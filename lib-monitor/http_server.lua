@@ -3,13 +3,12 @@ local string_lower = string.lower
 local table_copy = table.copy
 local table_concat = table.concat
 local os_exit = os.exit
-
 local log_info = log.info
 local log_error = log.error
 local timer = timer
 local http_server = http_server
 local astra_version = astra.version
-local astra_reload = astra.reload
+local _astra_reload = astra.reload
 
 -- =============================================
 -- Хелперы (Helplers)
@@ -112,6 +111,12 @@ local update_monitor_channel = function(server, client, req)
     send_response(server, client, result and 200 or 400)
 end
 
+local create_channel = function(server, client, req)
+end
+
+local get_channel_info = function(server, client, req)
+end
+
 -- Функция get_psi_channel была закомментирована, пропускаем ее оптимизацию.
 
 local update_monitor_dvb = function(server, client, req)
@@ -136,12 +141,12 @@ local update_monitor_dvb = function(server, client, req)
     send_response(server, client, result and 200 or 400)
 end
 
-local reload_astra = function(server, client, req)
+local astra_reload = function(server, client, req)
     timer({
         interval = validate_interval(get_param(req, "interval")), 
         callback = function(t) 
             t:close()
-            astra_reload() -- Используем локализованную функцию
+            _astra_reload()
             log_info("[Astra] Reloaded") 
         end
     })
@@ -154,7 +159,7 @@ local kill_astra = function(server, client, req)
         callback = function(t) 
             t:close() 
             log_info("[Astra] Stopped") 
-            os_exit(0) -- Используем локализованную функцию
+            os_exit(0)
         end
     })
     send_response(server, client, 200, "Shutdown scheduled") -- Добавил сообщение
@@ -169,9 +174,11 @@ function server_start(addr, port)
             {"/control_kill_channel", control_kill_channel},
             {"/control_kill_monitors", control_kill_monitor},
             {"/update_monitor_channel", update_monitor_channel},
+            {"/create_channel", create_channel},
+            {"/get_channel_info", get_channel_info},
             -- {"/get_psi_channel", get_psi_channel}, -- Закомментированный маршрут
             {"/update_monitor_dvb", update_monitor_dvb},
-            {"/reload", reload_astra},
+            {"/reload", astra_reload},
             {"/exit", kill_astra}
         }
     })

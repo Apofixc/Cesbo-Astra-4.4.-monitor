@@ -6,11 +6,34 @@
 --     monitor -- информация о объекте мониторинга
 --     rate -- погрешность сравнения битрейда
 --     time_update -- время обновления информаций
---     analyze -- расширенная информация о состояний потока
+--     analyze -- расширенная информация о ошибка потока
 --     method_comparison -- метод сравнения состояния потока
 -- }
 
--- Константы для дефолтных значений
+-- ===========================================================================
+-- Оптимизации: Кэширование функций
+-- ===========================================================================
+
+local type = type
+local tostring = tostring
+local tonumber = tonumber
+local ipairs = ipairs
+local math_max = math.max
+local math_min = math.min
+local string_lower = string.lower
+local table_insert = table.insert
+local table_remove = table.remove
+local log_info = log.info
+local log_error = log.error
+
+local table_copy = table.copy -- Объявлена в модуле base.lua
+local string_split = string.split -- Объявлена в модуле base.lua
+local l_ratio = m_ratio -- Объявлена в модуле utils.lua
+
+-- ===========================================================================
+-- Константы и конфигурация
+-- ===========================================================================
+
 local DEFAULT_RATE = 0.035
 local DEFAULT_TIME_UPDATE = 0
 local DEFAULT_ANALYZE = false
@@ -23,9 +46,6 @@ local TELEGRAF_MONIT_ADDRESS = {
     {host = "127.0.0.1", port = 8083, path = "/errors"}, 
     {host = "127.0.0.1", port = 8084, path = "/psi"}, 
 }
-
--- Кэширование функций
-local l_ratio = m_ratio
 
 local channel_monitor_method_comparison = {
     function() -- по времени
@@ -62,9 +82,16 @@ local channel_monitor_method_comparison = {
     end
 }
 
-local function create_monitor(instance, stream_json, channel_data)
+-- ===========================================================================
+-- Основные функции модуля
+-- ===========================================================================
+
+local function create_monitor(monitor_data, channel_data)
+    local instance = monitor_data.config
+    local stream_json = monitor_data.stream_json
+
     if not instance.name then
-        log.error("[make_monitor] name is required")
+        log_error("[make_monitor] name is required")
         return nil
     end    
 
@@ -80,7 +107,7 @@ local function create_monitor(instance, stream_json, channel_data)
         local active_id = channel_data and channel_data.active_input_id or 1
         if active_id ~= last_active_id then 
             last_active_id = active_id
-            local input_index = (active_id == 0 and 1) or active_id
+            local input_index = math_max(1, active_id)
             cached_source = stream_json[input_index] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
         end
         return cached_source
@@ -127,7 +154,7 @@ local function create_monitor(instance, stream_json, channel_data)
                     local has_errors = false
                     for _, pid_data in ipairs(data.analyze) do
                         if pid_data.cc_error > 0 or pid_data.pes_error > 0 or pid_data.sc_error > 0 then
-                            table.insert(content.analyze, pid_data)
+                            table_insert(content.analyze, pid_data)
                             has_errors = true
                         end
                     end
@@ -172,6 +199,10 @@ local function create_monitor(instance, stream_json, channel_data)
 
     if monitor then 
         return monitor
+    else
+        log_error("[create_monitor] analyze returned nil")
+
+        return nil
     end
 end
 
@@ -179,14 +210,14 @@ local monitor_list = {}
 
 function update_monitor_parameters(name, params)
     if not name or type(params) ~= 'table' then
-        log.error("[update_monitor_parameters] name and params table are required")
+        log_error("[update_monitor_parameters] name and params table are required")
         return nil
     end
 
     -- Находим монитор по имени
     local monitor_data = find_monitor(name)
     if not monitor_data then
-        log.error("[update_monitor_parameters] Monitor not found for name: " .. tostring(name))
+        log_error("[update_monitor_parameters] Monitor not found for name: " .. tostring(name))
         return nil
     end
 
@@ -201,14 +232,14 @@ function update_monitor_parameters(name, params)
         monitor_data.instance.analyze = params.analyze
     end
 
-    log.info("[update_monitor_parameters] Parameters updated successfully for monitor: " .. name)
+    log_info("[update_monitor_parameters] Parameters updated successfully for monitor: " .. name)
 
     return true
 end
 
 function make_monitor(channel_data, config)
     if #monitor_list > MONITOR_LIMIT then 
-        log.error("[make_monitor] monitor_list overflow")
+        log_error("[make_monitor] monitor_list overflow")
         return false
     end
 
@@ -264,20 +295,20 @@ function make_monitor(channel_data, config)
 
         monitor_data.input = init_input(cfg)
         if not monitor_data.input then
-            log.error("[make_monitor] udp_input returned nil, upstream is required")
+            log_error("[make_monitor] udp_input returned nil, upstream is required")
             return false
         end
 
         config.upstream = monitor_data.input.tail
     end    
 
-    monitor_data.monitor = create_monitor(monitor_data.instance, monitor_data.stream_json, ch_data)
+    monitor_data.monitor = create_monitor(monitor_data, ch_data)
     if monitor_data.monitor then
-        table.insert(monitor_list, monitor_data)
+        table_insert(monitor_list, monitor_data)
 
         return monitor_data.monitor
     else
-        log.error("[make_monitor] create_monitor returned nil")
+        log_error("[make_monitor] create_monitor returned nil")
         return false        
     end
 end
@@ -304,11 +335,11 @@ function kill_monitor(monitor_data)
     end
 
     if not monitor_id then
-        log.error("[kill_monitor] Monitor not in list")
+        log_error("[kill_monitor] Monitor not in list")
         return false
     end
 
-    local config = table.copy(monitor_data.instance)
+    local config = table_copy(monitor_data.instance)
 
     if monitor_data.input then
         kill_input(monitor_data.input)
@@ -326,10 +357,10 @@ function kill_monitor(monitor_data)
     monitor_data.stream_json = nil
 
     -- Удаляем из списка
-    table.remove(monitor_list, monitor_id)
+    table_remove(monitor_list, monitor_id)
 
     -- Запрос сборки мусора
-    collectgarbage()
+    --collectgarbage()
 
     return config
 end
@@ -337,12 +368,12 @@ end
 function make_stream(conf)  
     local channel_data = make_channel(conf)
     if not channel_data then 
-        log.error("[make_stream] channel_data is nil")
+        log_error("[make_stream] channel_data is nil")
         return false
     end
 
     local monitor_name = conf.monitor and conf.monitor.name or conf.name
-    local monitor_type = conf.monitor and conf.monitor.monitor_type and string.lower(conf.monitor.monitor_type) or "output"
+    local monitor_type = conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type) or "output"
 
     -- Вспомогательная функция для создания экземпляра
     local function create_instance(name, upstream, monitor, rate, time_update, analyze, method_comparison)
@@ -350,10 +381,10 @@ function make_stream(conf)
             name = name,
             upstream = upstream,
             monitor = monitor,
-            rate = tonumber(rate) and math.max(0, math.min(1, rate)) or DEFAULT_RATE,
-            time_update = tonumber(time_update) and math.max(0, time_update) or DEFAULT_TIME_UPDATE,
+            rate = tonumber(rate) and math_max(0, math_min(1, rate)) or DEFAULT_RATE,
+            time_update = tonumber(time_update) and math_max(0, time_update) or DEFAULT_TIME_UPDATE,
             analyze = (type(analyze) == "boolean") and analyze or DEFAULT_ANALYZE,
-            method_comparison = tonumber(method_comparison) and math.max(1, math.min(4, method_comparison)) or DEFAULT_METHOD_COMPARISON         
+            method_comparison = tonumber(method_comparison) and math_max(1, math_min(4, method_comparison)) or DEFAULT_METHOD_COMPARISON         
         }
     end
 
@@ -361,7 +392,7 @@ function make_stream(conf)
     if monitor_type == "input" then
         local input_data = channel_data.input[1]
         upstream = input_data.input.tail
-        monitor_target = string.split(conf.input[1], "#")[1]
+        monitor_target = string_split(conf.input[1], "#")[1]
     elseif monitor_type == "output" then
         upstream = channel_data.tail
         monitor_target = "output"
@@ -369,7 +400,7 @@ function make_stream(conf)
         monitor_type = "ip"
 
         if not channel_data.output or #channel_data.output == 0 then
-            log.error("[make_stream] channel_data.output is missing for ip monitor")
+            log_error("[make_stream] channel_data.output is missing for ip monitor")
             return false
         end
 
@@ -381,7 +412,7 @@ function make_stream(conf)
             end
         end
 
-        monitor_target = string.split(conf.output[key], "#")[1]
+        monitor_target = string_split(conf.output[key], "#")[1]
     end
 
     local instance = create_instance(
@@ -399,7 +430,7 @@ end
 
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config then 
-        log.error("[kill_stream] channel_data or config is nil")
+        log_error("[kill_stream] channel_data or config is nil")
         return nil 
     end
 
@@ -412,7 +443,7 @@ function kill_stream(channel_data)
     end
 
     -- Закрываем канал, очищаем ресурсы
-    local config = table.copy(channel_data.config)
+    local config = table_copy(channel_data.config)
     kill_channel(channel_data)
 
     -- Возвращаем конфигурацию канала (если нужно)
