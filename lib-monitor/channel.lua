@@ -30,7 +30,8 @@ local analyze = analyze
 
 local table_copy = table.copy -- Объявлена в модуле base.lua
 local string_split = string.split -- Объявлена в модуле base.lua
-local l_ratio = m_ratio -- Объявлена в модуле utils.lua
+local ratio = ratio -- Объявлена в модуле utils.lua
+local check = check
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -42,15 +43,9 @@ local DEFAULT_ANALYZE = false
 local DEFAULT_METHOD_COMPARISON = 3
 local MONITOR_LIMIT = 50
 local FORCE_SEND = 300 
-local TELEGRAF_MONIT_ADDRESS = {
-    {host = "127.0.0.1", port = 8081, path = "/channels"}, 
-    {host = "127.0.0.1", port = 8082, path = "/analyze"},    
-    {host = "127.0.0.1", port = 8083, path = "/errors"}, 
-    {host = "127.0.0.1", port = 8084, path = "/psi"}, 
-}
 
 local channel_monitor_method_comparison = {
-    function() -- по времени
+    function() -- по таймеру
         return true
     end,
     function(status, data) -- по любому измнению параметров
@@ -69,7 +64,7 @@ local channel_monitor_method_comparison = {
             status.scrambled ~= data.total.scrambled or 
             status.cc_error > 0 or 
             status.pes_error > 0 or 
-            l_ratio(status.bitrate, data.total.bitrate) > rate then
+            ratio(status.bitrate, data.total.bitrate) > rate then
                 return true
         end
 
@@ -89,7 +84,7 @@ local channel_monitor_method_comparison = {
 -- ===========================================================================
 
 local function create_monitor(monitor_data, channel_data)
-    local instance = monitor_data.config
+    local instance = monitor_data.instance
     local stream_json = monitor_data.stream_json
 
     if not instance.name then
@@ -145,10 +140,11 @@ local function create_monitor(monitor_data, channel_data)
                 local content = create_template()
                 content.error = data.error
 
-                send(json_encode(content), TELEGRAF_MONIT_ADDRESS[3])
+                send(json_encode(content), "error")
             elseif data.psi then
                 -- local content = create_template()
                 -- local psi = json_encode(data)
+                -- send(json_encode(content), "psi")
             elseif data.total then
                if instance.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
                     local content = create_template()
@@ -162,7 +158,7 @@ local function create_monitor(monitor_data, channel_data)
                     end
 
                     if has_errors then  -- Отправляем только если есть ошибки (избегаем пустых JSON)
-                        send(json_encode(content), TELEGRAF_MONIT_ADDRESS[2])
+                        send(json_encode(content), "analyze")
                     end
                 end
 
@@ -188,7 +184,7 @@ local function create_monitor(monitor_data, channel_data)
                     status.scrambled = data.total.scrambled or true
                     status.bitrate = data.total.bitrate or 0
                     
-                    send(json_encode(status), TELEGRAF_MONIT_ADDRESS[1])
+                    send(json_encode(status), "channels")
 
                     --Обнуляем счетчик
                     status.cc_error = 0
@@ -267,10 +263,10 @@ function make_monitor(channel_data, config)
                 cfg.stream = adap_conf and adap_conf.source or "dvb"      
             elseif  input.config.format == "udp" or  input.config.format == "rtp"  then
                 cfg.addr = input.config.localaddr .. "@" .. input.config.addr .. ":".. input.config.port
-                cfg.stream = Get_stream(input.config.addr)
+                cfg.stream = get_stream(input.config.addr)
             elseif  input.config.format == "http" then
                 cfg.addr = input.config.host .. ":".. input.config.port .. input.config.path
-                cfg.stream = Get_stream(input.config.host)
+                cfg.stream = get_stream(input.config.host)
             elseif  input.config.format == "file" then
                 cfg.addr = input.config.filename
                 cfg.stream = "file"
@@ -377,7 +373,6 @@ function make_stream(conf)
     local monitor_name = conf.monitor and conf.monitor.name or conf.name
     local monitor_type = conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type) or "output"
 
-    -- Вспомогательная функция для создания экземпляра
     local function create_instance(name, upstream, monitor, rate, time_update, analyze, method_comparison)
         return {
             name = name,
@@ -436,18 +431,15 @@ function kill_stream(channel_data)
         return nil 
     end
 
-    -- Находим монитор по имени канала
     local monitor_data = find_monitor(channel_data.config.name)
 
     if monitor_data then
-        -- Удаляем мониторинг-объекты, связанные с этим каналом
         kill_monitor(monitor_data)
+        log_info("[kill_stream] Monitor was kill")
     end
 
-    -- Закрываем канал, очищаем ресурсы
     local config = table_copy(channel_data.config)
     kill_channel(channel_data)
 
-    -- Возвращаем конфигурацию канала (если нужно)
     return config
 end
