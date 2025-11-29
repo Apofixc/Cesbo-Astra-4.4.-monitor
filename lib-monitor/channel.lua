@@ -25,6 +25,8 @@ local table_insert = table.insert
 local table_remove = table.remove
 local log_info = log.info
 local log_error = log.error
+local json_encode = json.encode
+local analyze = analyze
 
 local table_copy = table.copy -- Объявлена в модуле base.lua
 local string_split = string.split -- Объявлена в модуле base.lua
@@ -143,10 +145,10 @@ local function create_monitor(monitor_data, channel_data)
                 local content = create_template()
                 content.error = data.error
 
-                send(json.encode(content), TELEGRAF_MONIT_ADDRESS[3])
+                send(json_encode(content), TELEGRAF_MONIT_ADDRESS[3])
             elseif data.psi then
                 -- local content = create_template()
-                -- local psi = json.encode(data)
+                -- local psi = json_encode(data)
             elseif data.total then
                if instance.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
                     local content = create_template()
@@ -160,7 +162,7 @@ local function create_monitor(monitor_data, channel_data)
                     end
 
                     if has_errors then  -- Отправляем только если есть ошибки (избегаем пустых JSON)
-                        send(json.encode(content), TELEGRAF_MONIT_ADDRESS[2])
+                        send(json_encode(content), TELEGRAF_MONIT_ADDRESS[2])
                     end
                 end
 
@@ -186,7 +188,7 @@ local function create_monitor(monitor_data, channel_data)
                     status.scrambled = data.total.scrambled or true
                     status.bitrate = data.total.bitrate or 0
                     
-                    send(json.encode(status), TELEGRAF_MONIT_ADDRESS[1])
+                    send(json_encode(status), TELEGRAF_MONIT_ADDRESS[1])
 
                     --Обнуляем счетчик
                     status.cc_error = 0
