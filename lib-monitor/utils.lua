@@ -4,6 +4,7 @@
 
 local type = type
 local tostring = tostring
+local string_format = string.format
 local math_max = math.max
 local math_abs = math.abs
 local log_info = log.info
@@ -47,24 +48,23 @@ end
 
 function ratio(old, new)
     if type(old) ~= "number" or type(new) ~= "number" then
-        log_error("[m_ratio] Invalid types: old and new must be numbers")
+        log_error("[ratio] Invalid types: old and new must be numbers")
         return 0
     end
     if new == 0 then
-        log_error("[m_ratio] Division by zero: new is 0")
+        log_error("[ratio] Division by zero: new is 0")
         return 0
     end
     return math_abs(old - new) / math_max(old, new)
 end
 
 table.copy = function(t)
-    local copy = {} 
-
     if type(t) ~= "table" then
         log_error("[table.copy] Invalid argument: must be a table")
-        return copy
+        return {}
     end
 
+    local copy = {} 
     for k, v in pairs(t) do
         copy[k] = v
     end
@@ -136,7 +136,7 @@ function send_monitor(content, feed)
             end
         })
     else
-        print(content)
+        log_info(string_format("[send_monitor] No address for feed '%s', content: %s", feed, content))
     end
 end
 
