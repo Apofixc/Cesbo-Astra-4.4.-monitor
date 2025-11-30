@@ -96,7 +96,7 @@ local update_monitor_channel = function(server, client, req)
     end
 
     local params = {}
-    for _, param_name in ipairs({ "analyze", "time_update", "rate" }) do
+    for _, param_name in ipairs({ "analyze", "time_check", "rate" }) do
         local val = get_param(req, param_name)
         if val and val ~= "" then params[param_name] = val end
     end

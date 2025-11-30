@@ -5,7 +5,7 @@
 --     monitor_type -- на основай какого объекта будет создан монитор, только для make_stream
 --     monitor -- информация о объекте мониторинга
 --     rate -- погрешность сравнения битрейда
---     time_update -- время обновления информаций
+--     time_check -- время обновления информаций
 --     analyze -- расширенная информация о ошибках потока
 --     method_comparison -- метод сравнения состояния потока
 -- }
@@ -38,7 +38,7 @@ local check = check
 -- ===========================================================================
 
 local DEFAULT_RATE = 0.035
-local DEFAULT_TIME_UPDATE = 0
+local DEFAULT_TIME_CHECK = 0
 local DEFAULT_ANALYZE = false
 local DEFAULT_METHOD_COMPARISON = 3
 local MONITOR_LIMIT = 50
@@ -51,8 +51,8 @@ local channel_monitor_method_comparison = {
     function(status, data) -- по любому измнению параметров
         if status.ready ~= data.on_air or 
             status.scrambled ~= data.total.scrambled or 
-            status.cc_error > 0 or 
-            status.pes_error > 0 or 
+            status.cc_errors > 0 or 
+            status.pes_errors > 0 or 
             status.bitrate ~= data.total.bitrate then
                 return true
         end
@@ -62,8 +62,8 @@ local channel_monitor_method_comparison = {
     function(status, data, rate) -- по любому измнению параметров, с учетом погрешности
         if status.ready ~= data.on_air or 
             status.scrambled ~= data.total.scrambled or 
-            status.cc_error > 0 or 
-            status.pes_error > 0 or 
+            status.cc_errors > 0 or 
+            status.pes_errors > 0 or 
             ratio(status.bitrate, data.total.bitrate) > rate then
                 return true
         end
@@ -114,7 +114,7 @@ local function create_monitor(monitor_data, channel_data)
         local source = get_cached_source()
         return {
             type = "Channel",
-            server = Get_server_name(),
+            server = get_server_name(),
             channel = instance.name,
             output = instance.monitor, -- добавлен output для совместимости.
             stream = source.stream,
@@ -129,8 +129,8 @@ local function create_monitor(monitor_data, channel_data)
     status.ready = false
     status.scrambled = true
     status.bitrate = 0
-    status.cc_error = 0
-    status.pes_error = 0
+    status.cc_errors = 0
+    status.pes_errors = 0
     
     local monitor = analyze({
         upstream = instance.upstream:stream(),
@@ -163,11 +163,11 @@ local function create_monitor(monitor_data, channel_data)
                 end
 
                 --Считаем общее количество ошибок между передачами данных
-                status.cc_error = status.cc_error + (data.total.cc_errors or 0)
-                status.pes_error = status.pes_error + (data.total.pes_errors or 0)
+                status.cc_errors = status.cc_errors + data.total.cc_errors
+                status.pes_errors = status.pes_errors + data.total.pes_errors
 
                 force_timer = force_timer + 1
-                if time < instance.time_update then
+                if time < instance.time_check then
                     time = time + 1
                     return
                 end
@@ -180,15 +180,15 @@ local function create_monitor(monitor_data, channel_data)
                         status.format = source.format
                         status.addr = source.addr
                     end
-                    status.ready = data.on_air or false
-                    status.scrambled = data.total.scrambled or true
-                    status.bitrate = data.total.bitrate or 0
+                    status.ready = data.on_air
+                    status.scrambled = data.total.scrambled
+                    status.bitrate = data.total.bitrate
                     
                     send(json_encode(status), "channels")
 
                     --Обнуляем счетчик
-                    status.cc_error = 0
-                    status.pes_error = 0
+                    status.cc_errors = 0
+                    status.pes_errors = 0
                     force_timer = 0
                 end
             end
@@ -209,22 +209,22 @@ local monitor_list = {}
 function update_monitor_parameters(name, params)
     if not name or type(params) ~= 'table' then
         log_error("[update_monitor_parameters] name and params table are required")
-        return nil
+        return false
     end
 
     -- Находим монитор по имени
     local monitor_data = find_monitor(name)
     if not monitor_data then
         log_error("[update_monitor_parameters] Monitor not found for name: " .. tostring(name))
-        return nil
+        return false
     end
 
     -- Обновляем только переданные параметры (если ключ есть в params, обновляем; иначе оставляем старые)
     if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 1, "params.rate must be between 0.001 and 1") then
         monitor_data.instance.rate = params.rate
     end
-    if params.time_update ~= nil and check(type(params.time_update) == 'number' and params.time_update >= 0, "params.time_update must be non-negative") then
-        monitor_data.instance.time_update = params.time_update
+    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0, "params.time_check must be non-negative") then
+        monitor_data.instance.time_check = params.time_check
     end
     if params.analyze ~= nil and check(type(params.analyze) == 'boolean', "params.analyze must be boolean") then
         monitor_data.instance.analyze = params.analyze
@@ -241,15 +241,16 @@ function make_monitor(channel_data, config)
         return false
     end
 
-    local ch_data = type(channel_data) == "string" and find_channel(channel_data) or channel_data
+    local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
 
     if not check(type(config) == 'table', "config must be a table") then return false end
-    if not check(config.name, "config.name required") then return false end
-    if not check(config.monitor, "config.monitor required") then return false end
-    if not check(type(config.rate) == 'number' and config.rate >= 0.001 and config.rate <= 1, "config.rate must be between 0.001 and 1") then return false end
-    if not check(type(config.time_update) == 'number' and config.time_update >= 0, "config.time_update must be non-negative") then return false end
-    if not check(type(config.analyze) == 'boolean', "config.analyze must be boolean") then return false end
-    if not check(type(config.method_comparison) == 'number' and config.method_comparison >= 1 and config.method_comparison <= 4, "config.method_comparison must be between 1 and 4") then return false end
+    if not check(config.name and type(config.name) == 'string', "config.name required") then return false end
+    if not check(config.monitor and type(config.monitor) == 'string', "config.monitor required") then return false end
+    if not check(type(config.rate) == 'number' and config.rate >= 0.001 and config.rate <= 1, "config.rate must be between 0.001 and 1, default value was set: " .. DEFAULT_RATE) then config.rate = DEFAULT_RATE end
+    if not check(type(config.time_check) == 'number' and config.time_check >= 0, "config.time_check must be non-negative, default value was set: " .. DEFAULT_TIME_CHECK) then config.time_check = DEFAULT_TIME_CHECK end
+    if not check(type(config.analyze) == 'boolean', "config.analyze must be boolean, default value was set: " .. tostring(DEFAULT_ANALYZE)) then config.analyze = DEFAULT_ANALYZE end
+    if not check(type(config.method_comparison) == 'number' and config.method_comparison >= 1 and config.method_comparison <= 4, "config.method_comparison must be between 1 and 4, default value was set: " .. DEFAULT_METHOD_COMPARISON) then 
+        config.method_comparison = DEFAULT_METHOD_COMPARISON end
 
     local name
     local stream_json = {}
@@ -281,6 +282,11 @@ function make_monitor(channel_data, config)
         name = type(channel_data) == "string" and channel_data or config.name
     end
 
+    if find_monitor(name) then 
+        log_error("[make_monitor] Monitor already exists") 
+        return false
+    end
+
     local monitor_data = {
         name = name,
         instance = config,
@@ -289,6 +295,12 @@ function make_monitor(channel_data, config)
 
     if not config.upstream then
         local cfg = parse_url(config.monitor)
+
+        if not cfg then
+            log_error("[make_monitor] monitoring address does not exist.") 
+            return false     
+        end
+
         cfg.name = name
 
         monitor_data.input = init_input(cfg)
@@ -370,18 +382,18 @@ function make_stream(conf)
         return false
     end
 
-    local monitor_name = conf.monitor and conf.monitor.name or conf.name
-    local monitor_type = conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type) or "output"
+    local monitor_name = conf.monitor and type(conf.monitor.name) == "string" and conf.monitor.name or conf.name
+    local monitor_type = conf.monitor and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type) or "output"
 
-    local function create_instance(name, upstream, monitor, rate, time_update, analyze, method_comparison)
+    local function create_instance(name, upstream, monitor, rate, time_check, analyze, method_comparison)
         return {
             name = name,
             upstream = upstream,
             monitor = monitor,
-            rate = tonumber(rate) and math_max(0, math_min(1, rate)) or DEFAULT_RATE,
-            time_update = tonumber(time_update) and math_max(0, time_update) or DEFAULT_TIME_UPDATE,
-            analyze = (type(analyze) == "boolean") and analyze or DEFAULT_ANALYZE,
-            method_comparison = tonumber(method_comparison) and math_max(1, math_min(4, method_comparison)) or DEFAULT_METHOD_COMPARISON         
+            rate = rate,
+            time_check = time_check,
+            analyze = analyze,
+            method_comparison = method_comparison        
         }
     end
 
@@ -410,16 +422,18 @@ function make_stream(conf)
         end
 
         monitor_target = string_split(conf.output[key], "#")[1]
+
+        log_info("Using output key " .. key)
     end
 
     local instance = create_instance(
         monitor_name,
         upstream,
         monitor_target,
-        conf.monitor and conf.monitor.rate,
-        conf.monitor and conf.monitor.time_update,
-        conf.monitor and conf.monitor.analyze,
-        conf.monitor and conf.monitor.method_comparison
+        conf.monitor and conf.monitor.rate or nil,
+        conf.monitor and conf.monitor.time_check or nil,
+        conf.monitor and conf.monitor.analyze or nil,
+        conf.monitor and conf.monitor.method_comparison or nil
     )
 
     return make_monitor(channel_data, instance)
@@ -440,6 +454,8 @@ function kill_stream(channel_data)
 
     local config = table_copy(channel_data.config)
     kill_channel(channel_data)
+
+    log_info("[kill_stream] Stream is shutdown: " .. config.name)
 
     return config
 end

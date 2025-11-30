@@ -9,7 +9,13 @@ local math_max = math.max
 local math_abs = math.abs
 local log_info = log.info
 local log_error = log.error
+local ipairs = ipairs
 local http_request = http_request
+local astra_version = astra.version
+
+-- ===========================================================================
+-- Константы и конфигурация
+-- ===========================================================================
 
 local hostname =  utils.hostname()
 
@@ -26,12 +32,14 @@ local STREAM = {
 }
 
 local MONIT_ADDRESS = {
-    ["channels"] = {host = "127.0.0.1", port = 8081, path = "/channels"}, 
-    ["analyze"] = {host = "127.0.0.1", port = 8082, path = "/analyze"},    
-    ["errors"] = {host = "127.0.0.1", port = 8083, path = "/errors"}, 
-    ["psi"] = {host = "127.0.0.1", port = 8084, path = "/psi"}, 
-    ["dvb"] = {host = "127.0.0.1", port = 8085, path = "/dvb"}, 
+    -- ["channels"] = {host = "127.0.0.1", port = 8081, path = "/channels"}, 
+    -- ["analyze"] = {host = "127.0.0.1", port = 8082, path = "/analyze"},    
+    -- ["errors"] = {host = "127.0.0.1", port = 8083, path = "/errors"}, 
+    -- ["psi"] = {host = "127.0.0.1", port = 8084, path = "/psi"}, 
+    -- ["dvb"] = {host = "127.0.0.1", port = 8085, path = "/dvb"}, 
 }
+
+local send_debug = true
 
 -- ===========================================================================
 -- Основные функции модуля
@@ -51,10 +59,11 @@ function ratio(old, new)
         log_error("[ratio] Invalid types: old and new must be numbers")
         return 0
     end
+    
     if new == 0 then
-        log_error("[ratio] Division by zero: new is 0")
         return 0
     end
+
     return math_abs(old - new) / math_max(old, new)
 end
 
@@ -81,11 +90,7 @@ function check(cond, msg)
     return true
 end
 
-function set_client_monitoring(feed, host, port, path)
-    if not check(type(feed) == "string" and feed ~= "", "[set_client_monitoring] feed must be a non-empty string") then
-        return false
-    end
-
+function set_client_monitoring(host, port, path, feed)
     if not check(type(host) == "string" and host ~= "", "[set_client_monitoring] host must be a non-empty string") then
         return false
     end
@@ -98,18 +103,29 @@ function set_client_monitoring(feed, host, port, path)
         return false
     end
 
-    if not MONIT_ADDRESS[feed] then
-        log_error("[set_client_monitoring] Client '" .. feed .. "' not found in MONIT_ADDRESS. Cannot override non-standard address.")
-        return false
-    end
+    if feed then
+        if not check(type(feed) == "string" and feed ~= "", "[set_client_monitoring] feed must be a non-empty string") then
+            return false
+        end
 
-    MONIT_ADDRESS[feed] = {host = host, port = port, path = path}
-    log_info("[set_client_monitoring] Overridden standard monitoring address for client '" .. feed .. "' with host=" .. host .. ", port=" .. port .. ", path=" .. path)
+        if not MONIT_ADDRESS[feed] then
+            log_error("[set_client_monitoring] Client '" .. feed .. "' not found in MONIT_ADDRESS. Cannot override non-standard address.")
+            return false
+        end
+
+        MONIT_ADDRESS[feed] = {host = host, port = port, path = path}
+        log_info("[set_client_monitoring] Overridden standard monitoring address for client '" .. feed .. "' with host=" .. host .. ", port=" .. port .. ", path=" .. path)
+    else
+        for _, feed in ipairs({"channels", "analyze", "errors", "psi", "dvb"}) do
+            MONIT_ADDRESS[feed] = {host = host, port = port, path = path}
+            log_info("[set_client_monitoring] Overridden standard monitoring address for client '" .. feed .. "' with host=" .. host .. ", port=" .. port .. ", path=" .. path)
+        end
+    end
 
     return true
 end
 
-function Get_server_name()
+function get_server_name()
     return hostname
 end
 
@@ -123,7 +139,7 @@ function send_monitor(content, feed)
             content = content,
             port = addr.port,
             headers = {
-                "User-Agent: Astra v." .. astra.version,
+                "User-Agent: Astra v." .. astra_version,
                 "Host: " .. addr.host,
                 "Content-Type: application/json;charset=utf-8",
                 "Content-Length: " .. #content,
