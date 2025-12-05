@@ -203,13 +203,14 @@ local get_monitor_data = function(server, client, request)
     if not request then return nil end
     local req = validate_request(request)
 
-    local content = {}
-    local monitor_list = get_monitor_list()
-    for _, monitor_data in pairs(monitor_list) do
-        table_insert(content, monitor_data.name)
+    local name = get_param(req, "channel")
+    if not name then 
+        return send_response(server, client, 400, "Missing channel")   
     end
+
+    local monitor = find_monitor(name)
     
-    local json_content = json_encode(content)
+    local json_content = json_encode(monitor.status)
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",

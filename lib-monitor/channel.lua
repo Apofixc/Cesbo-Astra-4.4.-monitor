@@ -198,6 +198,9 @@ local function create_monitor(monitor_data, channel_data)
                     
                     send(json_encode(status), "channels")
 
+                    monitor_data.status.bitrate = status.bitrate
+                    monitor_data.status.on_air = status.on_air    
+
                     -- Обнуляем счетчик
                     status.cc_errors = 0
                     status.pes_errors = 0
@@ -310,7 +313,7 @@ function make_monitor(config, channel_data)
         instance = config,
         stream_json = stream_json,
         psi_data = {},
-        status = {}
+        status = { bitrate = 0, ready = false}
     }
 
     if not config.upstream then
@@ -325,7 +328,7 @@ function make_monitor(config, channel_data)
 
         monitor_data.input = init_input(cfg)
         if not monitor_data.input then
-            log_error("[make_monitor] udp_input returned nil, upstream is required")
+            log_error("[make_monitor] init_input returned nil, upstream is required")
             return false
         end
 
@@ -391,7 +394,7 @@ function kill_monitor(monitor_data)
     table_remove(monitor_list, monitor_id)
 
     -- Мягкая сборка мусора для оптимизации памяти
-    collectgarbage("step")
+    collectgarbage("collect")
 
     return config
 end
