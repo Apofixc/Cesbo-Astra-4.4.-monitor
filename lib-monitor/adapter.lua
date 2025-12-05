@@ -1,26 +1,39 @@
+-- ===========================================================================
+-- Оптимизации: Кэширование функций
+-- ===========================================================================
 
-local l_ratio = m_ratio
+local type = type
+local log_info = log.info
+local log_error = log.error
+local json_encode = json.encode
+
+local ratio = ratio
+
+-- ===========================================================================
+-- Константы и конфигурация
+-- ===========================================================================
+
 local dvb_monitor_method_comparison = {
     function() -- для совместимости
         return true
     end,
-    function(status_signal, data) -- по любому измнению параметров
-        if status_signal.status ~= data.status or 
-            status_signal.signal ~= data.signal or 
-            status_signal.snr ~= data.snr or 
-            status_signal.ber ~= data.ber or 
-            status_signal.unc ~= data.unc then
+    function(prev, curr) -- по любому измнению параметров
+        if prev.status ~= curr.status or 
+            prev.signal ~= curr.signal or 
+            prev.snr ~= curr.snr or 
+            prev.ber ~= curr.ber or 
+            prev.unc ~= curr.unc then
                 return true
         end
 
         return false
     end,
-    function(status_signal, data, rate) -- по любому измнению параметров, с учетом погрешности 
-        if status_signal.status ~= data.status or 
-            status_signal.signal ~= data.signal or 
-            l_ratio(status_signal.snr, data.snr) > rate or 
-            status_signal.ber ~= data.ber or 
-            status_signal.unc ~= data.unc then
+    function(prev, curr, rate) -- по любому измнению параметров, с учетом погрешности 
+        if prev.status ~= curr.status or 
+            ratio(prev.signal, curr.signal) > rate or 
+            ratio(prev.snr, curr.snr) > rate or 
+            prev.ber ~= curr.ber or 
+            prev.unc ~= curr.unc then
                 return true
         end
 
@@ -28,29 +41,33 @@ local dvb_monitor_method_comparison = {
     end
 }
 
+-- ===========================================================================
+-- Основные функции модуля
+-- ===========================================================================
+
 local dvb_config = {}
 
 function dvb_tuner_monitor(conf)
     if not conf.name_adapter then
-        log.error("[dvb_tuner] name is not found")
+        log_error("[dvb_tuner] name is not found")
         return
     end
 
     if _G[conf.name_adapter] or dvb_config[conf.name_adapter] then
-        log.error("[dvb_tuner] tuner is found")
+        log_error("[dvb_tuner] tuner is found")
         return
     end
 
-    conf.time_update = conf.time_update or 0
+    conf.time_check = conf.time_check or 10
     conf.rate = conf.rate or 0.015
     conf.method_comparison = conf.method_comparison or 3
 
     local send = send_monitor
     local comparison = dvb_monitor_method_comparison[conf.method_comparison]
     
-    local content = {
+    local status_signal = {
         type = "dvb",
-        server = Get_server_name(),
+        server = get_server_name(),
         format = conf.type or "",
         modulation = conf.modulation or "",
         source = conf.tp or conf.frequency,
@@ -63,44 +80,42 @@ function dvb_tuner_monitor(conf)
     }
 
     local time = 0
-    local status_signal = {}
     conf.callback = function(data)
-        if time < conf.time_update then
+        if time < conf.time_check then
             time = time + 1
             return
         end
         time = 0
 
         if comparison(status_signal, data, conf.rate) then
-            content.status = data.status or -1
-            content.signal = data.signal or -1
-            content.snr = data.snr or -1
-            content.ber = data.ber or -1
-            content.unc = data.unc or -1
+            status_signal.status = data.status or -1
+            status_signal.signal = data.signal or -1
+            status_signal.snr = data.snr or -1
+            status_signal.ber = data.ber or -1
+            status_signal.unc = data.unc or -1
 
-            send(json.encode(content))
+            send(json_encode(status_signal), "dvb")
         end
     end
+
     --hook из-за кривости init_dvb
-    _G[conf.name_adapter] = dvb_tune(conf)
+    local instance = dvb_tune(conf)
+    _G[conf.name_adapter] = instance
 
     if _G[conf.name_adapter] then
-        dvb_config[conf.name_adapter] = conf
+        dvb_config[conf.name_adapter] = instance
+
+        return instance
     end
 end
 
 function find_dvb_conf(name_adapter)
-    for _, config in ipairs(dvb_config) do
-        if config.name_adapter == name_adapter then
-            return config
-        end
-    end
-    return nil
+    return dvb_config[name_adapter]
 end
 
 function update_dvb_monitor_parameters(name_adapter, params)
     if not name_adapter or type(params) ~= 'table' then
-        log.error("[update_dvb_monitor_parameters] name_adapter and params table are required")
+        log_error("[update_dvb_monitor_parameters] name_adapter and params table are required")
         return nil
     end
 
@@ -110,14 +125,14 @@ function update_dvb_monitor_parameters(name_adapter, params)
         if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 1, "params.rate must be between 0.001 and 1") then
             conf.rate = params.rate
         end
-        if params.time_update ~= nil and check(type(params.time_update) == 'number' and params.time_update >= 0, "params.time_update must be non-negative") then
-            conf.time_update = params.time_update
+        if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0, "params.time_check must be non-negative") then
+            conf.time_check = params.time_check
         end
 
-        log.info("[update_dvb_monitor_parameters] Parameters updated successfully for monitor: " .. name_adapter)
+        log_info("[update_dvb_monitor_parameters] Parameters updated successfully for monitor: " .. name_adapter)
 
         return true
     else
-        log.error("[update_dvb_monitor_parameters] Monitor not found for name: " .. tostring(name_adapter))       
+        log_error("[update_dvb_monitor_parameters] Monitor not found for name: " .. name_adapter)       
     end
 end

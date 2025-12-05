@@ -42,36 +42,36 @@ local DEFAULT_TIME_CHECK = 0
 local DEFAULT_ANALYZE = false
 local DEFAULT_METHOD_COMPARISON = 3
 local MONITOR_LIMIT = 50
-local FORCE_SEND = 300 
+local FORCE_SEND = 300
 
 local channel_monitor_method_comparison = {
     function() -- по таймеру
         return true
     end,
-    function(status, data) -- по любому измнению параметров
-        if status.ready ~= data.on_air or 
-            status.scrambled ~= data.total.scrambled or 
-            status.cc_errors > 0 or 
-            status.pes_errors > 0 or 
-            status.bitrate ~= data.total.bitrate then
+    function(prev, curr) -- по любому измнению параметров
+        if prev.ready ~= curr.on_air or 
+            prev.scrambled ~= curr.total.scrambled or 
+            prev.cc_errors > 0 or 
+            prev.pes_errors > 0 or 
+            prev.bitrate ~= curr.total.bitrate then
                 return true
         end
 
         return false
     end,
-    function(status, data, rate) -- по любому измнению параметров, с учетом погрешности
-        if status.ready ~= data.on_air or 
-            status.scrambled ~= data.total.scrambled or 
-            status.cc_errors > 0 or 
-            status.pes_errors > 0 or 
-            ratio(status.bitrate, data.total.bitrate) > rate then
+    function(prev, curr, rate) -- по любому измнению параметров, с учетом погрешности
+        if prev.ready ~= curr.on_air or 
+            prev.scrambled ~= curr.total.scrambled or 
+            prev.cc_errors > 0 or 
+            prev.pes_errors > 0 or 
+            ratio(prev.bitrate, curr.total.bitrate) > rate then
                 return true
         end
 
         return false
     end,
-    function(status, data, rate) -- по изменению доступности канала (добавлена для использование в связке telegraf + telegram bot)
-        if status.ready ~= data.on_air then
+    function(prev, curr, rate) -- по изменению доступности канала (добавлена для использование в связке telegraf + telegram bot)
+        if prev.ready ~= curr.on_air then
                 return true
         end
 
@@ -146,7 +146,7 @@ local function create_monitor(monitor_data, channel_data)
                 -- local psi = json_encode(data)
                 -- send(json_encode(content), "psi")
             elseif data.total then
-               if instance.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
+               if instance.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
                     local content = create_template()
                     content.analyze = {}
                     local has_errors = false
@@ -163,8 +163,8 @@ local function create_monitor(monitor_data, channel_data)
                 end
 
                 --Считаем общее количество ошибок между передачами данных
-                status.cc_errors = status.cc_errors + data.total.cc_errors
-                status.pes_errors = status.pes_errors + data.total.pes_errors
+                status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
+                status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
 
                 force_timer = force_timer + 1
                 if time < instance.time_check then
@@ -180,9 +180,10 @@ local function create_monitor(monitor_data, channel_data)
                         status.format = source.format
                         status.addr = source.addr
                     end
+
                     status.ready = data.on_air
                     status.scrambled = data.total.scrambled
-                    status.bitrate = data.total.bitrate
+                    status.bitrate = data.total.bitrate or 0
                     
                     send(json_encode(status), "channels")
 
@@ -205,6 +206,10 @@ local function create_monitor(monitor_data, channel_data)
 end
 
 local monitor_list = {}
+
+function get_monitor_list()
+    return monitor_list
+end
 
 function update_monitor_parameters(name, params)
     if not name or type(params) ~= 'table' then
@@ -235,7 +240,7 @@ function update_monitor_parameters(name, params)
     return true
 end
 
-function make_monitor(channel_data, config)
+function make_monitor(config, channel_data)
     if #monitor_list > MONITOR_LIMIT then 
         log_error("[make_monitor] monitor_list overflow")
         return false
@@ -436,7 +441,7 @@ function make_stream(conf)
         conf.monitor and conf.monitor.method_comparison or nil
     )
 
-    return make_monitor(channel_data, instance)
+    return make_monitor(instance, channel_data)
 end
 
 function kill_stream(channel_data)
