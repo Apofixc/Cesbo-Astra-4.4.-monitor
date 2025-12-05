@@ -231,7 +231,7 @@ local get_psi_channel = function(server, client, request)
 
     local monitor = find_monitor(name)
 
-    local json_content = json_encode(monitor.psi)
+    local json_content = json_encode(monitor.psi_data)
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
