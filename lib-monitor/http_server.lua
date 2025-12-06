@@ -47,10 +47,10 @@ local function validate_request(request)
 end
 
 local function check_auth(request)
-    local api_key = request and request.headers and request.headers["x-api-key"]
-    if not api_key or api_key ~= API_SECRET then
-        return false
-    end
+    -- local api_key = request and request.headers and request.headers["x-api-key"]
+    -- if not api_key or api_key ~= API_SECRET then
+    --     return false
+    -- end
     return true
 end
 
@@ -356,29 +356,30 @@ local get_adapter_list = function(server, client, request)
     send_response(server, client, 200, json_content, headers) 
 end
 
-local get_adapter_data = function(server, client, request) -- заглушка
+local get_adapter_data = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         log_info(string.format("[get_adapter_data] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
-    -- local req = validate_request(request)
 
-    -- local name = get_param(req, "channel")
-    -- if not name then 
-    --     return send_response(server, client, 400, "Missing channel")   
-    -- end
+    local req = validate_request(request)
 
-    -- local monitor = find_monitor(name)
+    local name = get_param(req, "name_adapter")
+    if not name then 
+        return send_response(server, client, 400, "Missing adapter")   
+    end
+
+    local monitor = find_monitor(name).status_signal
     
-    -- local json_content = json_encode(monitor.status)
+    local json_content = json_encode(monitor)
 
-    -- local headers = {
-    --     "Content-Type: application/json;charset=utf-8",
-    --     "Content-Length: " .. #json_content,
-    --     "Connection: close",
-    -- }    
+    local headers = {
+        "Content-Type: application/json;charset=utf-8",
+        "Content-Length: " .. #json_content,
+        "Connection: close",
+    }    
     
     send_response(server, client, 200)   
 end
@@ -466,7 +467,7 @@ local instance = function (server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end   
 
-    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version()})
+    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version})
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",

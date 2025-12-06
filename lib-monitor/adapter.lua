@@ -107,14 +107,17 @@ function dvb_tuner_monitor(conf)
     _G[conf.name_adapter] = instance
 
     if _G[conf.name_adapter] then
-        dvb_config[conf.name_adapter] = instance
+        dvb_config[conf.name_adapter] = {
+            instance = instance,
+            status_signal = status_signal
+        }
 
         return instance
     end
 end
 
 function find_dvb_conf(name_adapter)
-    return dvb_config[name_adapter]
+    return dvb_config[name_adapter].instance
 end
 
 function update_dvb_monitor_parameters(name_adapter, params)
@@ -124,7 +127,7 @@ function update_dvb_monitor_parameters(name_adapter, params)
     end
 
     if dvb_config[name_adapter] then
-        local conf = dvb_config[name_adapter]
+        local conf = dvb_config[name_adapter].instance
         -- Обновляем только переданные параметры (если ключ есть в params, обновляем; иначе оставляем старые)
         if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 1, "params.rate must be between 0.001 and 1") then
             conf.rate = params.rate

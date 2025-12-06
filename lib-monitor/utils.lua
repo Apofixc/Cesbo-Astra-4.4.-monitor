@@ -35,8 +35,7 @@ local MONIT_ADDRESS = {
     -- ["channels"] = {host = "127.0.0.1", port = 8081, path = "/channels"}, 
     -- ["analyze"] = {host = "127.0.0.1", port = 8082, path = "/analyze"},    
     -- ["errors"] = {host = "127.0.0.1", port = 8083, path = "/errors"}, 
-    -- ["psi"] = {host = "127.0.0.1", port = 8084, path = "/psi"}, 
-    -- ["dvb"] = {host = "127.0.0.1", port = 8085, path = "/dvb"}, 
+    -- ["dvb"] = {host = "127.0.0.1", port = 8084, path = "/dvb"}, 
 }
 
 local send_debug = true
@@ -151,8 +150,6 @@ function send_monitor(content, feed)
                 end
             end
         })
-    else
-        log_info(string_format("[send_monitor] No address for feed '%s', content: %s", feed, content))
     end
 end
 
