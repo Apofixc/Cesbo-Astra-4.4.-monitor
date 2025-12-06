@@ -13,6 +13,12 @@ local _astra_reload = astra.reload
 local json_decode = json.decode
 local json_encode = json.encode
 
+-- ===========================================================================
+-- Константы и конфигурация
+-- ===========================================================================
+
+local API_SECRET = "test"
+
 -- =============================================
 -- Хелперы (Helplers)
 -- =============================================
@@ -29,14 +35,22 @@ local function validate_request(request)
 
     local content_type = request.content and request.headers and request.headers["content-type"] and request.headers["content-type"]:lower() or ""
     if content_type == "application/json" or content_type == "multipart/json" then
-        local decoder = json_decode(request.content)
-        if decoder then
+        local success, decoder = pcall(json_decode, request.content)
+        if success then
             return decoder
         end
     end
 
     log_error("[validate_request] request is empty.") 
     return {}
+end
+
+local function check_auth(request)
+    local api_key = request.headers["x-api-key"]
+    if not api_key or api_key ~= API_SECRET then
+        return false
+    end
+    return true
 end
 
 local function get_param(req, key)
@@ -50,9 +64,14 @@ local function get_param(req, key)
     end
 end
 
-local function validate_interval(s) 
+local function validate_delay(s) 
     local i = tonumber(s)
-    return (i and i >= 1) and i or 30
+    if i and i >= 1 then
+        return i
+    else
+        log_error("[validate_interval] Invalid interval: " .. tostring(s) .. ", using default 30")
+        return 30
+    end
 end
 
 local function send_response(server, client, code, msg, headers)
@@ -85,11 +104,11 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     log_info(string.format("[%s] %s killed", log_prefix, name))
 
     if string_lower(get_param(req, "reboot") or "") == "true" then 
-        local interval = validate_interval(get_param(req, "interval"))
-        log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, interval)) 
+        local delay = validate_delay(get_param(req, "delay"))
+        log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, delay)) 
 
         timer({
-            interval = interval, 
+            interval = delay, 
             callback = function(t) 
                 t:close()
                 make_func(cfg, name)
@@ -108,11 +127,21 @@ end
 local control_kill_stream = function(server, client, request)
     if not request then return nil end
     
+    if not check_auth(request) then
+        log.info(string.format("[control_kill_stream] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     handle_kill_with_reboot(find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
 end
 
 local control_kill_channel = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[control_kill_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
 
     handle_kill_with_reboot(find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
@@ -124,11 +153,22 @@ end
 local control_kill_monitor = function(server, client, request)
     if not request then return nil end
 
+    if not check_auth(request) then
+        log.info(string.format("[control_kill_monitor] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     handle_kill_with_reboot(find_monitor, kill_monitor, make_monitor, "Monitor", server, client, validate_request(request))
 end
 
 local update_monitor_channel = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[update_monitor_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
@@ -139,10 +179,13 @@ local update_monitor_channel = function(server, client, request)
     local params = {}
     for _, param_name in ipairs({ "analyze", "time_check", "rate", "method_comparison" }) do
         local val = get_param(req, param_name)
-        if param_name = "analyze" then
+        if param_name == "analyze" then
             if val and val ~= "" then params[param_name] = val end            
         else
-            if val and val ~= "" then params[param_name] = tonumber(val) end
+            if val and val ~= "" then 
+                local num = tonumber(val)
+                if num then params[param_name] = num end
+            end
         end
     end
 
@@ -158,11 +201,22 @@ end
 
 local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[create_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     send_response(server, client, 200)
 end
 
 local get_channel_list = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[get_channel_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
 
     local content = {}
     for key, channel_data in ipairs(channel_list) do
@@ -183,9 +237,14 @@ end
 local get_monitor_list = function(server, client, request)
     if not request then return nil end
 
+    if not check_auth(request) then
+        log.info(string.format("[get_monitor_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     local content = {}
     local monitor_list = get_list_monitor()
-    for key, monitor_data in pairs(monitor_list) do
+    for key, monitor_data in ipairs(monitor_list) do
         content["monitor_" .. key] = monitor_data.name
     end
     
@@ -202,6 +261,12 @@ end
 
 local get_monitor_data = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[get_monitor_data] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
@@ -228,6 +293,12 @@ end
 
 local get_psi_channel = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[get_psi_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
@@ -255,6 +326,11 @@ end
 local get_adapter_list = function(server, client, request)
     if not request then return nil end
 
+    if not check_auth(request) then
+        log.info(string.format("[get_adapter_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
     local content = {}
     local key = 1
     local monitor_list = get_list_adapter()
@@ -276,6 +352,11 @@ end
 
 local get_adapter_data = function(server, client, request) -- заглушка
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[get_adapter_data] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end    
     -- local req = validate_request(request)
 
     -- local name = get_param(req, "channel")
@@ -298,6 +379,12 @@ end
 
 local update_monitor_dvb = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[update_monitor_dvb] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end    
+
     local req = validate_request(request)
 
     local name_adapter = get_param(req, "name_adapter")
@@ -308,7 +395,10 @@ local update_monitor_dvb = function(server, client, request)
     local params = {}
     for _, param_name in ipairs({ "time_check", "rate" }) do
         local val = get_param(req, param_name)
-        if val and val ~= "" then params[param_name] = tonumber(val) end
+        if val and val ~= "" then 
+            local num = tonumber(val)
+            if num then params[param_name] = num end
+        end
     end
 
     local result = update_monitor_parameters(name_adapter, params)
@@ -323,10 +413,16 @@ end
 
 local astra_reload = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[astra_reload] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end    
+
     local req = validate_request(request)
     send_response(server, client, 200, "Reload scheduled")
     timer({
-        interval = validate_interval(get_param(req, "interval")), 
+        interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close()
             log_info("[Astra] Reloaded") 
@@ -337,10 +433,16 @@ end
 
 local kill_astra = function(server, client, request)
     if not request then return nil end
+
+    if not check_auth(request) then
+        log.info(string.format("[kill_astra] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        return send_response(server, client, 401, "Unauthorized")
+    end   
+
     local req = validate_request(request)
     send_response(server, client, 200, "Shutdown scheduled")
     timer({
-        interval = validate_interval(get_param(req, "interval")), 
+        interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close() 
             log_info("[Astra] Stopped") 
