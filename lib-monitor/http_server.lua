@@ -17,10 +17,11 @@ local json_encode = json.encode
 -- Константы и конфигурация
 -- ===========================================================================
 
-local API_SECRET = "test"
+local API_SECRET = os.getenv("ASTRA_API_KEY") or "test"
+local DELAY = 30
 
 -- =============================================
--- Хелперы (Helplers)
+-- Хелперы (Helpers)
 -- =============================================
 
 local function validate_request(request) 
@@ -36,17 +37,17 @@ local function validate_request(request)
     local content_type = request.content and request.headers and request.headers["content-type"] and request.headers["content-type"]:lower() or ""
     if content_type == "application/json" or content_type == "multipart/json" then
         local success, decoder = pcall(json_decode, request.content)
-        if success then
+        if success and decoder then
             return decoder
         end
     end
 
-    log_error("[validate_request] request is empty.") 
+    log_error("[validate_request] Invalid or empty request content") 
     return {}
 end
 
 local function check_auth(request)
-    local api_key = request.headers["x-api-key"]
+    local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
         return false
     end
@@ -69,8 +70,8 @@ local function validate_delay(s)
     if i and i >= 1 then
         return i
     else
-        log_error("[validate_interval] Invalid interval: " .. tostring(s) .. ", using default 30")
-        return 30
+        log_error("[validate_delay] Invalid delay: " .. tostring(s) .. ", using default " .. DELAY)
+        return DELAY
     end
 end
 
@@ -82,7 +83,7 @@ local function send_response(server, client, code, msg, headers)
             content = msg or ""
         })
     else
-        log_error(string.format("[Error] %s (code: %d)", msg or "Unknown error", code))
+        log_error(string.format("[send_response] %s (code: %d)", msg or "Unknown error", code))
         server:abort(client, code) 
     end
 end
@@ -112,7 +113,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
             callback = function(t) 
                 t:close()
                 make_func(cfg, name)
-                log_info(string.format("[%s] %s was reboot", log_prefix, name)) 
+                log_info(string.format("[%s] %s was rebooted", log_prefix, name)) 
             end
         })
     end
@@ -121,14 +122,14 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
 end
 
 -- =============================================
--- Управления каналами и их мониторами (Route Handlers)
+-- Управление каналами и их мониторами (Route Handlers)
 -- =============================================
 
 local control_kill_stream = function(server, client, request)
     if not request then return nil end
     
     if not check_auth(request) then
-        log.info(string.format("[control_kill_stream] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[control_kill_stream] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -139,7 +140,7 @@ local control_kill_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[control_kill_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[control_kill_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -154,7 +155,7 @@ local control_kill_monitor = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[control_kill_monitor] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[control_kill_monitor] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -165,7 +166,7 @@ local update_monitor_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[update_monitor_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[update_monitor_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -203,7 +204,7 @@ local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[create_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[create_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -214,10 +215,15 @@ local get_channel_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_channel_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_channel_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
+    if not channel_list then
+        log_error("[get_channel_list] channel_list is nil.")
+        return send_response(server, client, 500, "Internal error")
+    end
+    
     local content = {}
     for key, channel_data in ipairs(channel_list) do
         content["channel_" .. key] = channel_data.config.name
@@ -238,7 +244,7 @@ local get_monitor_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_monitor_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_monitor_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -263,7 +269,7 @@ local get_monitor_data = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_monitor_data] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_monitor_data] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -295,7 +301,7 @@ local get_psi_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_psi_channel] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_psi_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -327,14 +333,14 @@ local get_adapter_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_adapter_list] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_adapter_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
     local content = {}
     local key = 1
-    local monitor_list = get_list_adapter()
-    for name, _ in pairs(monitor_list) do
+    local adapter_list = get_list_adapter()
+    for name, _ in pairs(adapter_list) do
         content["adapter_" .. key] = name
         key = key + 1
     end
@@ -354,7 +360,7 @@ local get_adapter_data = function(server, client, request) -- заглушка
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[get_adapter_data] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[get_adapter_data] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
     -- local req = validate_request(request)
@@ -381,7 +387,7 @@ local update_monitor_dvb = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[update_monitor_dvb] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[update_monitor_dvb] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
 
@@ -415,7 +421,7 @@ local astra_reload = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[astra_reload] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[astra_reload] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
 
@@ -435,7 +441,7 @@ local kill_astra = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log.info(string.format("[kill_astra] [Security] Unauthorized request from %s:%s", client.ip, client.port))
+        log_info(string.format("[kill_astra] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end   
 
@@ -455,7 +461,12 @@ end
 local instance = function (server, client, request)
     if not request then return nil end
 
-    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port})
+    if not check_auth(request) then
+        log_info(string.format("[instance] [Security] Unauthorized request"))
+        return send_response(server, client, 401, "Unauthorized")
+    end   
+
+    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version()})
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
