@@ -28,14 +28,14 @@ local function validate_request(request)
     end
 
     local content_type = request.content and request.headers and request.headers["content-type"] and request.headers["content-type"]:lower() or ""
-    if content_type == "application/json" then
+    if content_type == "application/json" or content_type == "multipart/json" then
         local decoder = json_decode(request.content)
         if decoder then
             return decoder
         end
     end
 
-    log_error("[validate_request] request is entry.") 
+    log_error("[validate_request] request is empty.") 
     return {}
 end
 
@@ -137,9 +137,13 @@ local update_monitor_channel = function(server, client, request)
     end
 
     local params = {}
-    for _, param_name in ipairs({ "analyze", "time_check", "rate" }) do
+    for _, param_name in ipairs({ "analyze", "time_check", "rate", "method_comparison" }) do
         local val = get_param(req, param_name)
-        if val and val ~= "" then params[param_name] = val end
+        if param_name = "analyze" then
+            if val and val ~= "" then params[param_name] = val end            
+        else
+            if val and val ~= "" then params[param_name] = tonumber(val) end
+        end
     end
 
     local result = update_monitor_parameters(name, params)
@@ -152,19 +156,17 @@ local update_monitor_channel = function(server, client, request)
     send_response(server, client, result and 200 or 400)
 end
 
-local create_channel = function(server, client, request)
+local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
-    local req = validate_request(request)
-
+    send_response(server, client, 200)
 end
 
 local get_channel_list = function(server, client, request)
     if not request then return nil end
-    local req = validate_request(request)
 
     local content = {}
-    for _, channel_data in pairs(channel_list) do
-        table_insert(content, channel_data.config.name)
+    for key, channel_data in ipairs(channel_list) do
+        content["channel_" .. key] = channel_data.config.name
     end
     
     local json_content = json_encode(content)
@@ -175,17 +177,16 @@ local get_channel_list = function(server, client, request)
         "Connection: close",
     }    
     
-    send_response(server, client, 200, content, json_content)   
+    send_response(server, client, 200, json_content, headers)   
 end
 
 local get_monitor_list = function(server, client, request)
     if not request then return nil end
-    local req = validate_request(request)
 
     local content = {}
-    local monitor_list = get_monitor_list()
-    for _, monitor_data in pairs(monitor_list) do
-        table_insert(content, monitor_data.name)
+    local monitor_list = get_list_monitor()
+    for key, monitor_data in pairs(monitor_list) do
+        content["monitor_" .. key] = monitor_data.name
     end
     
     local json_content = json_encode(content)
@@ -196,7 +197,7 @@ local get_monitor_list = function(server, client, request)
         "Connection: close",
     }    
     
-    send_response(server, client, 200, content, json_content)    
+    send_response(server, client, 200, json_content, headers) 
 end
 
 local get_monitor_data = function(server, client, request)
@@ -210,6 +211,10 @@ local get_monitor_data = function(server, client, request)
 
     local monitor = find_monitor(name)
     
+    if not monitor then
+        return send_response(server, client, 404, "Monitor not found")
+    end
+
     local json_content = json_encode(monitor.status)
 
     local headers = {
@@ -218,7 +223,7 @@ local get_monitor_data = function(server, client, request)
         "Connection: close",
     }    
     
-    send_response(server, client, 200, content, json_content)    
+    send_response(server, client, 200, json_content, headers)    
 end
 
 local get_psi_channel = function(server, client, request)
@@ -232,6 +237,10 @@ local get_psi_channel = function(server, client, request)
 
     local monitor = find_monitor(name)
 
+    if not monitor then
+        return send_response(server, client, 404, "Monitor not found")
+    end
+
     local json_content = json_encode(monitor.psi_data)
 
     local headers = {
@@ -240,7 +249,51 @@ local get_psi_channel = function(server, client, request)
         "Connection: close",
     }    
     
-    send_response(server, client, 200, content, json_content)   
+    send_response(server, client, 200, json_content, headers)   
+end
+
+local get_adapter_list = function(server, client, request)
+    if not request then return nil end
+
+    local content = {}
+    local key = 1
+    local monitor_list = get_list_adapter()
+    for name, _ in pairs(monitor_list) do
+        content["adapter_" .. key] = name
+        key = key + 1
+    end
+    
+    local json_content = json_encode(content)
+
+    local headers = {
+        "Content-Type: application/json;charset=utf-8",
+        "Content-Length: " .. #json_content,
+        "Connection: close",
+    }    
+    
+    send_response(server, client, 200, json_content, headers) 
+end
+
+local get_adapter_data = function(server, client, request) -- заглушка
+    if not request then return nil end
+    -- local req = validate_request(request)
+
+    -- local name = get_param(req, "channel")
+    -- if not name then 
+    --     return send_response(server, client, 400, "Missing channel")   
+    -- end
+
+    -- local monitor = find_monitor(name)
+    
+    -- local json_content = json_encode(monitor.status)
+
+    -- local headers = {
+    --     "Content-Type: application/json;charset=utf-8",
+    --     "Content-Length: " .. #json_content,
+    --     "Connection: close",
+    -- }    
+    
+    send_response(server, client, 200)   
 end
 
 local update_monitor_dvb = function(server, client, request)
@@ -255,7 +308,7 @@ local update_monitor_dvb = function(server, client, request)
     local params = {}
     for _, param_name in ipairs({ "time_check", "rate" }) do
         local val = get_param(req, param_name)
-        if val and val ~= "" then params[param_name] = val end
+        if val and val ~= "" then params[param_name] = tonumber(val) end
     end
 
     local result = update_monitor_parameters(name_adapter, params)
@@ -271,22 +324,21 @@ end
 local astra_reload = function(server, client, request)
     if not request then return nil end
     local req = validate_request(request)
-
+    send_response(server, client, 200, "Reload scheduled")
     timer({
         interval = validate_interval(get_param(req, "interval")), 
         callback = function(t) 
             t:close()
-            _astra_reload()
             log_info("[Astra] Reloaded") 
+            _astra_reload()
         end
     })
-    send_response(server, client, 200, "Reload scheduled") -- Добавил сообщение
 end
 
 local kill_astra = function(server, client, request)
     if not request then return nil end
     local req = validate_request(request)
-
+    send_response(server, client, 200, "Shutdown scheduled")
     timer({
         interval = validate_interval(get_param(req, "interval")), 
         callback = function(t) 
@@ -295,7 +347,21 @@ local kill_astra = function(server, client, request)
             os_exit(0)
         end
     })
-    send_response(server, client, 200, "Shutdown scheduled") -- Добавил сообщение
+
+end
+
+local instance = function (server, client, request)
+    if not request then return nil end
+
+    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port})
+
+    local headers = {
+        "Content-Type: application/json;charset=utf-8",
+        "Content-Length: " .. #json_content,
+        "Connection: close",
+    }    
+    
+    send_response(server, client, 200, json_content, headers) 
 end
 
 function server_start(addr, port)
@@ -303,18 +369,21 @@ function server_start(addr, port)
         addr = addr,
         port = port,
         route = {
-            {"/control_kill_stream", control_kill_stream},
-            {"/control_kill_channel", control_kill_channel},
-            {"/control_kill_monitor", control_kill_monitor},
-            {"/update_monitor_channel", update_monitor_channel},
-            {"/create_channel", create_channel},
-            {"/get_channel_list", get_channel_list},
-            {"/get_monitor_list", get_monitor_list},
-            {"/get_monitor_data", get_monitor_data},
-            {"/get_psi_channel", get_psi_channel},
-            {"/update_monitor_dvb", update_monitor_dvb},
-            {"/reload", astra_reload},
-            {"/exit", kill_astra}
+            {"/api/control_kill_stream", control_kill_stream},
+            {"/api/control_kill_channel", control_kill_channel},
+            {"/api/control_kill_monitor", control_kill_monitor},
+            {"/api/update_monitor_channel", update_monitor_channel},
+            {"/api/create_channel", create_channel},
+            {"/api/get_channel_list", get_channel_list},
+            {"/api/get_monitor_list", get_monitor_list},
+            {"/api/get_monitor_data", get_monitor_data},
+            {"/api/get_psi_channel", get_psi_channel},
+            {"/api/get_adapter_list", get_adapter_list},
+            {"/api/get_adapter_data", get_adapter_data},
+            {"/api/update_monitor_dvb", update_monitor_dvb},
+            {"/api/reload", astra_reload},
+            {"/api/exit", kill_astra},
+            {"/api/instance", instance}
         }
     })
     log_info(string.format("[Server] Started on %s:%d", addr, port))

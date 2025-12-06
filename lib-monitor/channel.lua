@@ -6,8 +6,8 @@
 --     upstream -- функция вызова потока
 --     monitor_type -- на основай какого объекта будет создан монитор, только для make_stream
 --     monitor -- адрес мониторинга
---     rate -- погрешность сравнения битрейда (0.001 to 1, default 0.035)
---     time_check -- время обновления информаций (>=0, default 0)
+--     rate -- погрешность сравнения битрейда (0.001 to 0.3, default 0.035)
+--     time_check -- время до сравнения данных для отправки обновления информаций (0 to 300, default 0). Раз в 300 происходит принудельное сравнение.
 --     analyze -- расширенная информация о ошибках потока (boolean, default false)
 --     method_comparison -- метод сравнения состояния потока (1 to 4, default 3)
 -- }
@@ -73,7 +73,7 @@ local channel_monitor_method_comparison = {
         return false
     end,
     function(prev, curr, rate) -- по изменению доступности канала (добавлена для использования в связке telegraf + telegram bot)
-        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then
+        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then -- "Сброс счетчиков ошибок для предотвращения накопления"
             prev.cc_errors = 0
             prev.pes_errors = 0
         end
@@ -149,7 +149,6 @@ local function create_monitor(monitor_data, channel_data)
 
                 send(json_encode(content), "error")
             elseif data.psi then
-                -- Улучшенная обработка psi_data для избежания дубликатов
                 local psi_key = data.psi
                 if monitor_data.psi_data[psi_key] then
                     monitor_data.psi_data[psi_key] = nil
@@ -199,7 +198,8 @@ local function create_monitor(monitor_data, channel_data)
                     send(json_encode(status), "channels")
 
                     monitor_data.status.bitrate = status.bitrate
-                    monitor_data.status.on_air = status.on_air    
+                    monitor_data.status.ready = status.ready    
+                    monitor_data.status.scrambled = status.scrambled 
 
                     -- Обнуляем счетчик
                     status.cc_errors = 0
@@ -220,7 +220,7 @@ end
 
 local monitor_list = {}
 
-function get_monitor_list()
+function get_list_monitor()
     return monitor_list
 end
 
@@ -238,10 +238,10 @@ function update_monitor_parameters(name, params)
     end
 
     -- Обновляем только переданные параметры с валидацией
-    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 1, "params.rate must be between 0.001 and 1") then
+    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 0.3, "params.rate must be between 0.001 and 0.3") then
         monitor_data.instance.rate = params.rate
     end
-    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0, "params.time_check must be non-negative") then
+    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0 and params.time_check <= 300, "params.time_check must be between 0 and 300") then
         monitor_data.instance.time_check = params.time_check
     end
     if params.analyze ~= nil and check(type(params.analyze) == 'boolean', "params.analyze must be boolean") then
@@ -267,8 +267,8 @@ function make_monitor(config, channel_data)
     if not check(type(config) == 'table', "config must be a table") then return false end
     if not check(config.name and type(config.name) == 'string', "config.name required") then return false end
     if not check(config.monitor and type(config.monitor) == 'string', "config.monitor required") then return false end
-    if not check(type(config.rate) == 'number' and config.rate >= 0.001 and config.rate <= 1, "config.rate must be between 0.001 and 1, default value was set: " .. DEFAULT_RATE) then config.rate = DEFAULT_RATE end
-    if not check(type(config.time_check) == 'number' and config.time_check >= 0, "config.time_check must be non-negative, default value was set: " .. DEFAULT_TIME_CHECK) then config.time_check = DEFAULT_TIME_CHECK end
+    if not check(type(config.rate) == 'number' and config.rate >= 0.001 and config.rate <= 0.3, "config.rate must be between 0.001 and 0.3, default value was set: " .. DEFAULT_RATE) then config.rate = DEFAULT_RATE end
+    if not check(type(config.time_check) == 'number' and config.time_check >= 0 and config.time_check <= 300, "config.time_check  must be between 0 and 300, default value was set: " .. DEFAULT_TIME_CHECK) then config.time_check = DEFAULT_TIME_CHECK end
     if not check(type(config.analyze) == 'boolean', "config.analyze must be boolean, default value was set: " .. tostring(DEFAULT_ANALYZE)) then config.analyze = DEFAULT_ANALYZE end
     if not check(type(config.method_comparison) == 'number' and config.method_comparison >= 1 and config.method_comparison <= 4, "config.method_comparison must be between 1 and 4, default value was set: " .. DEFAULT_METHOD_COMPARISON) then 
         config.method_comparison = DEFAULT_METHOD_COMPARISON end
@@ -313,7 +313,7 @@ function make_monitor(config, channel_data)
         instance = config,
         stream_json = stream_json,
         psi_data = {},
-        status = { bitrate = 0, ready = false}
+        status = { bitrate = 0, ready = false, scrambled = true}
     }
 
     if not config.upstream then

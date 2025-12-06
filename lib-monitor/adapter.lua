@@ -47,6 +47,10 @@ local dvb_monitor_method_comparison = {
 
 local dvb_config = {}
 
+function get_list_adapter()
+    return dvb_config
+end
+
 function dvb_tuner_monitor(conf)
     if not conf.name_adapter then
         log_error("[dvb_tuner] name is not found")
