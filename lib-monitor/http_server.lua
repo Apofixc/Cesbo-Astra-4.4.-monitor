@@ -104,7 +104,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     local cfg = kill_func(data)
     log_info(string.format("[%s] %s killed", log_prefix, name))
 
-    if string_lower(get_param(req, "reboot") or "") == "true" then 
+    if get_param(req, "reboot") == true then 
         local delay = validate_delay(get_param(req, "delay"))
         log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, delay)) 
 
