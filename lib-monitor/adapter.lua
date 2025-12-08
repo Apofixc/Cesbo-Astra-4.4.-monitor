@@ -84,6 +84,7 @@ function dvb_tuner_monitor(conf)
     }
 
     local time = 0
+    local json_cache = nil
     conf.callback = function(data)
         if time < conf.time_check then
             time = time + 1
@@ -98,7 +99,8 @@ function dvb_tuner_monitor(conf)
             status_signal.ber = data.ber or -1
             status_signal.unc = data.unc or -1
 
-            send(json_encode(status_signal), "dvb")
+            json_cache = json_encode(status_signal)
+            send(json_cache, "dvb")
         end
     end
 
@@ -109,7 +111,7 @@ function dvb_tuner_monitor(conf)
     if _G[conf.name_adapter] then
         dvb_config[conf.name_adapter] = {
             instance = instance,
-            status_signal = status_signal
+            json_status_cache = json_cache
         }
 
         return instance

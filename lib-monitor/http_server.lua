@@ -12,6 +12,7 @@ local astra_version = astra.version
 local _astra_reload = astra.reload
 local json_decode = json.decode
 local json_encode = json.encode
+local string_split = string.split -- Объявлена в модуле base.lu
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -104,7 +105,8 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     local cfg = kill_func(data)
     log_info(string.format("[%s] %s killed", log_prefix, name))
 
-    if get_param(req, "reboot") == true then 
+    local reboot = get_param(req, "reboot")
+    if type(reboot) == "boolean" and reboot == true or type(reboot) == "string" and reboot == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
         log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, delay)) 
 
@@ -226,7 +228,16 @@ local get_channel_list = function(server, client, request)
     
     local content = {}
     for key, channel_data in ipairs(channel_list) do
-        content["channel_" .. key] = channel_data.config.name
+        local output_string = ""
+
+        if channel_data.config.output and channel_data.config.output[1] then
+            output_string = channel_data.config.output[1]
+        end
+
+        content["channel_" .. key] = {
+            name = channel_data.config.name,
+            addr = string_split(output_string, "#")[1]
+        }
     end
     
     local json_content = json_encode(content)
@@ -286,15 +297,17 @@ local get_monitor_data = function(server, client, request)
         return send_response(server, client, 404, "Monitor not found")
     end
 
-    local json_content = json_encode(monitor.status)
+    if not monitor.json_status_cache then
+        return send_response(server, client, 404, "Monitor cache not found")
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #json_content,
+        "Content-Length: " .. #monitor.json_status_cache,
         "Connection: close",
     }    
     
-    send_response(server, client, 200, json_content, headers)    
+    send_response(server, client, 200, monitor.json_status_cache, headers)    
 end
 
 local get_psi_channel = function(server, client, request)
@@ -318,15 +331,18 @@ local get_psi_channel = function(server, client, request)
         return send_response(server, client, 404, "Monitor not found")
     end
 
-    local json_content = json_encode(monitor.psi_data)
+    if not monitor.psi_data_cache then
+        return send_response(server, client, 404, "PSI cache not found")
+    end
 
+    local json_content = json_encode(monitor.psi_data_cache)
     local headers = {
         "Content-Type: application/json;charset=utf-8",
         "Content-Length: " .. #json_content,
         "Connection: close",
     }    
     
-    send_response(server, client, 200, json_content, headers)   
+    send_response(server, client, 200, json_content, headers)    
 end
 
 local get_adapter_list = function(server, client, request)
@@ -371,17 +387,23 @@ local get_adapter_data = function(server, client, request)
         return send_response(server, client, 400, "Missing adapter")   
     end
 
-    local monitor = find_monitor(name).status_signal
+    local monitor = find_monitor(name)
     
-    local json_content = json_encode(monitor)
+    if not monitor then
+        return send_response(server, client, 404, "Monitor not found")
+    end
+
+    if not monitor.json_status_cache then
+        return send_response(server, client, 404, "Monitor cache not found")
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #json_content,
+        "Content-Length: " .. #json_status_cache,
         "Connection: close",
     }    
     
-    send_response(server, client, 200)   
+    send_response(server, client, 200, monitor.json_status_cache, headers)   
 end
 
 local update_monitor_dvb = function(server, client, request)

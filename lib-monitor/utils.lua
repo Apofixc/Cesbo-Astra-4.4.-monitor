@@ -32,10 +32,10 @@ local STREAM = {
 }
 
 local MONIT_ADDRESS = {
-    -- ["channels"] = {host = "127.0.0.1", port = 8081, path = "/channels"}, 
-    -- ["analyze"] = {host = "127.0.0.1", port = 8082, path = "/analyze"},    
-    -- ["errors"] = {host = "127.0.0.1", port = 8083, path = "/errors"}, 
-    -- ["dvb"] = {host = "127.0.0.1", port = 8084, path = "/dvb"}, 
+    -- ["channels"] = {{host = "127.0.0.1", port = 8081, path = "/channels"}, {host = "127.0.0.1", port = 5000, path = "/channels"}}, 
+    -- ["analyze"] = {{host = "127.0.0.1", port = 8082, path = "/analyze"}},    
+    -- ["errors"] = {{host = "127.0.0.1", port = 8083, path = "/errors"}}, 
+    -- ["dvb"] = {{host = "127.0.0.1", port = 8084, path = "/dvb"}, {host = "127.0.0.1", port = 5000, path = "/dvb"}}, 
 }
 
 local send_debug = true
@@ -129,27 +129,29 @@ function get_server_name()
 end
 
 function send_monitor(content, feed)
-    local addr = MONIT_ADDRESS[feed]
-    if addr then
-        http_request({
-            host = addr.host,
-            path = addr.path,
-            method = "POST",
-            content = content,
-            port = addr.port,
-            headers = {
-                "User-Agent: Astra v." .. astra_version,
-                "Host: " .. addr.host,
-                "Content-Type: application/json;charset=utf-8",
-                "Content-Length: " .. #content,
-                "Connection: close",
-            },
-            callback = function(s,r)
-                if not s or type(r) == "table" and r.code and r.code ~= 200 then
-                    log_error(string_format("[send_monitor] HTTP request failed for feed '%s': status=%s", feed, r.code or "unknown"))
+    local recipients = MONIT_ADDRESS[feed]
+    if recipients then
+        for _, addr in ipairs(recipients) do
+            http_request({
+                host = addr.host,
+                path = addr.path,
+                method = "POST",
+                content = content,
+                port = addr.port,
+                headers = {
+                    "User-Agent: Astra v." .. astra_version,
+                    "Host: " .. addr.host .. ":" .. addr.port,
+                    "Content-Type: application/json;charset=utf-8",
+                    "Content-Length: " .. #content,
+                    "Connection: close",
+                },
+                callback = function(s,r)
+                    if not s or type(r) == "table" and r.code and r.code ~= 200 then
+                        log_error(string_format("[send_monitor] HTTP request failed for feed '%s': status=%s", feed, r.code or "unknown"))
+                    end
                 end
-            end
-        })
+            })
+        end
     end
 end
 

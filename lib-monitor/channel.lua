@@ -154,7 +154,7 @@ local function create_monitor(monitor_data, channel_data)
                     monitor_data.psi_data[psi_key] = nil
                 end
                     
-                monitor_data.psi_data[psi_key] = data
+                monitor_data.psi_data_cache[psi_key] = json_encode(data) 
             elseif data.total then
                if instance.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
                     local content = create_template()
@@ -195,11 +195,10 @@ local function create_monitor(monitor_data, channel_data)
                     status.scrambled = data.total.scrambled
                     status.bitrate = data.total.bitrate or 0
                     
-                    send(json_encode(status), "channels")
+                    local json_cache = json_encode(status)
+                    send(json_cache, "channels")
 
-                    monitor_data.status.bitrate = status.bitrate
-                    monitor_data.status.ready = status.ready    
-                    monitor_data.status.scrambled = status.scrambled 
+                    monitor_data.json_status_cache = json_cache
 
                     -- Обнуляем счетчик
                     status.cc_errors = 0
@@ -312,8 +311,8 @@ function make_monitor(config, channel_data)
         name = name,
         instance = config,
         stream_json = stream_json,
-        psi_data = {},
-        status = { bitrate = 0, ready = false, scrambled = true}
+        psi_data_cache = {},
+        json_status_cache = nil
     }
 
     if not config.upstream then
@@ -383,8 +382,8 @@ function kill_monitor(monitor_data)
     monitor_data.name = nil
     monitor_data.monitor = nil
     monitor_data.instance = nil
-    monitor_data.psi_data = nil 
-    monitor_data.status = nil
+    monitor_data.psi_data_cache = nil 
+    monitor_data.json_status_cache = nil
 
     for i = 1, #monitor_data.stream_json do
         monitor_data.stream_json[i] = nil
