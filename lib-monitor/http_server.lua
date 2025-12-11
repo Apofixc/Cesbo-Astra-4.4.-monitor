@@ -36,7 +36,7 @@ local function validate_request(request)
     end
 
     local content_type = request.content and request.headers and request.headers["content-type"] and request.headers["content-type"]:lower() or ""
-    if content_type == "application/json" or content_type == "multipart/json" then
+    if content_type == "application/json" then
         local success, decoder = pcall(json_decode, request.content)
         if success and decoder then
             return decoder
@@ -106,7 +106,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     log_info(string.format("[%s] %s killed", log_prefix, name))
 
     local reboot = get_param(req, "reboot")
-    if type(reboot) == "boolean" and reboot == true or type(reboot) == "string" and reboot == "true" then 
+    if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
         log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, delay)) 
 
@@ -399,7 +399,7 @@ local get_adapter_data = function(server, client, request)
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #json_status_cache,
+        "Content-Length: " .. #monitor.json_status_cache, 
         "Connection: close",
     }    
     
@@ -481,7 +481,7 @@ local kill_astra = function(server, client, request)
 
 end
 
-local instance = function (server, client, request)
+local health = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
@@ -519,7 +519,7 @@ function server_start(addr, port)
             {"/api/update_monitor_dvb", update_monitor_dvb},
             {"/api/reload", astra_reload},
             {"/api/exit", kill_astra},
-            {"/api/instance", instance}
+            {"/api/health", health}
         }
     })
     log_info(string.format("[Server] Started on %s:%d", addr, port))

@@ -150,8 +150,8 @@ local function create_monitor(monitor_data, channel_data)
                 send(json_encode(content), "error")
             elseif data.psi then
                 local psi_key = data.psi
-                if monitor_data.psi_data[psi_key] then
-                    monitor_data.psi_data[psi_key] = nil
+                if monitor_data.psi_data_cache[psi_key] then
+                    monitor_data.psi_data_cache[psi_key] = nil
                 end
                     
                 monitor_data.psi_data_cache[psi_key] = json_encode(data) 
