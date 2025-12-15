@@ -57,7 +57,7 @@ function dvb_tuner_monitor(conf)
         return
     end
 
-    if _G[conf.name_adapter] or dvb_config[conf.name_adapter] then
+    if dvb_config[conf.name_adapter] then
         log_error("[dvb_tuner] tuner is found")
         return
     end
