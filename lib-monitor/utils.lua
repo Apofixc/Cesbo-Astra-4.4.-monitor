@@ -17,28 +17,12 @@ local astra_version = astra.version
 -- Константы и конфигурация
 -- ===========================================================================
 
+local config = require "config"
+
 local hostname =  utils.hostname()
 
-local STREAM = {
-    ["127.0.0.1"] = "Узда",
-    ["127.0.0.2"] = "Дружный",
-    ["127.0.0.3"] = "Старобин",
-    ["127.0.0.4"] = "Октябрьский",
-    ["127.0.0.5"] = "Червень",
-    ["127.0.0.6"] = "Mediatech",
-    ["127.0.0.7"] = "PlayOut",
-    ["127.0.0.8"] = "BeCloud",
-    ["127.0.0.9"] = "WikiLink",
-}
-
-local MONIT_ADDRESS = {
-    -- ["channels"] = {{host = "127.0.0.1", port = 8081, path = "/channels"}, {host = "127.0.0.1", port = 5000, path = "/channels"}}, 
-    -- ["analyze"] = {{host = "127.0.0.1", port = 8082, path = "/analyze"}},    
-    -- ["errors"] = {{host = "127.0.0.1", port = 8083, path = "/errors"}}, 
-    -- ["dvb"] = {{host = "127.0.0.1", port = 8084, path = "/dvb"}, {host = "127.0.0.1", port = 5000, path = "/dvb"}}, 
-}
-
-local send_debug = true
+local STREAM = config.STREAM
+local MONIT_ADDRESS = config.MONIT_ADDRESS
 
 -- ===========================================================================
 -- Основные функции модуля
@@ -154,5 +138,3 @@ function send_monitor(content, feed)
         end
     end
 end
-
-
