@@ -104,11 +104,9 @@ function dvb_tuner_monitor(conf)
         end
     end
 
-    --hook из-за кривости init_dvb
     local instance = dvb_tune(conf)
-    _G[conf.name_adapter] = instance
 
-    if _G[conf.name_adapter] then
+    if instance then
         dvb_config[conf.name_adapter] = {
             instance = instance,
             json_status_cache = json_cache
