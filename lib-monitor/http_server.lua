@@ -48,10 +48,10 @@ local function validate_request(request)
 end
 
 local function check_auth(request)
-    -- local api_key = request and request.headers and request.headers["x-api-key"]
-    -- if not api_key or api_key ~= API_SECRET then
-    --     return false
-    -- end
+    local api_key = request and request.headers and request.headers["x-api-key"]
+    if not api_key or api_key ~= API_SECRET then
+        return false
+    end
     return true
 end
 
