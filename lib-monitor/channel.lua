@@ -90,6 +90,15 @@ local channel_monitor_method_comparison = {
 -- Основные функции модуля
 -- ===========================================================================
 
+--- Создает и настраивает монитор для канала.
+-- @param table monitor_data Таблица с данными монитора, включая:
+--   - instance (table): Конфигурация монитора.
+--   - stream_json (table): Информация о потоках.
+--   - psi_data_cache (table): Кэш данных PSI.
+--   - json_status_cache (string): Кэш JSON-статуса.
+-- @param table channel_data Таблица с данными канала, включая:
+--   - active_input_id (number): ID активного входа.
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе nil.
 local function create_monitor(monitor_data, channel_data)
     local instance = monitor_data.instance
     local stream_json = monitor_data.stream_json
@@ -97,7 +106,7 @@ local function create_monitor(monitor_data, channel_data)
     if not instance.name then
         log_error("[create_monitor] name is required")
         return nil
-    end    
+    end
 
     local send = send_monitor
     
@@ -219,10 +228,20 @@ end
 
 local monitor_list = {}
 
+--- Возвращает список всех активных мониторов.
+-- @return table monitor_list Таблица со списком активных мониторов.
 function get_list_monitor()
     return monitor_list
 end
 
+--- Обновляет параметры существующего монитора канала.
+-- @param string name Имя монитора, который нужно обновить.
+-- @param table params Таблица с новыми параметрами. Поддерживаемые параметры:
+--   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
+--   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
+--   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
+--   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
+-- @return boolean true, если параметры успешно обновлены, иначе false.
 function update_monitor_parameters(name, params)
     if not name or type(params) ~= 'table' then
         log_error("[update_monitor_parameters] name and params table are required")
@@ -255,6 +274,17 @@ function update_monitor_parameters(name, params)
     return true
 end
 
+--- Создает новый монитор канала.
+-- @param table config Таблица конфигурации для нового монитора, содержащая:
+--   - name (string): Имя монитора (обязательно).
+--   - monitor (string): Адрес мониторинга (обязательно).
+--   - rate (number, optional): Погрешность сравнения битрейта (от 0.001 до 0.3, по умолчанию 0.035).
+--   - time_check (number, optional): Время до сравнения данных (от 0 до 300, по умолчанию 0).
+--   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках (по умолчанию false).
+--   - method_comparison (number, optional): Метод сравнения состояния потока (от 1 до 4, по умолчанию 3).
+--   - upstream (userdata, optional): Функция вызова потока.
+-- @param table channel_data (optional) Таблица с данными канала или его имя (string).
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
 function make_monitor(config, channel_data)
     if #monitor_list > MONITOR_LIMIT then 
         log_error("[make_monitor] monitor_list overflow")
@@ -345,6 +375,9 @@ function make_monitor(config, channel_data)
     end
 end
 
+--- Находит монитор по его имени.
+-- @param string name Имя монитора для поиска.
+-- @return table monitor_data Таблица с данными монитора, если найден, иначе nil.
 function find_monitor(name)
     for _, monitor_data in ipairs(monitor_list) do
         if monitor_data.name == name then
@@ -354,6 +387,9 @@ function find_monitor(name)
     return nil
 end
 
+--- Останавливает и удаляет монитор.
+-- @param table monitor_data Таблица с данными монитора, который нужно остановить.
+-- @return table config Копия конфигурации остановленного монитора, если успешно, иначе false.
 function kill_monitor(monitor_data)
     if not monitor_data then return false end
 
@@ -398,6 +434,19 @@ function kill_monitor(monitor_data)
     return config
 end
 
+--- Создает и запускает поток с мониторингом.
+-- @param table conf Таблица конфигурации потока, содержащая:
+--   - name (string): Имя потока.
+--   - input (table): Конфигурация входных данных.
+--   - output (table): Конфигурация выходных данных.
+--   - monitor (table, optional): Конфигурация монитора, содержащая:
+--     - name (string, optional): Имя монитора (по умолчанию совпадает с именем потока).
+--     - monitor_type (string, optional): Тип монитора ("input", "output", "ip", по умолчанию "output").
+--     - rate (number, optional): Погрешность сравнения битрейта.
+--     - time_check (number, optional): Время до сравнения данных.
+--     - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
+--     - method_comparison (number, optional): Метод сравнения состояния потока.
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
 function make_stream(conf)  
     local channel_data = make_channel(conf)
     if not channel_data then 
@@ -453,6 +502,9 @@ function make_stream(conf)
     return make_monitor(instance, channel_data)
 end
 
+--- Останавливает поток и связанный с ним монитор.
+-- @param table channel_data Таблица с данными канала, который нужно остановить.
+-- @return table config Копия конфигурации остановленного канала, если успешно, иначе nil.
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config or not channel_data.config.name then 
         log_error("[kill_stream] Invalid channel_data or config")

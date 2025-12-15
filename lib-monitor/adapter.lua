@@ -47,10 +47,23 @@ local dvb_monitor_method_comparison = {
 
 local dvb_config = {}
 
+--- Возвращает текущую конфигурацию DVB-адаптеров.
+-- @return table dvb_config Таблица с конфигурацией DVB-адаптеров.
 function get_list_adapter()
     return dvb_config
 end
 
+--- Инициализирует и запускает мониторинг DVB-тюнера.
+-- @param table conf Таблица конфигурации для DVB-тюнера, содержащая:
+--   - name_adapter (string): Имя адаптера (обязательно).
+--   - time_check (number, optional): Интервал проверки в секундах (по умолчанию 10).
+--   - rate (number, optional): Допустимая погрешность для сравнения параметров (по умолчанию 0.015).
+--   - method_comparison (number, optional): Метод сравнения параметров (1, 2 или 3, по умолчанию 3).
+--   - type (string, optional): Тип DVB (например, "T", "S", "C").
+--   - modulation (string, optional): Тип модуляции.
+--   - tp (string, optional): Транспондер.
+--   - frequency (number, optional): Частота.
+-- @return userdata instance Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе nil.
 function dvb_tuner_monitor(conf)
     if not conf.name_adapter then
         log_error("[dvb_tuner] name is not found")
@@ -116,10 +129,19 @@ function dvb_tuner_monitor(conf)
     end
 end
 
+--- Находит конфигурацию DVB-тюнера по имени адаптера.
+-- @param string name_adapter Имя адаптера.
+-- @return userdata instance Экземпляр DVB-тюнера, если найден, иначе nil.
 function find_dvb_conf(name_adapter)
     return dvb_config[name_adapter].instance
 end
 
+--- Обновляет параметры мониторинга DVB-тюнера.
+-- @param string name_adapter Имя адаптера, параметры которого нужно обновить.
+-- @param table params Таблица с новыми параметрами. Поддерживаемые параметры:
+--   - rate (number, optional): Новое значение допустимой погрешности (от 0.001 до 1).
+--   - time_check (number, optional): Новый интервал проверки (неотрицательное число).
+-- @return boolean true, если параметры успешно обновлены, иначе nil.
 function update_dvb_monitor_parameters(name_adapter, params)
     if not name_adapter or type(params) ~= 'table' then
         log_error("[update_dvb_monitor_parameters] name_adapter and params table are required")

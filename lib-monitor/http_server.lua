@@ -25,6 +25,10 @@ local DELAY = 30
 -- Хелперы (Helpers)
 -- =============================================
 
+--- Валидирует входящий HTTP-запрос и извлекает параметры.
+-- Поддерживает параметры из query string или из JSON-тела запроса.
+-- @param table request Объект HTTP-зазапроса.
+-- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
         log_error("[validate_request] request is nil.")
@@ -47,6 +51,9 @@ local function validate_request(request)
     return {}
 end
 
+--- Проверяет наличие и валидность API-ключа в заголовках запроса.
+-- @param table request Объект HTTP-запроса.
+-- @return boolean true, если аутентификация успешна, иначе false.
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
@@ -55,6 +62,10 @@ local function check_auth(request)
     return true
 end
 
+--- Извлекает параметр из таблицы запроса.
+-- @param table req Таблица с параметрами запроса.
+-- @param string key Ключ параметра.
+-- @return any Значение параметра или nil, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
         log_error("[get_param] req is nil.")
@@ -66,6 +77,9 @@ local function get_param(req, key)
     end
 end
 
+--- Валидирует значение задержки.
+-- @param string s Строковое представление задержки.
+-- @return number Валидное значение задержки (не менее 1) или значение по умолчанию.
 local function validate_delay(s) 
     local i = tonumber(s)
     if i and i >= 1 then
@@ -76,6 +90,12 @@ local function validate_delay(s)
     end
 end
 
+--- Отправляет HTTP-ответ клиенту.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param number code HTTP-код ответа.
+-- @param string msg (optional) Сообщение для отправки в теле ответа.
+-- @param table headers (optional) Таблица с дополнительными HTTP-заголовками.
 local function send_response(server, client, code, msg, headers)
     if code == 200 then
         server:send(client, {
@@ -90,6 +110,14 @@ local function send_response(server, client, code, msg, headers)
 end
 
 -- Основной хелпер для логики kill/reboot
+--- Универсальный обработчик для операций остановки/перезагрузки потоков, каналов или мониторов.
+-- @param function find_func Функция для поиска объекта (поток, канал, монитор) по имени.
+-- @param function kill_func Функция для остановки объекта.
+-- @param function make_func Функция для создания/перезапуска объекта.
+-- @param string log_prefix Префикс для сообщений в логе.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table req Таблица с параметрами запроса (должна содержать "channel" и опционально "reboot", "delay").
 local function handle_kill_with_reboot(find_func, kill_func, make_func, log_prefix, server, client, req)
     local name = get_param(req, "channel")
 
@@ -127,6 +155,11 @@ end
 -- Управление каналами и их мониторами (Route Handlers)
 -- =============================================
 
+--- Обработчик HTTP-запроса для остановки или перезагрузки потока.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local control_kill_stream = function(server, client, request)
     if not request then return nil end
     
@@ -138,6 +171,11 @@ local control_kill_stream = function(server, client, request)
     handle_kill_with_reboot(find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
 end
 
+--- Обработчик HTTP-запроса для остановки или перезагрузки канала.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local control_kill_channel = function(server, client, request)
     if not request then return nil end
 
@@ -153,6 +191,11 @@ local control_kill_channel = function(server, client, request)
     end, make_channel, "Channel", server, client, validate_request(request))
 end
 
+--- Обработчик HTTP-запроса для остановки или перезагрузки монитора.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local control_kill_monitor = function(server, client, request)
     if not request then return nil end
 
@@ -164,6 +207,11 @@ local control_kill_monitor = function(server, client, request)
     handle_kill_with_reboot(find_monitor, kill_monitor, make_monitor, "Monitor", server, client, validate_request(request))
 end
 
+--- Обработчик HTTP-запроса для обновления параметров монитора канала.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local update_monitor_channel = function(server, client, request)
     if not request then return nil end
 
@@ -202,6 +250,11 @@ local update_monitor_channel = function(server, client, request)
     send_response(server, client, result and 200 or 400)
 end
 
+--- Обработчик HTTP-запроса для создания канала (заглушка).
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
 
@@ -213,6 +266,11 @@ local create_channel = function(server, client, request) -- заглушка
     send_response(server, client, 200)
 end
 
+--- Обработчик HTTP-запроса для получения списка каналов.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_channel_list = function(server, client, request)
     if not request then return nil end
 
@@ -251,6 +309,11 @@ local get_channel_list = function(server, client, request)
     send_response(server, client, 200, json_content, headers)   
 end
 
+--- Обработчик HTTP-запроса для получения списка активных мониторов.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_monitor_list = function(server, client, request)
     if not request then return nil end
 
@@ -276,6 +339,11 @@ local get_monitor_list = function(server, client, request)
     send_response(server, client, 200, json_content, headers) 
 end
 
+--- Обработчик HTTP-запроса для получения данных монитора канала.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_monitor_data = function(server, client, request)
     if not request then return nil end
 
@@ -310,6 +378,11 @@ local get_monitor_data = function(server, client, request)
     send_response(server, client, 200, monitor.json_status_cache, headers)    
 end
 
+--- Обработчик HTTP-запроса для получения данных PSI канала.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_psi_channel = function(server, client, request)
     if not request then return nil end
 
@@ -345,6 +418,11 @@ local get_psi_channel = function(server, client, request)
     send_response(server, client, 200, json_content, headers)    
 end
 
+--- Обработчик HTTP-запроса для получения списка DVB-адаптеров.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_adapter_list = function(server, client, request)
     if not request then return nil end
 
@@ -372,6 +450,11 @@ local get_adapter_list = function(server, client, request)
     send_response(server, client, 200, json_content, headers) 
 end
 
+--- Обработчик HTTP-запроса для получения данных DVB-адаптера.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local get_adapter_data = function(server, client, request)
     if not request then return nil end
 
@@ -406,6 +489,11 @@ local get_adapter_data = function(server, client, request)
     send_response(server, client, 200, monitor.json_status_cache, headers)   
 end
 
+--- Обработчик HTTP-запроса для обновления параметров DVB-монитора.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local update_monitor_dvb = function(server, client, request)
     if not request then return nil end
 
@@ -440,6 +528,11 @@ local update_monitor_dvb = function(server, client, request)
     send_response(server, client, result and 200 or 400)
 end
 
+--- Обработчик HTTP-запроса для перезагрузки Astra.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local astra_reload = function(server, client, request)
     if not request then return nil end
 
@@ -460,6 +553,11 @@ local astra_reload = function(server, client, request)
     })
 end
 
+--- Обработчик HTTP-запроса для остановки Astra.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local kill_astra = function(server, client, request)
     if not request then return nil end
 
@@ -481,6 +579,11 @@ local kill_astra = function(server, client, request)
 
 end
 
+--- Обработчик HTTP-запроса для проверки состояния сервера.
+-- Требует аутентификации по API-ключу.
+-- @param table server Объект HTTP-сервера.
+-- @param table client Объект клиента.
+-- @param table request Объект HTTP-запроса.
 local health = function (server, client, request)
     if not request then return nil end
 
@@ -500,6 +603,9 @@ local health = function (server, client, request)
     send_response(server, client, 200, json_content, headers) 
 end
 
+--- Запускает HTTP-сервер мониторинга.
+-- @param string addr IP-адрес, на котором будет слушать сервер.
+-- @param number port Порт, на котором будет слушать сервер.
 function server_start(addr, port)
     http_server({
         addr = addr,
