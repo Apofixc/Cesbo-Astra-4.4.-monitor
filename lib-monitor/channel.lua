@@ -99,6 +99,46 @@ local channel_monitor_method_comparison = {
 -- @param table channel_data Таблица с данными канала, включая:
 --   - active_input_id (number): ID активного входа.
 -- @return userdata monitor Экземпляр монитора, если успешно создан, иначе nil.
+--
+-- Отправляет JSON-объект со статусом канала. Структура JSON:
+-- {
+--   type (string): "Channel",
+--   server (string): Имя сервера,
+--   channel (string): Имя канала,
+--   output (string): Адрес мониторинга,
+--   stream (string): Имя потока,
+--   format (string): Формат потока,
+--   addr (string): Адрес потока,
+--   ready (boolean): Готовность канала,
+--   scrambled (boolean): Зашифрован ли канал,
+--   bitrate (number): Битрейт канала,
+--   cc_errors (number): Количество CC-ошибок,
+--   pes_errors (number): Количество PES-ошибок,
+--   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
+-- }
+-- Отправляет JSON-объект с ошибкой, если она произошла. Структура JSON:
+-- {
+--   type (string): "Channel",
+--   server (string): Имя сервера,
+--   channel (string): Имя канала,
+--   output (string): Адрес мониторинга,
+--   stream (string): Имя потока,
+--   format (string): Формат потока,
+--   addr (string): Адрес потока,
+--   error (string): Описание ошибки.
+-- }
+-- Отправляет JSON-объект с данными PSI, если они доступны. Структура JSON:
+-- {
+--   type (string): "psi",
+--   server (string): Имя сервера,
+--   channel (string): Имя канала,
+--   output (string): Адрес мониторинга,
+--   stream (string): Имя потока,
+--   format (string): Формат потока,
+--   addr (string): Адрес потока,
+--   psi (string): Тип PSI данных (например, "pmt", "sdt").
+--   [...]: Другие поля, специфичные для PSI данных.
+-- }
 local function create_monitor(monitor_data, channel_data)
     local instance = monitor_data.instance
     local stream_json = monitor_data.stream_json

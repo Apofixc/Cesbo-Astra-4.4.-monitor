@@ -64,6 +64,21 @@ end
 --   - tp (string, optional): Транспондер.
 --   - frequency (number, optional): Частота.
 -- @return userdata instance Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе nil.
+--
+-- Отправляет JSON-объект со статусом DVB-тюнера. Структура JSON:
+-- {
+--   type (string): "dvb",
+--   server (string): Имя сервера,
+--   format (string): Формат DVB (например, "T", "S", "C"),
+--   modulation (string): Тип модуляции,
+--   source (string/number): Транспондер или частота,
+--   name_adapter (string): Имя адаптера,
+--   status (number): Статус сигнала (-1 по умолчанию),
+--   signal (number): Уровень сигнала (-1 по умолчанию),
+--   snr (number): Соотношение сигнал/шум (-1 по умолчанию),
+--   ber (number): Коэффициент битовых ошибок (-1 по умолчанию),
+--   unc (number): Количество некорректируемых ошибок (-1 по умолчанию)
+-- }
 function dvb_tuner_monitor(conf)
     if not conf.name_adapter then
         log_error("[dvb_tuner] name is not found")

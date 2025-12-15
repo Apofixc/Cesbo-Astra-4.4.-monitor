@@ -157,9 +157,12 @@ end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки потока.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - channel (string): Имя потока (обязательно).
+--   - reboot (boolean, optional): true для перезагрузки потока после остановки.
+--   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local control_kill_stream = function(server, client, request)
     if not request then return nil end
     
@@ -173,9 +176,12 @@ end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - channel (string): Имя канала (обязательно).
+--   - reboot (boolean, optional): true для перезагрузки канала после остановки.
+--   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local control_kill_channel = function(server, client, request)
     if not request then return nil end
 
@@ -193,9 +199,12 @@ end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки монитора.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - channel (string): Имя монитора (обязательно).
+--   - reboot (boolean, optional): true для перезагрузки монитора после остановки.
+--   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local control_kill_monitor = function(server, client, request)
     if not request then return nil end
 
@@ -209,9 +218,14 @@ end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - channel (string): Имя канала (обязательно).
+--   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
+--   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
+--   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
+--   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_monitor_channel = function(server, client, request)
     if not request then return nil end
 
@@ -252,9 +266,9 @@ end
 
 --- Обработчик HTTP-запроса для создания канала (заглушка).
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса: (в настоящее время не используются, заглушка)
+-- Возвращает: HTTP 200 OK или 401 Unauthorized.
 local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
 
@@ -268,9 +282,15 @@ end
 
 --- Обработчик HTTP-запроса для получения списка каналов.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект со списком каналов. Структура JSON:
+-- {
+--   channel_1 (table): {
+--     name (string): Имя канала,
+--     addr (string): Адрес канала
+--   },
+--   channel_2 (table): { ... }
+-- }
 local get_channel_list = function(server, client, request)
     if not request then return nil end
 
@@ -311,9 +331,13 @@ end
 
 --- Обработчик HTTP-запроса для получения списка активных мониторов.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект со списком мониторов. Структура JSON:
+-- {
+--   monitor_1 (string): Имя монитора,
+--   monitor_2 (string): Имя монитора,
+--   ...
+-- }
 local get_monitor_list = function(server, client, request)
     if not request then return nil end
 
@@ -341,9 +365,23 @@ end
 
 --- Обработчик HTTP-запроса для получения данных монитора канала.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект со статусом монитора. Структура JSON:
+-- {
+--   type (string): "Channel",
+--   server (string): Имя сервера,
+--   channel (string): Имя канала,
+--   output (string): Адрес мониторинга,
+--   stream (string): Имя потока,
+--   format (string): Формат потока,
+--   addr (string): Адрес потока,
+--   ready (boolean): Готовность канала,
+--   scrambled (boolean): Зашифрован ли канал,
+--   bitrate (number): Битрейт канала,
+--   cc_errors (number): Количество CC-ошибок,
+--   pes_errors (number): Количество PES-ошибок,
+--   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
+-- }
 local get_monitor_data = function(server, client, request)
     if not request then return nil end
 
@@ -380,9 +418,19 @@ end
 
 --- Обработчик HTTP-запроса для получения данных PSI канала.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект с данными PSI. Структура JSON:
+-- {
+--   type (string): "psi",
+--   server (string): Имя сервера,
+--   channel (string): Имя канала,
+--   output (string): Адрес мониторинга,
+--   stream (string): Имя потока,
+--   format (string): Формат потока,
+--   addr (string): Адрес потока,
+--   psi (string): Тип PSI данных (например, "pmt", "sdt").
+--   [...]: Другие поля, специфичные для PSI данных.
+-- }
 local get_psi_channel = function(server, client, request)
     if not request then return nil end
 
@@ -420,9 +468,13 @@ end
 
 --- Обработчик HTTP-запроса для получения списка DVB-адаптеров.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект со списком адаптеров. Структура JSON:
+-- {
+--   adapter_1 (string): Имя адаптера,
+--   adapter_2 (string): Имя адаптера,
+--   ...
+-- }
 local get_adapter_list = function(server, client, request)
     if not request then return nil end
 
@@ -452,9 +504,21 @@ end
 
 --- Обработчик HTTP-запроса для получения данных DVB-адаптера.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект со статусом DVB-адаптера. Структура JSON:
+-- {
+--   type (string): "dvb",
+--   server (string): Имя сервера,
+--   format (string): Формат DVB (например, "T", "S", "C"),
+--   modulation (string): Тип модуляции,
+--   source (string/number): Транспондер или частота,
+--   name_adapter (string): Имя адаптера,
+--   status (number): Статус сигнала (-1 по умолчанию),
+--   signal (number): Уровень сигнала (-1 по умолчанию),
+--   snr (number): Соотношение сигнал/шум (-1 по умолчанию),
+--   ber (number): Коэффициент битовых ошибок (-1 по умолчанию),
+--   unc (number): Количество некорректируемых ошибок (-1 по умолчанию)
+-- }
 local get_adapter_data = function(server, client, request)
     if not request then return nil end
 
@@ -491,9 +555,12 @@ end
 
 --- Обработчик HTTP-запроса для обновления параметров DVB-монитора.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - name_adapter (string): Имя адаптера (обязательно).
+--   - time_check (number, optional): Новый интервал проверки в секундах (неотрицательное число).
+--   - rate (number, optional): Новое значение допустимой погрешности (от 0.001 до 1).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_monitor_dvb = function(server, client, request)
     if not request then return nil end
 
@@ -530,9 +597,12 @@ end
 
 --- Обработчик HTTP-запроса для перезагрузки Astra.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--- Обработчик HTTP-запроса для перезагрузки Astra.
+-- Требует аутентификации по API-ключу.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+-- Возвращает: HTTP 200 OK или 401 Unauthorized.
 local astra_reload = function(server, client, request)
     if not request then return nil end
 
@@ -555,9 +625,12 @@ end
 
 --- Обработчик HTTP-запроса для остановки Astra.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--- Обработчик HTTP-запроса для остановки Astra.
+-- Требует аутентификации по API-ключу.
+-- Метод: POST
+-- Параметры запроса (JSON или Query String):
+--   - delay (number, optional): Задержка в секундах перед остановкой (по умолчанию 30).
+-- Возвращает: HTTP 200 OK или 401 Unauthorized.
 local kill_astra = function(server, client, request)
     if not request then return nil end
 
@@ -581,9 +654,13 @@ end
 
 --- Обработчик HTTP-запроса для проверки состояния сервера.
 -- Требует аутентификации по API-ключу.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table request Объект HTTP-запроса.
+--
+-- Возвращает JSON-объект с информацией о сервере. Структура JSON:
+-- {
+--   addr (string): IP-адрес сервера,
+--   port (number): Порт сервера,
+--   version (string): Версия Astra
+-- }
 local health = function (server, client, request)
     if not request then return nil end
 
