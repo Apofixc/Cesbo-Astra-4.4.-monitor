@@ -6,258 +6,38 @@ local type = type
 local tostring = tostring
 local tonumber = tonumber
 local ipairs = ipairs
-local math_max = math.max
+local math_max = math_max
 local math_min = math.min
 local string_lower = string.lower
-local table_insert = table.insert
-local table_remove = table.remove
+local table_insert = table_insert
+local table_remove = table_remove
 local log_info = log.info
 local log_error = log.error
 local json_encode = json.encode
-local analyze = analyze
 
-local table_copy = table.copy -- Объявлена в модуле base.lua
-local string_split = string.split -- Объявлена в модуле base.lua
-local ratio = ratio -- Объявлена в модуле utils.lua
+local table_copy = table.copy
+local string_split = string.split
 local check = check
+
+local ChannelMonitor = require "channel.channel_monitor"
+local MonitorManager = require "monitor_manager"
 
 -- ===========================================================================
 -- Константы и конфигурация
 -- ===========================================================================
 
-local DEFAULT_RATE = 0.035
-local DEFAULT_TIME_CHECK = 0
-local DEFAULT_ANALYZE = false
-local DEFAULT_METHOD_COMPARISON = 3
 local MONITOR_LIMIT = 50
-local FORCE_SEND = 300
-
-local channel_monitor_method_comparison = {
-    function(prev, curr, rate) -- по таймеру
-        return true
-    end,
-    function(prev, curr, rate) -- по любому изменению параметров
-        if prev.ready ~= curr.on_air or 
-            prev.scrambled ~= curr.total.scrambled or 
-            prev.cc_errors > 0 or 
-            prev.pes_errors > 0 or 
-            prev.bitrate ~= curr.total.bitrate then
-                return true
-        end
-
-        return false
-    end,
-    function(prev, curr, rate) -- по любому изменению параметров, с учетом погрешности
-        if prev.ready ~= curr.on_air or 
-            prev.scrambled ~= curr.total.scrambled or 
-            prev.cc_errors > 0 or 
-            prev.pes_errors > 0 or 
-            ratio(prev.bitrate, curr.total.bitrate) > rate then
-                return true
-        end
-
-        return false
-    end,
-    function(prev, curr, rate) -- по изменению доступности канала (добавлена для использования в связке telegraf + telegram bot)
-        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then -- "Сброс счетчиков ошибок для предотвращения накопления"
-            prev.cc_errors = 0
-            prev.pes_errors = 0
-        end
-
-        if prev.ready ~= curr.on_air then
-                return true
-        end
-
-        return false
-    end
-}
 
 -- ===========================================================================
 -- Основные функции модуля
 -- ===========================================================================
 
---- Создает и настраивает монитор для канала.
--- @param table monitor_data Таблица с данными монитора, включая:
---   - instance (table): Конфигурация монитора.
---   - stream_json (table): Информация о потоках.
---   - psi_data_cache (table): Кэш данных PSI.
---   - json_status_cache (string): Кэш JSON-статуса.
--- @param table channel_data Таблица с данными канала, включая:
---   - active_input_id (number): ID активного входа.
--- @return userdata monitor Экземпляр монитора, если успешно создан, иначе nil.
---
--- Отправляет JSON-объект со статусом канала. Структура JSON:
--- {
---   type (string): "Channel",
---   server (string): Имя сервера,
---   channel (string): Имя канала,
---   output (string): Адрес мониторинга,
---   stream (string): Имя потока,
---   format (string): Формат потока,
---   addr (string): Адрес потока,
---   ready (boolean): Готовность канала,
---   scrambled (boolean): Зашифрован ли канал,
---   bitrate (number): Битрейт канала,
---   cc_errors (number): Количество CC-ошибок,
---   pes_errors (number): Количество PES-ошибок,
---   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
--- }
--- Отправляет JSON-объект с ошибкой, если она произошла. Структура JSON:
--- {
---   type (string): "Channel",
---   server (string): Имя сервера,
---   channel (string): Имя канала,
---   output (string): Адрес мониторинга,
---   stream (string): Имя потока,
---   format (string): Формат потока,
---   addr (string): Адрес потока,
---   error (string): Описание ошибки.
--- }
--- Отправляет JSON-объект с данными PSI, если они доступны. Структура JSON:
--- {
---   type (string): "psi",
---   server (string): Имя сервера,
---   channel (string): Имя канала,
---   output (string): Адрес мониторинга,
---   stream (string): Имя потока,
---   format (string): Формат потока,
---   addr (string): Адрес потока,
---   psi (string): Тип PSI данных (например, "pmt", "sdt").
---   [...]: Другие поля, специфичные для PSI данных.
--- }
-local function create_monitor(monitor_data, channel_data)
-    local instance = monitor_data.instance
-    local stream_json = monitor_data.stream_json
-
-    if not instance.name then
-        log_error("[create_monitor] name is required")
-        return nil
-    end
-
-    local send = send_monitor
-    
-    local comparison = channel_monitor_method_comparison[instance.method_comparison]
-
-    -- Кэш для source (инициализация)
-    local cached_source = nil
-    local last_active_id = nil
-    -- Функция для получения актуального source
-    local function get_cached_source()
-        local active_id = channel_data and channel_data.active_input_id or 1
-        if active_id ~= last_active_id then 
-            last_active_id = active_id
-            local input_index = math_max(1, active_id)
-            cached_source = stream_json[input_index] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
-        end
-        return cached_source
-    end
-
-    local function create_template()
-        local source = get_cached_source()
-        return {
-            type = "Channel",
-            server = get_server_name(),
-            channel = instance.name,
-            output = instance.monitor, -- добавлен output для совместимости.
-            stream = source.stream,
-            format = source.format,
-            addr = source.addr
-        }
-    end
-
-    local time = 0  
-    local force_timer = 0
-    local status = create_template()
-    status.ready = false
-    status.scrambled = true
-    status.bitrate = 0
-    status.cc_errors = 0
-    status.pes_errors = 0
-    
-    local monitor = analyze({
-        upstream = instance.upstream:stream(),
-        name = "_" .. instance.name,
-        callback = function(data)
-            if data.error then
-                local content = create_template()
-                content.error = data.error
-
-                send(json_encode(content), "error")
-            elseif data.psi then
-                local psi_key = data.psi
-                if monitor_data.psi_data_cache[psi_key] then
-                    monitor_data.psi_data_cache[psi_key] = nil
-                end
-                    
-                monitor_data.psi_data_cache[psi_key] = json_encode(data) 
-            elseif data.total then
-               if instance.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
-                    local content = create_template()
-                    content.analyze = {}
-                    local has_errors = false
-                    for _, pid_data in ipairs(data.analyze) do
-                        if pid_data.cc_error > 0 or pid_data.pes_error > 0 or pid_data.sc_error > 0 then
-                            table_insert(content.analyze, pid_data)
-                            has_errors = true
-                        end
-                    end
-
-                    if has_errors then  -- Отправляем только если есть ошибки (избегаем пустых JSON)
-                        send(json_encode(content), "analyze")
-                    end
-                end
-
-                -- Считаем общее количество ошибок между передачами данных
-                status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
-                status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
-
-                force_timer = force_timer + 1
-                if time < instance.time_check then
-                    time = time + 1
-                    return
-                end
-                time = 0
-
-                if comparison(status, data, instance.rate) or force_timer > FORCE_SEND then
-                    local source = get_cached_source()
-                    if source then
-                        status.stream = source.stream
-                        status.format = source.format
-                        status.addr = source.addr
-                    end
-
-                    status.ready = data.on_air
-                    status.scrambled = data.total.scrambled
-                    status.bitrate = data.total.bitrate or 0
-                    
-                    local json_cache = json_encode(status)
-                    send(json_cache, "channels")
-
-                    monitor_data.json_status_cache = json_cache
-
-                    -- Обнуляем счетчик
-                    status.cc_errors = 0
-                    status.pes_errors = 0
-                    force_timer = 0
-                end
-            end
-        end
-    })
-
-    if not monitor then 
-        log_error("[create_monitor] analyze returned nil")
-        return nil
-    end
-
-    return monitor
-end
-
-local monitor_list = {}
+local monitor_manager = MonitorManager:new()
 
 --- Возвращает список всех активных мониторов.
 -- @return table monitor_list Таблица со списком активных мониторов.
 function get_list_monitor()
-    return monitor_list
+    return monitor_manager:get_all_monitors()
 end
 
 --- Обновляет параметры существующего монитора канала.
@@ -301,18 +81,11 @@ function update_monitor_parameters(name, params)
 end
 
 --- Создает новый монитор канала.
--- @param table config Таблица конфигурации для нового монитора, содержащая:
---   - name (string): Имя монитора (обязательно).
---   - monitor (string): Адрес мониторинга (обязательно).
---   - rate (number, optional): Погрешность сравнения битрейта (от 0.001 до 0.3, по умолчанию 0.035).
---   - time_check (number, optional): Время до сравнения данных (от 0 до 300, по умолчанию 0).
---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках (по умолчанию false).
---   - method_comparison (number, optional): Метод сравнения состояния потока (от 1 до 4, по умолчанию 3).
---   - upstream (userdata, optional): Функция вызова потока.
+-- @param table config Таблица конфигурации для нового монитора.
 -- @param table channel_data (optional) Таблица с данными канала или его имя (string).
 -- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
 function make_monitor(config, channel_data)
-    if #monitor_list > MONITOR_LIMIT then 
+    if #monitor_manager:get_all_monitors() > MONITOR_LIMIT then 
         log_error("[make_monitor] monitor_list overflow")
         return false
     end
@@ -322,81 +95,15 @@ function make_monitor(config, channel_data)
     if not check(type(config) == 'table', "config must be a table") then return false end
     if not check(config.name and type(config.name) == 'string', "config.name required") then return false end
     if not check(config.monitor and type(config.monitor) == 'string', "config.monitor required") then return false end
-    if not check(type(config.rate) == 'number' and config.rate >= 0.001 and config.rate <= 0.3, "config.rate must be between 0.001 and 0.3, default value was set: " .. DEFAULT_RATE) then config.rate = DEFAULT_RATE end
-    if not check(type(config.time_check) == 'number' and config.time_check >= 0 and config.time_check <= 300, "config.time_check  must be between 0 and 300, default value was set: " .. DEFAULT_TIME_CHECK) then config.time_check = DEFAULT_TIME_CHECK end
-    if not check(type(config.analyze) == 'boolean', "config.analyze must be boolean, default value was set: " .. tostring(DEFAULT_ANALYZE)) then config.analyze = DEFAULT_ANALYZE end
-    if not check(type(config.method_comparison) == 'number' and config.method_comparison >= 1 and config.method_comparison <= 4, "config.method_comparison must be between 1 and 4, default value was set: " .. DEFAULT_METHOD_COMPARISON) then 
-        config.method_comparison = DEFAULT_METHOD_COMPARISON end
+    
+    local monitor = ChannelMonitor:new(config, ch_data)
+    local instance = monitor:start()
 
-    local name
-    local stream_json = {}
-    if ch_data then
-        -- Создание stream_json — сериализация конфигурации input
-        for key, input in ipairs(ch_data.input) do
-            local cfg = {format = input.config.format}
-            if input.config.format == "dvb" then
-                cfg.addr = input.config.addr
-                local adap_conf = find_dvb_conf(input.config.addr)
-                cfg.stream = adap_conf and adap_conf.source or "dvb"      
-            elseif input.config.format == "udp" or input.config.format == "rtp" then
-                cfg.addr = input.config.localaddr .. "@" .. input.config.addr .. ":" .. input.config.port
-                cfg.stream = get_stream(input.config.addr)
-            elseif input.config.format == "http" then
-                cfg.addr = input.config.host .. ":" .. input.config.port .. input.config.path
-                cfg.stream = get_stream(input.config.host)
-            elseif input.config.format == "file" then
-                cfg.addr = input.config.filename
-                cfg.stream = "file"
-            end
-
-            stream_json[key] = cfg
-        end
-
-        name = ch_data.name or config.name
+    if instance then
+        monitor_manager:add_monitor(monitor.name, monitor)
+        return instance
     else
-        table_insert(stream_json, {format = "Unknown", addr = "Unknown", stream = "Unknown"})
-        name = type(channel_data) == "string" and channel_data or config.name
-    end
-
-    if find_monitor(name) then 
-        log_error("[make_monitor] Monitor already exists") 
-        return false
-    end
-
-    local monitor_data = {
-        name = name,
-        instance = config,
-        stream_json = stream_json,
-        psi_data_cache = {},
-        json_status_cache = nil
-    }
-
-    if not config.upstream then
-        local cfg = parse_url(config.monitor)
-
-        if not cfg then
-            log_error("[make_monitor] monitoring address does not exist.") 
-            return false     
-        end
-
-        cfg.name = name
-
-        monitor_data.input = init_input(cfg)
-        if not monitor_data.input then
-            log_error("[make_monitor] init_input returned nil, upstream is required")
-            return false
-        end
-
-        config.upstream = monitor_data.input.tail
-    end    
-
-    monitor_data.monitor = create_monitor(monitor_data, ch_data)
-    if monitor_data.monitor then
-        table_insert(monitor_list, monitor_data)
-
-        return monitor_data.monitor
-    else
-        log_error("[make_monitor] create_monitor returned nil")
+        log_error("[make_monitor] ChannelMonitor:start returned nil")
         return false        
     end
 end
@@ -405,56 +112,18 @@ end
 -- @param string name Имя монитора для поиска.
 -- @return table monitor_data Таблица с данными монитора, если найден, иначе nil.
 function find_monitor(name)
-    for _, monitor_data in ipairs(monitor_list) do
-        if monitor_data.name == name then
-            return monitor_data
-        end
-    end
-    return nil
+    return monitor_manager:get_monitor(name)
 end
 
 --- Останавливает и удаляет монитор.
--- @param table monitor_data Таблица с данными монитора, который нужно остановить.
+-- @param table monitor_obj Объект монитора, который нужно остановить.
 -- @return table config Копия конфигурации остановленного монитора, если успешно, иначе false.
-function kill_monitor(monitor_data)
-    if not monitor_data then return false end
+function kill_monitor(monitor_obj)
+    if not monitor_obj then return false end
 
-    -- Находим индекс в списке monitor_list
-    local monitor_id = nil
-    for index, data in ipairs(monitor_list) do
-        if data == monitor_data then
-            monitor_id = index
-            break
-        end
-    end
+    local config = table_copy(monitor_obj.config)
+    monitor_manager:remove_monitor(monitor_obj.name)
 
-    if not monitor_id then
-        log_error("[kill_monitor] Monitor not in list")
-        return false
-    end
-
-    local config = table_copy(monitor_data.instance)
-
-    if monitor_data.input then
-        kill_input(monitor_data.input)
-        monitor_data.input = nil
-    end
-
-    -- Очистка связанных данных для предотвращения утечек памяти
-    monitor_data.name = nil
-    monitor_data.monitor = nil
-    monitor_data.instance = nil
-    monitor_data.psi_data_cache = nil 
-    monitor_data.json_status_cache = nil
-
-    for i = 1, #monitor_data.stream_json do
-        monitor_data.stream_json[i] = nil
-    end
-    monitor_data.stream_json = nil
-
-    table_remove(monitor_list, monitor_id)
-
-    -- Мягкая сборка мусора для оптимизации памяти
     collectgarbage("collect")
 
     return config

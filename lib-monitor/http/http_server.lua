@@ -14,6 +14,9 @@ local json_decode = json.decode
 local json_encode = json.encode
 local string_split = string.split -- Объявлена в модуле base.lu
 
+local MonitorManager = require "monitor_manager"
+local monitor_manager = MonitorManager:new()
+
 -- ===========================================================================
 -- Константы и конфигурация
 -- ===========================================================================
@@ -213,7 +216,37 @@ local control_kill_monitor = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_monitor, kill_monitor, make_monitor, "Monitor", server, client, validate_request(request))
+    local req = validate_request(request)
+    local name = get_param(req, "channel")
+
+    if not name then 
+        return send_response(server, client, 400, "Missing channel") 
+    end
+
+    local monitor_obj = monitor_manager:get_monitor(name)
+    if not monitor_obj then 
+        return send_response(server, client, 404, "Not found") 
+    end
+    
+    local cfg = monitor_manager:remove_monitor(name)
+    log_info(string.format("[Monitor] %s killed", name))
+
+    local reboot = get_param(req, "reboot")
+    if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
+        local delay = validate_delay(get_param(req, "delay"))
+        log_info(string.format("[Monitor] %s rebooted after %d seconds", name, delay)) 
+
+        timer({
+            interval = delay, 
+            callback = function(t) 
+                t:close()
+                make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
+                log_info(string.format("[Monitor] %s was rebooted", name)) 
+            end
+        })
+    end
+
+    send_response(server, client, 200, "OK")
 end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.
@@ -254,7 +287,7 @@ local update_monitor_channel = function(server, client, request)
         end
     end
 
-    local result = update_monitor_parameters(name, params)
+    local result = monitor_manager:update_monitor_parameters(name, params)
     if result then
         log_info(string.format("[Monitor] %s updated successfully", name))
     else
@@ -347,9 +380,10 @@ local get_monitor_list = function(server, client, request)
     end
 
     local content = {}
-    local monitor_list = get_list_monitor()
-    for key, monitor_data in ipairs(monitor_list) do
-        content["monitor_" .. key] = monitor_data.name
+    local key = 1
+    for name, _ in pairs(monitor_manager:get_all_monitors()) do
+        content["monitor_" .. key] = name
+        key = key + 1
     end
     
     local json_content = json_encode(content)
@@ -397,23 +431,24 @@ local get_monitor_data = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor = find_monitor(name)
+    local monitor = monitor_manager:get_monitor(name)
     
     if not monitor then
         return send_response(server, client, 404, "Monitor not found")
     end
 
-    if not monitor.json_status_cache then
+    local json_cache = monitor:get_json_cache()
+    if not json_cache then
         return send_response(server, client, 404, "Monitor cache not found")
     end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #monitor.json_status_cache,
+        "Content-Length: " .. #json_cache,
         "Connection: close",
     }    
     
-    send_response(server, client, 200, monitor.json_status_cache, headers)    
+    send_response(server, client, 200, json_cache, headers)    
 end
 
 --- Обработчик HTTP-запроса для получения данных PSI канала.
@@ -446,17 +481,18 @@ local get_psi_channel = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor = find_monitor(name)
+    local monitor = monitor_manager:get_monitor(name)
 
     if not monitor then
         return send_response(server, client, 404, "Monitor not found")
     end
 
-    if not monitor.psi_data_cache then
+    local psi_cache = monitor.psi_data_cache -- Предполагается, что psi_data_cache доступен напрямую
+    if not psi_cache then
         return send_response(server, client, 404, "PSI cache not found")
     end
 
-    local json_content = json_encode(monitor.psi_data_cache)
+    local json_content = json_encode(psi_cache)
     local headers = {
         "Content-Type: application/json;charset=utf-8",
         "Content-Length: " .. #json_content,
@@ -485,8 +521,7 @@ local get_adapter_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    local adapter_list = get_list_adapter()
-    for name, _ in pairs(adapter_list) do
+    for name, _ in pairs(monitor_manager:get_all_monitors()) do
         content["adapter_" .. key] = name
         key = key + 1
     end
@@ -534,23 +569,24 @@ local get_adapter_data = function(server, client, request)
         return send_response(server, client, 400, "Missing adapter")   
     end
 
-    local monitor = find_monitor(name)
+    local monitor = monitor_manager:get_monitor(name)
     
     if not monitor then
         return send_response(server, client, 404, "Monitor not found")
     end
 
-    if not monitor.json_status_cache then
+    local json_cache = monitor:get_json_cache()
+    if not json_cache then
         return send_response(server, client, 404, "Monitor cache not found")
     end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #monitor.json_status_cache, 
+        "Content-Length: " .. #json_cache, 
         "Connection: close",
     }    
     
-    send_response(server, client, 200, monitor.json_status_cache, headers)   
+    send_response(server, client, 200, json_cache, headers)   
 end
 
 --- Обработчик HTTP-запроса для обновления параметров DVB-монитора.
@@ -585,7 +621,7 @@ local update_monitor_dvb = function(server, client, request)
         end
     end
 
-    local result = update_monitor_parameters(name_adapter, params)
+    local result = monitor_manager:update_monitor_parameters(name_adapter, params)
     if result then
         log_info(string.format("[Monitor] %s updated successfully", name_adapter))
     else
