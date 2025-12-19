@@ -15,9 +15,9 @@ local MonitorManager = require "monitor_manager"
 
 local monitor_manager = MonitorManager:new()
 
---- Возвращает текущую конфигурацию DVB-адаптеров.
--- @return table dvb_config Таблица с конфигурацией DVB-адаптеров.
-function get_list_adapter()
+--- Возвращает список всех активных DVB-мониторов.
+-- @return table dvb_monitors Таблица со всеми объектами DVB-мониторов.
+function get_all_dvb_monitors()
     return monitor_manager:get_all_monitors()
 end
 
@@ -25,14 +25,18 @@ end
 -- @param table conf Таблица конфигурации для DVB-тюнера.
 -- @return userdata instance Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе nil.
 function dvb_tuner_monitor(conf)
-    if not conf.name_adapter then
-        log_error("[dvb_tuner] name is not found")
-        return
+    if not conf or type(conf) ~= 'table' then
+        log_error("[dvb_tuner_monitor] Invalid configuration table.")
+        return nil
+    end
+    if not conf.name_adapter or type(conf.name_adapter) ~= 'string' then
+        log_error("[dvb_tuner_monitor] conf.name_adapter is required and must be a string.")
+        return nil
     end
 
     if monitor_manager:get_monitor(conf.name_adapter) then
-        log_error("[dvb_tuner] tuner is found")
-        return
+        log_error("[dvb_tuner_monitor] Monitor with name '" .. conf.name_adapter .. "' already exists.")
+        return nil
     end
 
     local monitor = DvbTunerMonitor:new(conf)

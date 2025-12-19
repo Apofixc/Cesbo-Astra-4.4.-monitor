@@ -28,6 +28,19 @@ local MonitorManager = require "monitor_manager"
 
 local MONITOR_LIMIT = 50
 
+-- Константы для валидации параметров монитора
+local MIN_RATE = 0.001
+local MAX_RATE = 0.3
+local MIN_TIME_CHECK = 0
+local MAX_TIME_CHECK = 300
+local MIN_METHOD_COMPARISON = 1
+local MAX_METHOD_COMPARISON = 4
+
+-- Константы для типов мониторов
+local MONITOR_TYPE_INPUT = "input"
+local MONITOR_TYPE_OUTPUT = "output"
+local MONITOR_TYPE_IP = "ip"
+
 -- ===========================================================================
 -- Основные функции модуля
 -- ===========================================================================
@@ -62,16 +75,16 @@ function update_monitor_parameters(name, params)
     end
 
     -- Обновляем только переданные параметры с валидацией
-    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 0.3, "params.rate must be between 0.001 and 0.3") then
+    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= MIN_RATE and params.rate <= MAX_RATE, "params.rate must be between " .. tostring(MIN_RATE) .. " and " .. tostring(MAX_RATE)) then
         monitor_data.instance.rate = params.rate
     end
-    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0 and params.time_check <= 300, "params.time_check must be between 0 and 300") then
+    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= MIN_TIME_CHECK and params.time_check <= MAX_TIME_CHECK, "params.time_check must be between " .. tostring(MIN_TIME_CHECK) .. " and " .. tostring(MAX_TIME_CHECK)) then
         monitor_data.instance.time_check = params.time_check
     end
     if params.analyze ~= nil and check(type(params.analyze) == 'boolean', "params.analyze must be boolean") then
         monitor_data.instance.analyze = params.analyze
     end
-    if params.method_comparison ~= nil and check(type(params.method_comparison) == 'number' and params.method_comparison >= 1 and params.method_comparison <= 4, "params.method_comparison must be between 1 and 4") then
+    if params.method_comparison ~= nil and check(type(params.method_comparison) == 'number' and params.method_comparison >= MIN_METHOD_COMPARISON and params.method_comparison <= MAX_METHOD_COMPARISON, "params.method_comparison must be between " .. tostring(MIN_METHOD_COMPARISON) .. " and " .. tostring(MAX_METHOD_COMPARISON)) then
         monitor_data.instance.method_comparison = params.method_comparison
     end
 
@@ -92,9 +105,18 @@ function make_monitor(config, channel_data)
 
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
 
-    if not check(type(config) == 'table', "config must be a table") then return false end
-    if not check(config.name and type(config.name) == 'string', "config.name required") then return false end
-    if not check(config.monitor and type(config.monitor) == 'string', "config.monitor required") then return false end
+    if not check(type(config) == 'table', "[make_monitor] Invalid config table.") then
+        log_error("[make_monitor] Invalid config table.")
+        return false
+    end
+    if not check(config.name and type(config.name) == 'string', "[make_monitor] config.name required") then
+        log_error("[make_monitor] config.name is required and must be a string.")
+        return false
+    end
+    if not check(config.monitor and type(config.monitor) == 'string', "[make_monitor] config.monitor required") then
+        log_error("[make_monitor] config.monitor is required and must be a string.")
+        return false
+    end
     
     local monitor = ChannelMonitor:new(config, ch_data)
     local instance = monitor:start()
@@ -149,22 +171,29 @@ function make_stream(conf)
         return false
     end
 
-    local monitor_name = (conf.monitor and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
-    local monitor_type = (conf.monitor and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or "output"
+    if not check(type(conf) == 'table', "[make_stream] Invalid conf table.") then return false end
+    if not check(conf.name and type(conf.name) == 'string', "[make_stream] conf.name is required and must be a string.") then return false end
+    if not check(conf.input and type(conf.input) == 'table', "[make_stream] conf.input is required and must be a table.") then return false end
+    if not check(conf.output and type(conf.output) == 'table', "[make_stream] conf.output is required and must be a table.") then return false end
+
+    local monitor_name = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
+    local monitor_type = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
     local upstream, monitor_target
-    if monitor_type == "input" then
+    if monitor_type == MONITOR_TYPE_INPUT then
         local input_data = channel_data.input[1]
+        if not input_data then
+            log_error("[make_stream] Input data is missing for input monitor type.")
+            return false
+        end
         upstream = input_data.input.tail
 
         local split_result = string_split(conf.input[1], "#")
         monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
-    elseif monitor_type == "output" then
+    elseif monitor_type == MONITOR_TYPE_OUTPUT then
         upstream = channel_data.tail
-        monitor_target = "output"
-    else
-        monitor_type = "ip"
-
+        monitor_target = MONITOR_TYPE_OUTPUT
+    elseif monitor_type == MONITOR_TYPE_IP then
         if not channel_data.output or #channel_data.output == 0 then
             log_error("[make_stream] channel_data.output is missing for ip monitor")
             return false
@@ -182,6 +211,9 @@ function make_stream(conf)
         monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
         log_info("Using output key " .. key)
+    else
+        log_error("[make_stream] Invalid monitor_type: " .. tostring(monitor_type))
+        return false
     end
 
     local instance = {
