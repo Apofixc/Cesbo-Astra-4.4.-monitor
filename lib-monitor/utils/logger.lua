@@ -14,8 +14,10 @@ local LOG_LEVELS = {
     NONE = 5, -- Отключить все логи
 }
 
+local MonitorConfig = require "config.monitor_config"
+
 -- Текущий уровень логирования (по умолчанию INFO)
-local current_log_level = LOG_LEVELS.INFO
+local current_log_level = LOG_LEVELS[MonitorConfig.LogLevel:upper()] or LOG_LEVELS.INFO
 
 --- Устанавливает текущий уровень логирования.
 -- @param string level_name Имя уровня логирования (DEBUG, INFO, WARN, ERROR, NONE).

@@ -30,15 +30,16 @@ local MonitorManager = require "monitor_manager"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local MONITOR_LIMIT = 50
+local MonitorConfig = require "config.monitor_config"
 
 -- Константы для валидации параметров монитора
-local MIN_RATE = 0.001
-local MAX_RATE = 0.3
-local MIN_TIME_CHECK = 0
-local MAX_TIME_CHECK = 300
-local MIN_METHOD_COMPARISON = 1
-local MAX_METHOD_COMPARISON = 4
+local MONITOR_LIMIT = MonitorConfig.MonitorLimit
+local MIN_RATE = MonitorConfig.MinRate
+local MAX_RATE = MonitorConfig.MaxRate
+local MIN_TIME_CHECK = MonitorConfig.MinTimeCheck
+local MAX_TIME_CHECK = MonitorConfig.MaxTimeCheck
+local MIN_METHOD_COMPARISON = MonitorConfig.MinMethodComparison
+local MAX_METHOD_COMPARISON = MonitorConfig.MaxMethodComparison
 
 -- Константы для типов мониторов
 local MONITOR_TYPE_INPUT = "input"
