@@ -11,9 +11,13 @@ local math_min = math.min
 local string_lower = string.lower
 local table_insert = table_insert
 local table_remove = table_remove
-local log_info = log.info
-local log_error = log.error
 local json_encode = json.encode
+
+local Logger = require "utils.logger"
+local log_info = Logger.info
+local log_error = Logger.error
+
+local COMPONENT_NAME = "Channel"
 
 local table_copy = table.copy
 local string_split = string.split
@@ -62,15 +66,19 @@ end
 --   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
 -- @return boolean true, если параметры успешно обновлены, иначе false.
 function update_monitor_parameters(name, params)
-    if not name or type(params) ~= 'table' then
-        log_error("[update_monitor_parameters] name and params table are required")
+    if not name or type(name) ~= 'string' then
+        log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
+        return false
+    end
+    if not params or type(params) ~= 'table' then
+        log_error(COMPONENT_NAME, "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. ".")
         return false
     end
 
     -- Находим монитор по имени
     local monitor_data = find_monitor(name)
     if not monitor_data then
-        log_error("[update_monitor_parameters] Monitor not found for name: " .. tostring(name))
+        log_error(COMPONENT_NAME, "Monitor not found for name: " .. tostring(name))
         return false
     end
 
@@ -88,7 +96,7 @@ function update_monitor_parameters(name, params)
         monitor_data.instance.method_comparison = params.method_comparison
     end
 
-    log_info("[update_monitor_parameters] Parameters updated successfully for monitor: " .. name)
+    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. name)
 
     return true
 end
@@ -99,22 +107,22 @@ end
 -- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
 function make_monitor(config, channel_data)
     if #monitor_manager:get_all_monitors() > MONITOR_LIMIT then 
-        log_error("[make_monitor] monitor_list overflow")
+        log_error(COMPONENT_NAME, "Monitor list overflow. Cannot create more than " .. MONITOR_LIMIT .. " monitors.")
         return false
     end
 
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
 
     if not check(type(config) == 'table', "[make_monitor] Invalid config table.") then
-        log_error("[make_monitor] Invalid config table.")
+        log_error(COMPONENT_NAME, "Invalid config table.")
         return false
     end
     if not check(config.name and type(config.name) == 'string', "[make_monitor] config.name required") then
-        log_error("[make_monitor] config.name is required and must be a string.")
+        log_error(COMPONENT_NAME, "config.name is required and must be a string.")
         return false
     end
     if not check(config.monitor and type(config.monitor) == 'string', "[make_monitor] config.monitor required") then
-        log_error("[make_monitor] config.monitor is required and must be a string.")
+        log_error(COMPONENT_NAME, "config.monitor is required and must be a string.")
         return false
     end
     
@@ -123,9 +131,10 @@ function make_monitor(config, channel_data)
 
     if instance then
         monitor_manager:add_monitor(monitor.name, monitor)
+        log_info(COMPONENT_NAME, "Channel monitor '" .. monitor.name .. "' created and added successfully.")
         return instance
     else
-        log_error("[make_monitor] ChannelMonitor:start returned nil")
+        log_error(COMPONENT_NAME, "ChannelMonitor:start returned nil for monitor '" .. (config.name or "unknown") .. "'.")
         return false        
     end
 end
@@ -141,13 +150,17 @@ end
 -- @param table monitor_obj Объект монитора, который нужно остановить.
 -- @return table config Копия конфигурации остановленного монитора, если успешно, иначе false.
 function kill_monitor(monitor_obj)
-    if not monitor_obj then return false end
+    if not monitor_obj then
+        log_error(COMPONENT_NAME, "Attempted to kill a nil monitor object.")
+        return false
+    end
 
     local config = table_copy(monitor_obj.config)
     monitor_manager:remove_monitor(monitor_obj.name)
 
-    collectgarbage("collect")
+    -- collectgarbage("collect") -- Пересмотрено: принудительная сборка мусора может негативно сказаться на производительности.
 
+    log_info(COMPONENT_NAME, "Monitor '" .. monitor_obj.name .. "' killed successfully.")
     return config
 end
 
@@ -167,14 +180,26 @@ end
 function make_stream(conf)  
     local channel_data = make_channel(conf)
     if not channel_data then 
-        log_error("[make_stream] channel_data is nil")
+        log_error(COMPONENT_NAME, "Failed to create channel data for stream '" .. (conf.name or "unknown") .. "'.")
         return false
     end
 
-    if not check(type(conf) == 'table', "[make_stream] Invalid conf table.") then return false end
-    if not check(conf.name and type(conf.name) == 'string', "[make_stream] conf.name is required and must be a string.") then return false end
-    if not check(conf.input and type(conf.input) == 'table', "[make_stream] conf.input is required and must be a table.") then return false end
-    if not check(conf.output and type(conf.output) == 'table', "[make_stream] conf.output is required and must be a table.") then return false end
+    if not check(type(conf) == 'table', "[make_stream] Invalid conf table.") then
+        log_error(COMPONENT_NAME, "Invalid conf table.")
+        return false
+    end
+    if not check(conf.name and type(conf.name) == 'string', "[make_stream] conf.name is required and must be a string.") then
+        log_error(COMPONENT_NAME, "conf.name is required and must be a string.")
+        return false
+    end
+    if not check(conf.input and type(conf.input) == 'table', "[make_stream] conf.input is required and must be a table.") then
+        log_error(COMPONENT_NAME, "conf.input is required and must be a table.")
+        return false
+    end
+    if not check(conf.output and type(conf.output) == 'table', "[make_stream] conf.output is required and must be a table.") then
+        log_error(COMPONENT_NAME, "conf.output is required and must be a table.")
+        return false
+    end
 
     local monitor_name = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
     local monitor_type = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
@@ -183,7 +208,7 @@ function make_stream(conf)
     if monitor_type == MONITOR_TYPE_INPUT then
         local input_data = channel_data.input[1]
         if not input_data then
-            log_error("[make_stream] Input data is missing for input monitor type.")
+            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '" .. conf.name .. "'.")
             return false
         end
         upstream = input_data.input.tail
@@ -195,7 +220,7 @@ function make_stream(conf)
         monitor_target = MONITOR_TYPE_OUTPUT
     elseif monitor_type == MONITOR_TYPE_IP then
         if not channel_data.output or #channel_data.output == 0 then
-            log_error("[make_stream] channel_data.output is missing for ip monitor")
+            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'.")
             return false
         end
 
@@ -210,9 +235,9 @@ function make_stream(conf)
         local split_result = string_split(conf.output[key], "#")
         monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
-        log_info("Using output key " .. key)
+        log_info(COMPONENT_NAME, "Using output key " .. key .. " for IP monitor in stream '" .. conf.name .. "'.")
     else
-        log_error("[make_stream] Invalid monitor_type: " .. tostring(monitor_type))
+        log_error(COMPONENT_NAME, "Invalid monitor_type: '" .. tostring(monitor_type) .. "' for stream '" .. conf.name .. "'.")
         return false
     end
 
@@ -226,6 +251,7 @@ function make_stream(conf)
         method_comparison = conf.monitor and conf.monitor.method_comparison     
     }
 
+    log_info(COMPONENT_NAME, "Attempting to create monitor for stream '" .. conf.name .. "'.")
     return make_monitor(instance, channel_data)
 end
 
@@ -234,21 +260,24 @@ end
 -- @return table config Копия конфигурации остановленного канала, если успешно, иначе nil.
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config or not channel_data.config.name then 
-        log_error("[kill_stream] Invalid channel_data or config")
+        log_error(COMPONENT_NAME, "Invalid channel_data or config provided to kill_stream.")
         return nil 
     end
 
-    local monitor_data = find_monitor(channel_data.config.name)
+    local monitor_name = channel_data.config.name
+    local monitor_data = find_monitor(monitor_name)
 
     if monitor_data then
         kill_monitor(monitor_data)
-        log_info("[kill_stream] Monitor was killed")
+        log_info(COMPONENT_NAME, "Monitor '" .. monitor_name .. "' was killed as part of stream shutdown.")
+    else
+        log_info(COMPONENT_NAME, "No monitor found for stream '" .. monitor_name .. "'.")
     end
 
     local config = table_copy(channel_data.config)
     kill_channel(channel_data)
 
-    log_info("[kill_stream] Stream shutdown: " .. config.name)
+    log_info(COMPONENT_NAME, "Stream '" .. config.name .. "' shutdown successfully.")
 
     return config
 end
