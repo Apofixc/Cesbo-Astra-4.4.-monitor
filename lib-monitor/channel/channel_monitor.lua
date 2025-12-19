@@ -22,6 +22,12 @@ local kill_input = kill_input
 local check = check
 local ratio = ratio
 
+local Logger = require "utils.logger"
+local log_info = Logger.info
+local log_error = Logger.error
+
+local COMPONENT_NAME = "ChannelMonitor"
+
 -- Методы сравнения для монитора канала
 local channel_monitor_method_comparison = {
     [1] = function(prev, curr, rate) -- по таймеру
@@ -78,13 +84,13 @@ function ChannelMonitor:new(config, channel_data)
     self.config.method_comparison = self.config.method_comparison or 3
 
     self.name = self.channel_data and self.channel_data.name or self.config.name
-    self.stream_json = {}
+    self.stream_json = config.stream_json or {} -- Принимаем stream_json из config
     self.psi_data_cache = {}
     self.json_status_cache = nil
     self.input_instance = nil -- Для init_input
 
-    self:init_stream_json()
-    self:init_upstream()
+    -- self:init_stream_json() -- Удаляем вызов, так как stream_json теперь передается
+    -- self:init_upstream() -- Удаляем вызов, так как upstream теперь передается
 
     self.time = 0
     self.force_timer = 0
@@ -95,52 +101,8 @@ function ChannelMonitor:new(config, channel_data)
     self.status.cc_errors = 0
     self.status.pes_errors = 0
 
+    log_info(COMPONENT_NAME, "New ChannelMonitor instance created for channel: " .. self.name)
     return self
-end
-
---- Инициализирует stream_json на основе channel_data.
-function ChannelMonitor:init_stream_json()
-    if self.channel_data and type(self.channel_data) == "table" then
-        for key, input in ipairs(self.channel_data.input) do
-            local cfg = {format = input.config.format}
-            if input.config.format == "dvb" then
-                cfg.addr = input.config.addr
-                local adap_conf = find_dvb_conf(input.config.addr)
-                cfg.stream = adap_conf and adap_conf.source or "dvb"      
-            elseif input.config.format == "udp" or input.config.format == "rtp" then
-                cfg.addr = input.config.localaddr .. "@" .. input.config.addr .. ":" .. input.config.port
-                cfg.stream = get_stream(input.config.addr)
-            elseif input.config.format == "http" then
-                cfg.addr = input.config.host .. ":" .. input.config.port .. input.config.path
-                cfg.stream = get_stream(input.config.host)
-            elseif input.config.format == "file" then
-                cfg.addr = input.config.filename
-                cfg.stream = "file"
-            end
-            table_insert(self.stream_json, cfg)
-        end
-    else
-        table_insert(self.stream_json, {format = "Unknown", addr = "Unknown", stream = "Unknown"})
-    end
-end
-
---- Инициализирует upstream, если он не задан.
-function ChannelMonitor:init_upstream()
-    if not self.config.upstream then
-        local cfg = parse_url(self.config.monitor)
-        if not cfg then
-            log_error("[ChannelMonitor:init_upstream] monitoring address does not exist.") 
-            return false     
-        end
-        cfg.name = self.name
-        self.input_instance = init_input(cfg)
-        if not self.input_instance then
-            log_error("[ChannelMonitor:init_upstream] init_input returned nil, upstream is required")
-            return false
-        end
-        self.config.upstream = self.input_instance.tail
-    end
-    return true
 end
 
 --- Возвращает актуальный source.
@@ -240,11 +202,11 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then 
-        log_error("[ChannelMonitor:start] analyze returned nil")
+        log_error(COMPONENT_NAME, "analyze returned nil for channel '" .. self.name .. "'. Failed to start monitor.")
         return nil
     end
 
-    log_info("[ChannelMonitor] Started monitor for channel: " .. self.name)
+    log_info(COMPONENT_NAME, "Started monitor for channel: " .. self.name)
     return self.monitor_instance
 end
 
@@ -253,7 +215,7 @@ end
 -- @return boolean true, если параметры успешно обновлены, иначе false.
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        log_error("[ChannelMonitor:update_parameters] params must be a table")
+        log_error(COMPONENT_NAME, "Invalid parameters for update_parameters: expected table, got " .. type(params) .. ".")
         return false
     end
 
@@ -270,7 +232,7 @@ function ChannelMonitor:update_parameters(params)
         self.config.method_comparison = params.method_comparison
     end
 
-    log_info("[ChannelMonitor:update_parameters] Parameters updated successfully for monitor: " .. self.name)
+    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. self.name)
     return true
 end
 
@@ -286,7 +248,7 @@ function ChannelMonitor:kill()
     self.stream_json = nil
     self.psi_data_cache = nil
     self.json_status_cache = nil
-    log_info("[ChannelMonitor:kill] Monitor killed for channel: " .. self.name)
+    log_info(COMPONENT_NAME, "Monitor killed for channel: " .. self.name)
 end
 
 return ChannelMonitor

@@ -25,6 +25,10 @@ local check = check
 
 local ChannelMonitor = require "channel.channel_monitor"
 local MonitorManager = require "monitor_manager"
+local find_dvb_conf = require "adapters.adapter".find_dvb_conf
+local parse_url = parse_url -- Предполагаем, что parse_url является глобальной функцией
+local init_input = init_input -- Предполагаем, что init_input является глобальной функцией
+-- local get_stream = get_stream -- Предполагаем, что get_stream является глобальной функцией или импортируется из другого места
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -106,6 +110,33 @@ end
 -- @param table config Таблица конфигурации для нового монитора.
 -- @param table channel_data (optional) Таблица с данными канала или его имя (string).
 -- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
+local function parse_stream_json(ch_data)
+    local stream_json = {}
+    if ch_data and type(ch_data) == "table" then
+        for key, input in ipairs(ch_data.input) do
+            local cfg = {format = input.config.format}
+            if input.config.format == "dvb" then
+                cfg.addr = input.config.addr
+                local adap_conf = find_dvb_conf(input.config.addr)
+                cfg.stream = adap_conf and adap_conf.source or "dvb"      
+            elseif input.config.format == "udp" or input.config.format == "rtp" then
+                cfg.addr = input.config.localaddr .. "@" .. input.config.addr .. ":" .. input.config.port
+                cfg.stream = get_stream(input.config.addr) -- Предполагаем, что get_stream доступна
+            elseif input.config.format == "http" then
+                cfg.addr = input.config.host .. ":" .. input.config.port .. input.config.path
+                cfg.stream = get_stream(input.config.host) -- Предполагаем, что get_stream доступна
+            elseif input.config.format == "file" then
+                cfg.addr = input.config.filename
+                cfg.stream = "file"
+            end
+            table_insert(stream_json, cfg)
+        end
+    else
+        table_insert(stream_json, {format = "Unknown", addr = "Unknown", stream = "Unknown"})
+    end
+    return stream_json
+end
+
 function make_monitor(config, channel_data)
     if #monitor_manager:get_all_monitors() > MONITOR_LIMIT then 
         log_error(COMPONENT_NAME, "Monitor list overflow. Cannot create more than " .. MONITOR_LIMIT .. " monitors.")
@@ -127,6 +158,27 @@ function make_monitor(config, channel_data)
         return false
     end
     
+    config.stream_json = create_parse_stream_jsonstream_json(ch_data)
+
+    -- Инициализация upstream
+    if not config.upstream then
+        local cfg = parse_url(config.monitor)
+        if not cfg then
+            log_error(COMPONENT_NAME, "Monitoring address does not exist for channel '" .. config.name .. "'.") 
+            return false     
+        end
+        cfg.name = config.name
+        local input_instance = init_input(cfg)
+        if not input_instance then
+            log_error(COMPONENT_NAME, "init_input returned nil, upstream is required for channel '" .. config.name .. "'.")
+            return false
+        end
+        config.upstream = input_instance.tail
+        log_info(COMPONENT_NAME, "Upstream initialized for channel '" .. config.name .. "' from monitor config.")
+    else
+        log_info(COMPONENT_NAME, "Upstream already provided for channel '" .. config.name .. "'. Skipping initialization.")
+    end
+
     local monitor = ChannelMonitor:new(config, ch_data)
     local instance = monitor:start()
 
@@ -159,11 +211,49 @@ function kill_monitor(monitor_obj)
     local config = table_copy(monitor_obj.config)
     monitor_manager:remove_monitor(monitor_obj.name)
 
-    -- collectgarbage("collect") -- Пересмотрено: принудительная сборка мусора может негативно сказаться на производительности.
-
     log_info(COMPONENT_NAME, "Monitor '" .. monitor_obj.name .. "' killed successfully.")
     return config
 end
+
+--- Таблица обработчиков для определения upstream и monitor_target по типу монитора.
+local monitor_type_handlers = {
+    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
+        local input_data = channel_data.input[1]
+        if not input_data then
+            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '" .. conf.name .. "'.")
+            return nil, nil
+        end
+        local upstream = input_data.input.tail
+        local split_result = string_split(conf.input[1], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
+        return upstream, monitor_target
+    end,
+    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
+        local upstream = channel_data.tail
+        local monitor_target = MONITOR_TYPE_OUTPUT
+        return upstream, monitor_target
+    end,
+    [MONITOR_TYPE_IP] = function(conf, channel_data)
+        if not channel_data.output or #channel_data.output == 0 then
+            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'.")
+            return nil, nil
+        end
+
+        local key = 1
+        for index, output in ipairs(channel_data.output) do
+            if output.config and output.config.monitor then
+                key = index
+                break
+            end
+        end
+
+        local split_result = string_split(conf.output[key], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        
+        log_info(COMPONENT_NAME, "Using output key " .. key .. " for IP monitor in stream '" .. conf.name .. "'.")
+        return nil, monitor_target -- upstream не используется для IP-монитора
+    end,
+}
 
 --- Создает и запускает поток с мониторингом.
 -- @param table conf Таблица конфигурации потока, содержащая:
@@ -206,39 +296,16 @@ function make_stream(conf)
     local monitor_type = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
     local upstream, monitor_target
-    if monitor_type == MONITOR_TYPE_INPUT then
-        local input_data = channel_data.input[1]
-        if not input_data then
-            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '" .. conf.name .. "'.")
-            return false
-        end
-        upstream = input_data.input.tail
-
-        local split_result = string_split(conf.input[1], "#")
-        monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
-    elseif monitor_type == MONITOR_TYPE_OUTPUT then
-        upstream = channel_data.tail
-        monitor_target = MONITOR_TYPE_OUTPUT
-    elseif monitor_type == MONITOR_TYPE_IP then
-        if not channel_data.output or #channel_data.output == 0 then
-            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'.")
-            return false
-        end
-
-        local key = 1
-        for index, output in ipairs(channel_data.output) do
-            if output.config and output.config.monitor then
-                key = index
-                break
-            end
-        end
-
-        local split_result = string_split(conf.output[key], "#")
-        monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
-        
-        log_info(COMPONENT_NAME, "Using output key " .. key .. " for IP monitor in stream '" .. conf.name .. "'.")
+    local handler = monitor_type_handlers[monitor_type]
+    if handler then
+        upstream, monitor_target = handler(conf, channel_data)
     else
         log_error(COMPONENT_NAME, "Invalid monitor_type: '" .. tostring(monitor_type) .. "' for stream '" .. conf.name .. "'.")
+        return false
+    end
+
+    if not monitor_target then
+        log_error(COMPONENT_NAME, "Failed to determine monitor target for stream '" .. conf.name .. "'.")
         return false
     end
 
