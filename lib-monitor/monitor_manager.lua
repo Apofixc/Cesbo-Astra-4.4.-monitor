@@ -3,7 +3,7 @@
 -- ===========================================================================
 
 local type = type
-local table_remove = table.remove
+-- local table_remove = table.remove -- Не используется
 local Logger = require "utils.logger" -- Импортируем новый модуль логирования
 local log_info = Logger.info
 local log_error = Logger.error

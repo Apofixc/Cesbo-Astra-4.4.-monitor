@@ -7,15 +7,11 @@ local tostring = tostring
 local ipairs = ipairs
 local math_max = math.max
 local table_insert = table.insert
-local log_info = log.info
-local log_error = log.error
 local json_encode = json.encode
 local analyze = analyze
 
 local get_server_name = get_server_name
 local send_monitor = send_monitor
-local get_stream = get_stream
-local find_dvb_conf = find_dvb_conf
 local parse_url = parse_url
 local init_input = init_input
 local kill_input = kill_input
@@ -66,6 +62,8 @@ local channel_monitor_method_comparison = {
     end
 }
 
+local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -89,9 +87,6 @@ function ChannelMonitor:new(config, channel_data)
     self.json_status_cache = nil
     self.input_instance = nil -- Для init_input
 
-    -- self:init_stream_json() -- Удаляем вызов, так как stream_json теперь передается
-    -- self:init_upstream() -- Удаляем вызов, так как upstream теперь передается
-
     self.time = 0
     self.force_timer = 0
     self.status = self:create_status_template()
@@ -111,7 +106,7 @@ function ChannelMonitor:get_cached_source()
     if active_id ~= self.last_active_id then 
         self.last_active_id = active_id
         local input_index = math_max(1, active_id)
-        self.cached_source = self.stream_json[input_index] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+        self.cached_source = self.stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
     end
     return self.cached_source
 end

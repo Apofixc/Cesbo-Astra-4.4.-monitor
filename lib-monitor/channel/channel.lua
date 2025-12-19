@@ -4,14 +4,12 @@
 
 local type = type
 local tostring = tostring
-local tonumber = tonumber
 local ipairs = ipairs
 local math_max = math_max
-local math_min = math.min
 local string_lower = string.lower
 local table_insert = table_insert
-local table_remove = table_remove
-local json_encode = json.encode
+-- local table_remove = table_remove -- Не используется
+-- local json_encode = json.encode -- Не используется
 
 local Logger = require "utils.logger"
 local log_info = Logger.info
@@ -22,6 +20,9 @@ local COMPONENT_NAME = "Channel"
 local table_copy = table.copy
 local string_split = string.split
 local check = check
+
+-- local tonumber = tonumber -- Не используется
+-- local math_min = math.min -- Не используется
 
 local ChannelMonitor = require "channel.channel_monitor"
 local MonitorManager = require "monitor_manager"
@@ -110,7 +111,7 @@ end
 -- @param table config Таблица конфигурации для нового монитора.
 -- @param table channel_data (optional) Таблица с данными канала или его имя (string).
 -- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
-local function parse_stream_json(ch_data)
+local function create_stream_json(ch_data)
     local stream_json = {}
     if ch_data and type(ch_data) == "table" then
         for key, input in ipairs(ch_data.input) do
@@ -158,7 +159,7 @@ function make_monitor(config, channel_data)
         return false
     end
     
-    config.stream_json = create_parse_stream_jsonstream_json(ch_data)
+    config.stream_json = create_stream_json(ch_data)
 
     -- Инициализация upstream
     if not config.upstream then
