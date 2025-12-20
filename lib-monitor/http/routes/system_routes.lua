@@ -1,10 +1,5 @@
-local os_exit = os.exit
 local log_info    = log.info
 local log_error   = log.error
-local timer       = timer
-local astra_version = astra.version
-local _astra_reload = astra.reload
-local json_encode = json.encode
 
 local http_helpers = require "http.http_helpers"
 local validate_request = http_helpers.validate_request
@@ -12,6 +7,11 @@ local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
+local timer_lib = http_helpers.timer_lib
+local os_exit_func = http_helpers.os_exit_func
+local astra_version_var = http_helpers.astra_version_var
+local astra_reload_func = http_helpers.astra_reload_func
+local json_encode = http_helpers.json_encode
 
 -- =============================================
 -- Управление системой Astra (Route Handlers)
@@ -32,12 +32,12 @@ local astra_reload = function(server, client, request)
 
     local req = validate_request(request)
     send_response(server, client, 200, "Reload scheduled")
-    timer({
+    timer_lib({
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close()
             log_info(COMPONENT_NAME, "[Astra] Reloaded") -- Изменено на log_info с COMPONENT_NAME
-            _astra_reload()
+            astra_reload_func()
         end
     })
 end
@@ -57,12 +57,12 @@ local kill_astra = function(server, client, request)
 
     local req = validate_request(request)
     send_response(server, client, 200, "Shutdown scheduled")
-    timer({
+    timer_lib({
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close() 
             log_info(COMPONENT_NAME, "[Astra] Stopped") -- Изменено на log_info с COMPONENT_NAME
-            os_exit(0)
+            os_exit_func(0)
         end
     })
 
@@ -84,7 +84,7 @@ local health = function (server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end   
 
-    local json_content, encode_err = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version})
+    local json_content, encode_err = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version_var})
     if not json_content then
         local error_msg = "Failed to encode health data to JSON: " .. (encode_err or "unknown")
         log_error(COMPONENT_NAME, error_msg)

@@ -1,13 +1,15 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local utils = require "utils.utils"
-local table_copy = utils.table_copy
+local utils = require "utils.utils" -- Возвращено
 local log_error   = log.error
 local log_info    = log.info
-local timer       = timer
+local timer_lib   = timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
 local json_decode = json.decode
 local json_encode = json.encode
 local string_split = string_split -- Объявлена в модуле base.lua
+local os_exit_func = os.exit -- Переименовано
+local astra_version_var = astra.version -- Переименовано
+local astra_reload_func = astra.reload -- Переименовано
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -139,7 +141,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
         local delay = validate_delay(get_param(req, "delay"))
         log_info(string.format("[%s] %s scheduled for reboot after %d seconds", log_prefix, name, delay)) 
 
-        timer({
+        timer_lib({
             interval = delay, 
             callback = function(t) 
                 t:close()
@@ -164,5 +166,13 @@ return {
     send_response = send_response,
     handle_kill_with_reboot = handle_kill_with_reboot,
     API_SECRET = API_SECRET,
-    DELAY = DELAY
+    DELAY = DELAY,
+    timer_lib = timer_lib,
+    os_exit_func = os_exit_func,
+    astra_version_var = astra_version_var,
+    astra_reload_func = astra_reload_func,
+    json_encode = json_encode,
+    string_split = string_split,
+    string_lower = string_lower,
+    table_copy = utils.table_copy, -- Добавлено
 }

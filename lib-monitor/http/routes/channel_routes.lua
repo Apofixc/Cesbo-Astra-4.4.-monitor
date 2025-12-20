@@ -1,10 +1,5 @@
-local string_lower = string.lower
-local table_copy = require "utils.utils".table_copy
 local log_info    = log.info
 local log_error   = log.error
-local timer       = timer
-local json_encode = json.encode
-local string_split = string_split -- Объявлена в модуле base.lua
 
 local MonitorManager = require "monitor_manager"
 local monitor_manager = MonitorManager:new()
@@ -16,6 +11,11 @@ local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
 local handle_kill_with_reboot = http_helpers.handle_kill_with_reboot
+local string_lower = http_helpers.string_lower
+local timer_lib = http_helpers.timer_lib
+local json_encode = http_helpers.json_encode
+local string_split = http_helpers.string_split
+local table_copy = http_helpers.table_copy -- Используем из http_helpers
 
 -- =============================================
 -- Управление каналами и их мониторами (Route Handlers)
@@ -103,7 +103,7 @@ local control_kill_monitor = function(server, client, request)
         local delay = validate_delay(get_param(req, "delay"))
         log_info(string.format("[Monitor] %s scheduled for reboot after %d seconds", name, delay)) 
 
-        timer({
+        timer_lib({
             interval = delay, 
             callback = function(t) 
                 t:close()

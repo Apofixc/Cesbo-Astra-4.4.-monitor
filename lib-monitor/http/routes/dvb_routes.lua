@@ -1,6 +1,5 @@
-local log_info    = log.info
 local log_error   = log.error
-local json_encode = json.encode
+local json_encode = http_helpers.json_encode
 local tonumber = tonumber
 
 local MonitorManager = require "monitor_manager"
