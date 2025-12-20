@@ -161,12 +161,32 @@ end
 --- Вспомогательная функция для валидации имени монитора.
 -- @param string name Имя монитора.
 -- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
+--- Вспомогательная функция для валидации имени монитора.
+-- Имя монитора должно быть непустой строкой, содержать только буквенно-цифровые символы,
+-- дефисы, подчеркивания и точки, а также иметь ограниченную длину.
+-- @param string name Имя монитора.
+-- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
 function validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
         local error_msg = "Invalid monitor name: expected non-empty string, got " .. tostring(name) .. "."
         log_error("[validate_monitor_name]", error_msg)
         return nil, error_msg
     end
+
+    -- Проверка на допустимые символы (буквы, цифры, дефисы, подчеркивания, точки)
+    if not string.match(name, "^[a-zA-Z0-9%._-]+$") then
+        local error_msg = "Invalid monitor name: contains disallowed characters. Only alphanumeric, hyphens, underscores, and dots are allowed."
+        log_error("[validate_monitor_name]", error_msg)
+        return nil, error_msg
+    end
+
+    -- Проверка на максимальную длину имени
+    if #name > MonitorConfig.MaxMonitorNameLength then
+        local error_msg = string_format("Invalid monitor name: length (%s) exceeds maximum allowed (%s).", #name, MonitorConfig.MaxMonitorNameLength)
+        log_error("[validate_monitor_name]", error_msg)
+        return nil, error_msg
+    end
+
     return true, nil
 end
 
@@ -262,15 +282,6 @@ end
 -- @param string content Содержимое для отправки (JSON-строка).
 -- @param string feed Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
 function send_monitor(content, feed)
-    if not content or type(content) ~= "string" then
-        log_error("[send_monitor]", "Invalid content: expected string, got %s.", type(content))
-        return nil, "Invalid content"
-    end
-    if not feed or type(feed) ~= "string" then
-        log_error("[send_monitor]", "Invalid feed: expected string, got %s.", type(feed))
-        return nil, "Invalid feed"
-    end
-
     local recipients = MONIT_ADDRESS[feed]
     if recipients and #recipients > 0 then
         local content_length = #content

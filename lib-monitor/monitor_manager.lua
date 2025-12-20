@@ -42,17 +42,24 @@ function MonitorManager:get_monitor(name)
         return nil, error_msg
     end
 
-    local channel_monitor, channel_err = self.channel_manager:get_monitor(name)
-    if channel_monitor then
+    local channel_monitor, channel_err = pcall(self.channel_manager.get_monitor, self.channel_manager, name)
+    if channel_monitor and not channel_err then -- channel_err будет nil, если pcall успешен
         return channel_monitor, nil
+    elseif channel_err and type(channel_err) == "string" then -- Если pcall вернул ошибку
+        log_info(COMPONENT_NAME, "Channel manager failed to get monitor '%s': %s", name, channel_err)
     end
 
-    local dvb_monitor, dvb_err = self.dvb_manager:get_monitor(name)
-    if dvb_monitor then
+    local dvb_monitor, dvb_err = pcall(self.dvb_manager.get_monitor, self.dvb_manager, name)
+    if dvb_monitor and not dvb_err then -- dvb_err будет nil, если pcall успешен
         return dvb_monitor, nil
+    elseif dvb_err and type(dvb_err) == "string" then -- Если pcall вернул ошибку
+        log_info(COMPONENT_NAME, "DVB manager failed to get monitor '%s': %s", name, dvb_err)
     end
     
-    local error_msg = "Monitor '" .. name .. "' not found. Channel manager error: " .. (channel_err or "none") .. ". DVB manager error: " .. (dvb_err or "none") .. "."
+    local error_msg = string.format("Monitor '%s' not found in any manager. Channel manager status: %s. DVB manager status: %s.",
+                                    name,
+                                    (channel_monitor and "found" or (channel_err or "not found")),
+                                    (dvb_monitor and "found" or (dvb_err or "not found")))
     log_error(COMPONENT_NAME, error_msg)
     return nil, error_msg
 end
@@ -68,19 +75,26 @@ function MonitorManager:remove_monitor(name)
         return nil, error_msg
     end
 
-    local success_channel, err_channel = self.channel_manager:remove_monitor(name)
-    if success_channel then
+    local success_channel, err_channel = pcall(self.channel_manager.remove_monitor, self.channel_manager, name)
+    if success_channel and not err_channel then
         log_info(COMPONENT_NAME, "Monitor '%s' removed from ChannelMonitorManager.", name)
         return true, nil
+    elseif err_channel and type(err_channel) == "string" then
+        log_info(COMPONENT_NAME, "Channel manager failed to remove monitor '%s': %s", name, err_channel)
     end
 
-    local success_dvb, err_dvb = self.dvb_manager:remove_monitor(name)
-    if success_dvb then
+    local success_dvb, err_dvb = pcall(self.dvb_manager.remove_monitor, self.dvb_manager, name)
+    if success_dvb and not err_dvb then
         log_info(COMPONENT_NAME, "Monitor '%s' removed from DvbMonitorManager.", name)
         return true, nil
+    elseif err_dvb and type(err_dvb) == "string" then
+        log_info(COMPONENT_NAME, "DVB manager failed to remove monitor '%s': %s", name, err_dvb)
     end
 
-    local error_msg = "Failed to remove monitor '" .. name .. "'. Channel manager error: " .. (err_channel or "none") .. ". DVB manager error: " .. (err_dvb or "none") .. "."
+    local error_msg = string.format("Failed to remove monitor '%s' from any manager. Channel manager status: %s. DVB manager status: %s.",
+                                    name,
+                                    (success_channel and "removed" or (err_channel or "not removed")),
+                                    (success_dvb and "removed" or (err_dvb or "not removed")))
     log_error(COMPONENT_NAME, error_msg)
     return nil, error_msg
 end
@@ -102,19 +116,26 @@ function MonitorManager:update_monitor_parameters(name, params)
         return nil, error_msg
     end
 
-    local success_channel, err_channel = self.channel_manager:update_monitor_parameters(name, params)
-    if success_channel then
+    local success_channel, err_channel = pcall(self.channel_manager.update_monitor_parameters, self.channel_manager, name, params)
+    if success_channel and not err_channel then
         log_info(COMPONENT_NAME, "Parameters updated for channel monitor '%s'.", name)
         return true, nil
+    elseif err_channel and type(err_channel) == "string" then
+        log_info(COMPONENT_NAME, "Channel manager failed to update parameters for monitor '%s': %s", name, err_channel)
     end
 
-    local success_dvb, err_dvb = self.dvb_manager:update_monitor_parameters(name, params)
-    if success_dvb then
+    local success_dvb, err_dvb = pcall(self.dvb_manager.update_monitor_parameters, self.dvb_manager, name, params)
+    if success_dvb and not err_dvb then
         log_info(COMPONENT_NAME, "Parameters updated for DVB monitor '%s'.", name)
         return true, nil
+    elseif err_dvb and type(err_dvb) == "string" then
+        log_info(COMPONENT_NAME, "DVB manager failed to update parameters for monitor '%s': %s", name, err_dvb)
     end
 
-    local error_msg = "Failed to update parameters for monitor '" .. name .. "'. Channel manager error: " .. (err_channel or "none") .. ". DVB manager error: " .. (err_dvb or "none") .. "."
+    local error_msg = string.format("Failed to update parameters for monitor '%s' in any manager. Channel manager status: %s. DVB manager status: %s.",
+                                    name,
+                                    (success_channel and "updated" or (err_channel or "not updated")),
+                                    (success_dvb and "updated" or (err_dvb or "not updated")))
     log_error(COMPONENT_NAME, error_msg)
     return nil, error_msg
 end

@@ -47,7 +47,7 @@ function DvbMonitorManager:add_monitor(name, monitor_obj)
         return nil, error_msg
     end
     if #self.monitors >= MonitorConfig.DvbMonitorLimit then
-        local error_msg = "DVB Monitor list overflow. Cannot create more than " .. MonitorConfig.DvbMonitorLimit .. " monitors."
+        local error_msg = string.format("DVB Monitor list overflow. Cannot add more than %s monitors.", MonitorConfig.DvbMonitorLimit)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end

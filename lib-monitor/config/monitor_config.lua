@@ -16,6 +16,7 @@ MonitorConfig.LogLevel = "INFO"
 -- Эти параметры используются для конфигурирования поведения ChannelMonitor.
 MonitorConfig.ChannelMonitorLimit = 50 -- Максимальное количество одновременно активных мониторов каналов.
 MonitorConfig.DvbMonitorLimit = 20  -- Максимальное количество одновременно активных DVB-мониторов (примерное значение).
+MonitorConfig.MaxMonitorNameLength = 64 -- Максимальная длина имени монитора.
 MonitorConfig.MinRate = 0.001       -- Минимальное допустимое значение погрешности при сравнении битрейта.
 MonitorConfig.MaxRate = 0.3         -- Максимальное допустимое значение погрешности при сравнении битрейта.
 MonitorConfig.MinTimeCheck = 0      -- Минимальный интервал (в секундах) между проверками данных монитором.

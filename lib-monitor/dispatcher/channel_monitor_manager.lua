@@ -51,7 +51,7 @@ function ChannelMonitorManager:add_monitor(name, monitor_obj)
         return nil, error_msg
     end
     if #self.monitors >= MonitorConfig.ChannelMonitorLimit then
-        local error_msg = "Channel Monitor list overflow. Cannot create more than " .. MonitorConfig.ChannelMonitorLimit .. " monitors."
+        local error_msg = string.format("Channel Monitor list overflow. Cannot add more than %s monitors.", MonitorConfig.ChannelMonitorLimit)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
