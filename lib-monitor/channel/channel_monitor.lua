@@ -20,13 +20,14 @@ local json_encode = json.encode
 local analyze = analyze
 local get_server_name = get_server_name
 local send_monitor = send_monitor
-local check = check
 local ratio = ratio
 
 -- Локальные модули
 local Logger = require "utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
+local MonitorConfig = require "config.monitor_config"
+local validate_monitor_param = require "utils.utils".validate_monitor_param
 
 local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
 
@@ -123,17 +124,17 @@ function ChannelMonitor:new(config, channel_data)
 
     -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
     -- Допустимая погрешность для сравнения битрейта (например, 0.035 = 3.5%).
-    self.config.rate = self.config.rate or 0.035
+    self.config.rate = validate_monitor_param("channel_rate", config.rate) or MonitorConfig.ValidationSchema.channel_rate.default
     -- Интервал проверки состояния канала в секундах.
-    self.config.time_check = self.config.time_check or 0
+    self.config.time_check = validate_monitor_param("channel_time_check", config.time_check) or MonitorConfig.ValidationSchema.channel_time_check.default
     -- Флаг, указывающий, нужно ли выполнять детальный анализ потока.
-    self.config.analyze = self.config.analyze or false
+    self.config.analyze = validate_monitor_param("channel_analyze", config.analyze) or MonitorConfig.ValidationSchema.channel_analyze.default
     -- Метод сравнения для определения изменений в параметрах канала.
     -- 1: Сравнение по таймеру.
     -- 2: Сравнение по любому изменению ключевых параметров.
     -- 3: Сравнение по изменению параметров с учетом погрешности битрейта.
     -- 4: Сравнение по изменению доступности канала.
-    self.config.method_comparison = self.config.method_comparison or 3
+    self.config.method_comparison = validate_monitor_param("channel_method_comparison", config.method_comparison) or MonitorConfig.ValidationSchema.channel_method_comparison.default
 
     -- Имя канала/монитора, извлекается из channel_data или config.
     self.name = self.channel_data and self.channel_data.name or self.config.name
@@ -276,17 +277,24 @@ function ChannelMonitor:update_parameters(params)
         return false
     end
 
-    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 0.3, "params.rate must be between 0.001 and 0.3") then
-        self.config.rate = params.rate
+    local updated_rate = validate_monitor_param("channel_rate", params.rate)
+    if updated_rate ~= nil then
+        self.config.rate = updated_rate
     end
-    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0 and params.time_check <= 300, "params.time_check must be between 0 and 300") then
-        self.config.time_check = params.time_check
+
+    local updated_time_check = validate_monitor_param("channel_time_check", params.time_check)
+    if updated_time_check ~= nil then
+        self.config.time_check = updated_time_check
     end
-    if params.analyze ~= nil and check(type(params.analyze) == 'boolean', "params.analyze must be boolean") then
-        self.config.analyze = params.analyze
+
+    local updated_analyze = validate_monitor_param("channel_analyze", params.analyze)
+    if updated_analyze ~= nil then
+        self.config.analyze = updated_analyze
     end
-    if params.method_comparison ~= nil and check(type(params.method_comparison) == 'number' and params.method_comparison >= 1 and params.method_comparison <= 4, "params.method_comparison must be between 1 and 4") then
-        self.config.method_comparison = params.method_comparison
+
+    local updated_method_comparison = validate_monitor_param("channel_method_comparison", params.method_comparison)
+    if updated_method_comparison ~= nil then
+        self.config.method_comparison = updated_method_comparison
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. self.name)

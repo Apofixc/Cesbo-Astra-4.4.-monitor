@@ -11,7 +11,8 @@ local json_encode = json.encode
 local ratio = ratio
 local get_server_name = get_server_name
 local send_monitor = send_monitor
-local check = check
+local MonitorConfig = require "config.monitor_config"
+local validate_monitor_param = require "utils.utils".validate_monitor_param
 
 local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
 
@@ -55,14 +56,14 @@ function DvbTunerMonitor:new(conf)
     -- Таблица конфигурации для DVB-тюнера.
     self.conf = conf
     -- Интервал проверки состояния DVB-тюнера в секундах.
-    self.conf.time_check = self.conf.time_check or 10
+    self.conf.time_check = validate_monitor_param("dvb_time_check", conf.time_check) or MonitorConfig.ValidationSchema.dvb_time_check.default
     -- Допустимая погрешность для сравнения параметров сигнала (например, 0.015 = 1.5%).
-    self.conf.rate = self.conf.rate or 0.015
+    self.conf.rate = validate_monitor_param("dvb_rate", conf.rate) or MonitorConfig.ValidationSchema.dvb_rate.default
     -- Метод сравнения для определения изменений в параметрах DVB-тюнера.
     -- 1: Всегда возвращает true (для совместимости).
     -- 2: Сравнивает по любому изменению статуса, сигнала, SNR, BER, UNC.
     -- 3: Сравнивает по любому изменению статуса, а также сигнала и SNR с учетом погрешности (rate).
-    self.conf.method_comparison = self.conf.method_comparison or 3
+    self.conf.method_comparison = validate_monitor_param("dvb_method_comparison", conf.method_comparison) or MonitorConfig.ValidationSchema.dvb_method_comparison.default
     -- Текущее состояние сигнала DVB-тюнера.
     self.status_signal = {
         type = "dvb",
@@ -132,11 +133,19 @@ function DvbTunerMonitor:update_parameters(params)
         return false
     end
 
-    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= 0.001 and params.rate <= 1, "params.rate must be between 0.001 and 1") then
-        self.conf.rate = params.rate
+    local updated_rate = validate_monitor_param("dvb_rate", params.rate)
+    if updated_rate ~= nil then
+        self.conf.rate = updated_rate
     end
-    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= 0, "params.time_check must be non-negative") then
-        self.conf.time_check = params.time_check
+
+    local updated_time_check = validate_monitor_param("dvb_time_check", params.time_check)
+    if updated_time_check ~= nil then
+        self.conf.time_check = updated_time_check
+    end
+
+    local updated_method_comparison = validate_monitor_param("dvb_method_comparison", params.method_comparison)
+    if updated_method_comparison ~= nil then
+        self.conf.method_comparison = updated_method_comparison
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", self.conf.name_adapter)

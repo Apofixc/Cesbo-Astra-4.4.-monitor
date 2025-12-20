@@ -18,6 +18,7 @@ local astra_version = astra.version
 -- ===========================================================================
 
 local config = require "config"
+local MonitorConfig = require "config.monitor_config"
 
 local hostname =  utils.hostname()
 
@@ -87,6 +88,40 @@ function check(cond, msg)
     end
 
     return true
+end
+
+--- Валидирует параметр монитора на основе его имени, значения и типа/диапазона, используя схему.
+-- @param string name Имя параметра.
+-- @param any value Значение параметра для валидации.
+-- @return any Валидное значение параметра или nil, если значение невалидно.
+function validate_monitor_param(name, value)
+    local schema = MonitorConfig.ValidationSchema[name]
+    if not schema then
+        log_error(string_format("Unknown monitor parameter in schema: %s", name))
+        return nil
+    end
+
+    if value == nil then
+        return nil -- Позволяем вызывающей стороне использовать значение по умолчанию
+    end
+
+    if type(value) ~= schema.type then
+        log_error(string_format("Invalid type for '%s': expected %s, got %s.", name, schema.type, type(value)))
+        return nil
+    end
+
+    if schema.type == "number" then
+        if schema.min ~= nil and value < schema.min then
+            log_error(string_format("Value for '%s' (%s) is less than minimum allowed (%s).", name, tostring(value), tostring(schema.min)))
+            return nil
+        end
+        if schema.max ~= nil and value > schema.max then
+            log_error(string_format("Value for '%s' (%s) is greater than maximum allowed (%s).", name, tostring(value), tostring(schema.max)))
+            return nil
+        end
+    end
+
+    return value
 end
 
 --- Устанавливает или переопределяет адрес мониторинга для клиентов.
