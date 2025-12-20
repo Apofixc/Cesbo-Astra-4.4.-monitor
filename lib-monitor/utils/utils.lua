@@ -7,8 +7,9 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local log_info    = log.info
-local log_error   = log.error
+local Logger      = require "utils.logger"
+local log_info    = Logger.info
+local log_error   = Logger.error
 local ipairs      = ipairs
 local http_request = http_request
 local astra_version = astra.version
@@ -20,9 +21,12 @@ local astra_version = astra.version
 local config = require "config.monitor_settings"
 local MonitorConfig = require "config.monitor_config"
 
+-- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
+-- Если это не так, их нужно будет передавать или явно требовать.
+
 local hostname      = utils.hostname()
 
-local STREAM        = config.STREAM
+local STREAM        = config.STREAM or {}
 local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей
 local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
 
@@ -66,20 +70,22 @@ end
 --- Создает поверхностную копию таблицы.
 -- @param table t Исходная таблица.
 -- @return table Копия таблицы; `nil` и сообщение об ошибке, если входной аргумент невалиден.
-table.copy = function(t)
-    if type(t) ~= "table" then
-        local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
-        log_error("[table.copy]", error_msg)
-        return nil, error_msg
-    end
-
-    local copy = {} 
-    for k, v in pairs(t) do
-        copy[k] = v
-    end
-
-    return copy, nil
-end
+-- table.copy: Предполагается, что эта функция может быть предоставлена Astra глобально.
+-- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
+-- table.copy = function(t)
+--     if type(t) ~= "table" then
+--         local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
+--         log_error("[table.copy]", error_msg)
+--         return nil, error_msg
+--     end
+--
+--     local copy = {}
+--     for k, v in pairs(t) do
+--         copy[k] = v
+--     end
+--
+--     return copy, nil
+-- end
 
 --- Вспомогательная функция для валидации общих параметров мониторинга.
 -- @param string host Хост.
@@ -150,6 +156,18 @@ function validate_monitor_param(name, value)
     end
 
     return value, nil
+end
+
+--- Вспомогательная функция для валидации имени монитора.
+-- @param string name Имя монитора.
+-- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
+function validate_monitor_name(name)
+    if not name or type(name) ~= "string" or name == "" then
+        local error_msg = "Invalid monitor name: expected non-empty string, got " .. tostring(name) .. "."
+        log_error("[validate_monitor_name]", error_msg)
+        return nil, error_msg
+    end
+    return true, nil
 end
 
 --- Устанавливает или переопределяет адрес мониторинга для клиентов.
@@ -255,13 +273,8 @@ function send_monitor(content, feed)
 
     local recipients = MONIT_ADDRESS[feed]
     if recipients and #recipients > 0 then
+        local content_length = #content
         for _, addr in ipairs(recipients) do
-            local is_valid, validation_err = validate_monitoring_params(addr.host, addr.port, addr.path)
-            if not is_valid then
-                log_error("[send_monitor]", "Invalid monitoring address for feed '%s': %s", feed, validation_err)
-                goto continue_loop
-            end
-
             http_request({
                 host = addr.host,
                 path = addr.path,
@@ -272,16 +285,19 @@ function send_monitor(content, feed)
                     "User-Agent: Astra v." .. astra_version,
                     "Host: " .. addr.host .. ":" .. addr.port,
                     "Content-Type: application/json;charset=utf-8",
-                    "Content-Length: " .. #content,
+                    "Content-Length: " .. content_length,
                     "Connection: close",
                 },
                 callback = function(s,r)
-                    if not s or (type(r) == "table" and r.code and r.code ~= 200) then
-                        log_error("[send_monitor]", "HTTP request failed for feed '%s' to %s:%s%s: status=%s", feed, addr.host, tostring(addr.port), addr.path, r.code or "unknown")
+                    if not s then
+                        log_error("[send_monitor]", "HTTP request failed for feed '%s' to %s:%s%s: status=connection_error", feed, addr.host, tostring(addr.port), addr.path)
+                    elseif type(r) == "table" and r.code and r.code ~= 200 then
+                        log_error("[send_monitor]", "HTTP request failed for feed '%s' to %s:%s%s: status=%s", feed, addr.host, tostring(addr.port), addr.path, r.code)
+                    elseif type(r) == "string" then -- Если r - это строка с ошибкой
+                        log_error("[send_monitor]", "HTTP request failed for feed '%s' to %s:%s%s: error=%s", feed, addr.host, tostring(addr.port), addr.path, r)
                     end
                 end
             })
-            ::continue_loop::
         end
         return true, nil
     else

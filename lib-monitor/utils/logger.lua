@@ -22,18 +22,30 @@ local MonitorConfig = require "config.monitor_config"
 --- Текущий активный уровень логирования.
 -- Инициализируется значением из `MonitorConfig.LogLevel` (приведенным к верхнему регистру)
 -- или `LOG_LEVELS.INFO` по умолчанию, если значение не определено или некорректно.
-local current_log_level = LOG_LEVELS[MonitorConfig.LogLevel:upper()] or LOG_LEVELS.INFO
+local initial_log_level_name = MonitorConfig.LogLevel
+local current_log_level
+
+-- Инициализация уровня логирования с проверкой на nil и тип
+if initial_log_level_name and type(initial_log_level_name) == "string" then
+    current_log_level = LOG_LEVELS[initial_log_level_name:upper()] or LOG_LEVELS.INFO
+else
+    current_log_level = LOG_LEVELS.INFO
+end
 
 --- Устанавливает глобальный уровень логирования для всех сообщений.
 -- Сообщения с уровнем ниже установленного не будут выводиться.
 -- @param string level_name Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
 function Logger.set_log_level(level_name)
+    if not level_name or type(level_name) ~= "string" then
+        io.stderr:write(format_message("ERROR", "Logger", "Invalid log level name: expected string, got %s.", type(level_name)) .. "\n")
+        return
+    end
     local level = LOG_LEVELS[level_name:upper()]
     if level then
         current_log_level = level
-        print("Log level set to: " .. level_name:upper())
+        io.write(format_message("INFO", "Logger", "Log level set to: %s", level_name:upper()) .. "\n")
     else
-        print("Invalid log level: " .. level_name .. ". Available levels: DEBUG, INFO, WARN, ERROR, NONE.")
+        io.stderr:write(format_message("ERROR", "Logger", "Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name) .. "\n")
     end
 end
 

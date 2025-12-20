@@ -118,15 +118,13 @@ local format_handlers = {
         cfg.stream = adap_conf and adap_conf.source or "dvb"
         return cfg
     end,
-    local function create_network_cfg(config)
+    udp = function(config)
         local cfg = {format = config.format}
         cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
-    end
-
-    udp = create_network_cfg,
-    rtp = create_network_cfg,
+    end,
+    rtp = format_handlers.udp,
     http = function(config)
         local cfg = {format = config.format}
         cfg.addr = config.host .. ":" .. config.port .. config.path

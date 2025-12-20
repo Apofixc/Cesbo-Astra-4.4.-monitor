@@ -10,6 +10,8 @@ local log_error   = Logger.error
 
 local ChannelMonitor = require "channel.channel_monitor"
 local MonitorConfig  = require "config.monitor_config"
+local Utils          = require "utils.utils" -- Добавляем require для utils.utils
+local validate_monitor_name = Utils.validate_monitor_name
 
 -- Предполагаем, что эти глобальные функции доступны в окружении Astra
 local parse_url = parse_url
@@ -34,10 +36,9 @@ end
 -- @param table monitor_obj Объект монитора канала, который должен быть таблицей.
 -- @return boolean true, если монитор успешно добавлен; `nil` и сообщение об ошибке в случае ошибки.
 function ChannelMonitorManager:add_monitor(name, monitor_obj)
-    if not name or type(name) ~= "string" then
-        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+    local is_name_valid, name_err = validate_monitor_name(name)
+    if not is_name_valid then
+        return nil, name_err
     end
     if not monitor_obj or type(monitor_obj) ~= "table" then
         local error_msg = "Invalid monitor object for '" .. name .. "': expected table, got " .. type(monitor_obj) .. "."
@@ -139,10 +140,9 @@ end
 -- @param string name Уникальное имя монитора.
 -- @return table Объект монитора, если найден; `nil` и сообщение об ошибке, если монитор с таким именем не существует или имя невалидно.
 function ChannelMonitorManager:get_monitor(name)
-    if not name or type(name) ~= "string" then
-        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+    local is_name_valid, name_err = validate_monitor_name(name)
+    if not is_name_valid then
+        return nil, name_err
     end
     return self.monitors[name], nil
 end
@@ -152,10 +152,9 @@ end
 -- @param string name Уникальное имя монитора.
 -- @return boolean true, если монитор успешно удален; `nil` и сообщение об ошибке в случае ошибки.
 function ChannelMonitorManager:remove_monitor(name)
-    if not name or type(name) ~= "string" then
-        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+    local is_name_valid, name_err = validate_monitor_name(name)
+    if not is_name_valid then
+        return nil, name_err
     end
     local monitor_obj, get_err = self:get_monitor(name)
     if not monitor_obj then
@@ -187,10 +186,9 @@ end
 -- @param table params Таблица, содержащая новые параметры для обновления.
 -- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
 function ChannelMonitorManager:update_monitor_parameters(name, params)
-    if not name or type(name) ~= "string" then
-        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+    local is_name_valid, name_err = validate_monitor_name(name)
+    if not is_name_valid then
+        return nil, name_err
     end
     if not params or type(params) ~= "table" then
         local error_msg = "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. "."
