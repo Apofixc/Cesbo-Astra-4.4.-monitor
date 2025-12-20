@@ -2,55 +2,94 @@
 -- ChannelMonitor Class
 -- ===========================================================================
 
+-- ===========================================================================
+-- ChannelMonitor Class
+-- Модуль для мониторинга состояния отдельных каналов.
+-- Отвечает за запуск анализа потока, обработку данных и отправку статусов.
+-- ===========================================================================
+
+-- Стандартные функции Lua
 local type = type
 local tostring = tostring
 local ipairs = ipairs
 local math_max = math.max
 local table_insert = table.insert
+
+-- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
 local json_encode = json.encode
 local analyze = analyze
-
 local get_server_name = get_server_name
 local send_monitor = send_monitor
-local parse_url = parse_url
-local init_input = init_input
-local kill_input = kill_input
 local check = check
 local ratio = ratio
 
+-- Локальные модули
 local Logger = require "utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 
-local COMPONENT_NAME = "ChannelMonitor"
+local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
 
--- Методы сравнения для монитора канала
+--- Таблица методов сравнения для монитора канала.
+-- Каждый метод определяет логику, по которой определяется, изменилось ли состояние канала
+-- достаточно для отправки нового статуса.
 local channel_monitor_method_comparison = {
-    [1] = function(prev, curr, rate) -- по таймеру
+    --- Метод 1: Сравнение по таймеру. Всегда возвращает true, что означает отправку статуса
+    -- по истечении заданного интервала `time_check`.
+    -- @param table prev Предыдущее состояние монитора.
+    -- @param table curr Текущее состояние данных потока.
+    -- @param number rate Погрешность сравнения битрейта (не используется в этом методе).
+    -- @return boolean Всегда true.
+    [1] = function(prev, curr, rate)
         return true
     end,
-    [2] = function(prev, curr, rate) -- по любому изменению параметров
-        if prev.ready ~= curr.on_air or 
-            prev.scrambled ~= curr.total.scrambled or 
-            prev.cc_errors > 0 or 
-            prev.pes_errors > 0 or 
+
+    --- Метод 2: Сравнение по любому изменению ключевых параметров.
+    -- Возвращает true, если изменился статус готовности, скремблирования,
+    -- есть ошибки CC/PES, или изменился битрейт.
+    -- @param table prev Предыдущее состояние монитора.
+    -- @param table curr Текущее состояние данных потока.
+    -- @param number rate Погрешность сравнения битрейта (не используется в этом методе).
+    -- @return boolean true, если обнаружено существенное изменение; false иначе.
+    [2] = function(prev, curr, rate)
+        if prev.ready ~= curr.on_air or
+            prev.scrambled ~= curr.total.scrambled or
+            prev.cc_errors > 0 or
+            prev.pes_errors > 0 or
             prev.bitrate ~= curr.total.bitrate then
                 return true
         end
         return false
     end,
-    [3] = function(prev, curr, rate) -- по любому изменению параметров, с учетом погрешности
-        if prev.ready ~= curr.on_air or 
-            prev.scrambled ~= curr.total.scrambled or 
-            prev.cc_errors > 0 or 
-            prev.pes_errors > 0 or 
+
+    --- Метод 3: Сравнение по изменению параметров с учетом погрешности битрейта.
+    -- Аналогичен Методу 2, но изменение битрейта учитывается с заданной погрешностью `rate`.
+    -- @param table prev Предыдущее состояние монитора.
+    -- @param table curr Текущее состояние данных потока.
+    -- @param number rate Допустимая погрешность для сравнения битрейта.
+    -- @return boolean true, если обнаружено существенное изменение; false иначе.
+    [3] = function(prev, curr, rate)
+        if prev.ready ~= curr.on_air or
+            prev.scrambled ~= curr.total.scrambled or
+            prev.cc_errors > 0 or
+            prev.pes_errors > 0 or
             ratio(prev.bitrate, curr.total.bitrate) > rate then
                 return true
         end
         return false
     end,
-    [4] = function(prev, curr, rate) -- по изменению доступности канала (добавлена для использования в связке telegraf + telegram bot)
-        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then -- "Сброс счетчиков ошибок для предотвращения накопления"
+
+    --- Метод 4: Сравнение по изменению доступности канала.
+    -- Используется для интеграции с внешними системами (например, Telegraf + Telegram bot).
+    -- Сбрасывает счетчики ошибок, если они превышают пороговое значение, и проверяет
+    -- только изменение статуса `on_air`.
+    -- @param table prev Предыдущее состояние монитора.
+    -- @param table curr Текущее состояние данных потока.
+    -- @param number rate Погрешность сравнения битрейта (не используется в этом методе).
+    -- @return boolean true, если изменился статус `on_air`; false иначе.
+    [4] = function(prev, curr, rate)
+        -- Сброс счетчиков ошибок для предотвращения накопления, если они слишком велики.
+        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then
             prev.cc_errors = 0
             prev.pes_errors = 0
         end
@@ -62,45 +101,52 @@ local channel_monitor_method_comparison = {
     end
 }
 
+--- Шаблон для информации об источнике, используемый по умолчанию, если данные отсутствуют.
 local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
 
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
---- Конструктор для ChannelMonitor.
--- @param table config Таблица конфигурации для нового монитора.
--- @param table channel_data Таблица с данными канала или его имя (string).
--- @return ChannelMonitor Новый экземпляр ChannelMonitor.
+--- Создает новый экземпляр ChannelMonitor.
+-- Инициализирует монитор с предоставленной конфигурацией и данными канала,
+-- устанавливает значения по умолчанию для отсутствующих параметров конфигурации
+-- и подготавливает внутренние состояния для мониторинга.
+-- @param table config Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
+-- @param table channel_data Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
+-- @return ChannelMonitor Новый объект ChannelMonitor.
 function ChannelMonitor:new(config, channel_data)
     local self = setmetatable({}, ChannelMonitor)
-    self.config = config
-    self.channel_data = channel_data
+    self.config = config            -- Конфигурация монитора
+    self.channel_data = channel_data -- Данные канала
 
+    -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
     self.config.rate = self.config.rate or 0.035
     self.config.time_check = self.config.time_check or 0
     self.config.analyze = self.config.analyze or false
     self.config.method_comparison = self.config.method_comparison or 3
 
-    self.name = self.channel_data and self.channel_data.name or self.config.name
-    self.stream_json = config.stream_json or {} -- Принимаем stream_json из config
-    self.psi_data_cache = {}
-    self.json_status_cache = nil
-    self.input_instance = nil -- Для init_input
+    self.name = self.channel_data and self.channel_data.name or self.config.name -- Имя канала/монитора
+    self.stream_json = config.stream_json or {} -- JSON-данные потока из конфигурации
+    self.psi_data_cache = {}        -- Кэш данных PSI
+    self.json_status_cache = nil    -- Кэш последнего отправленного JSON-статуса
+    self.input_instance = nil       -- Экземпляр входного потока (если используется init_input/kill_input)
 
-    self.time = 0
-    self.force_timer = 0
-    self.status = self:create_status_template()
-    self.status.ready = false
-    self.status.scrambled = true
-    self.status.bitrate = 0
-    self.status.cc_errors = 0
-    self.status.pes_errors = 0
+    self.time = 0                   -- Внутренний таймер для отсчета интервала проверки
+    self.force_timer = 0            -- Таймер для принудительной отправки статуса
+    self.status = self:create_status_template() -- Текущий статус монитора
+    self.status.ready = false       -- Готовность канала
+    self.status.scrambled = true    -- Статус скремблирования
+    self.status.bitrate = 0         -- Битрейт канала
+    self.status.cc_errors = 0       -- Счетчик ошибок CC
+    self.status.pes_errors = 0      -- Счетчик ошибок PES
 
     log_info(COMPONENT_NAME, "New ChannelMonitor instance created for channel: " .. self.name)
     return self
 end
 
---- Возвращает актуальный source.
+--- Возвращает кэшированную информацию об активном источнике канала.
+-- Обновляет кэш, если `active_input_id` канала изменился.
+-- @return table Таблица с информацией об активном источнике (`format`, `addr`, `stream`).
 function ChannelMonitor:get_cached_source()
     local active_id = self.channel_data and self.channel_data.active_input_id or 1
     if active_id ~= self.last_active_id then 
@@ -111,7 +157,10 @@ function ChannelMonitor:get_cached_source()
     return self.cached_source
 end
 
---- Создает шаблон статуса.
+--- Создает базовый шаблон статуса для канала.
+-- Включает общую информацию о канале, такую как тип, сервер, имя канала,
+-- выходной поток и данные источника.
+-- @return table Таблица, представляющая текущий статус канала.
 function ChannelMonitor:create_status_template()
     local source = self:get_cached_source()
     return {
@@ -125,8 +174,11 @@ function ChannelMonitor:create_status_template()
     }
 end
 
---- Запускает мониторинг канала.
--- @return userdata Экземпляр монитора, если успешно создан, иначе nil.
+--- Запускает процесс мониторинга для канала.
+-- Инициализирует функцию `analyze` Astra с колбэком для обработки входящих данных
+-- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
+-- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
+-- @return userdata Экземпляр монитора Astra, если успешно запущен; nil в случае ошибки.
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
@@ -171,25 +223,9 @@ function ChannelMonitor:start()
                 end
                 self_ref.time = 0
 
+                -- Проверяем, нужно ли отправлять статус
                 if comparison_method(self_ref.status, data, self_ref.config.rate) or self_ref.force_timer > 300 then -- FORCE_SEND = 300
-                    local source = self_ref:get_cached_source()
-                    if source then
-                        self_ref.status.stream = source.stream
-                        self_ref.status.format = source.format
-                        self_ref.status.addr = source.addr
-                    end
-
-                    self_ref.status.ready = data.on_air
-                    self_ref.status.scrambled = data.total.scrambled
-                    self_ref.status.bitrate = data.total.bitrate or 0
-                    
-                    local json_cache = json_encode(self_ref.status)
-                    send_monitor(json_cache, "channels")
-
-                    self_ref.json_status_cache = json_cache
-
-                    self_ref.status.cc_errors = 0
-                    self_ref.status.pes_errors = 0
+                    self_ref:send_channel_status(data)
                     self_ref.force_timer = 0
                 end
             end
@@ -205,9 +241,12 @@ function ChannelMonitor:start()
     return self.monitor_instance
 end
 
---- Обновляет параметры мониторинга канала.
--- @param table params Таблица с новыми параметрами.
--- @return boolean true, если параметры успешно обновлены, иначе false.
+--- Обновляет параметры конфигурации монитора канала.
+-- Проверяет и применяет новые значения для `rate`, `time_check`, `analyze` и `method_comparison`,
+-- если они предоставлены и валидны.
+-- @param table params Таблица, содержащая новые параметры для обновления.
+-- @return boolean true, если параметры успешно обновлены; false, если `params` не является таблицей
+-- или содержит невалидные значения.
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
         log_error(COMPONENT_NAME, "Invalid parameters for update_parameters: expected table, got " .. type(params) .. ".")
@@ -231,9 +270,37 @@ function ChannelMonitor:update_parameters(params)
     return true
 end
 
---- Останавливает монитор.
+--- Отправляет текущий статус канала.
+-- Обновляет данные статуса на основе текущих данных потока и отправляет их
+-- через `send_monitor`. Также обновляет кэш последнего отправленного статуса.
+-- @param table data Текущие данные потока, полученные от `analyze`.
+function ChannelMonitor:send_channel_status(data)
+    local source = self:get_cached_source()
+    if source then
+        self.status.stream = source.stream
+        self.status.format = source.format
+        self.status.addr = source.addr
+    end
+
+    self.status.ready = data.on_air
+    self.status.scrambled = data.total.scrambled
+    self.status.bitrate = data.total.bitrate or 0
+    
+    local json_cache = json_encode(self.status)
+    send_monitor(json_cache, "channels")
+
+    self.json_status_cache = json_cache
+
+    self.status.cc_errors = 0
+    self.status.pes_errors = 0
+end
+
+--- Останавливает и очищает ресурсы, связанные с монитором канала.
+-- Если существует `input_instance`, он будет остановлен.
+-- Сбрасывает все внутренние ссылки для освобождения памяти.
 function ChannelMonitor:kill()
     if self.input_instance then
+        -- Предполагается, что kill_input - это глобальная функция Astra
         kill_input(self.input_instance)
         self.input_instance = nil
     end

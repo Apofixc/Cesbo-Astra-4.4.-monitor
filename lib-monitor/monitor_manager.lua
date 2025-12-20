@@ -3,27 +3,29 @@
 -- ===========================================================================
 
 local type = type
--- local table_remove = table.remove -- Не используется
 local Logger = require "utils.logger" -- Импортируем новый модуль логирования
 local log_info = Logger.info
 local log_error = Logger.error
 
-local COMPONENT_NAME = "MonitorManager"
+local COMPONENT_NAME = "MonitorManager" -- Имя компонента для логирования
 
 local MonitorManager = {}
 MonitorManager.__index = MonitorManager
 
---- Конструктор для MonitorManager.
+--- Создает новый экземпляр MonitorManager.
+-- Инициализирует пустую таблицу для хранения объектов мониторов.
+-- @return MonitorManager Новый объект MonitorManager.
 function MonitorManager:new()
     local self = setmetatable({}, MonitorManager)
-    self.monitors = {} -- Таблица для хранения мониторов по имени
+    self.monitors = {} -- Таблица для хранения мониторов по их уникальному имени
     return self
 end
 
---- Добавляет монитор в менеджер.
--- @param string name Имя монитора.
--- @param table monitor_obj Объект монитора (DvbTunerMonitor или ChannelMonitor).
--- @return boolean true, если монитор успешно добавлен, иначе false.
+--- Добавляет объект монитора в менеджер.
+-- Проверяет валидность имени и объекта монитора, а также отсутствие дубликатов.
+-- @param string name Уникальное имя монитора.
+-- @param table monitor_obj Объект монитора, который должен быть таблицей (например, DvbTunerMonitor или ChannelMonitor).
+-- @return boolean true, если монитор успешно добавлен; false в случае ошибки (неверное имя, неверный объект, дубликат имени).
 function MonitorManager:add_monitor(name, monitor_obj)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
@@ -42,9 +44,9 @@ function MonitorManager:add_monitor(name, monitor_obj)
     return true
 end
 
---- Получает монитор по имени.
--- @param string name Имя монитора.
--- @return table Объект монитора, если найден, иначе nil.
+--- Получает объект монитора по его имени.
+-- @param string name Уникальное имя монитора.
+-- @return table Объект монитора, если найден; nil, если монитор с таким именем не существует или имя невалидно.
 function MonitorManager:get_monitor(name)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
@@ -53,9 +55,10 @@ function MonitorManager:get_monitor(name)
     return self.monitors[name]
 end
 
---- Удаляет монитор по имени.
--- @param string name Имя монитора.
--- @return boolean true, если монитор успешно удален, иначе false.
+--- Удаляет монитор из менеджера по его имени.
+-- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
+-- @param string name Уникальное имя монитора.
+-- @return boolean true, если монитор успешно удален; false в случае ошибки (неверное имя, монитор не найден).
 function MonitorManager:remove_monitor(name)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
@@ -77,16 +80,18 @@ function MonitorManager:remove_monitor(name)
     return true
 end
 
---- Получает список всех мониторов.
--- @return table Таблица со всеми объектами мониторов.
+--- Возвращает таблицу всех активных мониторов, управляемых менеджером.
+-- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
+-- @return table Таблица, содержащая все объекты мониторов.
 function MonitorManager:get_all_monitors()
     return self.monitors
 end
 
---- Обновляет параметры монитора по имени.
--- @param string name Имя монитора.
--- @param table params Таблица с новыми параметрами.
--- @return boolean true, если параметры успешно обновлены, иначе false.
+--- Обновляет параметры существующего монитора по его имени.
+-- Если монитор поддерживает метод `update_parameters`, он будет вызван с новыми параметрами.
+-- @param string name Уникальное имя монитора.
+-- @param table params Таблица, содержащая новые параметры для обновления.
+-- @return boolean true, если параметры успешно обновлены; false в случае ошибки (неверное имя, неверные параметры, монитор не найден, или метод `update_parameters` не поддерживается/вызвал ошибку).
 function MonitorManager:update_monitor_parameters(name, params)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")

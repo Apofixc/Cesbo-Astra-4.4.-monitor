@@ -1,26 +1,32 @@
 -- ===========================================================================
--- Модуль централизованного логирования
+-- Модуль централизованного логирования для системы мониторинга.
+-- Предоставляет функции для вывода логов с различными уровнями детализации
+-- (DEBUG, INFO, WARN, ERROR) и управляет текущим уровнем логирования.
 -- ===========================================================================
 
 local Logger = {}
 Logger.__index = Logger
 
--- Уровни логирования
+--- Таблица, определяющая уровни логирования и их числовые значения.
+-- Используется для фильтрации сообщений в зависимости от текущего уровня логирования.
 local LOG_LEVELS = {
-    DEBUG = 1,
-    INFO = 2,
-    WARN = 3,
-    ERROR = 4,
-    NONE = 5, -- Отключить все логи
+    DEBUG = 1, -- Отладочные сообщения, наиболее подробные.
+    INFO = 2,  -- Информационные сообщения о ходе выполнения программы.
+    WARN = 3,  -- Предупреждения о потенциальных проблемах.
+    ERROR = 4, -- Сообщения об ошибках, которые могут повлиять на работу программы.
+    NONE = 5,  -- Отключить все логи.
 }
 
 local MonitorConfig = require "config.monitor_config"
 
--- Текущий уровень логирования (по умолчанию INFO)
+--- Текущий активный уровень логирования.
+-- Инициализируется значением из `MonitorConfig.LogLevel` (приведенным к верхнему регистру)
+-- или `LOG_LEVELS.INFO` по умолчанию, если значение не определено или некорректно.
 local current_log_level = LOG_LEVELS[MonitorConfig.LogLevel:upper()] or LOG_LEVELS.INFO
 
---- Устанавливает текущий уровень логирования.
--- @param string level_name Имя уровня логирования (DEBUG, INFO, WARN, ERROR, NONE).
+--- Устанавливает глобальный уровень логирования для всех сообщений.
+-- Сообщения с уровнем ниже установленного не будут выводиться.
+-- @param string level_name Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
 function Logger.set_log_level(level_name)
     local level = LOG_LEVELS[level_name:upper()]
     if level then
@@ -31,25 +37,27 @@ function Logger.set_log_level(level_name)
     end
 end
 
---- Получает текущий уровень логирования.
--- @return number Текущий уровень логирования.
+--- Возвращает текущий установленный уровень логирования.
+-- @return number Числовое значение текущего уровня логирования.
 function Logger.get_log_level()
     return current_log_level
 end
 
---- Форматирует сообщение лога.
--- @param string level Уровень лога (например, "INFO").
--- @param string message Сообщение лога.
--- @param string component Компонент, из которого пришло сообщение (например, "MonitorManager").
--- @return string Отформатированное сообщение.
+--- Внутренняя функция для форматирования сообщения лога.
+-- Добавляет временную метку, уровень лога и имя компонента к сообщению.
+-- @param string level Уровень лога (например, "INFO", "ERROR").
+-- @param string message Основное текстовое сообщение лога.
+-- @param string component Имя компонента или модуля, откуда было вызвано логирование.
+-- @return string Полностью отформатированное сообщение лога.
 local function format_message(level, message, component)
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
     return string.format("[%s] [%s] [%s] %s", timestamp, level, component, message)
 end
 
 --- Логирует сообщение на уровне DEBUG.
--- @param string component Компонент, из которого пришло сообщение.
--- @param string message Сообщение лога.
+-- Сообщения DEBUG используются для детальной отладки и обычно отключаются в production.
+-- @param string component Имя компонента, генерирующего лог.
+-- @param string message Сообщение для логирования.
 function Logger.debug(component, message)
     if current_log_level <= LOG_LEVELS.DEBUG then
         print(format_message("DEBUG", message, component))
@@ -57,8 +65,9 @@ function Logger.debug(component, message)
 end
 
 --- Логирует сообщение на уровне INFO.
--- @param string component Компонент, из которого пришло сообщение.
--- @param string message Сообщение лога.
+-- Информационные сообщения о нормальной работе приложения.
+-- @param string component Имя компонента, генерирующего лог.
+-- @param string message Сообщение для логирования.
 function Logger.info(component, message)
     if current_log_level <= LOG_LEVELS.INFO then
         print(format_message("INFO", message, component))
@@ -66,8 +75,9 @@ function Logger.info(component, message)
 end
 
 --- Логирует сообщение на уровне WARN.
--- @param string component Компонент, из которого пришло сообщение.
--- @param string message Сообщение лога.
+-- Предупреждающие сообщения о потенциальных проблемах, которые не блокируют работу.
+-- @param string component Имя компонента, генерирующего лог.
+-- @param string message Сообщение для логирования.
 function Logger.warn(component, message)
     if current_log_level <= LOG_LEVELS.WARN then
         print(format_message("WARN", message, component))
@@ -75,8 +85,10 @@ function Logger.warn(component, message)
 end
 
 --- Логирует сообщение на уровне ERROR.
--- @param string component Компонент, из которого пришло сообщение.
--- @param string message Сообщение лога.
+-- Сообщения об ошибках, которые требуют внимания и могут указывать на сбои.
+-- Выводится в `io.stderr`.
+-- @param string component Имя компонента, генерирующего лог.
+-- @param string message Сообщение для логирования.
 function Logger.error(component, message)
     if current_log_level <= LOG_LEVELS.ERROR then
         io.stderr:write(format_message("ERROR", message, component) .. "\n")
