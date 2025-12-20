@@ -64,8 +64,7 @@ end
 -- @return string Полностью отформатированное сообщение лога.
 local function format_message(level, component, format_str, ...)
     local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-    local message = string.format(format_str, ...)
-    return string.format("[%s] [%s] [%s] %s", timestamp, level, component, message)
+    return string.format("[%s] [%s] [%s] " .. format_str, timestamp, level, component, ...)
 end
 
 --- Логирует сообщение на уровне DEBUG.

@@ -48,23 +48,35 @@ local dvb_monitor_method_comparison = {
     end
 }
 
+--- Вспомогательная функция для валидации и установки параметра конфигурации DVB.
+-- @param table self Объект DvbTunerMonitor.
+-- @param string param_name Имя параметра (например, "dvb_rate").
+-- @param any value Значение для установки.
+-- @return boolean true, если параметр успешно установлен; nil и сообщение об ошибке в случае ошибки.
+local function set_dvb_config_param(self, param_name, value)
+    local updated_value, err = validate_monitor_param(param_name, value)
+    if err then
+        log_error(COMPONENT_NAME, "Failed to validate '%s' parameter: %s", param_name, err)
+        return nil, err
+    end
+    -- Извлекаем фактическое имя параметра из "dvb_param_name"
+    local config_key = param_name:gsub("dvb_", "")
+    self.conf[config_key] = updated_value
+    return true
+end
+
 --- Конструктор для DvbTunerMonitor.
 -- @param table conf Таблица конфигурации для DVB-тюнера.
 -- @return DvbTunerMonitor Новый экземпляр DvbTunerMonitor.
 function DvbTunerMonitor:new(conf)
     local self = setmetatable({}, DvbTunerMonitor)
-    -- Таблица конфигурации для DVB-тюнера.
     self.conf = conf
-    -- Интервал проверки состояния DVB-тюнера в секундах.
-    self.conf.time_check = validate_monitor_param("dvb_time_check", conf.time_check) or MonitorConfig.ValidationSchema.dvb_time_check.default
-    -- Допустимая погрешность для сравнения параметров сигнала (например, 0.015 = 1.5%).
-    self.conf.rate = validate_monitor_param("dvb_rate", conf.rate) or MonitorConfig.ValidationSchema.dvb_rate.default
-    -- Метод сравнения для определения изменений в параметрах DVB-тюнера.
-    -- 1: Всегда возвращает true (для совместимости).
-    -- 2: Сравнивает по любому изменению статуса, сигнала, SNR, BER, UNC.
-    -- 3: Сравнивает по любому изменению статуса, а также сигнала и SNR с учетом погрешности (rate).
-    self.conf.method_comparison = validate_monitor_param("dvb_method_comparison", conf.method_comparison) or MonitorConfig.ValidationSchema.dvb_method_comparison.default
-    -- Текущее состояние сигнала DVB-тюнера.
+
+    -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
+    set_dvb_config_param(self, "dvb_time_check", conf.time_check)
+    set_dvb_config_param(self, "dvb_rate", conf.rate)
+    set_dvb_config_param(self, "dvb_method_comparison", conf.method_comparison)
+
     self.status_signal = {
         type = "dvb",
         server = get_server_name(),
@@ -78,11 +90,8 @@ function DvbTunerMonitor:new(conf)
         ber = -1,
         unc = -1
     }
-    -- Счетчик времени для интервала проверки.
     self.time = 0
-    -- Кэш JSON для последнего состояния сигнала.
     self.json_cache = nil 
-    -- Экземпляр DVB-тюнера, управляемый функцией dvb_tune.
     self.instance = nil 
 
     return self
@@ -114,8 +123,11 @@ function DvbTunerMonitor:start()
             self_ref.status_signal.ber = data.ber or -1
             self_ref.status_signal.unc = data.unc or -1
 
-            self_ref.json_cache = json_encode(self_ref.status_signal)
-            send_monitor(self_ref.json_cache, "dvb")
+            local current_json_cache = json_encode(self_ref.status_signal)
+            if current_json_cache ~= self_ref.json_cache then
+                send_monitor(current_json_cache, "dvb")
+                self_ref.json_cache = current_json_cache
+            end
         end
     end
 
@@ -141,31 +153,18 @@ function DvbTunerMonitor:update_parameters(params)
         return nil, error_msg
     end
 
-    local updated_rate, err_rate = validate_monitor_param("dvb_rate", params.rate)
-    if params.rate ~= nil then -- Only attempt to update if param is provided
-        if err_rate then
-            log_error(COMPONENT_NAME, "Failed to validate 'rate' parameter: %s", err_rate)
-            return nil, err_rate
-        end
-        self.conf.rate = updated_rate
+    local success, err
+    if params.rate ~= nil then
+        success, err = set_dvb_config_param(self, "dvb_rate", params.rate)
+        if not success then return nil, err end
     end
-
-    local updated_time_check, err_time_check = validate_monitor_param("dvb_time_check", params.time_check)
-    if params.time_check ~= nil then -- Only attempt to update if param is provided
-        if err_time_check then
-            log_error(COMPONENT_NAME, "Failed to validate 'time_check' parameter: %s", err_time_check)
-            return nil, err_time_check
-        end
-        self.conf.time_check = updated_time_check
+    if params.time_check ~= nil then
+        success, err = set_dvb_config_param(self, "dvb_time_check", params.time_check)
+        if not success then return nil, err end
     end
-
-    local updated_method_comparison, err_method_comparison = validate_monitor_param("dvb_method_comparison", params.method_comparison)
-    if params.method_comparison ~= nil then -- Only attempt to update if param is provided
-        if err_method_comparison then
-            log_error(COMPONENT_NAME, "Failed to validate 'method_comparison' parameter: %s", err_method_comparison)
-            return nil, err_method_comparison
-        end
-        self.conf.method_comparison = updated_method_comparison
+    if params.method_comparison ~= nil then
+        success, err = set_dvb_config_param(self, "dvb_method_comparison", params.method_comparison)
+        if not success then return nil, err end
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", self.conf.name_adapter)

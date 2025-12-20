@@ -53,14 +53,11 @@ local channel_monitor_method_comparison = {
     -- @param number rate Погрешность сравнения битрейта (не используется в этом методе).
     -- @return boolean true, если обнаружено существенное изменение; false иначе.
     [2] = function(prev, curr, rate)
-        if prev.ready ~= curr.on_air or
-            prev.scrambled ~= curr.total.scrambled or
-            prev.cc_errors > 0 or
-            prev.pes_errors > 0 or
-            prev.bitrate ~= curr.total.bitrate then
-                return true
-        end
-        return false
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               prev.cc_errors > 0 or
+               prev.pes_errors > 0 or
+               prev.bitrate ~= curr.total.bitrate
     end,
 
     --- Метод 3: Сравнение по изменению параметров с учетом погрешности битрейта.
@@ -70,14 +67,11 @@ local channel_monitor_method_comparison = {
     -- @param number rate Допустимая погрешность для сравнения битрейта.
     -- @return boolean true, если обнаружено существенное изменение; false иначе.
     [3] = function(prev, curr, rate)
-        if prev.ready ~= curr.on_air or
-            prev.scrambled ~= curr.total.scrambled or
-            prev.cc_errors > 0 or
-            prev.pes_errors > 0 or
-            ratio(prev.bitrate, curr.total.bitrate) > rate then
-                return true
-        end
-        return false
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               prev.cc_errors > 0 or
+               prev.pes_errors > 0 or
+               ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
 
     --- Метод 4: Сравнение по изменению доступности канала.
@@ -95,10 +89,7 @@ local channel_monitor_method_comparison = {
             prev.pes_errors = 0
         end
 
-        if prev.ready ~= curr.on_air then
-                return true
-        end
-        return false
+        return prev.ready ~= curr.on_air
     end
 }
 
@@ -107,6 +98,23 @@ local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = 
 
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
+
+--- Вспомогательная функция для валидации и установки параметра конфигурации.
+-- @param table self Объект ChannelMonitor.
+-- @param string param_name Имя параметра (например, "channel_rate").
+-- @param any value Значение для установки.
+-- @return boolean true, если параметр успешно установлен; nil и сообщение об ошибке в случае ошибки.
+local function set_config_param(self, param_name, value)
+    local updated_value, err = validate_monitor_param(param_name, value)
+    if err then
+        log_error(COMPONENT_NAME, "Failed to validate '%s' parameter: %s", param_name, err)
+        return nil, err
+    end
+    -- Извлекаем фактическое имя параметра из "channel_param_name"
+    local config_key = param_name:gsub("channel_", "")
+    self.config[config_key] = updated_value
+    return true
+end
 
 --- Создает новый экземпляр ChannelMonitor.
 -- Инициализирует монитор с предоставленной конфигурацией и данными канала,
@@ -117,51 +125,28 @@ ChannelMonitor.__index = ChannelMonitor
 -- @return ChannelMonitor Новый объект ChannelMonitor.
 function ChannelMonitor:new(config, channel_data)
     local self = setmetatable({}, ChannelMonitor)
-    -- Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
     self.config = config
-    -- Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
     self.channel_data = channel_data
 
     -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
-    -- Допустимая погрешность для сравнения битрейта (например, 0.035 = 3.5%).
-    self.config.rate = validate_monitor_param("channel_rate", config.rate) or MonitorConfig.ValidationSchema.channel_rate.default
-    -- Интервал проверки состояния канала в секундах.
-    self.config.time_check = validate_monitor_param("channel_time_check", config.time_check) or MonitorConfig.ValidationSchema.channel_time_check.default
-    -- Флаг, указывающий, нужно ли выполнять детальный анализ потока.
-    self.config.analyze = validate_monitor_param("channel_analyze", config.analyze) or MonitorConfig.ValidationSchema.channel_analyze.default
-    -- Метод сравнения для определения изменений в параметрах канала.
-    -- 1: Сравнение по таймеру.
-    -- 2: Сравнение по любому изменению ключевых параметров.
-    -- 3: Сравнение по изменению параметров с учетом погрешности битрейта.
-    -- 4: Сравнение по изменению доступности канала.
-    self.config.method_comparison = validate_monitor_param("channel_method_comparison", config.method_comparison) or MonitorConfig.ValidationSchema.channel_method_comparison.default
+    set_config_param(self, "channel_rate", config.rate)
+    set_config_param(self, "channel_time_check", config.time_check)
+    set_config_param(self, "channel_analyze", config.analyze)
+    set_config_param(self, "channel_method_comparison", config.method_comparison)
 
-    -- Имя канала/монитора, извлекается из channel_data или config.
     self.name = self.channel_data and self.channel_data.name or self.config.name
-    -- JSON-данные потока из конфигурации.
     self.stream_json = config.stream_json or {}
-    -- Кэш данных PSI (Program Specific Information).
     self.psi_data_cache = {}
-    -- Кэш последнего отправленного JSON-статуса.
     self.json_status_cache = nil
-    -- Экземпляр входного потока (если используется init_input).
     self.input_instance = nil
 
-    -- Внутренний таймер для отсчета интервала проверки.
     self.time = 0
-    -- Таймер для принудительной отправки статуса, если долго не было изменений.
     self.force_timer = 0
-    -- Текущий статус монитора, инициализируется шаблоном.
     self.status = self:create_status_template()
-    -- Готовность канала (true, если канал активен).
     self.status.ready = false
-    -- Статус скремблирования (true, если канал скремблирован).
     self.status.scrambled = true
-    -- Битрейт канала в кбит/с.
     self.status.bitrate = 0
-    -- Счетчик ошибок Continuity Counter.
     self.status.cc_errors = 0
-    -- Счетчик ошибок Packetized Elementary Stream.
     self.status.pes_errors = 0
 
     log_info(COMPONENT_NAME, "New ChannelMonitor instance created for channel: " .. self.name)
@@ -223,22 +208,20 @@ function ChannelMonitor:start()
                 send_monitor(json_encode(content), "errors")
             elseif data.psi then
                 local psi_key = data.psi
-                if self_ref.psi_data_cache[psi_key] then
-                    self_ref.psi_data_cache[psi_key] = nil
-                end
-                self_ref.psi_data_cache[psi_key] = json_encode(data) 
+                self_ref.psi_data_cache[psi_key] = json_encode(data)
             elseif data.total then
                if self_ref.config.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
-                    local content = self_ref:create_status_template()
-                    content.analyze = {}
+                    local analyze_errors = {}
                     local has_errors = false
                     for _, pid_data in ipairs(data.analyze) do
                         if pid_data.cc_error > 0 or pid_data.pes_error > 0 or pid_data.sc_error > 0 then
-                            table_insert(content.analyze, pid_data)
+                            table_insert(analyze_errors, pid_data)
                             has_errors = true
                         end
                     end
                     if has_errors then
+                        local content = self_ref:create_status_template()
+                        content.analyze = analyze_errors
                         send_monitor(json_encode(content), "analyze")
                     end
                 end
@@ -285,40 +268,22 @@ function ChannelMonitor:update_parameters(params)
         return nil, error_msg
     end
 
-    local updated_rate, err_rate = validate_monitor_param("channel_rate", params.rate)
+    local success, err
     if params.rate ~= nil then
-        if err_rate then
-            log_error(COMPONENT_NAME, "Failed to validate 'rate' parameter: %s", err_rate)
-            return nil, err_rate
-        end
-        self.config.rate = updated_rate
+        success, err = set_config_param(self, "channel_rate", params.rate)
+        if not success then return nil, err end
     end
-
-    local updated_time_check, err_time_check = validate_monitor_param("channel_time_check", params.time_check)
     if params.time_check ~= nil then
-        if err_time_check then
-            log_error(COMPONENT_NAME, "Failed to validate 'time_check' parameter: %s", err_time_check)
-            return nil, err_time_check
-        end
-        self.config.time_check = updated_time_check
+        success, err = set_config_param(self, "channel_time_check", params.time_check)
+        if not success then return nil, err end
     end
-
-    local updated_analyze, err_analyze = validate_monitor_param("channel_analyze", params.analyze)
     if params.analyze ~= nil then
-        if err_analyze then
-            log_error(COMPONENT_NAME, "Failed to validate 'analyze' parameter: %s", err_analyze)
-            return nil, err_analyze
-        end
-        self.config.analyze = updated_analyze
+        success, err = set_config_param(self, "channel_analyze", params.analyze)
+        if not success then return nil, err end
     end
-
-    local updated_method_comparison, err_method_comparison = validate_monitor_param("channel_method_comparison", params.method_comparison)
     if params.method_comparison ~= nil then
-        if err_method_comparison then
-            log_error(COMPONENT_NAME, "Failed to validate 'method_comparison' parameter: %s", err_method_comparison)
-            return nil, err_method_comparison
-        end
-        self.config.method_comparison = updated_method_comparison
+        success, err = set_config_param(self, "channel_method_comparison", params.method_comparison)
+        if not success then return nil, err end
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. self.name)
@@ -341,10 +306,11 @@ function ChannelMonitor:send_channel_status(data)
     self.status.scrambled = data.total.scrambled
     self.status.bitrate = data.total.bitrate or 0
     
-    local json_cache = json_encode(self.status)
-    send_monitor(json_cache, "channels")
-
-    self.json_status_cache = json_cache
+    local current_json_status = json_encode(self.status)
+    if current_json_status ~= self.json_status_cache then
+        send_monitor(current_json_status, "channels")
+        self.json_status_cache = current_json_status
+    end
 
     self.status.cc_errors = 0
     self.status.pes_errors = 0

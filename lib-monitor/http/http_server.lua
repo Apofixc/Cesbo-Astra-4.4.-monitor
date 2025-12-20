@@ -520,20 +520,14 @@ local get_psi_channel = function(server, client, request)
         return send_response(server, client, 404, "PSI cache for '" .. name .. "' not found or empty.")
     end
 
-    local json_content, encode_err = json_encode(psi_cache)
-    if not json_content then
-        local error_msg = "Failed to encode PSI cache to JSON for monitor '" .. name .. "': " .. (encode_err or "unknown")
-        log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
-    end
-
+    -- psi_data_cache уже является JSON-строкой, нет необходимости повторно кодировать
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #json_content,
+        "Content-Length: " .. #psi_cache,
         "Connection: close",
     }    
     
-    send_response(server, client, 200, json_content, headers)    
+    send_response(server, client, 200, psi_cache, headers)    
 end
 
 --- Обработчик HTTP-запроса для получения списка DVB-адаптеров.
