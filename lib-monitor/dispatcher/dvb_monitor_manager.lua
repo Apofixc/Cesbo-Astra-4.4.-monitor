@@ -24,6 +24,7 @@ DvbMonitorManager.__index = DvbMonitorManager
 function DvbMonitorManager:new()
     local self = setmetatable({}, DvbMonitorManager)
     self.monitors = {} -- Таблица для хранения DVB-мониторов по их уникальному имени
+    self.count = 0     -- Явный счетчик мониторов
     return self
 end
 
@@ -46,14 +47,15 @@ function DvbMonitorManager:add_monitor(name, monitor_obj)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
-    if #self.monitors >= MonitorConfig.DvbMonitorLimit then
+    if self.count >= MonitorConfig.DvbMonitorLimit then
         local error_msg = string.format("DVB Monitor list overflow. Cannot add more than %s monitors.", MonitorConfig.DvbMonitorLimit)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
     self.monitors[name] = monitor_obj
-    log_info(COMPONENT_NAME, "DVB Monitor '%s' added successfully.", name)
+    self.count = self.count + 1
+    log_info(COMPONENT_NAME, "DVB Monitor '%s' added successfully. Total: %d", name, self.count)
     return true, nil
 end
 
@@ -135,7 +137,8 @@ function DvbMonitorManager:remove_monitor(name)
         log_info(COMPONENT_NAME, "DVB Monitor '%s' does not have a kill() method.", name)
     end
     self.monitors[name] = nil
-    log_info(COMPONENT_NAME, "DVB Monitor '%s' removed successfully.", name)
+    self.count = self.count - 1
+    log_info(COMPONENT_NAME, "DVB Monitor '%s' removed successfully. Total: %d", name, self.count)
     return true, nil
 end
 

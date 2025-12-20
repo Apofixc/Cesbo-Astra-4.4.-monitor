@@ -28,6 +28,7 @@ ChannelMonitorManager.__index = ChannelMonitorManager
 function ChannelMonitorManager:new()
     local self = setmetatable({}, ChannelMonitorManager)
     self.monitors = {} -- Таблица для хранения мониторов каналов по их уникальному имени
+    self.count = 0     -- Явный счетчик мониторов
     return self
 end
 
@@ -50,14 +51,15 @@ function ChannelMonitorManager:add_monitor(name, monitor_obj)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
-    if #self.monitors >= MonitorConfig.ChannelMonitorLimit then
+    if self.count >= MonitorConfig.ChannelMonitorLimit then
         local error_msg = string.format("Channel Monitor list overflow. Cannot add more than %s monitors.", MonitorConfig.ChannelMonitorLimit)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
     self.monitors[name] = monitor_obj
-    log_info(COMPONENT_NAME, "Channel Monitor '%s' added successfully.", name)
+    self.count = self.count + 1
+    log_info(COMPONENT_NAME, "Channel Monitor '%s' added successfully. Total: %d", name, self.count)
     return true, nil
 end
 

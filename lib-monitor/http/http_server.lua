@@ -406,7 +406,7 @@ local get_monitor_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    for name, _ in pairs(monitor_manager:get_all_monitors()) do
+    for name, _ in monitor_manager:get_all_monitors() do -- Используем итератор
         content["monitor_" .. key] = name
         key = key + 1
     end
@@ -548,9 +548,7 @@ local get_adapter_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    -- DVB-мониторы хранятся в dvb_manager, а не в общем get_all_monitors()
-    -- Нужно получить список DVB-мониторов отдельно
-    for name, _ in pairs(monitor_manager.dvb_manager:get_all_monitors()) do
+    for name, _ in monitor_manager.dvb_manager:get_all_monitors() do
         content["adapter_" .. key] = name
         key = key + 1
     end

@@ -140,17 +140,29 @@ function MonitorManager:update_monitor_parameters(name, params)
     return nil, error_msg
 end
 
---- Возвращает таблицу всех активных мониторов (каналов и DVB-тюнеров).
--- @return table Таблица, содержащая все объекты мониторов.
+--- Возвращает итератор для всех активных мониторов (каналов и DVB-тюнеров).
+-- Это позволяет перебирать мониторы без создания новой большой таблицы,
+-- что может быть более эффективным для большого количества мониторов.
+-- @return function Итератор, который возвращает `name, monitor_obj`.
 function MonitorManager:get_all_monitors()
-    local all_monitors = {}
-    for name, monitor_obj in pairs(self.channel_manager:get_all_monitors()) do
-        all_monitors[name] = monitor_obj
+    local channel_iter, channel_state, channel_var = pairs(self.channel_manager:get_all_monitors())
+    local dvb_iter, dvb_state, dvb_var = pairs(self.dvb_manager:get_all_monitors())
+
+    return function()
+        local name, monitor_obj = channel_iter(channel_state, channel_var)
+        if name then
+            channel_var = name
+            return name, monitor_obj
+        else
+            local name_dvb, monitor_obj_dvb = dvb_iter(dvb_state, dvb_var)
+            if name_dvb then
+                dvb_var = name_dvb
+                return name_dvb, monitor_obj_dvb
+            else
+                return nil
+            end
+        end
     end
-    for name, monitor_obj in pairs(self.dvb_manager:get_all_monitors()) do
-        all_monitors[name] = monitor_obj
-    end
-    return all_monitors
 end
 
 return MonitorManager
