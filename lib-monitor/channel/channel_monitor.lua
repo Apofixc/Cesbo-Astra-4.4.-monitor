@@ -116,29 +116,52 @@ ChannelMonitor.__index = ChannelMonitor
 -- @return ChannelMonitor Новый объект ChannelMonitor.
 function ChannelMonitor:new(config, channel_data)
     local self = setmetatable({}, ChannelMonitor)
-    self.config = config            -- Конфигурация монитора
-    self.channel_data = channel_data -- Данные канала
+    -- Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
+    self.config = config
+    -- Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
+    self.channel_data = channel_data
 
     -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
+    -- Допустимая погрешность для сравнения битрейта (например, 0.035 = 3.5%).
     self.config.rate = self.config.rate or 0.035
+    -- Интервал проверки состояния канала в секундах.
     self.config.time_check = self.config.time_check or 0
+    -- Флаг, указывающий, нужно ли выполнять детальный анализ потока.
     self.config.analyze = self.config.analyze or false
+    -- Метод сравнения для определения изменений в параметрах канала.
+    -- 1: Сравнение по таймеру.
+    -- 2: Сравнение по любому изменению ключевых параметров.
+    -- 3: Сравнение по изменению параметров с учетом погрешности битрейта.
+    -- 4: Сравнение по изменению доступности канала.
     self.config.method_comparison = self.config.method_comparison or 3
 
-    self.name = self.channel_data and self.channel_data.name or self.config.name -- Имя канала/монитора
-    self.stream_json = config.stream_json or {} -- JSON-данные потока из конфигурации
-    self.psi_data_cache = {}        -- Кэш данных PSI
-    self.json_status_cache = nil    -- Кэш последнего отправленного JSON-статуса
-    self.input_instance = nil       -- Экземпляр входного потока (если используется init_input/kill_input)
+    -- Имя канала/монитора, извлекается из channel_data или config.
+    self.name = self.channel_data and self.channel_data.name or self.config.name
+    -- JSON-данные потока из конфигурации.
+    self.stream_json = config.stream_json or {}
+    -- Кэш данных PSI (Program Specific Information).
+    self.psi_data_cache = {}
+    -- Кэш последнего отправленного JSON-статуса.
+    self.json_status_cache = nil
+    -- Экземпляр входного потока (если используется init_input).
+    self.input_instance = nil
 
-    self.time = 0                   -- Внутренний таймер для отсчета интервала проверки
-    self.force_timer = 0            -- Таймер для принудительной отправки статуса
-    self.status = self:create_status_template() -- Текущий статус монитора
-    self.status.ready = false       -- Готовность канала
-    self.status.scrambled = true    -- Статус скремблирования
-    self.status.bitrate = 0         -- Битрейт канала
-    self.status.cc_errors = 0       -- Счетчик ошибок CC
-    self.status.pes_errors = 0      -- Счетчик ошибок PES
+    -- Внутренний таймер для отсчета интервала проверки.
+    self.time = 0
+    -- Таймер для принудительной отправки статуса, если долго не было изменений.
+    self.force_timer = 0
+    -- Текущий статус монитора, инициализируется шаблоном.
+    self.status = self:create_status_template()
+    -- Готовность канала (true, если канал активен).
+    self.status.ready = false
+    -- Статус скремблирования (true, если канал скремблирован).
+    self.status.scrambled = true
+    -- Битрейт канала в кбит/с.
+    self.status.bitrate = 0
+    -- Счетчик ошибок Continuity Counter.
+    self.status.cc_errors = 0
+    -- Счетчик ошибок Packetized Elementary Stream.
+    self.status.pes_errors = 0
 
     log_info(COMPONENT_NAME, "New ChannelMonitor instance created for channel: " .. self.name)
     return self
@@ -300,7 +323,7 @@ end
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
 function ChannelMonitor:kill()
     if self.input_instance then
-        -- Предполагается, что kill_input - это глобальная функция Astra
+        -- kill_input - это глобальная функция Astra
         kill_input(self.input_instance)
         self.input_instance = nil
     end

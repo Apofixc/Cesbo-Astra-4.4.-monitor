@@ -52,11 +52,18 @@ local dvb_monitor_method_comparison = {
 -- @return DvbTunerMonitor Новый экземпляр DvbTunerMonitor.
 function DvbTunerMonitor:new(conf)
     local self = setmetatable({}, DvbTunerMonitor)
+    -- Таблица конфигурации для DVB-тюнера.
     self.conf = conf
+    -- Интервал проверки состояния DVB-тюнера в секундах.
     self.conf.time_check = self.conf.time_check or 10
+    -- Допустимая погрешность для сравнения параметров сигнала (например, 0.015 = 1.5%).
     self.conf.rate = self.conf.rate or 0.015
+    -- Метод сравнения для определения изменений в параметрах DVB-тюнера.
+    -- 1: Всегда возвращает true (для совместимости).
+    -- 2: Сравнивает по любому изменению статуса, сигнала, SNR, BER, UNC.
+    -- 3: Сравнивает по любому изменению статуса, а также сигнала и SNR с учетом погрешности (rate).
     self.conf.method_comparison = self.conf.method_comparison or 3
-
+    -- Текущее состояние сигнала DVB-тюнера.
     self.status_signal = {
         type = "dvb",
         server = get_server_name(),
@@ -70,9 +77,12 @@ function DvbTunerMonitor:new(conf)
         ber = -1,
         unc = -1
     }
+    -- Счетчик времени для интервала проверки.
     self.time = 0
-    self.json_cache = nil
-    self.instance = nil -- Экземпляр dvb_tune
+    -- Кэш JSON для последнего состояния сигнала.
+    self.json_cache = nil 
+    -- Экземпляр DVB-тюнера, управляемый функцией dvb_tune.
+    self.instance = nil 
 
     return self
 end
