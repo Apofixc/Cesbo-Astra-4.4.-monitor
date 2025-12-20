@@ -1,35 +1,39 @@
 -- ===========================================================================
--- Кэширование локальных функций для производительности
+-- Модуль для управления каналами и их мониторингом.
+-- Предоставляет функции для создания, обновления и удаления каналов и связанных с ними мониторов.
 -- ===========================================================================
 
+-- Стандартные функции Lua
 local type = type
 local tostring = tostring
 local ipairs = ipairs
-local math_max = math_max
+local math_max = math.max
 local string_lower = string.lower
 local table_insert = table_insert
--- local table_remove = table_remove -- Не используется
--- local json_encode = json.encode -- Не используется
 
+-- Локальные модули
 local Logger = require "utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 
-local COMPONENT_NAME = "Channel"
+local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
+-- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
 local table_copy = table.copy
 local string_split = string.split
 local check = check
+local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
+local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
+local kill_channel = kill_channel -- Предполагаем, что kill_channel является глобальной функцией
+local get_stream = get_stream     -- Предполагаем, что get_stream является глобальной функцией
 
--- local tonumber = tonumber -- Не используется
--- local math_min = math.min -- Не используется
-
+-- Модули мониторинга
 local ChannelMonitor = require "channel.channel_monitor"
 local MonitorManager = require "monitor_manager"
 local find_dvb_conf = require "adapters.adapter".find_dvb_conf
-local parse_url = parse_url -- Предполагаем, что parse_url является глобальной функцией
-local init_input = init_input -- Предполагаем, что init_input является глобальной функцией
--- local get_stream = get_stream -- Предполагаем, что get_stream является глобальной функцией или импортируется из другого места
+-- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
+-- local parse_url = parse_url
+-- local init_input = init_input
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -138,12 +142,20 @@ local function create_stream_json(ch_data)
     return stream_json
 end
 
+--- Создает и регистрирует новый монитор канала.
+-- Эта функция подготавливает конфигурацию и данные канала, а затем делегирует
+-- создание и регистрацию монитора `MonitorManager`.
+-- @param table config Таблица конфигурации для нового монитора.
+--   - name (string): Имя монитора.
+--   - monitor (string): Адрес мониторинга.
+--   - upstream (userdata, optional): Экземпляр upstream, если уже инициализирован.
+--   - rate (number, optional): Погрешность сравнения битрейта.
+--   - time_check (number, optional): Интервал проверки данных.
+--   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
+--   - method_comparison (number, optional): Метод сравнения состояния потока.
+-- @param table channel_data (optional) Таблица с данными канала или его имя (string).
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе false.
 function make_monitor(config, channel_data)
-    if #monitor_manager:get_all_monitors() > MONITOR_LIMIT then 
-        log_error(COMPONENT_NAME, "Monitor list overflow. Cannot create more than " .. MONITOR_LIMIT .. " monitors.")
-        return false
-    end
-
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
 
     if not check(type(config) == 'table', "[make_monitor] Invalid config table.") then
@@ -161,36 +173,8 @@ function make_monitor(config, channel_data)
     
     config.stream_json = create_stream_json(ch_data)
 
-    -- Инициализация upstream
-    if not config.upstream then
-        local cfg = parse_url(config.monitor)
-        if not cfg then
-            log_error(COMPONENT_NAME, "Monitoring address does not exist for channel '" .. config.name .. "'.") 
-            return false     
-        end
-        cfg.name = config.name
-        local input_instance = init_input(cfg)
-        if not input_instance then
-            log_error(COMPONENT_NAME, "init_input returned nil, upstream is required for channel '" .. config.name .. "'.")
-            return false
-        end
-        config.upstream = input_instance.tail
-        log_info(COMPONENT_NAME, "Upstream initialized for channel '" .. config.name .. "' from monitor config.")
-    else
-        log_info(COMPONENT_NAME, "Upstream already provided for channel '" .. config.name .. "'. Skipping initialization.")
-    end
-
-    local monitor = ChannelMonitor:new(config, ch_data)
-    local instance = monitor:start()
-
-    if instance then
-        monitor_manager:add_monitor(monitor.name, monitor)
-        log_info(COMPONENT_NAME, "Channel monitor '" .. monitor.name .. "' created and added successfully.")
-        return instance
-    else
-        log_error(COMPONENT_NAME, "ChannelMonitor:start returned nil for monitor '" .. (config.name or "unknown") .. "'.")
-        return false        
-    end
+    -- Делегируем создание и регистрацию монитора MonitorManager
+    return monitor_manager:create_and_register_monitor(config, ch_data)
 end
 
 --- Находит монитор по его имени.
@@ -310,7 +294,7 @@ function make_stream(conf)
         return false
     end
 
-    local instance = {
+    local monitor_config = {
         name = monitor_name,
         upstream = upstream,
         monitor = monitor_target,
@@ -321,7 +305,8 @@ function make_stream(conf)
     }
 
     log_info(COMPONENT_NAME, "Attempting to create monitor for stream '" .. conf.name .. "'.")
-    return make_monitor(instance, channel_data)
+    -- Делегируем создание и регистрацию монитора MonitorManager
+    return monitor_manager:create_and_register_monitor(monitor_config, channel_data)
 end
 
 --- Останавливает поток и связанный с ним монитор.

@@ -7,6 +7,13 @@ local Logger = require "utils.logger" -- Импортируем новый мо�
 local log_info = Logger.info
 local log_error = Logger.error
 
+local ChannelMonitor = require "channel.channel_monitor" -- Для создания экземпляров мониторов
+local MonitorConfig = require "config.monitor_config"   -- Для доступа к лимитам мониторов
+
+-- Предполагаем, что эти глобальные функции доступны в окружении Astra
+local parse_url = parse_url
+local init_input = init_input
+
 local COMPONENT_NAME = "MonitorManager" -- Имя компонента для логирования
 
 local MonitorManager = {}
@@ -21,12 +28,13 @@ function MonitorManager:new()
     return self
 end
 
---- Добавляет объект монитора в менеджер.
--- Проверяет валидность имени и объекта монитора, а также отсутствие дубликатов.
+--- Внутренний метод для добавления уже созданного и запущенного объекта монитора в менеджер.
+-- Этот метод не выполняет проверок лимитов или инициализации upstream,
+-- предполагая, что эти шаги уже были выполнены перед вызовом.
 -- @param string name Уникальное имя монитора.
--- @param table monitor_obj Объект монитора, который должен быть таблицей (например, DvbTunerMonitor или ChannelMonitor).
+-- @param table monitor_obj Объект монитора, который должен быть таблицей.
 -- @return boolean true, если монитор успешно добавлен; false в случае ошибки (неверное имя, неверный объект, дубликат имени).
-function MonitorManager:add_monitor(name, monitor_obj)
+function MonitorManager:_add_monitor_internal(name, monitor_obj)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
         return false
@@ -42,6 +50,59 @@ function MonitorManager:add_monitor(name, monitor_obj)
     self.monitors[name] = monitor_obj
     log_info(COMPONENT_NAME, "Monitor '" .. name .. "' added successfully.")
     return true
+end
+
+--- Создает, инициализирует и регистрирует новый монитор канала.
+-- Этот метод централизует логику создания монитора, включая проверку лимитов,
+-- инициализацию upstream и запуск монитора.
+-- @param table config Таблица конфигурации для нового монитора.
+-- @param table channel_data (optional) Таблица с данными канала или его имя (string).
+-- @return userdata monitor Экземпляр монитора, если успешно создан и зарегистрирован, иначе false.
+function MonitorManager:create_and_register_monitor(config, channel_data)
+    if #self.monitors > MonitorConfig.MonitorLimit then
+        log_error(COMPONENT_NAME, "Monitor list overflow. Cannot create more than " .. MonitorConfig.MonitorLimit .. " monitors.")
+        return false
+    end
+
+    -- Инициализация upstream, если он не предоставлен
+    if not config.upstream then
+        if not parse_url then
+            log_error(COMPONENT_NAME, "Global function 'parse_url' is not available.")
+            return false
+        end
+        if not init_input then
+            log_error(COMPONENT_NAME, "Global function 'init_input' is not available.")
+            return false
+        end
+
+        local cfg = parse_url(config.monitor)
+        if not cfg then
+            log_error(COMPONENT_NAME, "Monitoring address does not exist for channel '" .. config.name .. "'.")
+            return false
+        end
+        cfg.name = config.name
+        local input_instance = init_input(cfg)
+        if not input_instance then
+            log_error(COMPONENT_NAME, "init_input returned nil, upstream is required for channel '" .. config.name .. "'.")
+            return false
+        end
+        config.upstream = input_instance.tail
+        log_info(COMPONENT_NAME, "Upstream initialized for channel '" .. config.name .. "' from monitor config.")
+    else
+        log_info(COMPONENT_NAME, "Upstream already provided for channel '" .. config.name .. "'. Skipping initialization.")
+    end
+
+    local monitor = ChannelMonitor:new(config, channel_data)
+    local instance = monitor:start()
+
+    if instance then
+        self:_add_monitor_internal(monitor.name, monitor)
+        log_info(COMPONENT_NAME, "Channel monitor '" .. monitor.name .. "' created and added successfully.")
+        return instance
+    else
+        log_error(COMPONENT_NAME, "ChannelMonitor:start returned nil for monitor '" .. (config.name or "unknown") .. "'.")
+        return false
+    end
 end
 
 --- Получает объект монитора по его имени.
