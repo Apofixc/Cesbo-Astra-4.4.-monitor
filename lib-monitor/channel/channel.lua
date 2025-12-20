@@ -29,7 +29,7 @@ local get_stream = get_stream     -- Предполагаем, что get_stream
 
 -- Модули мониторинга
 local ChannelMonitor = require "channel.channel_monitor"
-local MonitorManager = require "monitor_manager"
+local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
 local find_dvb_conf = require "adapters.adapter".find_dvb_conf
 -- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
 -- local parse_url = parse_url
@@ -59,12 +59,12 @@ local MONITOR_TYPE_IP = "ip"
 -- Основные функции модуля
 -- ===========================================================================
 
-local monitor_manager = MonitorManager:new()
+local channel_monitor_manager = ChannelMonitorManager:new()
 
 --- Возвращает список всех активных мониторов.
 -- @return table monitor_list Таблица со списком активных мониторов.
 function get_list_monitor()
-    return monitor_manager:get_all_monitors()
+    return channel_monitor_manager:get_all_monitors()
 end
 
 --- Обновляет параметры существующего монитора канала.
@@ -106,7 +106,7 @@ function update_monitor_parameters(name, params)
         monitor_data.instance.method_comparison = params.method_comparison
     end
 
-    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. name)
+    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", name)
 
     return true
 end
@@ -144,7 +144,7 @@ end
 
 --- Создает и регистрирует новый монитор канала.
 -- Эта функция подготавливает конфигурацию и данные канала, а затем делегирует
--- создание и регистрацию монитора `MonitorManager`.
+-- создание и регистрацию монитора `ChannelMonitorManager`.
 -- @param table config Таблица конфигурации для нового монитора.
 --   - name (string): Имя монитора.
 --   - monitor (string): Адрес мониторинга.
@@ -173,15 +173,15 @@ function make_monitor(config, channel_data)
     
     config.stream_json = create_stream_json(ch_data)
 
-    -- Делегируем создание и регистрацию монитора MonitorManager
-    return monitor_manager:create_and_register_monitor(config, ch_data)
+    -- Делегируем создание и регистрацию монитора ChannelMonitorManager
+    return channel_monitor_manager:create_and_register_channel_monitor(config, ch_data)
 end
 
 --- Находит монитор по его имени.
 -- @param string name Имя монитора для поиска.
 -- @return table monitor_data Таблица с данными монитора, если найден, иначе nil.
 function find_monitor(name)
-    return monitor_manager:get_monitor(name)
+    return channel_monitor_manager:get_monitor(name)
 end
 
 --- Останавливает и удаляет монитор.
@@ -194,9 +194,9 @@ function kill_monitor(monitor_obj)
     end
 
     local config = table_copy(monitor_obj.config)
-    monitor_manager:remove_monitor(monitor_obj.name)
+    channel_monitor_manager:remove_monitor(monitor_obj.name)
 
-    log_info(COMPONENT_NAME, "Monitor '" .. monitor_obj.name .. "' killed successfully.")
+    log_info(COMPONENT_NAME, "Monitor '%s' killed successfully.", monitor_obj.name)
     return config
 end
 
@@ -205,7 +205,7 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
         local input_data = channel_data.input[1]
         if not input_data then
-            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '" .. conf.name .. "'.")
+            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '%s'.", conf.name)
             return nil, nil
         end
         local upstream = input_data.input.tail
@@ -220,7 +220,7 @@ local monitor_type_handlers = {
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
         if not channel_data.output or #channel_data.output == 0 then
-            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'.")
+            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '%s'.", conf.name)
             return nil, nil
         end
 
@@ -235,7 +235,7 @@ local monitor_type_handlers = {
         local split_result = string_split(conf.output[key], "#")
         local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
-        log_info(COMPONENT_NAME, "Using output key " .. key .. " for IP monitor in stream '" .. conf.name .. "'.")
+        log_info(COMPONENT_NAME, "Using output key %d for IP monitor in stream '%s'.", key, conf.name)
         return nil, monitor_target -- upstream не используется для IP-монитора
     end,
 }
@@ -256,7 +256,7 @@ local monitor_type_handlers = {
 function make_stream(conf)  
     local channel_data = make_channel(conf)
     if not channel_data then 
-        log_error(COMPONENT_NAME, "Failed to create channel data for stream '" .. (conf.name or "unknown") .. "'.")
+        log_error(COMPONENT_NAME, "Failed to create channel data for stream '%s'.", (conf.name or "unknown"))
         return false
     end
 
@@ -285,12 +285,12 @@ function make_stream(conf)
     if handler then
         upstream, monitor_target = handler(conf, channel_data)
     else
-        log_error(COMPONENT_NAME, "Invalid monitor_type: '" .. tostring(monitor_type) .. "' for stream '" .. conf.name .. "'.")
+        log_error(COMPONENT_NAME, "Invalid monitor_type: '%s' for stream '%s'.", tostring(monitor_type), conf.name)
         return false
     end
 
     if not monitor_target then
-        log_error(COMPONENT_NAME, "Failed to determine monitor target for stream '" .. conf.name .. "'.")
+        log_error(COMPONENT_NAME, "Failed to determine monitor target for stream '%s'.", conf.name)
         return false
     end
 
@@ -304,9 +304,9 @@ function make_stream(conf)
         method_comparison = conf.monitor and conf.monitor.method_comparison     
     }
 
-    log_info(COMPONENT_NAME, "Attempting to create monitor for stream '" .. conf.name .. "'.")
-    -- Делегируем создание и регистрацию монитора MonitorManager
-    return monitor_manager:create_and_register_monitor(monitor_config, channel_data)
+    log_info(COMPONENT_NAME, "Attempting to create monitor for stream '%s'.", conf.name)
+    -- Делегируем создание и регистрацию монитора ChannelMonitorManager
+    return channel_monitor_manager:create_and_register_channel_monitor(monitor_config, channel_data)
 end
 
 --- Останавливает поток и связанный с ним монитор.
@@ -323,15 +323,15 @@ function kill_stream(channel_data)
 
     if monitor_data then
         kill_monitor(monitor_data)
-        log_info(COMPONENT_NAME, "Monitor '" .. monitor_name .. "' was killed as part of stream shutdown.")
+        log_info(COMPONENT_NAME, "Monitor '%s' was killed as part of stream shutdown.", monitor_name)
     else
-        log_info(COMPONENT_NAME, "No monitor found for stream '" .. monitor_name .. "'.")
+        log_info(COMPONENT_NAME, "No monitor found for stream '%s'.", monitor_name)
     end
 
     local config = table_copy(channel_data.config)
     kill_channel(channel_data)
 
-    log_info(COMPONENT_NAME, "Stream '" .. config.name .. "' shutdown successfully.")
+    log_info(COMPONENT_NAME, "Stream '%s' shutdown successfully.", config.name)
 
     return config
 end

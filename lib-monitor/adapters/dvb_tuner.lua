@@ -3,8 +3,9 @@
 -- ===========================================================================
 
 local type = type
-local log_info = log.info
-local log_error = log.error
+local Logger = require "utils.logger"
+local log_info = Logger.info
+local log_error = Logger.error
 local json_encode = json.encode
 
 local ratio = ratio
@@ -13,6 +14,8 @@ local send_monitor = send_monitor
 local check = check
 
 local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
+
+local COMPONENT_NAME = "DvbTunerMonitor"
 
 local DvbTunerMonitor = {}
 DvbTunerMonitor.__index = DvbTunerMonitor
@@ -102,10 +105,10 @@ function DvbTunerMonitor:start()
     self.instance = dvb_tune(self.conf)
 
     if self.instance then
-        log_info("[DvbTunerMonitor] Started monitor for adapter: " .. self.conf.name_adapter)
+        log_info(COMPONENT_NAME, "Started monitor for adapter: %s", self.conf.name_adapter)
         return self.instance
     else
-        log_error("[DvbTunerMonitor] Failed to start monitor for adapter: " .. self.conf.name_adapter)
+        log_error(COMPONENT_NAME, "Failed to start monitor for adapter: %s", self.conf.name_adapter)
         return nil
     end
 end
@@ -115,7 +118,7 @@ end
 -- @return boolean true, если параметры успешно обновлены, иначе false.
 function DvbTunerMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        log_error("[DvbTunerMonitor:update_parameters] params must be a table")
+        log_error(COMPONENT_NAME, "update_parameters: params must be a table")
         return false
     end
 
@@ -126,7 +129,7 @@ function DvbTunerMonitor:update_parameters(params)
         self.conf.time_check = params.time_check
     end
 
-    log_info("[DvbTunerMonitor:update_parameters] Parameters updated successfully for monitor: " .. self.conf.name_adapter)
+    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", self.conf.name_adapter)
     return true
 end
 
