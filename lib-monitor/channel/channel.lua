@@ -85,31 +85,46 @@ function update_monitor_parameters(name, params)
         return false
     end
 
-    -- Находим монитор по имени
-    local monitor_data = find_monitor(name)
-    if not monitor_data then
-        log_error(COMPONENT_NAME, "Monitor not found for name: " .. tostring(name))
-        return false
+    -- Делегируем обновление параметров менеджеру каналов
+    local success = channel_monitor_manager:update_monitor_parameters(name, params)
+    if success then
+        log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", name)
+    else
+        log_error(COMPONENT_NAME, "Failed to update parameters for monitor: %s", name)
     end
-
-    -- Обновляем только переданные параметры с валидацией
-    if params.rate ~= nil and check(type(params.rate) == 'number' and params.rate >= MIN_RATE and params.rate <= MAX_RATE, "params.rate must be between " .. tostring(MIN_RATE) .. " and " .. tostring(MAX_RATE)) then
-        monitor_data.instance.rate = params.rate
-    end
-    if params.time_check ~= nil and check(type(params.time_check) == 'number' and params.time_check >= MIN_TIME_CHECK and params.time_check <= MAX_TIME_CHECK, "params.time_check must be between " .. tostring(MIN_TIME_CHECK) .. " and " .. tostring(MAX_TIME_CHECK)) then
-        monitor_data.instance.time_check = params.time_check
-    end
-    if params.analyze ~= nil and check(type(params.analyze) == 'boolean', "params.analyze must be boolean") then
-        monitor_data.instance.analyze = params.analyze
-    end
-    if params.method_comparison ~= nil and check(type(params.method_comparison) == 'number' and params.method_comparison >= MIN_METHOD_COMPARISON and params.method_comparison <= MAX_METHOD_COMPARISON, "params.method_comparison must be between " .. tostring(MIN_METHOD_COMPARISON) .. " and " .. tostring(MAX_METHOD_COMPARISON)) then
-        monitor_data.instance.method_comparison = params.method_comparison
-    end
-
-    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", name)
-
-    return true
+    return success
 end
+
+local format_handlers = {
+    dvb = function(config)
+        local cfg = {format = config.format, addr = config.addr}
+        local adap_conf = find_dvb_conf(config.addr)
+        cfg.stream = adap_conf and adap_conf.source or "dvb"
+        return cfg
+    end,
+    udp = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
+        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        return cfg
+    end,
+    rtp = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
+        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        return cfg
+    end,
+    http = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = config.host .. ":" .. config.port .. config.path
+        cfg.stream = get_stream(config.host) or "unknown_stream"
+        return cfg
+    end,
+    file = function(config)
+        local cfg = {format = config.format, addr = config.filename, stream = "file"}
+        return cfg
+    end,
+}
 
 --- Создает новый монитор канала.
 -- @param table config Таблица конфигурации для нового монитора.
@@ -119,20 +134,13 @@ local function create_stream_json(ch_data)
     local stream_json = {}
     if ch_data and type(ch_data) == "table" then
         for key, input in ipairs(ch_data.input) do
-            local cfg = {format = input.config.format}
-            if input.config.format == "dvb" then
-                cfg.addr = input.config.addr
-                local adap_conf = find_dvb_conf(input.config.addr)
-                cfg.stream = adap_conf and adap_conf.source or "dvb"      
-            elseif input.config.format == "udp" or input.config.format == "rtp" then
-                cfg.addr = input.config.localaddr .. "@" .. input.config.addr .. ":" .. input.config.port
-                cfg.stream = get_stream(input.config.addr) -- Предполагаем, что get_stream доступна
-            elseif input.config.format == "http" then
-                cfg.addr = input.config.host .. ":" .. input.config.port .. input.config.path
-                cfg.stream = get_stream(input.config.host) -- Предполагаем, что get_stream доступна
-            elseif input.config.format == "file" then
-                cfg.addr = input.config.filename
-                cfg.stream = "file"
+            local cfg = {}
+            local handler = format_handlers[input.config.format]
+            if handler then
+                cfg = handler(input.config)
+            else
+                log_error(COMPONENT_NAME, "Unknown or unsupported stream format: %s for entry %d. Cannot create stream JSON. Returning empty table.", tostring(format), key)
+                return {} -- Возвращаем пустую таблицу, так как канал не может быть создан
             end
             table_insert(stream_json, cfg)
         end
