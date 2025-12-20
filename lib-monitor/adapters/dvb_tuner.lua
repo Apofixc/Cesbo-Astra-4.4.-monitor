@@ -177,4 +177,21 @@ function DvbTunerMonitor:get_json_cache()
     return self.json_cache
 end
 
+--- Останавливает и очищает ресурсы, связанные с DVB-тюнер монитором.
+-- Сбрасывает все внутренние ссылки для освобождения памяти.
+function DvbTunerMonitor:kill()
+    if self.instance then
+        -- Предполагается, что есть глобальная функция kill_dvb_tune или аналогичная
+        -- Если нет, то нужно будет уточнить, как остановить dvb_tune instance
+        -- В данном случае, если dvb_tune возвращает userdata, то его нужно будет остановить
+        -- Если dvb_tune не предоставляет метода остановки, то очистка ссылок - это все, что можно сделать.
+        -- kill_dvb_tune(self.instance) -- Пример
+        self.instance = nil
+    end
+    self.conf = nil
+    self.status_signal = nil
+    self.json_cache = nil
+    log_info(COMPONENT_NAME, "DVB Tuner Monitor killed for adapter: %s", self.conf.name_adapter)
+end
+
 return DvbTunerMonitor

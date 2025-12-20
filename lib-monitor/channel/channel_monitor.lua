@@ -331,6 +331,7 @@ function ChannelMonitor:kill()
     self.stream_json = nil
     self.psi_data_cache = nil
     self.json_status_cache = nil
+    self.status = nil -- Очищаем статус
     log_info(COMPONENT_NAME, "Monitor killed for channel: " .. self.name)
 end
 

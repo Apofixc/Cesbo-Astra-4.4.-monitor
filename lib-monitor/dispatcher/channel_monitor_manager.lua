@@ -171,7 +171,8 @@ function ChannelMonitorManager:remove_monitor(name)
         log_info(COMPONENT_NAME, "Channel Monitor '%s' does not have a kill() method.", name)
     end
     self.monitors[name] = nil
-    log_info(COMPONENT_NAME, "Channel Monitor '%s' removed successfully.", name)
+    self.count = self.count - 1 -- Уменьшаем счетчик активных мониторов
+    log_info(COMPONENT_NAME, "Channel Monitor '%s' removed successfully. Total: %d", name, self.count)
     return true, nil
 end
 
