@@ -17,13 +17,14 @@ local astra_version = astra.version
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "config"
+local config = require "config.monitor_settings"
 local MonitorConfig = require "config.monitor_config"
 
 local hostname =  utils.hostname()
 
 local STREAM = config.STREAM
-local MONIT_ADDRESS = config.MONIT_ADDRESS
+    local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей
+    local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
 
 -- ===========================================================================
 -- Основные функции модуля
@@ -90,6 +91,31 @@ function check(cond, msg)
     return true
 end
 
+--- Вспомогательная функция для валидации общих параметров мониторинга.
+-- @param string host Хост.
+-- @param number port Порт.
+-- @param string path Путь.
+-- @param string feed (optional) Имя клиента.
+-- @return boolean true, если все параметры валидны, иначе false.
+local function validate_monitoring_params(host, port, path, feed)
+    if not check(type(host) == "string" and host ~= "", "[monitoring_params_validation] host must be a non-empty string") then
+        return false
+    end
+
+    if not check(type(port) == "number" and port > 0, "[monitoring_params_validation] port must be a positive number") then
+        return false
+    end
+
+    if not check(type(path) == "string" and path ~= "", "[monitoring_params_validation] path must be a non-empty string") then
+        return false
+    end
+
+    if feed and not check(type(feed) == "string" and feed ~= "", "[monitoring_params_validation] feed must be a non-empty string if provided") then
+        return false
+    end
+    return true
+end
+
 --- Валидирует параметр монитора на основе его имени, значения и типа/диапазона, используя схему.
 -- @param string name Имя параметра.
 -- @param any value Значение параметра для валидации.
@@ -131,38 +157,77 @@ end
 -- @param string feed (optional) Имя клиента (например, "channels", "analyze"). Если не указано, обновляет все стандартные клиенты.
 -- @return boolean true, если адрес успешно установлен, иначе false.
 function set_client_monitoring(host, port, path, feed)
-    if not check(type(host) == "string" and host ~= "", "[set_client_monitoring] host must be a non-empty string") then
-        return false
-    end
-
-    if not check(type(port) == "number" and port > 0, "[set_client_monitoring] port must be a positive number") then
-        return false
-    end
-
-    if not check(type(path) == "string" and path ~= "", "[set_client_monitoring] path must be a non-empty string") then
+    if not validate_monitoring_params(host, port, path, feed) then
         return false
     end
 
     if feed then
-        if not check(type(feed) == "string" and feed ~= "", "[set_client_monitoring] feed must be a non-empty string") then
-            return false
+
+        -- Убедиться, что MONIT_ADDRESS[feed] является таблицей
+        if type(MONIT_ADDRESS[feed]) ~= "table" then
+            MONIT_ADDRESS[feed] = {}
         end
 
-        if not MONIT_ADDRESS[feed] then
-            log_error("[set_client_monitoring] Client '" .. feed .. "' not found in MONIT_ADDRESS. Cannot override non-standard address.")
-            return false
+        local new_address = {host = host, port = port, path = path}
+        local is_duplicate = false
+        for _, existing_addr in ipairs(MONIT_ADDRESS[feed]) do
+            if existing_addr.host == new_address.host and existing_addr.port == new_address.port and existing_addr.path == new_address.path then
+                is_duplicate = true
+                break
+            end
         end
 
-        MONIT_ADDRESS[feed] = {host = host, port = port, path = path}
-        log_info("[set_client_monitoring] Overridden standard monitoring address for client '" .. feed .. "' with host=" .. host .. ", port=" .. port .. ", path=" .. path)
+        if is_duplicate then
+            log_info(string_format("[set_client_monitoring] Monitoring address for client '%s' with host=%s, port=%s, path=%s already exists. Skipping addition.", feed, host, tostring(port), path))
+        else
+            table.insert(MONIT_ADDRESS[feed], new_address)
+            log_info(string_format("[set_client_monitoring] Added monitoring address for client '%s' with host=%s, port=%s, path=%s", feed, host, tostring(port), path))
+        end
     else
-        for _, feed in ipairs({"channels", "analyze", "errors", "psi", "dvb"}) do
-            MONIT_ADDRESS[feed] = {host = host, port = port, path = path}
-            log_info("[set_client_monitoring] Overridden standard monitoring address for client '" .. feed .. "' with host=" .. host .. ", port=" .. port .. ", path=" .. path)
+        for _, feed_name in ipairs(DEFAULT_FEEDS) do
+            -- Очистить существующий список и добавить новый адрес
+            MONIT_ADDRESS[feed_name] = {{host = host, port = port, path = path}}
+            local log_message = string_format("[set_client_monitoring] Set default monitoring address for client '%s' with host=%s, port=%s, path=%s", feed_name, host, tostring(port), path)
+            log_info(log_message)
         end
     end
 
     return true
+end
+
+--- Удаляет конкретный адрес мониторинга для клиента.
+-- @param string host Хост для удаления.
+-- @param number port Порт для удаления.
+-- @param string path Путь для удаления.
+-- @param string feed Имя клиента (например, "channels", "analyze").
+-- @return boolean true, если адрес успешно удален, иначе false.
+function remove_client_monitoring(host, port, path, feed)
+    if not validate_monitoring_params(host, port, path, feed) then
+        return false
+    end
+
+    local recipients = MONIT_ADDRESS[feed]
+    if not recipients or #recipients == 0 then
+        log_info(string_format("[remove_client_monitoring] No monitoring addresses found for client '%s'.", feed))
+        return false
+    end
+
+    local removed = false
+    for i = #recipients, 1, -1 do
+        local addr = recipients[i]
+        if addr.host == host and addr.port == port and addr.path == path then
+            table.remove(recipients, i)
+            removed = true
+            log_info(string_format("[remove_client_monitoring] Removed monitoring address for client '%s' with host=%s, port=%s, path=%s", feed, host, tostring(port), path))
+            break
+        end
+    end
+
+    if not removed then
+        log_info(string_format("[remove_client_monitoring] Monitoring address for client '%s' with host=%s, port=%s, path=%s not found.", feed, host, tostring(port), path))
+    end
+
+    return removed
 end
 
 --- Возвращает имя хоста сервера.
