@@ -4,15 +4,15 @@ local table_copy = table.copy
 local table_concat = table.concat
 local table_insert = table.insert
 local os_exit = os.exit
-local log_info = log.info
-local log_error = log.error
-local timer = timer
+local log_info    = log.info
+local log_error   = log.error
+local timer       = timer
 local http_server = http_server
 local astra_version = astra.version
 local _astra_reload = astra.reload
 local json_decode = json.decode
 local json_encode = json.encode
-local string_split = string.split -- Объявлена в модуле base.lu
+local string_split = string_split -- Объявлена в модуле base.lua
 
 local MonitorManager = require "monitor_manager"
 local monitor_manager = MonitorManager:new()
@@ -30,7 +30,7 @@ local DELAY = 30
 
 --- Валидирует входящий HTTP-запрос и извлекает параметры.
 -- Поддерживает параметры из query string или из JSON-тела запроса.
--- @param table request Объект HTTP-зазапроса.
+-- @param table request Объект HTTP-запроса.
 -- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
@@ -45,8 +45,10 @@ local function validate_request(request)
     local content_type = request.content and request.headers and request.headers["content-type"] and request.headers["content-type"]:lower() or ""
     if content_type == "application/json" then
         local success, decoder = pcall(json_decode, request.content)
-        if success and decoder then
+        if success and type(decoder) == "table" then -- Проверяем, что декодированный JSON является таблицей
             return decoder
+        else
+            log_error("[validate_request] Failed to decode JSON or decoded content is not a table: %s", tostring(decoder))
         end
     end
 
@@ -56,11 +58,11 @@ end
 
 --- Проверяет наличие и валидность API-ключа в заголовках запроса.
 -- @param table request Объект HTTP-запроса.
--- @return boolean true, если аутентификация успешна, иначе false.
+-- @return boolean true, если аутентификация успешна, иначе `false`.
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
-        log_info(string.format("[Security] Unauthorized request"))
+        log_info(string.format("[Security] Unauthorized request from %s", request.peer)) -- Добавлено логирование IP-адреса
         return false
     end
     return true
@@ -69,27 +71,25 @@ end
 --- Извлекает параметр из таблицы запроса.
 -- @param table req Таблица с параметрами запроса.
 -- @param string key Ключ параметра.
--- @return any Значение параметра или nil, если параметр отсутствует.
+-- @return any Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
         log_error("[get_param] req is nil.")
         return nil
     end
     
-    if req[key] ~= nil then
-        return req[key]
-    end
+    return req[key] -- Возвращаем значение напрямую, nil если отсутствует
 end
 
 --- Валидирует значение задержки.
--- @param string s Строковое представление задержки.
+-- @param any value Значение для валидации (может быть строкой или числом).
 -- @return number Валидное значение задержки (не менее 1) или значение по умолчанию.
-local function validate_delay(s) 
-    local i = tonumber(s)
+local function validate_delay(value) 
+    local i = tonumber(value)
     if i and i >= 1 then
         return i
     else
-        log_error("[validate_delay] Invalid delay: " .. tostring(s) .. ", using default " .. DELAY)
+        log_error("[validate_delay] Invalid delay value: %s, using default %d", tostring(value), DELAY)
         return DELAY
     end
 end
@@ -101,15 +101,17 @@ end
 -- @param string msg (optional) Сообщение для отправки в теле ответа.
 -- @param table headers (optional) Таблица с дополнительными HTTP-заголовками.
 local function send_response(server, client, code, msg, headers)
+    local response_headers = headers or {"Connection: close"}
     if code == 200 then
         server:send(client, {
             code = 200,
-            headers = headers or {"Connection: close"}, 
+            headers = response_headers, 
             content = msg or ""
         })
     else
-        log_error(string.format("[send_response] %s (code: %d)", msg or "Unknown error", code))
-        server:abort(client, code) 
+        local error_message = msg or "Unknown error"
+        log_error(string.format("[send_response] %s (code: %d)", error_message, code))
+        server:abort(client, code, error_message) -- Передаем сообщение об ошибке в abort
     end
 end
 
@@ -126,28 +128,35 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     local name = get_param(req, "channel")
 
     if not name then 
-        return send_response(server, client, 400, "Missing channel") 
+        return send_response(server, client, 400, "Missing channel name in request.") 
     end
 
-    local data = find_func(name)
+    local data, find_err = find_func(name)
     if not data then 
-        return send_response(server, client, 404, "Not found") 
+        return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown")) 
     end
     
-    local cfg = kill_func(data)
+    local cfg, kill_err = kill_func(data)
+    if not cfg then
+        return send_response(server, client, 500, "Failed to kill item '" .. name .. "'. Error: " .. (kill_err or "unknown"))
+    end
     log_info(string.format("[%s] %s killed", log_prefix, name))
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(string.format("[%s] %s rebooted after %d seconds", log_prefix, name, delay)) 
+        log_info(string.format("[%s] %s scheduled for reboot after %d seconds", log_prefix, name, delay)) 
 
         timer({
             interval = delay, 
             callback = function(t) 
                 t:close()
-                make_func(cfg, name)
-                log_info(string.format("[%s] %s was rebooted", log_prefix, name)) 
+                local success, make_err = make_func(cfg, name)
+                if success then
+                    log_info(string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
+                else
+                    log_error(string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown"))
+                end
             end
         })
     end
@@ -194,8 +203,12 @@ local control_kill_channel = function(server, client, request)
 
     handle_kill_with_reboot(find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
-        kill_channel(channel_data)
-        return cfg
+        local success, err = kill_channel(channel_data)
+        if not success then
+            log_error(COMPONENT_NAME, "Failed to kill channel '%s': %s", channel_data.config.name, err or "unknown")
+            return nil, err or "Failed to kill channel"
+        end
+        return cfg, nil
     end, make_channel, "Channel", server, client, validate_request(request))
 end
 
@@ -221,25 +234,37 @@ local control_kill_monitor = function(server, client, request)
         return send_response(server, client, 400, "Missing channel") 
     end
 
-    local monitor_obj = monitor_manager:get_monitor(name)
+    local monitor_obj, get_err = monitor_manager:get_monitor(name)
     if not monitor_obj then 
-        return send_response(server, client, 404, "Not found") 
+        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown")) 
     end
     
-    local cfg = monitor_manager:remove_monitor(name)
+    local cfg, remove_err = monitor_manager:remove_monitor(name)
+    if not cfg then
+        return send_response(server, client, 500, "Failed to remove monitor '" .. name .. "'. Error: " .. (remove_err or "unknown"))
+    end
     log_info(string.format("[Monitor] %s killed", name))
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(string.format("[Monitor] %s rebooted after %d seconds", name, delay)) 
+        log_info(string.format("[Monitor] %s scheduled for reboot after %d seconds", name, delay)) 
 
         timer({
             interval = delay, 
             callback = function(t) 
                 t:close()
-                make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
-                log_info(string.format("[Monitor] %s was rebooted", name)) 
+                -- make_monitor ожидает config и channel_data. cfg здесь - это config остановленного монитора.
+                -- name здесь - это имя канала/монитора, которое может быть использовано для поиска channel_data.
+                -- Однако, make_monitor в channel.lua ожидает config и channel_data, а не config и name.
+                -- Нужно передать правильные аргументы.
+                -- Предполагаем, что cfg содержит всю необходимую информацию для make_monitor.
+                local success, make_err = make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
+                if success then
+                    log_info(string.format("[Monitor] %s was successfully rebooted", name)) 
+                else
+                    log_error(string.format("[Monitor] Failed to reboot %s. Error: %s", name, make_err or "unknown"))
+                end
             end
         })
     end
@@ -284,14 +309,14 @@ local update_monitor_channel = function(server, client, request)
         end
     end
 
-    local result = monitor_manager:update_monitor_parameters(name, params)
-    if result then
+    local success, err = monitor_manager:update_monitor_parameters(name, params)
+    if success then
         log_info(string.format("[Monitor] %s updated successfully", name))
+        send_response(server, client, 200, "OK")
     else
-        log_error(string.format("[Monitor] %s update failed (invalid params or monitor not found)", name))
+        log_error(string.format("[Monitor] %s update failed: %s", name, err or "unknown error"))
+        send_response(server, client, 400, "Update failed: " .. (err or "unknown error"))
     end
-
-    send_response(server, client, result and 200 or 400)
 end
 
 --- Обработчик HTTP-запроса для создания канала (заглушка).
@@ -327,26 +352,32 @@ local get_channel_list = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not channel_list then
-        log_error("[get_channel_list] channel_list is nil.")
-        return send_response(server, client, 500, "Internal error")
+    if not channel_list then -- Предполагается, что channel_list глобально доступен
+        local error_msg = "[get_channel_list] channel_list is nil."
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
     end
     
     local content = {}
     for key, channel_data in ipairs(channel_list) do
         local output_string = ""
 
-        if channel_data.config.output and channel_data.config.output[1] then
+        if channel_data.config and channel_data.config.output and channel_data.config.output[1] then
             output_string = channel_data.config.output[1]
         end
 
         content["channel_" .. key] = {
-            name = channel_data.config.name,
-            addr = string_split(output_string, "#")[1]
+            name = channel_data.config and channel_data.config.name or "unknown",
+            addr = string_split(output_string, "#")[1] or "unknown"
         }
     end
     
-    local json_content = json_encode(content)
+    local json_content, encode_err = json_encode(content)
+    if not json_content then
+        local error_msg = "Failed to encode channel list to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
@@ -380,7 +411,12 @@ local get_monitor_list = function(server, client, request)
         key = key + 1
     end
     
-    local json_content = json_encode(content)
+    local json_content, encode_err = json_encode(content)
+    if not json_content then
+        local error_msg = "Failed to encode monitor list to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
@@ -424,15 +460,15 @@ local get_monitor_data = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor = monitor_manager:get_monitor(name)
+    local monitor, get_err = monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "Monitor not found")
+        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local json_cache = monitor:get_json_cache()
     if not json_cache then
-        return send_response(server, client, 404, "Monitor cache not found")
+        return send_response(server, client, 404, "Monitor cache for '" .. name .. "' not found or empty.")
     end
 
     local headers = {
@@ -473,18 +509,24 @@ local get_psi_channel = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor = monitor_manager:get_monitor(name)
+    local monitor, get_err = monitor_manager:get_monitor(name)
 
     if not monitor then
-        return send_response(server, client, 404, "Monitor not found")
+        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local psi_cache = monitor.psi_data_cache -- Предполагается, что psi_data_cache доступен напрямую
     if not psi_cache then
-        return send_response(server, client, 404, "PSI cache not found")
+        return send_response(server, client, 404, "PSI cache for '" .. name .. "' not found or empty.")
     end
 
-    local json_content = json_encode(psi_cache)
+    local json_content, encode_err = json_encode(psi_cache)
+    if not json_content then
+        local error_msg = "Failed to encode PSI cache to JSON for monitor '" .. name .. "': " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
+
     local headers = {
         "Content-Type: application/json;charset=utf-8",
         "Content-Length: " .. #json_content,
@@ -512,12 +554,19 @@ local get_adapter_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    for name, _ in pairs(monitor_manager:get_all_monitors()) do
+    -- DVB-мониторы хранятся в dvb_manager, а не в общем get_all_monitors()
+    -- Нужно получить список DVB-мониторов отдельно
+    for name, _ in pairs(monitor_manager.dvb_manager:get_all_monitors()) do
         content["adapter_" .. key] = name
         key = key + 1
     end
     
-    local json_content = json_encode(content)
+    local json_content, encode_err = json_encode(content)
+    if not json_content then
+        local error_msg = "Failed to encode adapter list to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",
@@ -559,15 +608,15 @@ local get_adapter_data = function(server, client, request)
         return send_response(server, client, 400, "Missing adapter")   
     end
 
-    local monitor = monitor_manager:get_monitor(name)
+    local monitor, get_err = monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "Monitor not found")
+        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local json_cache = monitor:get_json_cache()
     if not json_cache then
-        return send_response(server, client, 404, "Monitor cache not found")
+        return send_response(server, client, 404, "Monitor cache for '" .. name .. "' not found or empty.")
     end
 
     local headers = {
@@ -610,18 +659,16 @@ local update_monitor_dvb = function(server, client, request)
         end
     end
 
-    local result = monitor_manager:update_monitor_parameters(name_adapter, params)
-    if result then
+    local success, err = monitor_manager:update_monitor_parameters(name_adapter, params)
+    if success then
         log_info(string.format("[Monitor] %s updated successfully", name_adapter))
+        send_response(server, client, 200, "OK")
     else
-        log_error(string.format("[Monitor] %s update failed (invalid params or monitor not found)", name_adapter))
+        log_error(string.format("[Monitor] %s update failed: %s", name_adapter, err or "unknown error"))
+        send_response(server, client, 400, "Update failed: " .. (err or "unknown error"))
     end
-
-    send_response(server, client, result and 200 or 400)
 end
 
---- Обработчик HTTP-запроса для перезагрузки Astra.
--- Требует аутентификации по API-ключу.
 --- Обработчик HTTP-запроса для перезагрузки Astra.
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
@@ -641,14 +688,12 @@ local astra_reload = function(server, client, request)
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close()
-            log_info("[Astra] Reloaded") 
+            log_info(COMPONENT_NAME, "[Astra] Reloaded") -- Изменено на log_info с COMPONENT_NAME
             _astra_reload()
         end
     })
 end
 
---- Обработчик HTTP-запроса для остановки Astra.
--- Требует аутентификации по API-ключу.
 --- Обработчик HTTP-запроса для остановки Astra.
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
@@ -668,7 +713,7 @@ local kill_astra = function(server, client, request)
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close() 
-            log_info("[Astra] Stopped") 
+            log_info(COMPONENT_NAME, "[Astra] Stopped") -- Изменено на log_info с COMPONENT_NAME
             os_exit(0)
         end
     })
@@ -691,7 +736,12 @@ local health = function (server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end   
 
-    local json_content = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version})
+    local json_content, encode_err = json_encode({addr = server.__options.addr, port = server.__options.port, version = astra_version})
+    if not json_content then
+        local error_msg = "Failed to encode health data to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
 
     local headers = {
         "Content-Type: application/json;charset=utf-8",

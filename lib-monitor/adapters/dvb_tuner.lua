@@ -2,16 +2,16 @@
 -- DvbTunerMonitor Class
 -- ===========================================================================
 
-local type = type
-local Logger = require "utils.logger"
-local log_info = Logger.info
-local log_error = Logger.error
-local json_encode = json.encode
+local type        = type
+local Logger      = require "utils.logger"
+local log_info    = Logger.info
+local log_error   = Logger.error
+local json_encode = json.encode -- Предполагается, что json.encode глобально доступен
 
-local ratio = ratio
-local get_server_name = get_server_name
-local send_monitor = send_monitor
-local MonitorConfig = require "config.monitor_config"
+local ratio                = ratio -- Предполагается, что ratio глобально доступен
+local get_server_name      = get_server_name -- Предполагается, что get_server_name глобально доступен
+local send_monitor         = send_monitor -- Предполагается, что send_monitor глобально доступен
+local MonitorConfig        = require "config.monitor_config"
 local validate_monitor_param = require "utils.utils".validate_monitor_param
 
 local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
@@ -89,9 +89,15 @@ function DvbTunerMonitor:new(conf)
 end
 
 --- Запускает мониторинг DVB-тюнера.
--- @return userdata Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе nil.
+-- @return userdata Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе `nil` и сообщение об ошибке.
 function DvbTunerMonitor:start()
     local comparison_method = dvb_monitor_method_comparison[self.conf.method_comparison]
+    if not comparison_method then
+        local error_msg = "Invalid comparison method specified: " .. tostring(self.conf.method_comparison)
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
+    end
+
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
 
     self.conf.callback = function(data)
@@ -117,39 +123,53 @@ function DvbTunerMonitor:start()
 
     if self.instance then
         log_info(COMPONENT_NAME, "Started monitor for adapter: %s", self.conf.name_adapter)
-        return self.instance
+        return self.instance, nil
     else
-        log_error(COMPONENT_NAME, "Failed to start monitor for adapter: %s", self.conf.name_adapter)
-        return nil
+        local error_msg = "Failed to start monitor for adapter: " .. self.conf.name_adapter .. ". dvb_tune returned nil."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
 -- @param table params Таблица с новыми параметрами.
--- @return boolean true, если параметры успешно обновлены, иначе false.
+-- @return boolean true, если параметры успешно обновлены, иначе `nil` и сообщение об ошибке.
 function DvbTunerMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        log_error(COMPONENT_NAME, "update_parameters: params must be a table")
-        return false
+        local error_msg = "update_parameters: params must be a table. Got " .. type(params) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
-    local updated_rate = validate_monitor_param("dvb_rate", params.rate)
-    if updated_rate ~= nil then
+    local updated_rate, err_rate = validate_monitor_param("dvb_rate", params.rate)
+    if params.rate ~= nil then -- Only attempt to update if param is provided
+        if err_rate then
+            log_error(COMPONENT_NAME, "Failed to validate 'rate' parameter: %s", err_rate)
+            return nil, err_rate
+        end
         self.conf.rate = updated_rate
     end
 
-    local updated_time_check = validate_monitor_param("dvb_time_check", params.time_check)
-    if updated_time_check ~= nil then
+    local updated_time_check, err_time_check = validate_monitor_param("dvb_time_check", params.time_check)
+    if params.time_check ~= nil then -- Only attempt to update if param is provided
+        if err_time_check then
+            log_error(COMPONENT_NAME, "Failed to validate 'time_check' parameter: %s", err_time_check)
+            return nil, err_time_check
+        end
         self.conf.time_check = updated_time_check
     end
 
-    local updated_method_comparison = validate_monitor_param("dvb_method_comparison", params.method_comparison)
-    if updated_method_comparison ~= nil then
+    local updated_method_comparison, err_method_comparison = validate_monitor_param("dvb_method_comparison", params.method_comparison)
+    if params.method_comparison ~= nil then -- Only attempt to update if param is provided
+        if err_method_comparison then
+            log_error(COMPONENT_NAME, "Failed to validate 'method_comparison' parameter: %s", err_method_comparison)
+            return nil, err_method_comparison
+        end
         self.conf.method_comparison = updated_method_comparison
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", self.conf.name_adapter)
-    return true
+    return true, nil
 end
 
 --- Возвращает текущий кэш JSON статуса.

@@ -9,24 +9,24 @@
 -- ===========================================================================
 
 -- Стандартные функции Lua
-local type = type
-local tostring = tostring
-local ipairs = ipairs
-local math_max = math.max
+local type       = type
+local tostring   = tostring
+local ipairs     = ipairs
+local math_max   = math.max
 local table_insert = table.insert
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local json_encode = json.encode
-local analyze = analyze
-local get_server_name = get_server_name
-local send_monitor = send_monitor
-local ratio = ratio
+local json_encode     = json.encode -- Предполагается, что json.encode глобально доступен
+local analyze         = analyze -- Предполагается, что analyze глобально доступен
+local get_server_name = get_server_name -- Предполагается, что get_server_name глобально доступен
+local send_monitor    = send_monitor -- Предполагается, что send_monitor глобально доступен
+local ratio           = ratio -- Предполагается, что ratio глобально доступен
 
 -- Локальные модули
 local Logger = require "utils.logger"
-local log_info = Logger.info
-local log_error = Logger.error
-local MonitorConfig = require "config.monitor_config"
+local log_info           = Logger.info
+local log_error          = Logger.error
+local MonitorConfig      = require "config.monitor_config"
 local validate_monitor_param = require "utils.utils".validate_monitor_param
 
 local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
@@ -202,9 +202,15 @@ end
 -- Инициализирует функцию `analyze` Astra с колбэком для обработки входящих данных
 -- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
 -- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
--- @return userdata Экземпляр монитора Astra, если успешно запущен; nil в случае ошибки.
+-- @return userdata Экземпляр монитора Astra, если успешно запущен; `nil` и сообщение об ошибке в случае ошибки.
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
+    if not comparison_method then
+        local error_msg = "Invalid comparison method specified: " .. tostring(self.config.method_comparison)
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
+    end
+
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
 
     self.monitor_instance = analyze({
@@ -257,48 +263,66 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then 
-        log_error(COMPONENT_NAME, "analyze returned nil for channel '" .. self.name .. "'. Failed to start monitor.")
-        return nil
+        local error_msg = "analyze returned nil for channel '" .. self.name .. "'. Failed to start monitor."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
     log_info(COMPONENT_NAME, "Started monitor for channel: " .. self.name)
-    return self.monitor_instance
+    return self.monitor_instance, nil
 end
 
 --- Обновляет параметры конфигурации монитора канала.
 -- Проверяет и применяет новые значения для `rate`, `time_check`, `analyze` и `method_comparison`,
 -- если они предоставлены и валидны.
 -- @param table params Таблица, содержащая новые параметры для обновления.
--- @return boolean true, если параметры успешно обновлены; false, если `params` не является таблицей
+-- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке, если `params` не является таблицей
 -- или содержит невалидные значения.
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        log_error(COMPONENT_NAME, "Invalid parameters for update_parameters: expected table, got " .. type(params) .. ".")
-        return false
+        local error_msg = "Invalid parameters for update_parameters: expected table, got " .. type(params) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
-    local updated_rate = validate_monitor_param("channel_rate", params.rate)
-    if updated_rate ~= nil then
+    local updated_rate, err_rate = validate_monitor_param("channel_rate", params.rate)
+    if params.rate ~= nil then
+        if err_rate then
+            log_error(COMPONENT_NAME, "Failed to validate 'rate' parameter: %s", err_rate)
+            return nil, err_rate
+        end
         self.config.rate = updated_rate
     end
 
-    local updated_time_check = validate_monitor_param("channel_time_check", params.time_check)
-    if updated_time_check ~= nil then
+    local updated_time_check, err_time_check = validate_monitor_param("channel_time_check", params.time_check)
+    if params.time_check ~= nil then
+        if err_time_check then
+            log_error(COMPONENT_NAME, "Failed to validate 'time_check' parameter: %s", err_time_check)
+            return nil, err_time_check
+        end
         self.config.time_check = updated_time_check
     end
 
-    local updated_analyze = validate_monitor_param("channel_analyze", params.analyze)
-    if updated_analyze ~= nil then
+    local updated_analyze, err_analyze = validate_monitor_param("channel_analyze", params.analyze)
+    if params.analyze ~= nil then
+        if err_analyze then
+            log_error(COMPONENT_NAME, "Failed to validate 'analyze' parameter: %s", err_analyze)
+            return nil, err_analyze
+        end
         self.config.analyze = updated_analyze
     end
 
-    local updated_method_comparison = validate_monitor_param("channel_method_comparison", params.method_comparison)
-    if updated_method_comparison ~= nil then
+    local updated_method_comparison, err_method_comparison = validate_monitor_param("channel_method_comparison", params.method_comparison)
+    if params.method_comparison ~= nil then
+        if err_method_comparison then
+            log_error(COMPONENT_NAME, "Failed to validate 'method_comparison' parameter: %s", err_method_comparison)
+            return nil, err_method_comparison
+        end
         self.config.method_comparison = updated_method_comparison
     end
 
     log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. self.name)
-    return true
+    return true, nil
 end
 
 --- Отправляет текущий статус канала.

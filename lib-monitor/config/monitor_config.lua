@@ -50,7 +50,8 @@ MonitorConfig.ValidationSchema = {
     },
     dvb_time_check = {
         type = "number",
-        min = 0, -- DVB time_check может быть 0
+        min = MonitorConfig.MinTimeCheck,
+        max = MonitorConfig.MaxTimeCheck,
         default = 10
     },
     dvb_rate = {

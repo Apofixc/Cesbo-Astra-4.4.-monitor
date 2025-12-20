@@ -16,27 +16,27 @@
 -- ===========================================================================
 
 -- Стандартные функции Lua
-local type = type
-local tostring = tostring
-local ipairs = ipairs
-local math_max = math.max
+local type         = type
+local tostring     = tostring
+local ipairs       = ipairs
+local math_max     = math.max
 local string_lower = string.lower
 local table_insert = table_insert
 
 -- Локальные модули
 local Logger = require "utils.logger"
-local log_info = Logger.info
+local log_info  = Logger.info
 local log_error = Logger.error
 
 local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local table_copy = table.copy
+local table_copy   = table.copy
 local string_split = string.split
 local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
 local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
 local kill_channel = kill_channel -- Предполагаем, что kill_channel является глобальной функцией
-local get_stream = get_stream     -- Предполагаем, что get_stream является глобальной функцией
+local get_stream   = get_stream     -- Предполагаем, что get_stream является глобальной функцией
 
 -- Модули мониторинга
 local ChannelMonitor = require "channel.channel_monitor"
@@ -53,18 +53,18 @@ local find_dvb_conf = require "adapters.adapter".find_dvb_conf
 local MonitorConfig = require "config.monitor_config"
 
 -- Константы для валидации параметров монитора
-local MONITOR_LIMIT = MonitorConfig.MonitorLimit
-local MIN_RATE = MonitorConfig.MinRate
-local MAX_RATE = MonitorConfig.MaxRate
-local MIN_TIME_CHECK = MonitorConfig.MinTimeCheck
-local MAX_TIME_CHECK = MonitorConfig.MaxTimeCheck
+local MONITOR_LIMIT         = MonitorConfig.MonitorLimit
+local MIN_RATE              = MonitorConfig.MinRate
+local MAX_RATE              = MonitorConfig.MaxRate
+local MIN_TIME_CHECK        = MonitorConfig.MinTimeCheck
+local MAX_TIME_CHECK        = MonitorConfig.MaxTimeCheck
 local MIN_METHOD_COMPARISON = MonitorConfig.MinMethodComparison
 local MAX_METHOD_COMPARISON = MonitorConfig.MaxMethodComparison
 
 -- Константы для типов мониторов
-local MONITOR_TYPE_INPUT = "input"
+local MONITOR_TYPE_INPUT  = "input"
 local MONITOR_TYPE_OUTPUT = "output"
-local MONITOR_TYPE_IP = "ip"
+local MONITOR_TYPE_IP     = "ip"
 
 -- ===========================================================================
 -- Основные функции модуля
@@ -91,22 +91,24 @@ end
 -- @return boolean true, если параметры успешно обновлены, иначе `false`.
 function update_monitor_parameters(name, params)
     if not name or type(name) ~= 'string' then
-        log_error(COMPONENT_NAME, "Invalid name: expected string, got " .. type(name) .. ".")
-        return false
+        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
     if not params or type(params) ~= 'table' then
-        log_error(COMPONENT_NAME, "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. ".")
-        return false
+        local error_msg = "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
     -- Делегируем обновление параметров менеджеру каналов
-    local success = channel_monitor_manager:update_monitor_parameters(name, params)
+    local success, err = channel_monitor_manager:update_monitor_parameters(name, params)
     if success then
         log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", name)
     else
-        log_error(COMPONENT_NAME, "Failed to update parameters for monitor: %s", name)
+        log_error(COMPONENT_NAME, "Failed to update parameters for monitor: %s. Error: %s", name, err or "unknown error")
     end
-    return success
+    return success, err
 end
 
 local format_handlers = {
@@ -116,18 +118,15 @@ local format_handlers = {
         cfg.stream = adap_conf and adap_conf.source or "dvb"
         return cfg
     end,
-    udp = function(config)
+    local function create_network_cfg(config)
         local cfg = {format = config.format}
         cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
-    end,
-    rtp = function(config)
-        local cfg = {format = config.format}
-        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
-        cfg.stream = get_stream(config.addr) or "unknown_stream"
-        return cfg
-    end,
+    end
+
+    udp = create_network_cfg,
+    rtp = create_network_cfg,
     http = function(config)
         local cfg = {format = config.format}
         cfg.addr = config.host .. ":" .. config.port .. config.path
@@ -143,32 +142,35 @@ local format_handlers = {
 --- Создает JSON-представление потока на основе данных канала.
 -- Эта функция обрабатывает входные данные канала и формирует соответствующий
 -- JSON-объект, описывающий поток.
--- @param table ch_data Таблица с данными канала, содержащая информацию о входах.
--- @return table stream_json Таблица, представляющая JSON-объект потока, или пустая таблица в случае ошибки.
-local function create_stream_json(ch_data)
-    local stream_json = {}
-    if ch_data and type(ch_data) == "table" then
-        for key, input in ipairs(ch_data.input) do
-            local cfg = {}
-            local handler = format_handlers[input.config.format]
+-- @param table channel_data_obj Таблица с данными канала, содержащая информацию о входах.
+-- @return table stream_json_list Таблица, представляющая JSON-объект потока, или `nil` и сообщение об ошибке в случае ошибки.
+local function create_stream_json_representation(channel_data_obj)
+    local stream_json_list = {}
+    if channel_data_obj and type(channel_data_obj) == "table" then
+        for key, input_entry in ipairs(channel_data_obj.input) do
+            local config_entry = {}
+            local handler = format_handlers[input_entry.config.format]
             if handler then
-                cfg = handler(input.config)
+                config_entry = handler(input_entry.config)
             else
-                log_error(COMPONENT_NAME, "Unknown or unsupported stream format: %s for entry %d. Cannot create stream JSON. Returning empty table.", tostring(format), key)
-                return {} -- Возвращаем пустую таблицу, так как канал не может быть создан
+                local error_msg = "Unknown or unsupported stream format: " .. tostring(input_entry.config.format) .. " for entry " .. key .. ". Cannot create stream JSON."
+                log_error(COMPONENT_NAME, error_msg)
+                return nil, error_msg
             end
-            table_insert(stream_json, cfg)
+            table_insert(stream_json_list, config_entry)
         end
     else
-        table_insert(stream_json, {format = "Unknown", addr = "Unknown", stream = "Unknown"})
+        local error_msg = "Invalid channel data provided. Expected table, got " .. type(channel_data_obj) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
-    return stream_json
+    return stream_json_list, nil
 end
 
 --- Создает и регистрирует новый монитор канала.
 -- Эта функция подготавливает конфигурацию и данные канала, а затем делегирует
 -- создание и регистрацию монитора `ChannelMonitorManager`.
--- @param table config Таблица конфигурации для нового монитора.
+-- @param table monitor_config_table Таблица конфигурации для нового монитора.
 --   - name (string): Имя монитора.
 --   - monitor (string): Адрес мониторинга.
 --   - upstream (userdata, optional): Экземпляр upstream, если уже инициализирован.
@@ -176,28 +178,36 @@ end
 --   - time_check (number, optional): Интервал проверки данных.
 --   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
 --   - method_comparison (number, optional): Метод сравнения состояния потока.
--- @param table channel_data (optional) Таблица с данными канала или его имя (string).
--- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `false`.
-function make_monitor(config, channel_data)
-    local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
+-- @param table channel_data_obj (optional) Таблица с данными канала или его имя (string).
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `nil` и сообщение об ошибке.
+function make_monitor(monitor_config_table, channel_data_obj)
+    local ch_data = type(channel_data_obj) == "table" and channel_data_obj or find_channel(tostring(channel_data_obj))
 
-    if not (type(config) == 'table') then
-        log_error(COMPONENT_NAME, "[make_monitor] Invalid config table.")
-        return false
+    if not (type(monitor_config_table) == 'table') then
+        local error_msg = "[make_monitor] Invalid config table. Expected table, got " .. type(monitor_config_table) .. "."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
-    if not (config.name and type(config.name) == 'string') then
-        log_error(COMPONENT_NAME, "[make_monitor] config.name is required and must be a string.")
-        return false
+    if not (monitor_config_table.name and type(monitor_config_table.name) == 'string') then
+        local error_msg = "[make_monitor] config.name is required and must be a string."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
-    if not (config.monitor and type(config.monitor) == 'string') then
-        log_error(COMPONENT_NAME, "[make_monitor] config.monitor is required and must be a string.")
-        return false
+    if not (monitor_config_table.monitor and type(monitor_config_table.monitor) == 'string') then
+        local error_msg = "[make_monitor] config.monitor is required and must be a string."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
     
-    config.stream_json = create_stream_json(ch_data)
+    local stream_json, err = create_stream_json_representation(ch_data)
+    if err then
+        log_error(COMPONENT_NAME, "[make_monitor] Failed to create stream JSON: %s", err)
+        return nil, err
+    end
+    monitor_config_table.stream_json = stream_json
 
     -- Делегируем создание и регистрацию монитора ChannelMonitorManager
-    return channel_monitor_manager:create_and_register_channel_monitor(config, ch_data)
+    return channel_monitor_manager:create_and_register_channel_monitor(monitor_config_table, ch_data)
 end
 
 --- Находит монитор по его имени.
@@ -214,15 +224,21 @@ end
 -- @return table config Копия конфигурации остановленного монитора, если успешно, иначе `false`.
 function kill_monitor(monitor_obj)
     if not monitor_obj then
-        log_error(COMPONENT_NAME, "Attempted to kill a nil monitor object.")
-        return false
+        local error_msg = "Attempted to kill a nil monitor object."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
     local config = table_copy(monitor_obj.config)
-    channel_monitor_manager:remove_monitor(monitor_obj.name)
+    local success, err = channel_monitor_manager:remove_monitor(monitor_obj.name)
 
-    log_info(COMPONENT_NAME, "Monitor '%s' killed successfully.", monitor_obj.name)
-    return config
+    if success then
+        log_info(COMPONENT_NAME, "Monitor '%s' killed successfully.", monitor_obj.name)
+    else
+        log_error(COMPONENT_NAME, "Failed to remove monitor '%s'. Error: %s", monitor_obj.name, err or "unknown error")
+        return nil, err or "Failed to remove monitor"
+    end
+    return config, nil
 end
 
 --- Таблица обработчиков для определения upstream и monitor_target по типу монитора.
@@ -233,23 +249,25 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
         local input_data = channel_data.input[1]
         if not input_data then
-            log_error(COMPONENT_NAME, "Input data is missing for input monitor type in stream '%s'.", conf.name)
-            return nil, nil
+            local error_msg = "Input data is missing for input monitor type in stream '" .. conf.name .. "'."
+            log_error(COMPONENT_NAME, error_msg)
+            return nil, nil, error_msg
         end
         local upstream = input_data.input.tail
         local split_result = string_split(conf.input[1], "#")
         local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
-        return upstream, monitor_target
+        return upstream, monitor_target, nil
     end,
     [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
         local upstream = channel_data.tail
         local monitor_target = MONITOR_TYPE_OUTPUT
-        return upstream, monitor_target
+        return upstream, monitor_target, nil
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
         if not channel_data.output or #channel_data.output == 0 then
-            log_error(COMPONENT_NAME, "channel_data.output is missing for ip monitor in stream '%s'.", conf.name)
-            return nil, nil
+            local error_msg = "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'."
+            log_error(COMPONENT_NAME, error_msg)
+            return nil, nil, error_msg
         end
 
         local key = 1
@@ -264,7 +282,7 @@ local monitor_type_handlers = {
         local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
         log_info(COMPONENT_NAME, "Using output key %d for IP monitor in stream '%s'.", key, conf.name)
-        return nil, monitor_target -- upstream не используется для IP-монитора
+        return nil, monitor_target, nil -- upstream не используется для IP-монитора
     end,
 }
 
@@ -283,29 +301,42 @@ local monitor_type_handlers = {
 --     - time_check (number, optional): Время до сравнения данных.
 --     - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
 --     - method_comparison (number, optional): Метод сравнения состояния потока.
--- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `false`.
-function make_stream(conf)  
-    local channel_data = make_channel(conf)
+-- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `nil` и сообщение об ошибке.
+function make_stream(conf)
+    local channel_data, err_channel = make_channel(conf)
     if not channel_data then 
-        log_error(COMPONENT_NAME, "Failed to create channel data for stream '%s'.", (conf.name or "unknown"))
-        return false
+        local error_msg = "Failed to create channel data for stream '" .. (conf.name or "unknown") .. "'. Error: " .. (err_channel or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
-    local monitor_name = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
-    local monitor_type = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
+    local function get_monitor_params(stream_conf)
+        local name = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.name) == "string" and stream_conf.monitor.name) or stream_conf.name
+        local m_type = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.monitor_type) == "string" and string_lower(stream_conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
+        return name, m_type
+    end
 
-    local upstream, monitor_target
+    local monitor_name, monitor_type = get_monitor_params(conf)
+
+    local upstream, monitor_target, handler_err
     local handler = monitor_type_handlers[monitor_type]
     if handler then
-        upstream, monitor_target = handler(conf, channel_data)
+        upstream, monitor_target, handler_err = handler(conf, channel_data)
     else
-        log_error(COMPONENT_NAME, "Invalid monitor_type: '%s' for stream '%s'.", tostring(monitor_type), conf.name)
-        return false
+        local error_msg = "Invalid monitor_type: '" .. tostring(monitor_type) .. "' for stream '" .. conf.name .. "'."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
+    end
+
+    if handler_err then
+        log_error(COMPONENT_NAME, "Error from monitor type handler for stream '%s': %s", conf.name, handler_err)
+        return nil, handler_err
     end
 
     if not monitor_target then
-        log_error(COMPONENT_NAME, "Failed to determine monitor target for stream '%s'.", conf.name)
-        return false
+        local error_msg = "Failed to determine monitor target for stream '" .. conf.name .. "'."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
     local monitor_config = {
@@ -318,6 +349,13 @@ function make_stream(conf)
         method_comparison = conf.monitor and conf.monitor.method_comparison     
     }
 
+    local stream_json, err = create_stream_json_representation(channel_data)
+    if err then
+        log_error(COMPONENT_NAME, "[make_stream] Failed to create stream JSON: %s", err)
+        return nil, err
+    end
+    monitor_config.stream_json = stream_json
+
     log_info(COMPONENT_NAME, "Attempting to create monitor for stream '%s'.", conf.name)
     -- Делегируем создание и регистрацию монитора ChannelMonitorManager
     return channel_monitor_manager:create_and_register_channel_monitor(monitor_config, channel_data)
@@ -327,27 +365,33 @@ end
 -- Эта функция останавливает работу канала с помощью `kill_channel` и, если
 -- существует связанный монитор, останавливает и удаляет его через `kill_monitor`.
 -- @param table channel_data Таблица с данными канала, который нужно остановить.
--- @return table config Копия конфигурации остановленного канала, если успешно, иначе `nil`.
+-- @return table config Копия конфигурации остановленного канала, если успешно, иначе `nil` и сообщение об ошибке.
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config or not channel_data.config.name then 
-        log_error(COMPONENT_NAME, "Invalid channel_data or config provided to kill_stream.")
-        return nil 
+        local error_msg = "Invalid channel_data or config provided to kill_stream."
+        log_error(COMPONENT_NAME, error_msg)
+        return nil, error_msg
     end
 
     local monitor_name = channel_data.config.name
     local monitor_data = find_monitor(monitor_name)
 
     if monitor_data then
-        kill_monitor(monitor_data)
-        log_info(COMPONENT_NAME, "Monitor '%s' was killed as part of stream shutdown.", monitor_name)
+        local success, err = kill_monitor(monitor_data)
+        if success then
+            log_info(COMPONENT_NAME, "Monitor '%s' was killed as part of stream shutdown.", monitor_name)
+        else
+            log_error(COMPONENT_NAME, "Failed to kill monitor '%s' as part of stream shutdown. Error: %s", monitor_name, err or "unknown error")
+            return nil, err or "Failed to kill monitor during stream shutdown"
+        end
     else
         log_info(COMPONENT_NAME, "No monitor found for stream '%s'.", monitor_name)
     end
 
     local config = table_copy(channel_data.config)
-    kill_channel(channel_data)
+    kill_channel(channel_data) -- Предполагаем, что kill_channel всегда успешен или обрабатывает свои ошибки
 
     log_info(COMPONENT_NAME, "Stream '%s' shutdown successfully.", config.name)
 
-    return config
+    return config, nil
 end
