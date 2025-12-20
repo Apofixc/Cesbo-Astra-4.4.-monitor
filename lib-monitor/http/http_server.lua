@@ -1,6 +1,7 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local table_copy = table.copy
+local utils = require "utils.utils"
+local table_copy = utils.table_copy
 local table_concat = table.concat
 local table_insert = table.insert
 local os_exit = os.exit

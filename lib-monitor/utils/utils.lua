@@ -72,20 +72,20 @@ end
 -- @return table Копия таблицы; `nil` и сообщение об ошибке, если входной аргумент невалиден.
 -- table.copy: Предполагается, что эта функция может быть предоставлена Astra глобально.
 -- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
--- table.copy = function(t)
---     if type(t) ~= "table" then
---         local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
---         log_error("[table.copy]", error_msg)
---         return nil, error_msg
---     end
---
---     local copy = {}
---     for k, v in pairs(t) do
---         copy[k] = v
---     end
---
---     return copy, nil
--- end
+local table_copy = table.copy or function(t)
+    if type(t) ~= "table" then
+        local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
+        log_error("[table.copy]", error_msg)
+        return nil, error_msg
+    end
+
+    local copy = {}
+    for k, v in pairs(t) do
+        copy[k] = v
+    end
+
+    return copy, nil
+end
 
 --- Вспомогательная функция для валидации общих параметров мониторинга.
 -- @param string host Хост.
@@ -316,3 +316,15 @@ function send_monitor(content, feed)
         return nil, "No recipients configured for feed '" .. feed .. "'"
     end
 end
+
+return {
+    get_stream = get_stream,
+    ratio = ratio,
+    table_copy = table_copy,
+    validate_monitor_param = validate_monitor_param,
+    validate_monitor_name = validate_monitor_name,
+    set_client_monitoring = set_client_monitoring,
+    remove_client_monitoring = remove_client_monitoring,
+    get_server_name = get_server_name,
+    send_monitor = send_monitor,
+}

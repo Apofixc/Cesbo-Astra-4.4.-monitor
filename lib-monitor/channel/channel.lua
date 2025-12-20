@@ -31,7 +31,8 @@ local log_error = Logger.error
 local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local table_copy   = table.copy
+local utils = require "utils.utils"
+local table_copy   = utils.table_copy
 local string_split = string.split
 local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
 local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
