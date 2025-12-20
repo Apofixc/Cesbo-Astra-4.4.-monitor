@@ -60,6 +60,7 @@ end
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
+        log_info(string.format("[Security] Unauthorized request"))
         return false
     end
     return true
@@ -170,7 +171,6 @@ local control_kill_stream = function(server, client, request)
     if not request then return nil end
     
     if not check_auth(request) then
-        log_info(string.format("[control_kill_stream] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -189,7 +189,6 @@ local control_kill_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[control_kill_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -212,7 +211,6 @@ local control_kill_monitor = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[control_kill_monitor] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -263,7 +261,6 @@ local update_monitor_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[update_monitor_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -306,7 +303,6 @@ local create_channel = function(server, client, request) -- заглушка
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[create_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -328,7 +324,6 @@ local get_channel_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_channel_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -375,7 +370,6 @@ local get_monitor_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_monitor_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -420,7 +414,6 @@ local get_monitor_data = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_monitor_data] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -470,7 +463,6 @@ local get_psi_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_psi_channel] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -515,7 +507,6 @@ local get_adapter_list = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_adapter_list] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end
 
@@ -558,7 +549,6 @@ local get_adapter_data = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[get_adapter_data] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
 
@@ -601,7 +591,6 @@ local update_monitor_dvb = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[update_monitor_dvb] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
 
@@ -643,7 +632,6 @@ local astra_reload = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[astra_reload] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end    
 
@@ -671,7 +659,6 @@ local kill_astra = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[kill_astra] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end   
 
@@ -701,7 +688,6 @@ local health = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        log_info(string.format("[instance] [Security] Unauthorized request"))
         return send_response(server, client, 401, "Unauthorized")
     end   
 

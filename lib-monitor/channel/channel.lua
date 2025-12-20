@@ -33,7 +33,6 @@ local COMPONENT_NAME = "Channel" -- Имя компонента для логи�
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
 local table_copy = table.copy
 local string_split = string.split
-local check = check
 local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
 local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
 local kill_channel = kill_channel -- Предполагаем, что kill_channel является глобальной функцией
@@ -182,16 +181,16 @@ end
 function make_monitor(config, channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
 
-    if not check(type(config) == 'table', "[make_monitor] Invalid config table.") then
-        log_error(COMPONENT_NAME, "Invalid config table.")
+    if not (type(config) == 'table') then
+        log_error(COMPONENT_NAME, "[make_monitor] Invalid config table.")
         return false
     end
-    if not check(config.name and type(config.name) == 'string', "[make_monitor] config.name required") then
-        log_error(COMPONENT_NAME, "config.name is required and must be a string.")
+    if not (config.name and type(config.name) == 'string') then
+        log_error(COMPONENT_NAME, "[make_monitor] config.name is required and must be a string.")
         return false
     end
-    if not check(config.monitor and type(config.monitor) == 'string', "[make_monitor] config.monitor required") then
-        log_error(COMPONENT_NAME, "config.monitor is required and must be a string.")
+    if not (config.monitor and type(config.monitor) == 'string') then
+        log_error(COMPONENT_NAME, "[make_monitor] config.monitor is required and must be a string.")
         return false
     end
     

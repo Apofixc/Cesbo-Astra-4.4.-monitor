@@ -78,19 +78,6 @@ table.copy = function(t)
     return copy
 end
 
---- Проверяет условие и логирует ошибку, если условие ложно.
--- @param boolean cond Проверяемое условие.
--- @param string msg Сообщение об ошибке, если условие ложно.
--- @return boolean Результат условия.
-function check(cond, msg)
-    if not cond then
-        log_error(msg)
-        return false
-    end
-
-    return true
-end
-
 --- Вспомогательная функция для валидации общих параметров мониторинга.
 -- @param string host Хост.
 -- @param number port Порт.
@@ -98,19 +85,23 @@ end
 -- @param string feed (optional) Имя клиента.
 -- @return boolean true, если все параметры валидны, иначе false.
 local function validate_monitoring_params(host, port, path, feed)
-    if not check(type(host) == "string" and host ~= "", "[monitoring_params_validation] host must be a non-empty string") then
+    if not (type(host) == "string" and host ~= "") then
+        log_error("[monitoring_params_validation] host must be a non-empty string")
         return false
     end
 
-    if not check(type(port) == "number" and port > 0, "[monitoring_params_validation] port must be a positive number") then
+    if not (type(port) == "number" and port > 0) then
+        log_error("[monitoring_params_validation] port must be a positive number")
         return false
     end
 
-    if not check(type(path) == "string" and path ~= "", "[monitoring_params_validation] path must be a non-empty string") then
+    if not (type(path) == "string" and path ~= "") then
+        log_error("[monitoring_params_validation] path must be a non-empty string")
         return false
     end
 
-    if feed and not check(type(feed) == "string" and feed ~= "", "[monitoring_params_validation] feed must be a non-empty string if provided") then
+    if feed and not (type(feed) == "string" and feed ~= "") then
+        log_error("[monitoring_params_validation] feed must be a non-empty string if provided")
         return false
     end
     return true
