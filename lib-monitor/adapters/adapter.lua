@@ -1,5 +1,15 @@
 -- ===========================================================================
--- Оптимизации: Кэширование функций
+-- Модуль `adapters.adapter`
+--
+-- Этот модуль предоставляет интерфейс для управления DVB-тюнерами и их мониторингом.
+-- Он использует `DvbMonitorManager` для создания, регистрации, поиска и обновления
+-- параметров DVB-мониторов.
+--
+-- Основные функции включают:
+-- - Получение списка всех активных DVB-мониторов.
+-- - Инициализацию и запуск мониторинга для конкретного DVB-тюнера.
+-- - Поиск конфигурации DVB-тюнера по имени адаптера.
+-- - Обновление параметров мониторинга DVB-тюнера.
 -- ===========================================================================
 
 local type = type
@@ -12,13 +22,11 @@ local COMPONENT_NAME = "Adapter"
 local DvbTunerMonitor = require "adapters.dvb_tuner"
 local DvbMonitorManager = require "dispatcher.dvb_monitor_manager"
 
--- ===========================================================================
--- Основные функции модуля
--- ===========================================================================
-
 local dvb_monitor_manager = DvbMonitorManager:new()
 
 --- Возвращает список всех активных DVB-мониторов.
+-- Эта функция запрашивает у `DvbMonitorManager` список всех зарегистрированных
+-- и активных DVB-мониторов.
 -- @return table dvb_monitors Таблица со всеми объектами DVB-мониторов.
 function get_all_dvb_monitors()
     log_info(COMPONENT_NAME, "Retrieving all DVB monitors.")
@@ -26,16 +34,19 @@ function get_all_dvb_monitors()
 end
 
 --- Инициализирует и запускает мониторинг DVB-тюнера.
--- @param table conf Таблица конфигурации для DVB-тюнера.
--- @return userdata instance Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе nil.
+-- Создает новый DVB-монитор на основе предоставленной конфигурации и регистрирует его
+-- в `DvbMonitorManager`.
+-- @param table conf Таблица конфигурации для DVB-тюнера. Ожидается поле `name_adapter` (string).
+-- @return userdata instance Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе `nil`.
 function dvb_tuner_monitor(conf)
     log_info(COMPONENT_NAME, "Attempting to create and register DVB monitor '%s'.", conf.name_adapter)
     return dvb_monitor_manager:create_and_register_dvb_monitor(conf)
 end
 
 --- Находит конфигурацию DVB-тюнера по имени адаптера.
--- @param string name_adapter Имя адаптера.
--- @return userdata instance Экземпляр DVB-тюнера, если найден, иначе nil.
+-- Ищет зарегистрированный DVB-монитор по его имени адаптера.
+-- @param string name_adapter Имя адаптера, по которому осуществляется поиск.
+-- @return userdata instance Экземпляр DVB-тюнера, если найден, иначе `nil`.
 function find_dvb_conf(name_adapter)
     if not name_adapter or type(name_adapter) ~= 'string' then
         log_error(COMPONENT_NAME, "Invalid name_adapter: expected string, got %s.", type(name_adapter))
@@ -51,9 +62,10 @@ function find_dvb_conf(name_adapter)
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
+-- Обновляет параметры существующего DVB-монитора, идентифицируемого по имени адаптера.
 -- @param string name_adapter Имя адаптера, параметры которого нужно обновить.
--- @param table params Таблица с новыми параметрами.
--- @return boolean true, если параметры успешно обновлены, иначе nil.
+-- @param table params Таблица с новыми параметрами для DVB-монитора.
+-- @return boolean true, если параметры успешно обновлены, иначе `nil`.
 function update_dvb_monitor_parameters(name_adapter, params)
     if not name_adapter or type(name_adapter) ~= 'string' then
         log_error(COMPONENT_NAME, "Invalid name_adapter: expected string, got %s.", type(name_adapter))
