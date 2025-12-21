@@ -55,15 +55,15 @@ local kill_channel = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(ChannelModule.find_channel, function(channel_data)
+    handle_kill_with_reboot(find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
-        local success, err = ChannelModule.kill_channel(channel_data)
+        local success, err = kill_channel(channel_data)
         if not success then
             log_error(COMPONENT_NAME, "Failed to kill channel '%s': %s", channel_data.config.name, err or "unknown")
             return nil, err or "Failed to kill channel"
         end
         return cfg, nil
-    end, ChannelModule.make_channel, "Channel", server, client, validate_request(request))
+    end, make_channel, "Channel", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки монитора канала.
