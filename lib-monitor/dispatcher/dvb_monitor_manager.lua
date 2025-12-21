@@ -18,14 +18,20 @@ local COMPONENT_NAME = "DvbMonitorManager"
 local DvbMonitorManager = {}
 DvbMonitorManager.__index = DvbMonitorManager
 
---- Создает новый экземпляр DvbMonitorManager.
+local instance = nil -- Переменная для хранения единственного экземпляра
+
+--- Создает новый экземпляр DvbMonitorManager (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов DVB-мониторов.
--- @return DvbMonitorManager Новый объект DvbMonitorManager.
+-- @return DvbMonitorManager Единственный объект DvbMonitorManager.
 function DvbMonitorManager:new()
-    local self = setmetatable({}, DvbMonitorManager)
-    self.monitors = {} -- Таблица для хранения DVB-мониторов по их уникальному имени
-    self.count = 0     -- Явный счетчик мониторов
-    return self
+    if not instance then
+        local self = setmetatable({}, DvbMonitorManager)
+        self.monitors = {} -- Таблица для хранения DVB-мониторов по их уникальному имени
+        self.count = 0     -- Явный счетчик мониторов
+        instance = self
+        log_info(COMPONENT_NAME, "DvbMonitorManager initialized.")
+    end
+    return instance
 end
 
 --- Добавляет уже созданный и запущенный объект DVB-монитора в менеджер.

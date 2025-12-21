@@ -1,10 +1,17 @@
 local log_info    = log.info
 local log_error   = log.error
 
-local MonitorManager = require "monitor_manager"
-local monitor_manager = MonitorManager:new()
+local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
+local DvbMonitorManager = require "dispatcher.dvb_monitor_manager" -- Добавляем DvbMonitorManager, так как get_monitor_list может возвращать DVB мониторы
+local ResourceMonitorManager = require "dispatcher.resource_monitor_manager"
+
+local channel_monitor_manager = ChannelMonitorManager:new()
+local dvb_monitor_manager = DvbMonitorManager:new()
+local resource_monitor_manager = ResourceMonitorManager:new()
 
 local http_helpers = require "http.http_helpers"
+
+local COMPONENT_NAME = "ChannelRoutes" -- Определяем COMPONENT_NAME для логирования
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
@@ -87,12 +94,33 @@ local control_kill_monitor = function(server, client, request)
         return send_response(server, client, 400, "Missing channel") 
     end
 
-    local monitor_obj, get_err = monitor_manager:get_monitor(name)
+    local monitor_obj, get_err
+    local manager_to_use
+    local cfg, remove_err
+
+    -- Try ChannelMonitorManager
+    monitor_obj, get_err = channel_monitor_manager:get_monitor(name)
+    if monitor_obj then
+        manager_to_use = channel_monitor_manager
+    else
+        -- Try DvbMonitorManager
+        monitor_obj, get_err = dvb_monitor_manager:get_monitor(name)
+        if monitor_obj then
+            manager_to_use = dvb_monitor_manager
+        else
+            -- Try ResourceMonitorManager
+            monitor_obj, get_err = resource_monitor_manager:get_monitor(name)
+            if monitor_obj then
+                manager_to_use = resource_monitor_manager
+            end
+        end
+    end
+
     if not monitor_obj then 
         return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown")) 
     end
     
-    local cfg, remove_err = monitor_manager:remove_monitor(name)
+    cfg, remove_err = manager_to_use:remove_monitor(name)
     if not cfg then
         return send_response(server, client, 500, "Failed to remove monitor '" .. name .. "'. Error: " .. (remove_err or "unknown"))
     end
@@ -157,7 +185,7 @@ local update_monitor_channel = function(server, client, request)
         end
     end
 
-    local success, err = monitor_manager:update_monitor_parameters(name, params)
+    local success, err = channel_monitor_manager:update_monitor_parameters(name, params)
     if success then
         log_info(string.format("[Monitor] %s updated successfully", name))
         send_response(server, client, 200, "OK")
@@ -254,7 +282,21 @@ local get_monitor_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    for name, _ in monitor_manager:get_all_monitors() do -- Используем итератор
+
+    -- Получаем мониторы каналов
+    for name, _ in channel_monitor_manager:get_all_monitors() do
+        content["monitor_" .. key] = name
+        key = key + 1
+    end
+
+    -- Получаем DVB мониторы
+    for name, _ in dvb_monitor_manager:get_all_monitors() do
+        content["monitor_" .. key] = name
+        key = key + 1
+    end
+
+    -- Получаем ресурсные мониторы
+    for name, _ in resource_monitor_manager:get_all_monitors() do
         content["monitor_" .. key] = name
         key = key + 1
     end
@@ -308,10 +350,10 @@ local get_monitor_data = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor, get_err = monitor_manager:get_monitor(name)
+    local monitor, get_err = channel_monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
+        return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local json_cache = monitor:get_json_cache()
@@ -357,10 +399,10 @@ local get_psi_channel = function(server, client, request)
         return send_response(server, client, 400, "Missing channel")   
     end
 
-    local monitor, get_err = monitor_manager:get_monitor(name)
+    local monitor, get_err = channel_monitor_manager:get_monitor(name)
 
     if not monitor then
-        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
+        return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local psi_cache = monitor.psi_data_cache -- Предполагается, что psi_data_cache доступен напрямую

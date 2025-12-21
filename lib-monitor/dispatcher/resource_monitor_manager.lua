@@ -18,13 +18,18 @@ local COMPONENT_NAME = "ResourceMonitorManager"
 local ResourceMonitorManager = {}
 ResourceMonitorManager.__index = ResourceMonitorManager
 
---- Создает новый экземпляр ResourceMonitorManager.
--- @return ResourceMonitorManager Новый объект ResourceMonitorManager.
+local instance = nil -- Переменная для хранения единственного экземпляра
+
+--- Создает новый экземпляр ResourceMonitorManager (или возвращает существующий).
+-- @return ResourceMonitorManager Единственный объект ResourceMonitorManager.
 function ResourceMonitorManager:new()
-    local self = setmetatable({}, ResourceMonitorManager)
-    self.monitors = {} -- Хранилище для ресурсных мониторов
-    log_info(COMPONENT_NAME, "ResourceMonitorManager initialized.")
-    return self
+    if not instance then
+        local self = setmetatable({}, ResourceMonitorManager)
+        self.monitors = {} -- Хранилище для ресурсных мониторов
+        instance = self
+        log_info(COMPONENT_NAME, "ResourceMonitorManager initialized.")
+    end
+    return instance
 end
 
 --- Добавляет новый ресурсный монитор.

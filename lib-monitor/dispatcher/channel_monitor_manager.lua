@@ -22,14 +22,20 @@ local COMPONENT_NAME = "ChannelMonitorManager"
 local ChannelMonitorManager = {}
 ChannelMonitorManager.__index = ChannelMonitorManager
 
---- Создает новый экземпляр ChannelMonitorManager.
+local instance = nil -- Переменная для хранения единственного экземпляра
+
+--- Создает новый экземпляр ChannelMonitorManager (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов мониторов каналов.
--- @return ChannelMonitorManager Новый объект ChannelMonitorManager.
+-- @return ChannelMonitorManager Единственный объект ChannelMonitorManager.
 function ChannelMonitorManager:new()
-    local self = setmetatable({}, ChannelMonitorManager)
-    self.monitors = {} -- Таблица для хранения мониторов каналов по их уникальному имени
-    self.count = 0     -- Явный счетчик мониторов
-    return self
+    if not instance then
+        local self = setmetatable({}, ChannelMonitorManager)
+        self.monitors = {} -- Таблица для хранения мониторов каналов по их уникальному имени
+        self.count = 0     -- Явный счетчик мониторов
+        instance = self
+        log_info(COMPONENT_NAME, "ChannelMonitorManager initialized.")
+    end
+    return instance
 end
 
 --- Добавляет уже созданный и запущенный объект монитора канала в менеджер.

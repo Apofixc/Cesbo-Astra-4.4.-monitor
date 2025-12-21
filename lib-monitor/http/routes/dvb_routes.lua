@@ -8,8 +8,10 @@ local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
 
-local MonitorManager = require "monitor_manager"
-local monitor_manager = MonitorManager:new()
+local DvbMonitorManager = require "dispatcher.dvb_monitor_manager"
+local dvb_monitor_manager = DvbMonitorManager:new()
+
+local COMPONENT_NAME = "DvbRoutes" -- Определяем COMPONENT_NAME для логирования
 
 -- =============================================
 -- Управление DVB-адаптерами (Route Handlers)
@@ -33,7 +35,7 @@ local get_adapter_list = function(server, client, request)
 
     local content = {}
     local key = 1
-    for name, _ in monitor_manager.dvb_manager:get_all_monitors() do
+    for name, _ in dvb_monitor_manager:get_all_monitors() do
         content["adapter_" .. key] = name
         key = key + 1
     end
@@ -85,10 +87,10 @@ local get_adapter_data = function(server, client, request)
         return send_response(server, client, 400, "Missing adapter")   
     end
 
-    local monitor, get_err = monitor_manager:get_monitor(name)
+    local monitor, get_err = dvb_monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
+        return send_response(server, client, 404, "DVB Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
     local json_cache = monitor:get_json_cache()
@@ -136,7 +138,7 @@ local update_monitor_dvb = function(server, client, request)
         end
     end
 
-    local success, err = monitor_manager:update_monitor_parameters(name_adapter, params)
+    local success, err = dvb_monitor_manager:update_monitor_parameters(name_adapter, params)
     if success then
         log_info(string.format("[Monitor] %s updated successfully", name_adapter))
         send_response(server, client, 200, "OK")
