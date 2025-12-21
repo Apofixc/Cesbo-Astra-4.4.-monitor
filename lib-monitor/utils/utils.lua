@@ -10,6 +10,7 @@ local math_abs    = math.abs
 local Logger      = require "utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
+local log_debug   = Logger.debug
 local ipairs      = ipairs
 local http_request = http_request
 local astra_version = astra.version
@@ -282,6 +283,7 @@ end
 -- @param string content Содержимое для отправки (JSON-строка).
 -- @param string feed Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
 function send_monitor(content, feed)
+    log_debug("[send_monitor]", "Sending monitor data for feed '%s'. Content: %s", feed, content)
     local recipients = MONIT_ADDRESS[feed]
     if recipients and #recipients > 0 then
         local content_length = #content
