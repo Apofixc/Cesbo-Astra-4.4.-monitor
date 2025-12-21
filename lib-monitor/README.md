@@ -426,7 +426,7 @@ local dvb_config = {
 }
 local dvb_monitor = require("lib-monitor.dispatcher.dvb_monitor_manager").dvb_tuner_monitor(dvb_config)
 
--- Пример создания монитора канала
+-- Пример создания стрима
 local channel_data = {
     name = "Channel1",
     input = "udp://239.1.1.1:1234",
@@ -442,6 +442,12 @@ local channel_data = {
 }
 local channel_stream = require("lib-monitor.dispatcher.channel_monitor_manager").make_stream(channel_data)
 
+-- Пример создания монитора
+local channel_data = {
+    name = "Channel1",
+    input = "udp://239.1.1.1:1234",
+    output = "udp://239.1.1.2:1234"
+}
 local channel_data = make_channel({.........})
 local monitor = {
     name  = "Monitor1", -- Имя монитора (по умолчанию совпадает с именем потока).
