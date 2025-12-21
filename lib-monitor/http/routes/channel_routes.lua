@@ -41,7 +41,7 @@ local kill_stream = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(ChannelModule.find_channel, ChannelModule.kill_stream, ChannelModule.make_stream, "Stream", server, client, validate_request(request))
+    handle_kill_with_reboot(find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
@@ -61,12 +61,8 @@ local kill_channel = function(server, client, request)
 
     handle_kill_with_reboot(find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
-        local success, err = kill_channel(channel_data)
-        if not success then
-            log_error(COMPONENT_NAME, "Failed to kill channel '%s': %s", channel_data.config.name, err or "unknown")
-            return nil, err or "Failed to kill channel"
-        end
-        return cfg, nil
+        kill_channel(channel_data)
+        return cfg
     end, make_channel, "Channel", server, client, validate_request(request))
 end
 
@@ -85,49 +81,7 @@ local kill_monitor = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    local req = validate_request(request)
-    local name = get_param(req, "channel")
-
-    if not name then 
-        return send_response(server, client, 400, "Missing channel") 
-    end
-
-    local monitor_obj, get_err
-    local cfg, remove_err
-
-    -- Ищем монитор только в ChannelMonitorManager
-    monitor_obj, get_err = channel_monitor_manager:get_monitor(name)
-    
-    if not monitor_obj then 
-        return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown")) 
-    end
-    
-    cfg, remove_err = channel_monitor_manager:remove_monitor(name)
-    if not cfg then
-        return send_response(server, client, 500, "Failed to remove channel monitor '" .. name .. "'. Error: " .. (remove_err or "unknown"))
-    end
-    log_info(string.format("[Channel Monitor] %s killed", name))
-
-    local reboot = get_param(req, "reboot")
-    if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
-        local delay = validate_delay(get_param(req, "delay"))
-        log_info(string.format("[Channel Monitor] %s scheduled for reboot after %d seconds", name, delay)) 
-
-        timer_lib({
-            interval = delay, 
-            callback = function(t) 
-                t:close()
-                local success, make_err = ChannelModule.make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
-                if success then
-                    log_info(string.format("[Channel Monitor] %s was successfully rebooted", name)) 
-                else
-                    log_error(string.format("[Channel Monitor] Failed to reboot %s. Error: %s", name, make_err or "unknown"))
-                end
-            end
-        })
-    end
-
-    send_response(server, client, 200, "OK")
+    handle_kill_with_reboot(find_monitor, kill_monitor, make_monitor, "Monitor", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.

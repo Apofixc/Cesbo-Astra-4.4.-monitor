@@ -125,7 +125,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
         return send_response(server, client, 400, "Missing channel name in request.") 
     end
 
-    local data, find_err = find_func(name)
+    local data = find_func(name)
     if not data then 
         return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown")) 
     end
