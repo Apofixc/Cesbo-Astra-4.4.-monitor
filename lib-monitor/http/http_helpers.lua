@@ -16,7 +16,7 @@ local astra_reload_func = astra.reload -- Переименовано
 -- ===========================================================================
 
 local API_SECRET = os.getenv("ASTRA_API_KEY") or "test"
-local DELAY = 30
+local DELAY = 1
 
 -- =============================================
 -- Хелперы (Helpers)
