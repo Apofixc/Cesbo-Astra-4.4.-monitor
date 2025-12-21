@@ -35,6 +35,8 @@ local table_copy = http_helpers.table_copy -- Используем из http_hel
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_stream = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -51,6 +53,8 @@ end
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_channel = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -75,6 +79,8 @@ end
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_monitor = function(server, client, request)
+    if not request then return nil end
+
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -135,6 +141,8 @@ end
 --   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_channel_monitor = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -177,6 +185,8 @@ end
 --   - config (table): Конфигурация канала в формате JSON (обязательно).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 500 Internal Server Error.
 local create_channel = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -228,29 +238,23 @@ end
 --   channel_2 (table): { ... }
 -- }
 local get_channels = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not ChannelModule.channel_list then
-        log_error(COMPONENT_NAME, "[get_channels] ChannelModule.channel_list is nil.")
+    if not channel_list then
+        log_error(COMPONENT_NAME, "[get_channels] channel_list is nil.")
         return send_response(server, client, 500, "Internal server error: Channel list not available.")
     end
-    
-    local content = {}
-    for _, channel_data in ipairs(ChannelModule.channel_list) do
-        local output_string = ""
-        if channel_data.config and channel_data.config.output and channel_data.config.output[1] then
-            output_string = channel_data.config.output[1]
-        end
 
-        table.insert(content, {
-            name = channel_data.config and channel_data.config.name or "unknown",
-            addr = string_split(output_string, "#")[1] or "unknown"
-        })
+    local content = {}
+    for _, channel_data in ipairs(channel_list) do
+        table.insert(content, channel_data.config.name)
     end
     
-    local json_content, encode_err = json_encode(content)
+    local json_content = json_encode(content)
     if not json_content then
         log_error(COMPONENT_NAME, "Failed to encode channel list to JSON: %s", encode_err or "unknown")
         return send_response(server, client, 500, "Internal server error: Failed to encode channel list.")
@@ -261,7 +265,7 @@ local get_channels = function(server, client, request)
         "Content-Length: " .. #json_content,
         "Connection: close",
     }    
-    
+
     send_response(server, client, 200, json_content, headers)   
 end
 
@@ -275,12 +279,14 @@ end
 --   ...
 -- }
 local get_channel_monitors = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
     local content = {}
-    for name, _ in channel_monitor_manager:get_all_monitors() do
+    for name, _ in pairs(channel_monitor_manager:get_all_monitors()) do
         table.insert(content, name)
     end
     
@@ -319,6 +325,8 @@ end
 --   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
 -- }
 local get_channel_monitor_data = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -366,6 +374,8 @@ end
 --   [...]: Другие поля, специфичные для PSI данных.
 -- }
 local get_channel_psi = function(server, client, request)
+    if not request then return nil end
+    
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -383,19 +393,29 @@ local get_channel_psi = function(server, client, request)
         return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
-    local psi_cache = monitor.psi_data_cache -- Предполагается, что psi_data_cache доступен напрямую
-    if not psi_cache then
+    local psi_cache_table = channel_monitor_manager:get_psi_data_cache()
+    if not psi_cache_table or next(psi_cache_table) == nil then -- Проверяем, что таблица не пуста
         return send_response(server, client, 404, "PSI cache for '" .. name .. "' not found or empty.")
     end
 
-    -- psi_data_cache уже является JSON-строкой, нет необходимости повторно кодировать
+    local content_array = {}
+    for key, value in pairs(psi_cache_table) do
+        table.insert(content_array, json_decode(value)) -- Декодируем каждую JSON-строку обратно в таблицу
+    end
+
+    local json_content, encode_err = json_encode(content_array)
+    if not json_content then
+        log_error(COMPONENT_NAME, "Failed to encode PSI data to JSON: %s", encode_err or "unknown")
+        return send_response(server, client, 500, "Internal server error: Failed to encode PSI data.")
+    end
+
     local headers = {
         "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #psi_cache,
+        "Content-Length: " .. #json_content,
         "Connection: close",
     }    
     
-    send_response(server, client, 200, psi_cache, headers)    
+    send_response(server, client, 200, json_content, headers)    
 end
 
 return {
