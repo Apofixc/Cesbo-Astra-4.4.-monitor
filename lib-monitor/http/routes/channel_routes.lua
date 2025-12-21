@@ -2,12 +2,9 @@ local log_info    = log.info
 local log_error   = log.error
 
 local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
-local DvbMonitorManager = require "dispatcher.dvb_monitor_manager" -- Добавляем DvbMonitorManager, так как get_monitor_list может возвращать DVB мониторы
-local ResourceMonitorManager = require "dispatcher.resource_monitor_manager"
+local ChannelModule = require "channel.channel"
 
 local channel_monitor_manager = ChannelMonitorManager:new()
-local dvb_monitor_manager = DvbMonitorManager:new()
-local resource_monitor_manager = ResourceMonitorManager:new()
 
 local http_helpers = require "http.http_helpers"
 
@@ -21,6 +18,7 @@ local handle_kill_with_reboot = http_helpers.handle_kill_with_reboot
 local string_lower = http_helpers.string_lower
 local timer_lib = http_helpers.timer_lib
 local json_encode = http_helpers.json_encode
+local json_decode = http_helpers.json_decode -- Добавляем json_decode
 local string_split = http_helpers.string_split
 local table_copy = http_helpers.table_copy -- Используем из http_helpers
 
@@ -43,7 +41,7 @@ local control_kill_stream = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
+    handle_kill_with_reboot(ChannelModule.find_channel, ChannelModule.kill_stream, ChannelModule.make_stream, "Stream", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
@@ -61,23 +59,23 @@ local control_kill_channel = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_channel, function(channel_data)
+    handle_kill_with_reboot(ChannelModule.find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
-        local success, err = kill_channel(channel_data)
+        local success, err = ChannelModule.kill_channel(channel_data)
         if not success then
             log_error(COMPONENT_NAME, "Failed to kill channel '%s': %s", channel_data.config.name, err or "unknown")
             return nil, err or "Failed to kill channel"
         end
         return cfg, nil
-    end, make_channel, "Channel", server, client, validate_request(request))
+    end, ChannelModule.make_channel, "Channel", server, client, validate_request(request))
 end
 
---- Обработчик HTTP-запроса для остановки или перезагрузки монитора.
+--- Обработчик HTTP-запроса для остановки или перезагрузки монитора канала.
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
 -- Параметры запроса (JSON или Query String):
---   - channel (string): Имя монитора (обязательно).
---   - reboot (boolean, optional): true для перезагрузки монитора после остановки.
+--   - channel (string): Имя монитора канала (обязательно).
+--   - reboot (boolean, optional): true для перезагрузки монитора канала после остановки.
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local control_kill_monitor = function(server, client, request)
@@ -95,51 +93,35 @@ local control_kill_monitor = function(server, client, request)
     end
 
     local monitor_obj, get_err
-    local manager_to_use
     local cfg, remove_err
 
-    -- Try ChannelMonitorManager
+    -- Ищем монитор только в ChannelMonitorManager
     monitor_obj, get_err = channel_monitor_manager:get_monitor(name)
-    if monitor_obj then
-        manager_to_use = channel_monitor_manager
-    else
-        -- Try DvbMonitorManager
-        monitor_obj, get_err = dvb_monitor_manager:get_monitor(name)
-        if monitor_obj then
-            manager_to_use = dvb_monitor_manager
-        else
-            -- Try ResourceMonitorManager
-            monitor_obj, get_err = resource_monitor_manager:get_monitor(name)
-            if monitor_obj then
-                manager_to_use = resource_monitor_manager
-            end
-        end
-    end
-
+    
     if not monitor_obj then 
-        return send_response(server, client, 404, "Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown")) 
+        return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown")) 
     end
     
-    cfg, remove_err = manager_to_use:remove_monitor(name)
+    cfg, remove_err = channel_monitor_manager:remove_monitor(name)
     if not cfg then
-        return send_response(server, client, 500, "Failed to remove monitor '" .. name .. "'. Error: " .. (remove_err or "unknown"))
+        return send_response(server, client, 500, "Failed to remove channel monitor '" .. name .. "'. Error: " .. (remove_err or "unknown"))
     end
-    log_info(string.format("[Monitor] %s killed", name))
+    log_info(string.format("[Channel Monitor] %s killed", name))
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(string.format("[Monitor] %s scheduled for reboot after %d seconds", name, delay)) 
+        log_info(string.format("[Channel Monitor] %s scheduled for reboot after %d seconds", name, delay)) 
 
         timer_lib({
             interval = delay, 
             callback = function(t) 
                 t:close()
-                local success, make_err = make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
+                local success, make_err = ChannelModule.make_monitor(cfg, name) -- make_monitor ожидает config и channel_data
                 if success then
-                    log_info(string.format("[Monitor] %s was successfully rebooted", name)) 
+                    log_info(string.format("[Channel Monitor] %s was successfully rebooted", name)) 
                 else
-                    log_error(string.format("[Monitor] Failed to reboot %s. Error: %s", name, make_err or "unknown"))
+                    log_error(string.format("[Channel Monitor] Failed to reboot %s. Error: %s", name, make_err or "unknown"))
                 end
             end
         })
@@ -195,19 +177,55 @@ local update_monitor_channel = function(server, client, request)
     end
 end
 
---- Обработчик HTTP-запроса для создания канала (заглушка).
+--- Обработчик HTTP-запроса для создания канала.
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
--- Параметры запроса: (в настоящее время не используются, заглушка)
--- Возвращает: HTTP 200 OK или 401 Unauthorized.
-local create_channel = function(server, client, request) -- заглушка
+-- Параметры запроса (JSON или Query String):
+--   - name (string): Имя канала (обязательно).
+--   - config (table): Конфигурация канала в формате JSON (обязательно).
+-- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 500 Internal Server Error.
+local create_channel = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    send_response(server, client, 200)
+    local req = validate_request(request)
+    local name = get_param(req, "name")
+    local config_str = get_param(req, "config")
+
+    if not name then
+        return send_response(server, client, 400, "Missing channel name")
+    end
+    if not config_str then
+        return send_response(server, client, 400, "Missing channel config")
+    end
+
+    local config, decode_err = json_decode(config_str) -- Предполагаем наличие json_decode
+    if not config then
+        log_error(COMPONENT_NAME, "Failed to decode channel config for '%s': %s", name, decode_err or "unknown")
+        return send_response(server, client, 400, "Invalid channel config: " .. (decode_err or "unknown"))
+    end
+
+    config.name = name -- Убедимся, что имя канала в конфиге соответствует переданному
+
+    local success, err = ChannelModule.make_channel(config) -- Используем ChannelModule.make_channel
+    if not success then
+        log_error(COMPONENT_NAME, "Failed to create channel '%s': %s", name, err or "unknown")
+        return send_response(server, client, 500, "Failed to create channel: " .. (err or "unknown"))
+    end
+
+    -- Также создаем монитор для нового канала
+    local monitor_success, monitor_err = ChannelModule.make_monitor(config, name) -- Используем ChannelModule.make_monitor
+    if not monitor_success then
+        log_error(COMPONENT_NAME, "Failed to create monitor for channel '%s': %s", name, monitor_err or "unknown")
+        -- Возможно, стоит откатить создание канала или просто залогировать ошибку
+        return send_response(server, client, 500, "Channel created, but failed to create monitor: " .. (monitor_err or "unknown"))
+    end
+
+    log_info(string.format("[Channel] Channel '%s' and its monitor created successfully", name))
+    send_response(server, client, 200, "Channel and monitor created successfully")
 end
 
 --- Обработчик HTTP-запроса для получения списка каналов.
@@ -228,14 +246,14 @@ local get_channel_list = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not channel_list then -- Предполагается, что channel_list глобально доступен
-        local error_msg = "[get_channel_list] channel_list is nil."
+    if not ChannelModule.channel_list then -- Используем ChannelModule.channel_list
+        local error_msg = "[get_channel_list] ChannelModule.channel_list is nil."
         log_error(COMPONENT_NAME, error_msg)
         return send_response(server, client, 500, "Internal server error: " .. error_msg)
     end
     
     local content = {}
-    for key, channel_data in ipairs(channel_list) do
+    for key, channel_data in ipairs(ChannelModule.channel_list) do
         local output_string = ""
 
         if channel_data.config and channel_data.config.output and channel_data.config.output[1] then
@@ -264,13 +282,13 @@ local get_channel_list = function(server, client, request)
     send_response(server, client, 200, json_content, headers)   
 end
 
---- Обработчик HTTP-запроса для получения списка активных мониторов.
+--- Обработчик HTTP-запроса для получения списка активных мониторов каналов.
 -- Требует аутентификации по API-ключу.
 --
--- Возвращает JSON-объект со списком мониторов. Структура JSON:
+-- Возвращает JSON-объект со списком мониторов каналов. Структура JSON:
 -- {
---   monitor_1 (string): Имя монитора,
---   monitor_2 (string): Имя монитора,
+--   monitor_1 (string): Имя монитора канала,
+--   monitor_2 (string): Имя монитора канала,
 --   ...
 -- }
 local get_monitor_list = function(server, client, request)
@@ -285,18 +303,6 @@ local get_monitor_list = function(server, client, request)
 
     -- Получаем мониторы каналов
     for name, _ in channel_monitor_manager:get_all_monitors() do
-        content["monitor_" .. key] = name
-        key = key + 1
-    end
-
-    -- Получаем DVB мониторы
-    for name, _ in dvb_monitor_manager:get_all_monitors() do
-        content["monitor_" .. key] = name
-        key = key + 1
-    end
-
-    -- Получаем ресурсные мониторы
-    for name, _ in resource_monitor_manager:get_all_monitors() do
         content["monitor_" .. key] = name
         key = key + 1
     end
