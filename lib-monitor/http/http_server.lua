@@ -13,21 +13,24 @@ function server_start(addr, port)
         addr = addr,
         port = port,
         route = {
-            {"/api/control_kill_stream", channel_routes.control_kill_stream},
-            {"/api/control_kill_channel", channel_routes.control_kill_channel},
-            {"/api/control_kill_monitor", channel_routes.control_kill_monitor},
-            {"/api/update_monitor_channel", channel_routes.update_monitor_channel},
-            {"/api/create_channel", channel_routes.create_channel},
-            {"/api/get_channel_list", channel_routes.get_channel_list},
-            {"/api/get_monitor_list", channel_routes.get_monitor_list},
-            {"/api/get_monitor_data", channel_routes.get_monitor_data},
-            {"/api/get_psi_channel", channel_routes.get_psi_channel},
-            {"/api/get_adapter_list", dvb_routes.get_adapter_list},
-            {"/api/get_adapter_data", dvb_routes.get_adapter_data},
-            {"/api/update_monitor_dvb", dvb_routes.update_monitor_dvb},
-            {"/api/reload", system_routes.astra_reload},
-            {"/api/exit", system_routes.kill_astra},
-            {"/api/health", system_routes.health}
+            -- Channel Routes
+            {"/api/channels/streams/kill", channel_routes.kill_stream},
+            {"/api/channels/kill", channel_routes.kill_channel},
+            {"/api/channels/monitors/kill", channel_routes.kill_monitor},
+            {"/api/channels/monitors/update", channel_routes.update_channel_monitor},
+            {"/api/channels", channel_routes.create_channel},
+            {"/api/channels", channel_routes.get_channels},
+            {"/api/channels/monitors", channel_routes.get_channel_monitors},
+            {"/api/channels/monitors/data", channel_routes.get_channel_monitor_data},
+            {"/api/channels/psi", channel_routes.get_channel_psi},
+            -- DVB Routes
+            {"/api/dvb/adapters", dvb_routes.get_adapters},
+            {"/api/dvb/adapters/data", dvb_routes.get_adapter_data},
+            {"/api/dvb/adapters/monitors/update", dvb_routes.update_dvb_monitor},
+            -- System Routes
+            {"/api/system/reload", system_routes.astra_reload},
+            {"/api/system/exit", system_routes.kill_astra},
+            {"/api/system/health", system_routes.health}
         }
     })
     log_info(string.format("[Server] Started on %s:%d", addr, port))

@@ -34,9 +34,7 @@ local table_copy = http_helpers.table_copy -- Используем из http_hel
 --   - reboot (boolean, optional): true для перезагрузки потока после остановки.
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
-local control_kill_stream = function(server, client, request)
-    if not request then return nil end
-    
+local kill_stream = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -52,9 +50,7 @@ end
 --   - reboot (boolean, optional): true для перезагрузки канала после остановки.
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
-local control_kill_channel = function(server, client, request)
-    if not request then return nil end
-
+local kill_channel = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -78,9 +74,7 @@ end
 --   - reboot (boolean, optional): true для перезагрузки монитора канала после остановки.
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
-local control_kill_monitor = function(server, client, request)
-    if not request then return nil end
-
+local kill_monitor = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -140,9 +134,7 @@ end
 --   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
 --   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
-local update_monitor_channel = function(server, client, request)
-    if not request then return nil end
-
+local update_channel_monitor = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -185,8 +177,6 @@ end
 --   - config (table): Конфигурация канала в формате JSON (обязательно).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 500 Internal Server Error.
 local create_channel = function(server, client, request)
-    if not request then return nil end
-
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -202,25 +192,23 @@ local create_channel = function(server, client, request)
         return send_response(server, client, 400, "Missing channel config")
     end
 
-    local config, decode_err = json_decode(config_str) -- Предполагаем наличие json_decode
+    local config, decode_err = json_decode(config_str)
     if not config then
         log_error(COMPONENT_NAME, "Failed to decode channel config for '%s': %s", name, decode_err or "unknown")
         return send_response(server, client, 400, "Invalid channel config: " .. (decode_err or "unknown"))
     end
 
-    config.name = name -- Убедимся, что имя канала в конфиге соответствует переданному
+    config.name = name
 
-    local success, err = ChannelModule.make_channel(config) -- Используем ChannelModule.make_channel
+    local success, err = ChannelModule.make_channel(config)
     if not success then
         log_error(COMPONENT_NAME, "Failed to create channel '%s': %s", name, err or "unknown")
         return send_response(server, client, 500, "Failed to create channel: " .. (err or "unknown"))
     end
 
-    -- Также создаем монитор для нового канала
-    local monitor_success, monitor_err = ChannelModule.make_monitor(config, name) -- Используем ChannelModule.make_monitor
+    local monitor_success, monitor_err = ChannelModule.make_monitor(config, name)
     if not monitor_success then
         log_error(COMPONENT_NAME, "Failed to create monitor for channel '%s': %s", name, monitor_err or "unknown")
-        -- Возможно, стоит откатить создание канала или просто залогировать ошибку
         return send_response(server, client, 500, "Channel created, but failed to create monitor: " .. (monitor_err or "unknown"))
     end
 
@@ -239,38 +227,33 @@ end
 --   },
 --   channel_2 (table): { ... }
 -- }
-local get_channel_list = function(server, client, request)
-    if not request then return nil end
-
+local get_channels = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not ChannelModule.channel_list then -- Используем ChannelModule.channel_list
-        local error_msg = "[get_channel_list] ChannelModule.channel_list is nil."
-        log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    if not ChannelModule.channel_list then
+        log_error(COMPONENT_NAME, "[get_channels] ChannelModule.channel_list is nil.")
+        return send_response(server, client, 500, "Internal server error: Channel list not available.")
     end
     
     local content = {}
-    for key, channel_data in ipairs(ChannelModule.channel_list) do
+    for _, channel_data in ipairs(ChannelModule.channel_list) do
         local output_string = ""
-
         if channel_data.config and channel_data.config.output and channel_data.config.output[1] then
             output_string = channel_data.config.output[1]
         end
 
-        content["channel_" .. key] = {
+        table.insert(content, {
             name = channel_data.config and channel_data.config.name or "unknown",
             addr = string_split(output_string, "#")[1] or "unknown"
-        }
+        })
     end
     
     local json_content, encode_err = json_encode(content)
     if not json_content then
-        local error_msg = "Failed to encode channel list to JSON: " .. (encode_err or "unknown")
-        log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+        log_error(COMPONENT_NAME, "Failed to encode channel list to JSON: %s", encode_err or "unknown")
+        return send_response(server, client, 500, "Internal server error: Failed to encode channel list.")
     end
 
     local headers = {
@@ -291,27 +274,20 @@ end
 --   monitor_2 (string): Имя монитора канала,
 --   ...
 -- }
-local get_monitor_list = function(server, client, request)
-    if not request then return nil end
-
+local get_channel_monitors = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
     local content = {}
-    local key = 1
-
-    -- Получаем мониторы каналов
     for name, _ in channel_monitor_manager:get_all_monitors() do
-        content["monitor_" .. key] = name
-        key = key + 1
+        table.insert(content, name)
     end
     
     local json_content, encode_err = json_encode(content)
     if not json_content then
-        local error_msg = "Failed to encode monitor list to JSON: " .. (encode_err or "unknown")
-        log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+        log_error(COMPONENT_NAME, "Failed to encode monitor list to JSON: %s", encode_err or "unknown")
+        return send_response(server, client, 500, "Internal server error: Failed to encode monitor list.")
     end
 
     local headers = {
@@ -342,9 +318,7 @@ end
 --   pes_errors (number): Количество PES-ошибок,
 --   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
 -- }
-local get_monitor_data = function(server, client, request)
-    if not request then return nil end
-
+local get_channel_monitor_data = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -391,9 +365,7 @@ end
 --   psi (string): Тип PSI данных (например, "pmt", "sdt").
 --   [...]: Другие поля, специфичные для PSI данных.
 -- }
-local get_psi_channel = function(server, client, request)
-    if not request then return nil end
-
+local get_channel_psi = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
@@ -427,13 +399,13 @@ local get_psi_channel = function(server, client, request)
 end
 
 return {
-    control_kill_stream = control_kill_stream,
-    control_kill_channel = control_kill_channel,
-    control_kill_monitor = control_kill_monitor,
-    update_monitor_channel = update_monitor_channel,
+    kill_stream = kill_stream,
+    kill_channel = kill_channel,
+    kill_monitor = kill_monitor,
+    update_channel_monitor = update_channel_monitor,
     create_channel = create_channel,
-    get_channel_list = get_channel_list,
-    get_monitor_list = get_monitor_list,
-    get_monitor_data = get_monitor_data,
-    get_psi_channel = get_psi_channel,
+    get_channels = get_channels,
+    get_channel_monitors = get_channel_monitors,
+    get_channel_monitor_data = get_channel_monitor_data,
+    get_channel_psi = get_channel_psi,
 }

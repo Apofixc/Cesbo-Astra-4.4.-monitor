@@ -26,25 +26,20 @@ local COMPONENT_NAME = "DvbRoutes" -- Определяем COMPONENT_NAME для
 --   adapter_2 (string): Имя адаптера,
 --   ...
 -- }
-local get_adapter_list = function(server, client, request)
-    if not request then return nil end
-
+local get_adapters = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
     local content = {}
-    local key = 1
     for name, _ in dvb_monitor_manager:get_all_monitors() do
-        content["adapter_" .. key] = name
-        key = key + 1
+        table.insert(content, name)
     end
     
     local json_content, encode_err = json_encode(content)
     if not json_content then
-        local error_msg = "Failed to encode adapter list to JSON: " .. (encode_err or "unknown")
-        log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+        log_error(COMPONENT_NAME, "Failed to encode adapter list to JSON: %s", encode_err or "unknown")
+        return send_response(server, client, 500, "Internal server error: Failed to encode adapter list.")
     end
 
     local headers = {
@@ -74,8 +69,6 @@ end
 --   unc (number): Количество некорректируемых ошибок (-1 по умолчанию)
 -- }
 local get_adapter_data = function(server, client, request)
-    if not request then return nil end
-
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end    
@@ -84,7 +77,7 @@ local get_adapter_data = function(server, client, request)
 
     local name = get_param(req, "name_adapter")
     if not name then 
-        return send_response(server, client, 400, "Missing adapter")   
+        return send_response(server, client, 400, "Missing adapter name in request.")   
     end
 
     local monitor, get_err = dvb_monitor_manager:get_monitor(name)
@@ -115,9 +108,7 @@ end
 --   - time_check (number, optional): Новый интервал проверки в секундах (неотрицательное число).
 --   - rate (number, optional): Новое значение допустимой погрешности (от 0.001 до 1).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
-local update_monitor_dvb = function(server, client, request)
-    if not request then return nil end
-
+local update_dvb_monitor = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end    
@@ -149,7 +140,7 @@ local update_monitor_dvb = function(server, client, request)
 end
 
 return {
-    get_adapter_list = get_adapter_list,
+    get_adapters = get_adapters,
     get_adapter_data = get_adapter_data,
-    update_monitor_dvb = update_monitor_dvb,
+    update_dvb_monitor = update_dvb_monitor,
 }
