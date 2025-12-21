@@ -21,7 +21,7 @@ local tostring     = tostring
 local ipairs       = ipairs
 local math_max     = math.max
 local string_lower = string.lower
-local table_insert = table_insert
+local table_insert = table.insert
 
 -- Локальные модули
 local Logger = require "utils.logger"
@@ -42,7 +42,7 @@ local get_stream   = get_stream     -- Предполагаем, что get_stre
 -- Модули мониторинга
 local ChannelMonitor = require "channel.channel_monitor"
 local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
-local find_dvb_conf = require "adapters.adapter".find_dvb_conf
+local LoadAdapter = require "adapters.adapter"
 -- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
 -- local parse_url = parse_url
 -- local init_input = init_input
@@ -125,7 +125,12 @@ local format_handlers = {
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
     end,
-    rtp = format_handlers.udp,
+    rtp = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
+        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        return cfg
+    end,
     http = function(config)
         local cfg = {format = config.format}
         cfg.addr = config.host .. ":" .. config.port .. config.path

@@ -134,7 +134,7 @@ function validate_monitor_param(name, value)
     end
 
     if value == nil then
-        return nil, nil -- Позволяем вызывающей стороне использовать значение по умолчанию
+        return schema.default, nil -- Используем значение по умолчанию из схемы
     end
 
     if type(value) ~= schema.type then

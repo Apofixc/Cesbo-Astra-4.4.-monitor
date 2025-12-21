@@ -1,15 +1,15 @@
 local log_error   = log.error
-local json_encode = http_helpers.json_encode
 local tonumber = tonumber
 
-local MonitorManager = require "monitor_manager"
-local monitor_manager = MonitorManager:new()
-
 local http_helpers = require "http.http_helpers"
+local json_encode = http_helpers.json_encode
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
+
+local MonitorManager = require "monitor_manager"
+local monitor_manager = MonitorManager:new()
 
 -- =============================================
 -- Управление DVB-адаптерами (Route Handlers)
