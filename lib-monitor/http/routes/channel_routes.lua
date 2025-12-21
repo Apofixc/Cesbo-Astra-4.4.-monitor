@@ -363,15 +363,7 @@ end
 --
 -- Возвращает JSON-объект с данными PSI. Структура JSON:
 -- {
---   type (string): "psi",
---   server (string): Имя сервера,
---   channel (string): Имя канала,
---   output (string): Адрес мониторинга,
---   stream (string): Имя потока,
---   format (string): Формат потока,
---   addr (string): Адрес потока,
 --   psi (string): Тип PSI данных (например, "pmt", "sdt").
---   [...]: Другие поля, специфичные для PSI данных.
 -- }
 local get_channel_psi = function(server, client, request)
     if not request then return nil end
