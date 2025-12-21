@@ -62,7 +62,11 @@ function ratio(old, new)
     end
     
     if new == 0 then
-        return 0, nil
+        if old == 0 then
+            return 0, nil -- Если оба 0, изменение 0%
+        else
+            return 1, nil -- Если old не 0, а new 0, это 100% изменение (или полная потеря)
+        end
     end
 
     return math_abs(old - new) / math_max(old, new), nil
@@ -287,20 +291,24 @@ function send_monitor(content, feed)
     local recipients = MONIT_ADDRESS[feed]
     if recipients and #recipients > 0 then
         local content_length = #content
+        local common_headers = {
+            "User-Agent: Astra v." .. astra_version,
+            "Content-Type: application/json;charset=utf-8",
+            "Content-Length: " .. content_length,
+            "Connection: close",
+        }
+
         for _, addr in ipairs(recipients) do
+            local headers = table_copy(common_headers) -- Копируем общие заголовки
+            table.insert(headers, "Host: " .. addr.host .. ":" .. addr.port) -- Добавляем специфичный заголовок Host
+
             http_request({
                 host = addr.host,
                 path = addr.path,
                 method = "POST",
                 content = content,
                 port = addr.port,
-                headers = {
-                    "User-Agent: Astra v." .. astra_version,
-                    "Host: " .. addr.host .. ":" .. addr.port,
-                    "Content-Type: application/json;charset=utf-8",
-                    "Content-Length: " .. content_length,
-                    "Connection: close",
-                },
+                headers = headers,
                 callback = function(s,r)
                     if not s then
                         log_error("[send_monitor]", "HTTP request failed for feed '%s' to %s:%s%s: status=connection_error", feed, addr.host, tostring(addr.port), addr.path)
