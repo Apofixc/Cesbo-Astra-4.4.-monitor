@@ -393,17 +393,12 @@ local get_channel_psi = function(server, client, request)
         return send_response(server, client, 404, "Channel Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
     end
 
-    local psi_cache_table = channel_monitor_manager:get_psi_data_cache()
+    local psi_cache_table = monitor:get_psi_data_cache()
     if not psi_cache_table or next(psi_cache_table) == nil then -- Проверяем, что таблица не пуста
         return send_response(server, client, 404, "PSI cache for '" .. name .. "' not found or empty.")
     end
 
-    local content_array = {}
-    for key, value in pairs(psi_cache_table) do
-        table.insert(content_array, json_decode(value)) -- Декодируем каждую JSON-строку обратно в таблицу
-    end
-
-    local json_content, encode_err = json_encode(content_array)
+    local json_content = json_encode(psi_cache_table)
     if not json_content then
         log_error(COMPONENT_NAME, "Failed to encode PSI data to JSON: %s", encode_err or "unknown")
         return send_response(server, client, 500, "Internal server error: Failed to encode PSI data.")
