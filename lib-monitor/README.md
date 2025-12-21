@@ -413,15 +413,16 @@ lib-monitor/
 ## Пример использования:
 
 ```lua
--- Пример инициализации монитора DVB-тюнера
 local dvb_config = {
-    name = "dvb0",
-    adapter = 0,
-    type = "DVB-S",
-    frequency = 11747000,
-    symbolrate = 27500,
-    polarization = "H",
-    fec = "3/4"
+    -- Стандартные параметры
+    ------------------------
+    ------------------------
+    ------------------------
+    -- Новые параметры
+    name_adapter = "dvb0", -- Имя адаптера (обязательно).
+    time_check = 10, -- Интервал проверки в секундах (по умолчанию 10).
+    rate = 0.015, -- Допустимая погрешность для сравнения параметров (по умолчанию 0.015).
+    method_comparison = 3 -- Метод сравнения параметров (1, 2 или 3, по умолчанию 3).
 }
 local dvb_monitor = require("lib-monitor.dispatcher.dvb_monitor_manager").dvb_tuner_monitor(dvb_config)
 
@@ -430,23 +431,27 @@ local channel_data = {
     name = "Channel1",
     input = "udp://239.1.1.1:1234",
     output = "udp://239.1.1.2:1234"
+    monitor = {
+        name  = "Monitor1", -- Имя монитора (по умолчанию совпадает с именем потока).
+        monitor_type = "output", -- Тип монитора ("input", "output", "ip", по умолчанию "output").
+        rate = 0.03,  -- Погрешность сравнения битрейта.
+        time_check = 0,-- Время до сравнения данных.
+        analyze = false, -- Включить/отключить расширенную информацию об ошибках.
+        method_comparison = 3, -- Метод сравнения состояния потока.
+    }
 }
-local monitor_config = {
-    name = "Channel1_Monitor",
-    type = "input",
-    bitrate_tolerance = 0.1,
-    check_interval = 5
+local channel_stream = require("lib-monitor.dispatcher.channel_monitor_manager").make_stream(channel_data)
+
+local channel_data = make_channel({.........})
+local monitor = {
+    name  = "Monitor1", -- Имя монитора (по умолчанию совпадает с именем потока).
+    monitor_type = "output", -- Тип монитора ("input", "output", "ip", по умолчанию "output").
+    rate = 0.03,  -- Погрешность сравнения битрейта.
+    time_check = 0,-- Время до сравнения данных.
+    analyze = false, -- Включить/отключить расширенную информацию об ошибках.
+    method_comparison = 3, -- Метод сравнения состояния потока.
 }
 local channel_monitor = require("lib-monitor.dispatcher.channel_monitor_manager").make_monitor(monitor_config, channel_data)
-
--- Пример отправки данных мониторинга
-local monitor_data = {
-    timestamp = os.time(),
-    channel = "Channel1",
-    status = "OK",
-    bitrate = 10000
-}
-require("lib-monitor.http.http_server").send_monitor(monitor_data, "default")
 ```
 
 ---
