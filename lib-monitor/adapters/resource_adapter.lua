@@ -21,7 +21,6 @@ local COMPONENT_NAME = "ResourceMonitor"
 local ResourceMonitor = {}
 ResourceMonitor.__index = ResourceMonitor
 
--- Единственный экземпляр (singleton)
 local instance = nil
 
 local function get_current_pid()
