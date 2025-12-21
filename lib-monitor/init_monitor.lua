@@ -13,3 +13,4 @@ require "channel.channel"
 require "http.http_server"
 require "dispatcher.channel_monitor_manager"
 require "dispatcher.dvb_monitor_manager"
+require "dispatcher.resource_monitor_manager" -- Добавлено для загрузки менеджера ресурсов

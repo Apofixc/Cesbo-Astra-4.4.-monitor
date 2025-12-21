@@ -1,7 +1,6 @@
 -- ===========================================================================
--- ResourceAdapter Class
--- Адаптер для сбора данных о системных ресурсах (CPU, RAM, Disk I/O, Network I/O).
--- Использует системные команды для получения информации.
+-- ResourceMonitor Class
+-- Менеджер для мониторинга системных ресурсов (CPU, RAM, Disk I/O, Network I/O).
 -- ===========================================================================
 
 local type      = type
@@ -17,17 +16,17 @@ local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
 
-local COMPONENT_NAME = "ResourceAdapter"
+local COMPONENT_NAME = "ResourceMonitor"
 
-local ResourceAdapter = {}
-ResourceAdapter.__index = ResourceAdapter
+local ResourceMonitor = {}
+ResourceMonitor.__index = ResourceMonitor
 
---- Создает новый экземпляр ResourceAdapter.
+--- Создает новый экземпляр ResourceMonitor.
 -- @param string name Уникальное имя монитора.
 -- @param table config Конфигурация монитора.
--- @return ResourceAdapter Новый объект ResourceAdapter.
-function ResourceAdapter:new(name, config)
-    local self = setmetatable({}, ResourceAdapter)
+-- @return ResourceMonitor Новый объект ResourceMonitor.
+function ResourceMonitor:new(name, config)
+    local self = setmetatable({}, ResourceMonitor)
     self.name = name
     self.config = config or {}
     self.interval = self.config.interval or 5000 -- Интервал мониторинга в миллисекундах
@@ -36,33 +35,35 @@ function ResourceAdapter:new(name, config)
     self.pid = getpid() -- PID процесса для мониторинга
     self.last_cpu_time = 0 -- Для расчета использования CPU процесса
     self.last_total_cpu_time = 0 -- Для расчета общего использования CPU
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' initialized with interval %dms. PID: %s", self.name, self.interval, tostring(self.pid))
+    self.last_process_cpu_time = {} -- Для расчета использования CPU для каждого PID
+    self.last_process_total_cpu_time = 0 -- Для расчета общего использования CPU для процесса
+    log_info(COMPONENT_NAME, "ResourceMonitor '%s' initialized with interval %dms. PID: %s", self.name, self.interval, tostring(self.pid))
     self:start()
     return self
 end
 
 --- Запускает мониторинг ресурсов.
-function ResourceAdapter:start()
+function ResourceMonitor:start()
     if self.timer then
         self:stop()
     end
-    self.timer = astra.timer.start(self.interval, function() self:collect_data() end)
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' started monitoring.", self.name)
+    self.timer = astra.timer.start(self.interval, function() self:collect_system_data() end) -- Изменено на collect_system_data
+    log_info(COMPONENT_NAME, "ResourceMonitor '%s' started monitoring.", self.name)
 end
 
 --- Останавливает мониторинг ресурсов.
-function ResourceAdapter:stop()
+function ResourceMonitor:stop()
     if self.timer then
         astra.timer.stop(self.timer)
         self.timer = nil
-        log_info(COMPONENT_NAME, "ResourceAdapter '%s' stopped monitoring.", self.name)
+        log_info(COMPONENT_NAME, "ResourceMonitor '%s' stopped monitoring.", self.name)
     end
 end
 
 --- Обновляет параметры монитора.
 -- @param table params Новые параметры.
 -- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
-function ResourceAdapter:update_parameters(params)
+function ResourceMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
         return nil, "Invalid parameters: expected table."
     end
@@ -70,12 +71,12 @@ function ResourceAdapter:update_parameters(params)
     self.interval = self.config.interval or self.interval
     self.pid = self.config.pid or self.pid
     self:start() -- Перезапускаем таймер с новым интервалом
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' parameters updated. New interval: %dms. PID: %s", self.name, self.interval, tostring(self.pid))
+    log_info(COMPONENT_NAME, "ResourceMonitor '%s' parameters updated. New interval: %dms. PID: %s", self.name, self.interval, tostring(self.pid))
     return true
 end
 
 --- Собирает данные о системных ресурсах.
-function ResourceAdapter:collect_data()
+function ResourceMonitor:collect_system_data()
     local data = {
         timestamp = astra.date(),
         system = {
@@ -85,31 +86,29 @@ function ResourceAdapter:collect_data()
             network = self:get_network_usage()
         }
     }
-
-    if self.pid then
-        local target_pid = self.pid
-
-        if target_pid then
-            data.process = {
-                pid = target_pid,
-                cpu = self:get_process_cpu_usage(target_pid),
-                memory = self:get_process_memory_usage(target_pid)
-            }
-        else
-            log_info(COMPONENT_NAME, "Invalid PID '%s'.", tostring(self.pid))
-        end
-    end
-
-    log_debug(COMPONENT_NAME, "Collected data for '%s': %s", self.name, json.encode(data))
-    -- Здесь можно добавить логику для отправки данных, например, в InfluxDB или через HTTP
-    -- astra.event.send("resource_monitor_data", { name = self.name, data = data })
+    log_debug(COMPONENT_NAME, "Collected system data for '%s': %s", self.name, json.encode(data))
     return data
 end
 
+--- Собирает данные о ресурсах конкретного процесса.
+-- @param number pid PID процесса для мониторинга.
+-- @return table Таблица с данными о ресурсах процесса.
+function ResourceMonitor:collect_process_data(pid)
+    local data = {
+        timestamp = astra.date(),
+        process = {
+            pid = pid,
+            cpu = self:get_process_cpu_usage(pid),
+            memory = self:get_process_memory_usage(pid)
+        }
+    }
+    log_debug(COMPONENT_NAME, "Collected process data for PID '%s': %s", tostring(pid), json.encode(data))
+    return data
+end
 
 --- Получает использование CPU системы.
 -- @return table Таблица с данными об использовании CPU системы.
-function ResourceAdapter:get_system_cpu_usage()
+function ResourceMonitor:get_system_cpu_usage()
     local cpu_data = {}
     local f = io_popen("grep 'cpu ' /proc/stat")
     if f then
@@ -152,7 +151,7 @@ end
 
 --- Получает использование памяти системы.
 -- @return table Таблица с данными об использовании памяти системы.
-function ResourceAdapter:get_system_memory_usage()
+function ResourceMonitor:get_system_memory_usage()
     local mem_data = {}
     local f = io_popen("free -m | awk 'NR==2{print $2,$3}'")
     if f then
@@ -176,7 +175,7 @@ end
 --- Получает использование CPU конкретного процесса.
 -- @param number pid PID процесса.
 -- @return table Таблица с данными об использовании CPU процесса.
-function ResourceAdapter:get_process_cpu_usage(pid)
+function ResourceMonitor:get_process_cpu_usage(pid)
     local cpu_data = {}
     local f = io_popen(string_format("cat /proc/%d/stat", pid))
     if f then
@@ -192,9 +191,12 @@ function ResourceAdapter:get_process_cpu_usage(pid)
             local user, nice, system, idle, iowait, irq, softirq, steal = total_cpu_line:match("cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
             local current_total_cpu_time = (tonumber(user) or 0) + (tonumber(nice) or 0) + (tonumber(system) or 0) + (tonumber(idle) or 0) + (tonumber(iowait) or 0) + (tonumber(irq) or 0) + (tonumber(softirq) or 0) + (tonumber(steal) or 0)
 
-            if self.last_cpu_time > 0 and self.last_total_cpu_time > 0 then
-                local delta_cpu_time = current_cpu_time - self.last_cpu_time
-                local delta_total_cpu_time = current_total_cpu_time - self.last_total_cpu_time
+            local last_cpu_time_for_pid = self.last_process_cpu_time[pid] or 0
+            local last_total_cpu_time_for_pid = self.last_process_total_cpu_time or 0
+
+            if last_cpu_time_for_pid > 0 and last_total_cpu_time_for_pid > 0 then
+                local delta_cpu_time = current_cpu_time - last_cpu_time_for_pid
+                local delta_total_cpu_time = current_total_cpu_time - last_total_cpu_time_for_pid
                 
                 if delta_total_cpu_time > 0 then
                     cpu_data.usage_percent = (delta_cpu_time / delta_total_cpu_time) * 100
@@ -204,8 +206,8 @@ function ResourceAdapter:get_process_cpu_usage(pid)
             else
                 cpu_data.usage_percent = 0
             end
-            self.last_cpu_time = current_cpu_time
-            self.last_total_cpu_time = current_total_cpu_time -- Обновляем и системное время для следующего расчета
+            self.last_process_cpu_time[pid] = current_cpu_time
+            self.last_process_total_cpu_time = current_total_cpu_time -- Обновляем и системное время для следующего расчета
         else
             log_error(COMPONENT_NAME, "Failed to read /proc/%d/stat for process CPU usage.", pid)
         end
@@ -218,7 +220,7 @@ end
 --- Получает использование памяти конкретного процесса.
 -- @param number pid PID процесса.
 -- @return table Таблица с данными об использовании памяти процесса.
-function ResourceAdapter:get_process_memory_usage(pid)
+function ResourceMonitor:get_process_memory_usage(pid)
     local mem_data = {}
     local f = io_popen(string_format("cat /proc/%d/status | grep VmRSS", pid))
     if f then
@@ -238,7 +240,7 @@ end
 
 --- Получает использование диска.
 -- @return table Таблица с данными об использовании диска.
-function ResourceAdapter:get_disk_usage()
+function ResourceMonitor:get_disk_usage()
     local disk_data = {}
     local f = io_popen("df -h / | awk 'NR==2{print $5}' | sed 's/%//'")
     if f then
@@ -257,7 +259,7 @@ end
 
 --- Получает сетевую активность.
 -- @return table Таблица с данными о сетевой активности.
-function ResourceAdapter:get_network_usage()
+function ResourceMonitor:get_network_usage()
     local net_data = {
         interfaces = {}
     }
@@ -292,4 +294,4 @@ function ResourceAdapter:get_network_usage()
     return net_data
 end
 
-return ResourceAdapter
+return ResourceMonitor

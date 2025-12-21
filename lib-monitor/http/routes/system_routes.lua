@@ -99,3 +99,87 @@ local health = function (server, client, request)
     
     send_response(server, client, 200, json_content, headers) 
 end
+
+--- Обработчик HTTP-запроса для получения данных о системных ресурсах.
+-- Требует аутентификации по API-ключу.
+-- Метод: GET
+-- Возвращает: JSON-объект с данными о системных ресурсах.
+local get_system_resources = function (server, client, request, resource_adapter)
+    if not request then return nil end
+
+    if not check_auth(request) then
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
+    if not resource_adapter then
+        log_error(COMPONENT_NAME, "ResourceAdapter instance is not available.")
+        return send_response(server, client, 500, "Internal server error: ResourceAdapter not initialized.")
+    end
+
+    local data = resource_adapter:collect_system_data()
+    local json_content, encode_err = json_encode(data)
+    if not json_content then
+        local error_msg = "Failed to encode system resource data to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
+
+    local headers = {
+        "Content-Type: application/json;charset=utf-8",
+        "Content-Length: " .. #json_content,
+        "Connection: close",
+    }
+    
+    send_response(server, client, 200, json_content, headers)
+end
+
+--- Обработчик HTTP-запроса для получения данных о ресурсах конкретного процесса.
+-- Требует аутентификации по API-ключу.
+-- Метод: GET
+-- Параметры запроса (JSON или Query String):
+--   - pid (number, required): PID процесса для мониторинга.
+-- Возвращает: JSON-объект с данными о ресурсах процесса.
+local get_process_resources = function (server, client, request, resource_adapter)
+    if not request then return nil end
+
+    if not check_auth(request) then
+        return send_response(server, client, 401, "Unauthorized")
+    end
+
+    if not resource_adapter then
+        log_error(COMPONENT_NAME, "ResourceAdapter instance is not available.")
+        return send_response(server, client, 500, "Internal server error: ResourceAdapter not initialized.")
+    end
+
+    local req = http_helpers.validate_request(request)
+    local pid_str = http_helpers.get_param(req, "pid")
+    local pid = tonumber(pid_str)
+
+    if not pid then
+        return http_helpers.send_response(server, client, 400, "Bad Request: 'pid' parameter is required and must be a number.")
+    end
+
+    local data = resource_adapter:collect_process_data(pid)
+    local json_content, encode_err = json_encode(data)
+    if not json_content then
+        local error_msg = "Failed to encode process resource data to JSON: " .. (encode_err or "unknown")
+        log_error(COMPONENT_NAME, error_msg)
+        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+    end
+
+    local headers = {
+        "Content-Type: application/json;charset=utf-8",
+        "Content-Length: " .. #json_content,
+        "Connection: close",
+    }
+    
+    send_response(server, client, 200, json_content, headers)
+end
+
+return {
+    astra_reload = astra_reload,
+    kill_astra = kill_astra,
+    health = health,
+    get_system_resources = get_system_resources,
+    get_process_resources = get_process_resources
+}

@@ -11,7 +11,7 @@ local Logger = require "utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 
-local ResourceAdapter = require "adapters.resource_adapter" -- Будет создан позже
+local ResourceAdapter = require "adapters.resource_adapter"
 
 local COMPONENT_NAME = "ResourceMonitorManager"
 
@@ -19,6 +19,7 @@ local ResourceMonitorManager = {}
 ResourceMonitorManager.__index = ResourceMonitorManager
 
 local instance = nil -- Переменная для хранения единственного экземпляра
+local resource_adapter_instance = nil -- Переменная для хранения единственного экземпляра ResourceAdapter
 
 --- Создает новый экземпляр ResourceMonitorManager (или возвращает существующий).
 -- @return ResourceMonitorManager Единственный объект ResourceMonitorManager.
@@ -30,6 +31,15 @@ function ResourceMonitorManager:new()
         log_info(COMPONENT_NAME, "ResourceMonitorManager initialized.")
     end
     return instance
+end
+
+--- Возвращает единственный экземпляр ResourceAdapter.
+-- @return ResourceAdapter Единственный объект ResourceAdapter.
+function ResourceMonitorManager:get_resource_adapter()
+    if not resource_adapter_instance then
+        resource_adapter_instance = ResourceAdapter:new("global_resource_monitor", {})
+    end
+    return resource_adapter_instance
 end
 
 --- Добавляет новый ресурсный монитор.
