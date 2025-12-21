@@ -70,58 +70,9 @@ lib-monitor/
     *   `logger.lua`: Модуль логирования.
     *   `utils.lua`: Общие вспомогательные функции.
 
-## Взаимосвязь модулей:
+## Документация Astra:
 
-```mermaid
-graph TD
-    A[init_monitor.lua] --> B(utils.utils)
-    A --> C(adapters.adapter)
-    A --> D(channel.channel)
-    A --> E(http.http_server)
-    A --> F(dispatcher.channel_monitor_manager)
-    A --> G(dispatcher.dvb_monitor_manager)
-
-    C --> B
-    C --> H(adapters.dvb_tuner)
-    C --> G
-
-    H --> B
-    H --> I(config.monitor_config)
-
-    D --> B
-    D --> J(channel.channel_monitor)
-    D --> F
-    D --> C
-
-    J --> B
-    J --> I
-
-    F --> B
-    F --> J
-    F --> I
-
-    G --> B
-    G --> H
-    G --> I
-
-    E --> K(http.routes.channel_routes)
-    E --> L(http.routes.dvb_routes)
-    E --> M(http.routes.system_routes)
-    E --> N(adapters.resource_adapter)
-
-    K --> F
-    K --> D
-    K --> O(http.http_helpers)
-
-    L --> G
-    L --> O
-
-    M --> N
-    M --> O
-    M --> B
-
-    O --> B
-```
+Для получения подробной информации о функциях Astra, используемых в этой библиотеке, обратитесь к официальной документации: [https://cdn.cesbo.com/astra/4.4.182-free](https://cdn.cesbo.com/astra/4.4.182-free)
 
 ## Установка:
 
