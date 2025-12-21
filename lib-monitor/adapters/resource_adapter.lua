@@ -18,6 +18,7 @@ local log_debug = Logger.debug
 
 local COMPONENT_NAME = "ResourceMonitor"
 
+local instance = nil
 local ResourceMonitor = {}
 ResourceMonitor.__index = ResourceMonitor
 
@@ -25,56 +26,23 @@ ResourceMonitor.__index = ResourceMonitor
 -- @param string name Уникальное имя монитора.
 -- @param table config Конфигурация монитора.
 -- @return ResourceMonitor Новый объект ResourceMonitor.
-function ResourceMonitor:new(name, config)
-    local self = setmetatable({}, ResourceMonitor)
-    self.name = name
-    self.config = config or {}
-    self.interval = self.config.interval or 5000 -- Интервал мониторинга в миллисекундах
-    self.timer = nil
-    self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
-    self.pid = getpid() -- PID процесса для мониторинга
-    self.last_cpu_time = 0 -- Для расчета использования CPU процесса
-    self.last_total_cpu_time = 0 -- Для расчета общего использования CPU
-    self.last_process_cpu_time = {} -- Для расчета использования CPU для каждого PID
-    self.last_process_total_cpu_time = 0 -- Для расчета общего использования CPU для процесса
-    log_info(COMPONENT_NAME, "ResourceMonitor '%s' initialized with interval %dms. PID: %s", self.name, self.interval, tostring(self.pid))
-    self:start()
-    return self
-end
+function ResourceMonitor:new()
+    if not instance then
+        local self = setmetatable({}, ResourceMonitor)
+        self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
+        self.pid = getpid() -- PID процесса для мониторинга
+        self.last_system_cpu_total_time = 0 -- Для расчета общего использования CPU системы
+        self.last_system_cpu_active_time = 0 -- Для расчета активного использования CPU системы
+        self.last_current_process_cpu_time = 0 -- Для расчета использования CPU текущего процесса
+        self.last_current_process_total_cpu_time_at_call = 0 -- Для расчета общего использования CPU системы на момент вызова process_cpu_usage для текущего процесса
+        self.last_network_check_time = astra.date() -- Для расчета интервала сетевой активности
+        log_info(COMPONENT_NAME, "ResourceMonitor initialized. PID: %s", tostring(self.pid))
 
---- Запускает мониторинг ресурсов.
-function ResourceMonitor:start()
-    if self.timer then
-        self:stop()
+        instance = self
     end
-    self.timer = astra.timer.start(self.interval, function() self:collect_system_data() end) -- Изменено на collect_system_data
-    log_info(COMPONENT_NAME, "ResourceMonitor '%s' started monitoring.", self.name)
+    
+    return instance
 end
-
---- Останавливает мониторинг ресурсов.
-function ResourceMonitor:stop()
-    if self.timer then
-        astra.timer.stop(self.timer)
-        self.timer = nil
-        log_info(COMPONENT_NAME, "ResourceMonitor '%s' stopped monitoring.", self.name)
-    end
-end
-
---- Обновляет параметры монитора.
--- @param table params Новые параметры.
--- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
-function ResourceMonitor:update_parameters(params)
-    if not params or type(params) ~= "table" then
-        return nil, "Invalid parameters: expected table."
-    end
-    self.config = params
-    self.interval = self.config.interval or self.interval
-    self.pid = self.config.pid or self.pid
-    self:start() -- Перезапускаем таймер с новым интервалом
-    log_info(COMPONENT_NAME, "ResourceMonitor '%s' parameters updated. New interval: %dms. PID: %s", self.name, self.interval, tostring(self.pid))
-    return true
-end
-
 --- Собирает данные о системных ресурсах.
 function ResourceMonitor:collect_system_data()
     local data = {
@@ -91,18 +59,17 @@ function ResourceMonitor:collect_system_data()
 end
 
 --- Собирает данные о ресурсах конкретного процесса.
--- @param number pid PID процесса для мониторинга.
 -- @return table Таблица с данными о ресурсах процесса.
-function ResourceMonitor:collect_process_data(pid)
+function ResourceMonitor:collect_process_data()
     local data = {
         timestamp = astra.date(),
         process = {
-            pid = pid,
-            cpu = self:get_process_cpu_usage(pid),
-            memory = self:get_process_memory_usage(pid)
+            pid = self.pid, -- Используем self.pid
+            cpu = self:get_process_cpu_usage(self.pid),
+            memory = self:get_process_memory_usage(self.pid)
         }
     }
-    log_debug(COMPONENT_NAME, "Collected process data for PID '%s': %s", tostring(pid), json.encode(data))
+    log_debug(COMPONENT_NAME, "Collected process data for PID '%s': %s", tostring(self.pid), json.encode(data))
     return data
 end
 
@@ -128,9 +95,9 @@ function ResourceMonitor:get_system_cpu_usage()
         local current_total_cpu_time = current_user + current_nice + current_system + current_idle + current_iowait + current_irq + current_softirq + current_steal
         local current_active_cpu_time = current_user + current_nice + current_system + current_irq + current_softirq + current_steal
 
-        if self.last_total_cpu_time > 0 then
-            local delta_total = current_total_cpu_time - self.last_total_cpu_time
-            local delta_active = current_active_cpu_time - self.last_active_cpu_time
+        if self.last_system_cpu_total_time > 0 then
+            local delta_total = current_total_cpu_time - self.last_system_cpu_total_time
+            local delta_active = current_active_cpu_time - self.last_system_cpu_active_time
 
             if delta_total > 0 then
                 cpu_data.usage_percent = (delta_active / delta_total) * 100
@@ -141,8 +108,8 @@ function ResourceMonitor:get_system_cpu_usage()
             cpu_data.usage_percent = 0
         end
 
-        self.last_total_cpu_time = current_total_cpu_time
-        self.last_active_cpu_time = current_active_cpu_time
+        self.last_system_cpu_total_time = current_total_cpu_time
+        self.last_system_cpu_active_time = current_active_cpu_time
     else
         log_error(COMPONENT_NAME, "Failed to open /proc/stat for system CPU usage.")
     end
@@ -191,12 +158,9 @@ function ResourceMonitor:get_process_cpu_usage(pid)
             local user, nice, system, idle, iowait, irq, softirq, steal = total_cpu_line:match("cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
             local current_total_cpu_time = (tonumber(user) or 0) + (tonumber(nice) or 0) + (tonumber(system) or 0) + (tonumber(idle) or 0) + (tonumber(iowait) or 0) + (tonumber(irq) or 0) + (tonumber(softirq) or 0) + (tonumber(steal) or 0)
 
-            local last_cpu_time_for_pid = self.last_process_cpu_time[pid] or 0
-            local last_total_cpu_time_for_pid = self.last_process_total_cpu_time or 0
-
-            if last_cpu_time_for_pid > 0 and last_total_cpu_time_for_pid > 0 then
-                local delta_cpu_time = current_cpu_time - last_cpu_time_for_pid
-                local delta_total_cpu_time = current_total_cpu_time - last_total_cpu_time_for_pid
+            if self.last_current_process_cpu_time > 0 and self.last_current_process_total_cpu_time_at_call > 0 then
+                local delta_cpu_time = current_cpu_time - self.last_current_process_cpu_time
+                local delta_total_cpu_time = current_total_cpu_time - self.last_current_process_total_cpu_time_at_call
                 
                 if delta_total_cpu_time > 0 then
                     cpu_data.usage_percent = (delta_cpu_time / delta_total_cpu_time) * 100
@@ -206,8 +170,8 @@ function ResourceMonitor:get_process_cpu_usage(pid)
             else
                 cpu_data.usage_percent = 0
             end
-            self.last_process_cpu_time[pid] = current_cpu_time
-            self.last_process_total_cpu_time = current_total_cpu_time -- Обновляем и системное время для следующего расчета
+            self.last_current_process_cpu_time = current_cpu_time
+            self.last_current_process_total_cpu_time_at_call = current_total_cpu_time
         else
             log_error(COMPONENT_NAME, "Failed to read /proc/%d/stat for process CPU usage.", pid)
         end
@@ -263,6 +227,13 @@ function ResourceMonitor:get_network_usage()
     local net_data = {
         interfaces = {}
     }
+    local current_time = astra.date()
+    local delta_time = (current_time - self.last_network_check_time) / 1000 -- в секундах
+
+    if delta_time <= 0 then
+        delta_time = 1 -- Избегаем деления на ноль или отрицательных значений
+    end
+
     local f = io_popen("cat /proc/net/dev")
     if f then
         for line in f:lines() do
@@ -274,8 +245,8 @@ function ResourceMonitor:get_network_usage()
                 local last_rx_bytes = self.last_net_stats[interface .. "_rx"] or 0
                 local last_tx_bytes = self.last_net_stats[interface .. "_tx"] or 0
 
-                local rx_speed = (current_rx_bytes - last_rx_bytes) / (self.interval / 1000) -- bytes/sec
-                local tx_speed = (current_tx_bytes - last_tx_bytes) / (self.interval / 1000) -- bytes/sec
+                local rx_speed = (current_rx_bytes - last_rx_bytes) / delta_time -- bytes/sec
+                local tx_speed = (current_tx_bytes - last_tx_bytes) / delta_time -- bytes/sec
 
                 self.last_net_stats[interface .. "_rx"] = current_rx_bytes
                 self.last_net_stats[interface .. "_tx"] = current_tx_bytes
@@ -291,6 +262,7 @@ function ResourceMonitor:get_network_usage()
     else
         log_error(COMPONENT_NAME, "Failed to open /proc/net/dev for network usage.")
     end
+    self.last_network_check_time = current_time
     return net_data
 end
 

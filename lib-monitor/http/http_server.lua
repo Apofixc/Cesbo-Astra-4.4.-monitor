@@ -4,15 +4,15 @@ local log_info    = log.info
 local channel_routes = require "http.routes.channel_routes"
 local dvb_routes = require "http.routes.dvb_routes"
 local system_routes = require "http.routes.system_routes"
-local ResourceAdapter = require "adapters.resource_adapter"
+local ResourceMonitor = require "adapters.resource_adapter" -- Изменено на ResourceMonitor
 
 --- Запускает HTTP-сервер мониторинга.
 -- @param string addr IP-адрес, на котором будет слушать сервер.
 -- @param number port Порт, на котором будет слушать сервер.
-local resource_adapter_instance = nil
+local resource_monitor_instance = nil -- Изменено на resource_monitor_instance
 
 function server_start(addr, port)
-    resource_adapter_instance = ResourceAdapter:new("system_monitor")
+    resource_monitor_instance = ResourceMonitor:new("system_monitor") -- Изменено на ResourceMonitor
     http_server({
         addr = addr,
         port = port,
@@ -35,7 +35,7 @@ function server_start(addr, port)
             {"/api/system/reload", system_routes.astra_reload},
             {"/api/system/exit", system_routes.kill_astra},
             {"/api/system/health", system_routes.health},
-            {"/api/system/resources", system_routes.get_resourcesnd}
+            {"/api/system/resources", function(server, client, request) system_routes.get_system_resources(server, client, request, resource_monitor_instance) end},
         }
     })
     log_info(string.format("[Server] Started on %s:%d", addr, port))
