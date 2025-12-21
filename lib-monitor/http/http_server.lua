@@ -20,7 +20,6 @@ function server_start(addr, port)
             {"/api/channels/kill", channel_routes.kill_channel},
             {"/api/channels/monitors/kill", channel_routes.kill_monitor},
             {"/api/channels/monitors/update", channel_routes.update_channel_monitor},
-            {"/api/channels/create", channel_routes.create_channel},
             {"/api/channels", channel_routes.get_channels},
             {"/api/channels/monitors", channel_routes.get_channel_monitors},
             {"/api/channels/monitors/data", channel_routes.get_channel_monitor_data},

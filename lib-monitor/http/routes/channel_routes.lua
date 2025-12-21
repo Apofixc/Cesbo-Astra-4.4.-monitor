@@ -177,55 +177,6 @@ local update_channel_monitor = function(server, client, request)
     end
 end
 
---- Обработчик HTTP-запроса для создания канала.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - name (string): Имя канала (обязательно).
---   - config (table): Конфигурация канала в формате JSON (обязательно).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 500 Internal Server Error.
-local create_channel = function(server, client, request)
-    if not request then return nil end
-    
-    if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
-    end
-
-    local req = validate_request(request)
-    local name = get_param(req, "name")
-    local config_str = get_param(req, "config")
-
-    if not name then
-        return send_response(server, client, 400, "Missing channel name")
-    end
-    if not config_str then
-        return send_response(server, client, 400, "Missing channel config")
-    end
-
-    local config, decode_err = json_decode(config_str)
-    if not config then
-        log_error(COMPONENT_NAME, "Failed to decode channel config for '%s': %s", name, decode_err or "unknown")
-        return send_response(server, client, 400, "Invalid channel config: " .. (decode_err or "unknown"))
-    end
-
-    config.name = name
-
-    local success, err = ChannelModule.make_channel(config)
-    if not success then
-        log_error(COMPONENT_NAME, "Failed to create channel '%s': %s", name, err or "unknown")
-        return send_response(server, client, 500, "Failed to create channel: " .. (err or "unknown"))
-    end
-
-    local monitor_success, monitor_err = ChannelModule.make_monitor(config, name)
-    if not monitor_success then
-        log_error(COMPONENT_NAME, "Failed to create monitor for channel '%s': %s", name, monitor_err or "unknown")
-        return send_response(server, client, 500, "Channel created, but failed to create monitor: " .. (monitor_err or "unknown"))
-    end
-
-    log_info(string.format("[Channel] Channel '%s' and its monitor created successfully", name))
-    send_response(server, client, 200, "Channel and monitor created successfully")
-end
-
 --- Обработчик HTTP-запроса для получения списка каналов.
 -- Требует аутентификации по API-ключу.
 --
@@ -410,7 +361,6 @@ return {
     kill_channel = kill_channel,
     kill_monitor = kill_monitor,
     update_channel_monitor = update_channel_monitor,
-    create_channel = create_channel,
     get_channels = get_channels,
     get_channel_monitors = get_channel_monitors,
     get_channel_monitor_data = get_channel_monitor_data,
