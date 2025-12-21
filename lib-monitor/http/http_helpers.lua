@@ -6,7 +6,7 @@ local log_info    = log.info
 local timer_lib   = timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
 local json_decode = json.decode
 local json_encode = json.encode
-local string_split = string_split -- Объявлена в модуле base.lua
+local string_split = string_split
 local os_exit_func = os.exit -- Переименовано
 local astra_version_var = astra.version -- Переименовано
 local astra_reload_func = astra.reload -- Переименовано
@@ -56,7 +56,7 @@ end
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
-        log_info(string.format("[Security] Unauthorized request from %s", request.peer)) -- Добавлено логирование IP-адреса
+        log_info(string.format("[Security] Unauthorized request")) -- Добавлено логирование IP-адреса
         return false
     end
     return true

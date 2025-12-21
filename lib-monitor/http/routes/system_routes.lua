@@ -82,7 +82,7 @@ end
 --   version (string): Версия Astra,
 --   process (table, optional): Данные о ресурсах процесса (если доступен ResourceMonitor)
 -- }
-local health = function (server, client, request, resource_adapter)
+local health = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
@@ -96,7 +96,7 @@ local health = function (server, client, request, resource_adapter)
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
     }
 
-    local process_data = resource_adapter:collect_process_data()
+    local process_data = resource_monitor_instance:collect_process_data()
     if process_data and process_data.process then
         response_data.process = {
             pid = process_data.process.pid,
@@ -108,7 +108,7 @@ local health = function (server, client, request, resource_adapter)
         log_error(COMPONENT_NAME, "Failed to collect process data for health endpoint: %s", 
                  tostring(process_data))
         response_data.process = {
-            pid = resource_adapter.pid or 0,
+            pid = resource_monitor_instance.pid or 0,
             cpu_usage_percent = -1,
             memory_usage_mb = -1,
             error = "Failed to collect process data"
@@ -116,7 +116,7 @@ local health = function (server, client, request, resource_adapter)
     end
 
     -- Кодируем в JSON
-    local json_content, encode_err = json_encode(response_data)
+    local json_content = json_encode(response_data)
     if not json_content then
         local error_msg = "Failed to encode health data to JSON: " .. (encode_err or "unknown")
         log_error(COMPONENT_NAME, error_msg)
@@ -149,7 +149,7 @@ local get_system_resources = function (server, client, request)
     end
 
     local data = resource_monitor_instance:collect_system_data()
-    local json_content, encode_err = json_encode(data)
+    local json_content = json_encode(data)
     if not json_content then
         local error_msg = "Failed to encode system resource data to JSON: " .. (encode_err or "unknown")
         log_error(COMPONENT_NAME, error_msg)
@@ -183,7 +183,7 @@ local get_monitor_stats = function (server, client, request)
 
     if resource_monitor_instance.get_stats then
         local stats = resource_monitor_instance:get_stats()
-        local json_content, encode_err = json_encode(stats)
+        local json_content = json_encode(stats)
         if not json_content then
             local error_msg = "Failed to encode monitor stats to JSON: " .. (encode_err or "unknown")
             log_error(COMPONENT_NAME, error_msg)

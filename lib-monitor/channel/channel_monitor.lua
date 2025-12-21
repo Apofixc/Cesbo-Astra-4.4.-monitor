@@ -335,4 +335,18 @@ function ChannelMonitor:kill()
     log_info(COMPONENT_NAME, "Monitor killed for channel: " .. self.name)
 end
 
+--- Возвращает PSI-data.
+-- @param table self Объект ChannelMonitor.
+-- @return table Кэшированная PSI-data.
+function ChannelMonitor:get_psi_data_cache()
+    return self.psi_data_cache
+end
+
+--- Возвращает кэшированную JSON-строку статуса монитора.
+-- @param table self Объект ChannelMonitor.
+-- @return string Кэшированная JSON-строка статуса.
+function ChannelMonitor:get_json_cache()
+    return self.json_status_cache
+end
+
 return ChannelMonitor
