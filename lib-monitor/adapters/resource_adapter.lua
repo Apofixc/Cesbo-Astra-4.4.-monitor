@@ -5,6 +5,7 @@
 -- ===========================================================================
 
 local type      = type
+local getpid    = getpid
 local tonumber  = tonumber
 local string_format = string.format
 local os_execute = os.execute
@@ -32,7 +33,11 @@ function ResourceAdapter:new(name, config)
     self.interval = self.config.interval or 5000 -- Интервал мониторинга в миллисекундах
     self.timer = nil
     self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' initialized with interval %dms.", self.name, self.interval)
+    self.pid = getpid() -- PID процесса для мониторинга
+    self.process_name = self.config.process_name -- Имя процесса для мониторинга
+    self.last_cpu_time = 0 -- Для расчета использования CPU процесса
+    self.last_total_cpu_time = 0 -- Для расчета общего использования CPU
+    log_info(COMPONENT_NAME, "ResourceAdapter '%s' initialized with interval %dms. PID: %s, Process Name: %s", self.name, self.interval, tostring(self.pid), tostring(self.process_name))
     self:start()
     return self
 end
@@ -64,8 +69,10 @@ function ResourceAdapter:update_parameters(params)
     end
     self.config = params
     self.interval = self.config.interval or self.interval
+    self.pid = self.config.pid or self.pid
+    self.process_name = self.config.process_name or self.process_name
     self:start() -- Перезапускаем таймер с новым интервалом
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' parameters updated. New interval: %dms.", self.name, self.interval)
+    log_info(COMPONENT_NAME, "ResourceAdapter '%s' parameters updated. New interval: %dms. PID: %s, Process Name: %s", self.name, self.interval, tostring(self.pid), tostring(self.process_name))
     return true
 end
 
@@ -73,50 +80,175 @@ end
 function ResourceAdapter:collect_data()
     local data = {
         timestamp = astra.date(),
-        cpu = self:get_cpu_usage(),
-        memory = self:get_memory_usage(),
-        disk = self:get_disk_usage(),
-        network = self:get_network_usage()
+        system = {
+            cpu = self:get_system_cpu_usage(),
+            memory = self:get_system_memory_usage(),
+            disk = self:get_disk_usage(),
+            network = self:get_network_usage()
+        }
     }
+
+    if self.pid or self.process_name then
+        local target_pid = self.pid
+        if not target_pid and self.process_name then
+            target_pid = self:get_pid_by_name(self.process_name)
+        end
+
+        if target_pid then
+            data.process = {
+                pid = target_pid,
+                cpu = self:get_process_cpu_usage(target_pid),
+                memory = self:get_process_memory_usage(target_pid)
+            }
+        else
+            log_info(COMPONENT_NAME, "Process not found for name '%s' or invalid PID '%s'.", tostring(self.process_name), tostring(self.pid))
+        end
+    end
+
     log_debug(COMPONENT_NAME, "Collected data for '%s': %s", self.name, json.encode(data))
     -- Здесь можно добавить логику для отправки данных, например, в InfluxDB или через HTTP
     -- astra.event.send("resource_monitor_data", { name = self.name, data = data })
+    return data
 end
 
---- Получает использование CPU.
--- @return table Таблица с данными об использовании CPU.
-function ResourceAdapter:get_cpu_usage()
-    local cpu_data = {}
-    local f = io_popen("grep 'cpu ' /proc/stat | awk '{usage=($2+$3+$4+$6+$7+$8)*100/($2+$3+$4+$5+$6+$7+$8+$9)} END {print usage}'")
+--- Получает PID процесса по его имени.
+-- @param string process_name Имя процесса.
+-- @return number PID процесса или `nil`, если не найден.
+function ResourceAdapter:get_pid_by_name(process_name)
+    local f = io_popen(string_format("pgrep -o '%s'", process_name))
     if f then
-        local usage = tonumber(f:read("*l"))
+        local pid_str = f:read("*l")
         f:close()
-        if usage then
-            cpu_data.usage_percent = usage
+        return tonumber(pid_str)
+    end
+    return nil
+end
+
+--- Получает использование CPU системы.
+-- @return table Таблица с данными об использовании CPU системы.
+function ResourceAdapter:get_system_cpu_usage()
+    local cpu_data = {}
+    local f = io_popen("grep 'cpu ' /proc/stat")
+    if f then
+        local line = f:read("*l")
+        f:close()
+        local user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice = line:match("cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s*(%d*)%s*(%d*)")
+        
+        local current_user = tonumber(user) or 0
+        local current_nice = tonumber(nice) or 0
+        local current_system = tonumber(system) or 0
+        local current_idle = tonumber(idle) or 0
+        local current_iowait = tonumber(iowait) or 0
+        local current_irq = tonumber(irq) or 0
+        local current_softirq = tonumber(softirq) or 0
+        local current_steal = tonumber(steal) or 0
+
+        local current_total_cpu_time = current_user + current_nice + current_system + current_idle + current_iowait + current_irq + current_softirq + current_steal
+        local current_active_cpu_time = current_user + current_nice + current_system + current_irq + current_softirq + current_steal
+
+        if self.last_total_cpu_time > 0 then
+            local delta_total = current_total_cpu_time - self.last_total_cpu_time
+            local delta_active = current_active_cpu_time - self.last_active_cpu_time
+
+            if delta_total > 0 then
+                cpu_data.usage_percent = (delta_active / delta_total) * 100
+            else
+                cpu_data.usage_percent = 0
+            end
         else
-            log_error(COMPONENT_NAME, "Failed to parse CPU usage.")
+            cpu_data.usage_percent = 0
         end
+
+        self.last_total_cpu_time = current_total_cpu_time
+        self.last_active_cpu_time = current_active_cpu_time
     else
-        log_error(COMPONENT_NAME, "Failed to open /proc/stat for CPU usage.")
+        log_error(COMPONENT_NAME, "Failed to open /proc/stat for system CPU usage.")
     end
     return cpu_data
 end
 
---- Получает использование памяти.
--- @return table Таблица с данными об использовании памяти.
-function ResourceAdapter:get_memory_usage()
+--- Получает использование памяти системы.
+-- @return table Таблица с данными об использовании памяти системы.
+function ResourceAdapter:get_system_memory_usage()
     local mem_data = {}
-    local f = io_popen("free -m | awk 'NR==2{printf \"%.2f\", $3*100/$2 }'")
+    local f = io_popen("free -m | awk 'NR==2{print $2,$3}'")
     if f then
-        local usage = tonumber(f:read("*l"))
+        local total_mem_str, used_mem_str = f:read("*l"):match("(%d+)%s+(%d+)")
         f:close()
-        if usage then
-            mem_data.usage_percent = usage
+        local total_mem = tonumber(total_mem_str)
+        local used_mem = tonumber(used_mem_str)
+        if total_mem and used_mem and total_mem > 0 then
+            mem_data.total_mb = total_mem
+            mem_data.used_mb = used_mem
+            mem_data.usage_percent = (used_mem / total_mem) * 100
         else
-            log_error(COMPONENT_NAME, "Failed to parse memory usage.")
+            log_error(COMPONENT_NAME, "Failed to parse system memory usage.")
         end
     else
-        log_error(COMPONENT_NAME, "Failed to execute 'free -m' for memory usage.")
+        log_error(COMPONENT_NAME, "Failed to execute 'free -m' for system memory usage.")
+    end
+    return mem_data
+end
+
+--- Получает использование CPU конкретного процесса.
+-- @param number pid PID процесса.
+-- @return table Таблица с данными об использовании CPU процесса.
+function ResourceAdapter:get_process_cpu_usage(pid)
+    local cpu_data = {}
+    local f = io_popen(string_format("cat /proc/%d/stat", pid))
+    if f then
+        local stat_line = f:read("*l")
+        f:close()
+        if stat_line then
+            local _, _, _, _, _, _, _, _, _, _, _, _, utime, stime, cutime, cstime = stat_line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%S+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
+            local current_cpu_time = (tonumber(utime) or 0) + (tonumber(stime) or 0) + (tonumber(cutime) or 0) + (tonumber(cstime) or 0)
+
+            local total_cpu_time_f = io_popen("grep 'cpu ' /proc/stat")
+            local total_cpu_line = total_cpu_time_f:read("*l")
+            total_cpu_time_f:close()
+            local user, nice, system, idle, iowait, irq, softirq, steal = total_cpu_line:match("cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
+            local current_total_cpu_time = (tonumber(user) or 0) + (tonumber(nice) or 0) + (tonumber(system) or 0) + (tonumber(idle) or 0) + (tonumber(iowait) or 0) + (tonumber(irq) or 0) + (tonumber(softirq) or 0) + (tonumber(steal) or 0)
+
+            if self.last_cpu_time > 0 and self.last_total_cpu_time > 0 then
+                local delta_cpu_time = current_cpu_time - self.last_cpu_time
+                local delta_total_cpu_time = current_total_cpu_time - self.last_total_cpu_time
+                
+                if delta_total_cpu_time > 0 then
+                    cpu_data.usage_percent = (delta_cpu_time / delta_total_cpu_time) * 100
+                else
+                    cpu_data.usage_percent = 0
+                end
+            else
+                cpu_data.usage_percent = 0
+            end
+            self.last_cpu_time = current_cpu_time
+            self.last_total_cpu_time = current_total_cpu_time -- Обновляем и системное время для следующего расчета
+        else
+            log_error(COMPONENT_NAME, "Failed to read /proc/%d/stat for process CPU usage.", pid)
+        end
+    else
+        log_error(COMPONENT_NAME, "Failed to open /proc/%d/stat for process CPU usage.", pid)
+    end
+    return cpu_data
+end
+
+--- Получает использование памяти конкретного процесса.
+-- @param number pid PID процесса.
+-- @return table Таблица с данными об использовании памяти процесса.
+function ResourceAdapter:get_process_memory_usage(pid)
+    local mem_data = {}
+    local f = io_popen(string_format("cat /proc/%d/status | grep VmRSS", pid))
+    if f then
+        local line = f:read("*l")
+        f:close()
+        local vmrss_kb = line:match("VmRSS:%s*(%d+)")
+        if vmrss_kb then
+            mem_data.rss_mb = tonumber(vmrss_kb) / 1024
+        else
+            log_error(COMPONENT_NAME, "Failed to parse VmRSS for process memory usage.")
+        end
+    else
+        log_error(COMPONENT_NAME, "Failed to open /proc/%d/status for process memory usage.", pid)
     end
     return mem_data
 end

@@ -204,9 +204,18 @@ local add_resource_monitor = function(monitor_manager)
         local req = validate_request(request)
         local name = get_param(req, "name")
         local config = get_param(req, "config")
+        local pid = get_param(req, "pid")
+        local process_name = get_param(req, "process_name")
 
         if not name or not config or type(config) ~= "table" then
             return send_response(server, client, 400, "Bad Request: 'name' and 'config' (table) parameters are required.")
+        end
+
+        if pid then
+            config.pid = tonumber(pid)
+        end
+        if process_name then
+            config.process_name = process_name
         end
 
         local monitor, err = monitor_manager.resource_manager:add_monitor(name, config)
