@@ -13,6 +13,7 @@
 *   **Гибкая конфигурация**: Поддержка различных типов мониторов (входной, выходной, IP) и настраиваемых параметров, таких как погрешность битрейта, интервалы проверки и методы сравнения.
 *   **Интеграция с Astra**: Использует глобальные функции Astra для управления каналами и потоками.
 *   **Логирование**: Интегрированное логирование для отслеживания операций и ошибок.
+*   **HTTP API**: Полноценный REST API для управления мониторами, каналами и получения статистики.
 
 ## Структура проекта:
 
@@ -156,9 +157,27 @@ lib-monitor/
     *   **Описание**: Получает список всех каналов.
     *   **Ответ**: JSON-массив имен каналов. `HTTP 200 OK` или `401 Unauthorized` / `500 Internal Server Error`.
 
+```json
+        [
+          "Channel_1",
+          "Channel_2",
+          "Channel_3",
+          "Discovery",
+          "National_Geographic"
+        ]
+```
+
 *   **GET `/api/channels/monitors`**
     *   **Описание**: Получает список активных мониторов каналов.
     *   **Ответ**: JSON-массив имен мониторов каналов. `HTTP 200 OK` или `401 Unauthorized` / `500 Internal Server Error`.
+
+```json
+        [
+          "Channel_1_Monitor",
+          "Channel_2_Monitor",
+          "Discovery_Monitor"
+        ]
+```
 
 *   **GET `/api/channels/monitors/data`**
     *   **Описание**: Получает данные монитора канала.
@@ -166,11 +185,78 @@ lib-monitor/
         *   `channel` (string, **обязательно**): Имя канала.
     *   **Ответ**: JSON-объект со статусом монитора. `HTTP 200 OK` или `400 Bad Request` / `401 Unauthorized` / `404 Not Found`.
 
+```json
+        {
+          "type": "Channel",
+          "server": "astra-server-01",
+          "channel": "Discovery",
+          "output": "udp://239.255.0.1:1234",
+          "stream": "31.130.202.110/httpts/tv3by/avchigh.ts",
+          "format": "udp",
+          "addr": "192.168.1.100@239.255.0.1:1234",
+          "ready": true,
+          "scrambled": false,
+          "bitrate": 12500,
+          "cc_errors": 0,
+          "pes_errors": 0
+        }
+```
+
 *   **GET `/api/channels/psi`**
     *   **Описание**: Получает данные PSI канала.
     *   **Параметры (Query String)**:
         *   `channel` (string, **обязательно**): Имя канала.
     *   **Ответ**: JSON-объект с данными PSI. `HTTP 200 OK` или `400 Bad Request` / `401 Unauthorized` / `404 Not Found` / `500 Internal Server Error`.
+
+```json
+        {
+          "pmt": {
+            "pid": 256,
+            "table_id": 2,
+            "section_length": 45,
+            "program_number": 1001,
+            "version_number": 5,
+            "current_next_indicator": 1,
+            "section_number": 0,
+            "last_section_number": 0,
+            "pcr_pid": 256,
+            "program_info_length": 0,
+            "streams": [
+              {
+                "stream_type": 27,
+                "elementary_pid": 256,
+                "es_info_length": 0
+              },
+              {
+                "stream_type": 3,
+                "elementary_pid": 257,
+                "es_info_length": 0
+              }
+            ]
+          },
+          "sdt": {
+            "pid": 17,
+            "table_id": 66,
+            "section_length": 78,
+            "transport_stream_id": 1001,
+            "version_number": 3,
+            "current_next_indicator": 1,
+            "section_number": 0,
+            "last_section_number": 0,
+            "original_network_id": 1,
+            "services": [
+              {
+                "service_id": 1001,
+                "eit_schedule_flag": 1,
+                "eit_present_following_flag": 1,
+                "running_status": 4,
+                "free_ca_mode": 0,
+                "descriptors_loop_length": 32
+              }
+            ]
+          }
+        }
+```
 
 ### DVB Routes (`/api/dvb`)
 
@@ -178,11 +264,37 @@ lib-monitor/
     *   **Описание**: Получает список DVB-адаптеров.
     *   **Ответ**: JSON-массив имен адаптеров. `HTTP 200 OK` или `401 Unauthorized` / `500 Internal Server Error`.
 
+```json
+        [
+          "dvb0",
+          "dvb1",
+          "dvb2_T",
+          "dvb3_S",
+          "dvb4_C"
+        ]
+```
+
 *   **GET `/api/dvb/adapters/data`**
     *   **Описание**: Получает данные DVB-адаптера.
     *   **Параметры (Query String)**:
         *   `name_adapter` (string, **обязательно**): Имя адаптера.
     *   **Ответ**: JSON-объект со статусом DVB-адаптера. `HTTP 200 OK` или `400 Bad Request` / `401 Unauthorized` / `404 Not Found`.
+
+```json
+        {
+          "type": "dvb",
+          "server": "astra-server-01",
+          "format": "T",
+          "modulation": "QAM256",
+          "source": "474000000",
+          "name_adapter": "dvb0",
+          "status": 1,
+          "signal": 75.5,
+          "snr": 24.8,
+          "ber": 2.1e-7,
+          "unc": 0
+        }
+```
 
 *   **POST `/api/dvb/adapters/monitors/update`**
     *   **Описание**: Обновляет параметры DVB-монитора.
@@ -210,13 +322,83 @@ lib-monitor/
     *   **Описание**: Проверяет состояние сервера.
     *   **Ответ**: JSON-объект с информацией о сервере, версии Astra и данных о ресурсах процесса. `HTTP 200 OK` или `401 Unauthorized` / `500 Internal Server Error`.
 
+```json
+        {
+          "addr": "0.0.0.0",
+          "port": 8080,
+          "version": "Astra 1.0.0",
+          "timestamp": "2024-01-15 14:30:00",
+          "process": {
+            "pid": 12345,
+            "cpu_usage_percent": 12.5,
+            "memory_usage_mb": 256.7,
+            "memory_usage_kb": 262809
+          }
+        }
+```
+
 *   **GET `/api/system/resources`**
     *   **Описание**: Получает данные о системных ресурсах (CPU, RAM, Disk I/O, Network I/O).
     *   **Ответ**: JSON-объект с данными о системных ресурсах. `HTTP 200 OK` или `401 Unauthorized` / `500 Internal Server Error`.
 
+```json
+        {
+          "timestamp": "2024-01-15 14:30:00",
+          "system": {
+            "cpu": {
+              "usage_percent": 24.7,
+              "cores": 8
+            },
+            "memory": {
+              "total_mb": 16384,
+              "used_mb": 8192,
+              "free_mb": 8192,
+              "usage_percent": 50.0
+            },
+            "disk": {
+              "usage_percent": 65.3,
+              "total_gb": 1024.0,
+              "used_gb": 668.7,
+              "free_gb": 355.3
+            },
+            "network": {
+              "interfaces": [
+                {
+                  "name": "eth0",
+                  "rx_bytes_per_sec": 1250000,
+                  "tx_bytes_per_sec": 750000,
+                  "rx_bytes_total": 107374182400,
+                  "tx_bytes_total": 53687091200
+                },
+                {
+                  "name": "eth1",
+                  "rx_bytes_per_sec": 500000,
+                  "tx_bytes_per_sec": 250000,
+                  "rx_bytes_total": 21474836480,
+                  "tx_bytes_total": 10737418240
+                }
+              ],
+              "total_rx_bytes_per_sec": 1750000,
+              "total_tx_bytes_per_sec": 1000000
+            }
+          }
+        }
+```
+
 *   **GET `/api/system/monitor-stats`**
     *   **Описание**: Получает статистику работы ResourceMonitor.
     *   **Ответ**: JSON-объект со статистикой работы монитора ресурсов. `HTTP 200 OK` или `401 Unauthorized` / `501 Not Implemented` / `500 Internal Server Error`.
+
+```json
+        {
+          "name": "system_monitor",
+          "pid": 12345,
+          "collections": 1500,
+          "last_reset": "2024-01-15 12:00:00",
+          "cache_hits": 1350,
+          "cache_interval": 2
+        }
+```
 
 *   **POST `/api/system/clear-cache`**
     *   **Описание**: Очищает кэш ResourceMonitor.
