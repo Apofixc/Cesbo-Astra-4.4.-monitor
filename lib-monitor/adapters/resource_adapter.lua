@@ -34,10 +34,9 @@ function ResourceAdapter:new(name, config)
     self.timer = nil
     self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
     self.pid = getpid() -- PID процесса для мониторинга
-    self.process_name = self.config.process_name -- Имя процесса для мониторинга
     self.last_cpu_time = 0 -- Для расчета использования CPU процесса
     self.last_total_cpu_time = 0 -- Для расчета общего использования CPU
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' initialized with interval %dms. PID: %s, Process Name: %s", self.name, self.interval, tostring(self.pid), tostring(self.process_name))
+    log_info(COMPONENT_NAME, "ResourceAdapter '%s' initialized with interval %dms. PID: %s", self.name, self.interval, tostring(self.pid))
     self:start()
     return self
 end
@@ -70,9 +69,8 @@ function ResourceAdapter:update_parameters(params)
     self.config = params
     self.interval = self.config.interval or self.interval
     self.pid = self.config.pid or self.pid
-    self.process_name = self.config.process_name or self.process_name
     self:start() -- Перезапускаем таймер с новым интервалом
-    log_info(COMPONENT_NAME, "ResourceAdapter '%s' parameters updated. New interval: %dms. PID: %s, Process Name: %s", self.name, self.interval, tostring(self.pid), tostring(self.process_name))
+    log_info(COMPONENT_NAME, "ResourceAdapter '%s' parameters updated. New interval: %dms. PID: %s", self.name, self.interval, tostring(self.pid))
     return true
 end
 
@@ -88,11 +86,8 @@ function ResourceAdapter:collect_data()
         }
     }
 
-    if self.pid or self.process_name then
+    if self.pid then
         local target_pid = self.pid
-        if not target_pid and self.process_name then
-            target_pid = self:get_pid_by_name(self.process_name)
-        end
 
         if target_pid then
             data.process = {
@@ -101,7 +96,7 @@ function ResourceAdapter:collect_data()
                 memory = self:get_process_memory_usage(target_pid)
             }
         else
-            log_info(COMPONENT_NAME, "Process not found for name '%s' or invalid PID '%s'.", tostring(self.process_name), tostring(self.pid))
+            log_info(COMPONENT_NAME, "Invalid PID '%s'.", tostring(self.pid))
         end
     end
 
@@ -111,18 +106,6 @@ function ResourceAdapter:collect_data()
     return data
 end
 
---- Получает PID процесса по его имени.
--- @param string process_name Имя процесса.
--- @return number PID процесса или `nil`, если не найден.
-function ResourceAdapter:get_pid_by_name(process_name)
-    local f = io_popen(string_format("pgrep -o '%s'", process_name))
-    if f then
-        local pid_str = f:read("*l")
-        f:close()
-        return tonumber(pid_str)
-    end
-    return nil
-end
 
 --- Получает использование CPU системы.
 -- @return table Таблица с данными об использовании CPU системы.
