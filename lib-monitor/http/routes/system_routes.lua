@@ -1,6 +1,7 @@
-local log_info    = log.info
-local log_error   = log.error
-
+local Logger = require "utils.logger"
+local log_info = Logger.info
+local log_error = Logger.error
+local log_debug = Logger.debug
 local resource_monitor_instance = ResourceMonitor:new("system_monitor")
 local http_helpers = require "http.http_helpers"
 local validate_request = http_helpers.validate_request
@@ -68,7 +69,6 @@ local kill_astra = function(server, client, request)
             os_exit_func(0)
         end
     })
-
 end
 
 --- Обработчик HTTP-запроса для проверки состояния сервера.
@@ -88,56 +88,29 @@ local health = function (server, client, request, resource_adapter)
         return send_response(server, client, 401, "Unauthorized")
     end   
 
-    -- Базовая информация о сервере
     local response_data = {
         addr = server.__options.addr,
         port = server.__options.port,
         version = astra_version_var,
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
-        status = "running"
     }
 
-    -- Если передан ResourceMonitor, добавляем информацию о ресурсах
-    if resource_adapter then
-        -- Проверяем, доступны ли методы для сбора данных о процессе
-        if resource_monitor_instance.collect_process_data then
-            local success, process_data = pcall(function()
-                return resource_adapter:collect_process_data()
-            end)
-            
-            if success and process_data and process_data.process then
-                response_data.process = {
-                    pid = process_data.process.pid,
-                    cpu_usage_percent = process_data.process.cpu and process_data.process.cpu.usage_percent or 0,
-                    memory_usage_mb = process_data.process.memory and process_data.process.memory.rss_mb or 0,
-                    memory_usage_kb = process_data.process.memory and process_data.process.memory.rss_kb or 0
-                }
-            else
-                log_error(COMPONENT_NAME, "Failed to collect process data for health endpoint: %s", 
-                         tostring(process_data))
-                response_data.process = {
-                    pid = resource_adapter.pid or 0,
-                    cpu_usage_percent = -1,
-                    memory_usage_mb = -1,
-                    error = "Failed to collect process data"
-                }
-            end
-        else
-            -- ResourceMonitor не поддерживает collect_process_data
-            response_data.process = {
-                pid = resource_adapter.pid or 0,
-                cpu_usage_percent = -1,
-                memory_usage_mb = -1,
-                error = "ResourceMonitor does not support process data collection"
-            }
-        end
-    else
-        -- ResourceMonitor не доступен
+    local process_data = resource_adapter:collect_process_data()
+    if process_data and process_data.process then
         response_data.process = {
-            pid = -1,
+            pid = process_data.process.pid,
+            cpu_usage_percent = process_data.process.cpu and process_data.process.cpu.usage_percent or 0,
+            memory_usage_mb = process_data.process.memory and process_data.process.memory.rss_mb or 0,
+            memory_usage_kb = process_data.process.memory and process_data.process.memory.rss_kb or 0
+        }
+    else
+        log_error(COMPONENT_NAME, "Failed to collect process data for health endpoint: %s", 
+                 tostring(process_data))
+        response_data.process = {
+            pid = resource_adapter.pid or 0,
             cpu_usage_percent = -1,
             memory_usage_mb = -1,
-            error = "ResourceMonitor not initialized"
+            error = "Failed to collect process data"
         }
     end
 
@@ -162,19 +135,19 @@ end
 -- Требует аутентификации по API-ключу.
 -- Метод: GET
 -- Возвращает: JSON-объект с данными о системных ресурсах.
-local get_system_resources = function (server, client, request, resource_adapter)
+local get_system_resources = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not resource_adapter then
+    if not resource_monitor_instance then
         log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
         return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
     end
 
-    local data = resource_adapter:collect_system_data()
+    local data = resource_monitor_instance:collect_system_data()
     local json_content, encode_err = json_encode(data)
     if not json_content then
         local error_msg = "Failed to encode system resource data to JSON: " .. (encode_err or "unknown")
@@ -195,21 +168,20 @@ end
 -- Требует аутентификации по API-ключу.
 -- Метод: GET
 -- Возвращает: JSON-объект со статистикой работы монитора ресурсов.
-local get_monitor_stats = function (server, client, request, resource_adapter)
+local get_monitor_stats = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not resource_adapter then
+    if not resource_monitor_instance then
         log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
         return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
     end
 
-    -- Используем новый метод get_stats
-    if resource_adapter.get_stats then
-        local stats = resource_adapter:get_stats()
+    if resource_monitor_instance.get_stats then
+        local stats = resource_monitor_instance:get_stats()
         local json_content, encode_err = json_encode(stats)
         if not json_content then
             local error_msg = "Failed to encode monitor stats to JSON: " .. (encode_err or "unknown")
@@ -234,21 +206,20 @@ end
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
 -- Возвращает: HTTP 200 OK или ошибку.
-local clear_monitor_cache = function (server, client, request, resource_adapter)
+local clear_monitor_cache = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not resource_adapter then
+    if not resource_monitor_instance then
         log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
         return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
     end
 
-    -- Используем метод clear_cache
-    if resource_adapter.clear_cache then
-        resource_adapter:clear_cache()
+    if resource_monitor_instance.clear_cache then
+        resource_monitor_instance:clear_cache()
         log_info(COMPONENT_NAME, "ResourceMonitor cache cleared via API request.")
         send_response(server, client, 200, "Cache cleared successfully")
     else
@@ -256,21 +227,20 @@ local clear_monitor_cache = function (server, client, request, resource_adapter)
         return send_response(server, client, 501, "Not Implemented: clear_cache method not available")
     end
 end
-
 --- Обработчик HTTP-запроса для установки интервала кэширования ResourceMonitor.
 -- Требует аутентификации по API-ключу.
 -- Метод: POST
 -- Параметры запроса:
 --   - interval (number): Новый интервал кэширования в секундах.
 -- Возвращает: HTTP 200 OK или ошибку.
-local set_monitor_cache_interval = function (server, client, request, resource_adapter)
+local set_monitor_cache_interval = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    if not resource_adapter then
+    if not resource_monitor_instance then
         log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
         return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
     end
@@ -287,9 +257,8 @@ local set_monitor_cache_interval = function (server, client, request, resource_a
         return send_response(server, client, 400, "Invalid interval value. Must be a non-negative number.")
     end
 
-    -- Используем метод set_cache_interval
-    if resource_adapter.set_cache_interval then
-        local success = resource_adapter:set_cache_interval(interval)
+    if resource_monitor_instance.set_cache_interval then
+        local success = resource_monitor_instance:set_cache_interval(interval)
         if success then
             log_info(COMPONENT_NAME, "ResourceMonitor cache interval set to %d seconds via API request.", interval)
             send_response(server, client, 200, string.format("Cache interval set to %d seconds", interval))
