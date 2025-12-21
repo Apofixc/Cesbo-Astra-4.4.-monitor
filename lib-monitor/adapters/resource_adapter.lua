@@ -46,7 +46,7 @@ function ResourceMonitor:new(name)
         self.name = name or "ResourceMonitor"
         
         -- Получаем PID текущего процесса (предполагается, что os.getpid доступен)
-        self.pid = get_current_pid()
+        self.pid = get_current_pid() or 0
         
         -- Инициализация состояния
         self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
@@ -80,6 +80,9 @@ function ResourceMonitor:new(name)
         
         log_info(COMPONENT_NAME, "ResourceMonitor '%s' initialized. PID: %s", 
                  self.name, tostring(self.pid))
+        
+        self:get_system_cpu_usage()
+        self:get_process_cpu_usage()
         
         instance = self
     end
@@ -251,61 +254,58 @@ end
 -- @return table Таблица с данными об использовании CPU процесса.
 function ResourceMonitor:get_process_cpu_usage()
     local cpu_data = {usage_percent = 0}
-    
-    if self.pid <= 0 then
-        return cpu_data
+    if self.pid <= 0 then 
+        return cpu_data 
     end
-    
-    -- Чтение статистики процесса
-    local stat_content = safe_command(string_format("cat /proc/%d/stat 2>/dev/null", self.pid), "")
-    if stat_content == "" then
-        return cpu_data
+
+    -- Чтение /proc/pid/stat без внешних команд
+    local f = io.open(string.format("/proc/%d/stat", self.pid), "r")
+    if not f then 
+        return cpu_data 
     end
-    
-    -- Парсинг строки /proc/pid/stat
+
+    local stat_content = f:read("*all")
+    f:close()
+
     local fields = {}
     for field in stat_content:gmatch("%S+") do
-        table_insert(fields, field)
+        table.insert(fields, field)
     end
-    
-    if #fields < 17 then
-        return cpu_data
-    end
-    
+
+    -- Нам нужны utime (14) и stime (15)
     local utime = tonumber(fields[14]) or 0
     local stime = tonumber(fields[15]) or 0
-    local cutime = tonumber(fields[16]) or 0
-    local cstime = tonumber(fields[17]) or 0
-    
-    local current_process_time = utime + stime + cutime + cstime
-    
-    -- Чтение общего времени CPU системы
-    local system_stat = safe_command("grep '^cpu ' /proc/stat", "")
+    local current_process_time = utime + stime
+
+    -- Чтение общей статистики системы
+    local sf = io.open("/proc/stat", "r")
+    if not sf then 
+        return cpu_data 
+    end
+
+    local system_stat = sf:read("*line") -- Первая строка всегда 'cpu '
+    sf:close()
+
     local user, nice, system, idle, iowait, irq, softirq, steal = 
         system_stat:match("cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)")
     
-    if not user then
-        return cpu_data
-    end
-    
     local current_system_time = 0
-    for _, val in ipairs({user, nice, system, idle, iowait, irq, softirq, steal}) do
-        current_system_time = current_system_time + (tonumber(val) or 0)
+    if user then
+        current_system_time = tonumber(user) + tonumber(nice) + tonumber(system) + 
+                              tonumber(idle) + tonumber(iowait) + tonumber(irq) + 
+                              tonumber(softirq) + tonumber(steal)
     end
-    
-    -- Расчет использования CPU
+
     if self.last_process_cpu_time > 0 and self.last_system_cpu_time_at_process_check > 0 then
         local delta_process = current_process_time - self.last_process_cpu_time
         local delta_system = current_system_time - self.last_system_cpu_time_at_process_check
         
         if delta_system > 0 then
-            -- Учитываем количество ядер
-            local cores = tonumber(safe_command("nproc", "1")) or 1
-            cpu_data.usage_percent = (delta_process / delta_system) * 100 * cores
+            local usage = (delta_process / delta_system) * 100
+            cpu_data.usage_percent = math.max(0, usage)
         end
     end
-    
-    -- Сохраняем для следующего вызова
+
     self.last_process_cpu_time = current_process_time
     self.last_system_cpu_time_at_process_check = current_system_time
     
