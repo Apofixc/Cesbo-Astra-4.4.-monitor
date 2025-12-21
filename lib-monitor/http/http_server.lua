@@ -10,6 +10,7 @@ local ResourceMonitor = require "adapters.resource_adapter" -- Изменено 
 -- @param string addr IP-адрес, на котором будет слушать сервер.
 -- @param number port Порт, на котором будет слушать сервер.
 function server_start(addr, port)
+    log_info(string.format("[Server] Type of system_routes: %s", type(system_routes)))
     http_server({
         addr = addr,
         port = port,

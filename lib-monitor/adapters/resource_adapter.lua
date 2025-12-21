@@ -24,6 +24,17 @@ ResourceMonitor.__index = ResourceMonitor
 -- Единственный экземпляр (singleton)
 local instance = nil
 
+local function get_current_pid()
+    local file = io.open("/proc/self/stat", "r")
+    if file then
+        local data = file:read("*a")
+        file:close()
+        local pid = data:match("^(%d+)")
+        return tonumber(pid)
+    end
+    return nil
+end
+
 --- Создает или возвращает единственный экземпляр ResourceMonitor.
 -- @param string name (optional) Уникальное имя монитора (используется только при первом создании).
 -- @return ResourceMonitor Единственный объект ResourceMonitor.
@@ -34,8 +45,8 @@ function ResourceMonitor:new(name)
         -- Сохраняем имя монитора (только при первом создании)
         self.name = name or "ResourceMonitor"
         
-        -- Получаем PID текущего процесса (предполагается, что utils.getpid доступен)
-        self.pid = getpid()
+        -- Получаем PID текущего процесса (предполагается, что os.getpid доступен)
+        self.pid = get_current_pid()
         
         -- Инициализация состояния
         self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
