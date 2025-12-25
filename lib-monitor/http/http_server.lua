@@ -1,5 +1,6 @@
 local http_server = http_server
-local log_info    = log.info
+local Logger      = require "src.utils.logger"
+local log_info    = Logger.info
 
 local channel_routes = require "http.routes.channel_routes"
 local dvb_routes = require "http.routes.dvb_routes"

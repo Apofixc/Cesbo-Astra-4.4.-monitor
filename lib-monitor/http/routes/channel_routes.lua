@@ -1,5 +1,6 @@
-local log_info    = log.info
-local log_error   = log.error
+local Logger      = require "src.utils.logger"
+local log_info    = Logger.info
+local log_error   = Logger.error
 
 local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
 local ChannelModule = require "channel.channel"

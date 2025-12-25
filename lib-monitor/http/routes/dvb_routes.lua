@@ -1,4 +1,5 @@
-local log_error   = log.error
+local Logger      = require "src.utils.logger"
+local log_error   = Logger.error
 local tonumber = tonumber
 
 local http_helpers = require "http.http_helpers"

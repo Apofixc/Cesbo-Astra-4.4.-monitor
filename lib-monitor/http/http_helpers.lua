@@ -1,8 +1,9 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local utils = require "utils.utils" -- Возвращено
-local log_error   = log.error
-local log_info    = log.info
+local Logger      = require "src.utils.logger"
+local log_info    = Logger.info
+local log_error   = Logger.error
+local utils = require "src.utils.utils" -- Возвращено
 local timer_lib   = timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
 local json_decode = json.decode
 local json_encode = json.encode
