@@ -16,18 +16,20 @@ local math_max   = math.max
 local table_insert = table.insert
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local json_encode     = json.encode -- Предполагается, что json.encode глобально доступен
-local analyze         = analyze -- Предполагается, что analyze глобально доступен
-local get_server_name = get_server_name -- Предполагается, что get_server_name глобально доступен
-local send_monitor    = send_monitor -- Предполагается, что send_monitor глобально доступен
-local ratio           = ratio -- Предполагается, что ratio глобально доступен
+local json_encode     = _G.json.encode -- Предполагается, что json.encode глобально доступен
+local analyze         = _G.analyze -- Предполагается, что analyze глобально доступен
+
+local Utils           = require "lib-monitor.src.utils.utils"
+local get_server_name = Utils.get_server_name -- Предполагается, что get_server_name глобально доступен
+local send_monitor    = Utils.send_monitor -- Предполагается, что send_monitor глобально доступен
+local ratio           = Utils.ratio -- Предполагается, что ratio глобально доступен
 
 -- Локальные модули
-local Logger = require "src.utils.logger"
+local Logger = require "lib-monitor.src.utils.logger"
 local log_info           = Logger.info
 local log_error          = Logger.error
-local MonitorConfig      = require "src.config.monitor_config"
-local validate_monitor_param = require "src.utils.utils".validate_monitor_param
+local MonitorConfig      = require "lib-monitor.src.config.monitor_config"
+local validate_monitor_param = require "lib-monitor.src.utils.utils".validate_monitor_param
 
 local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
 
@@ -322,7 +324,7 @@ end
 function ChannelMonitor:kill()
     if self.input_instance then
         -- kill_input - это глобальная функция Astra
-        kill_input(self.input_instance)
+        _G.kill_input(self.input_instance)
         self.input_instance = nil
     end
     self.monitor_instance = nil

@@ -6,12 +6,12 @@
 local type      = type
 local tonumber  = tonumber
 local string_format = string.format
-local io_popen = io.popen
-local table_insert = table.insert
-local os_time = os.time
-local os_date = os.date
+local io_popen = _G.io.popen
+local table_insert = _G.table.insert
+local os_time = _G.os.time
+local os_date = _G.os.date
 
-local Logger = require "src.utils.logger"
+local Logger = require "lib-monitor.src.utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug

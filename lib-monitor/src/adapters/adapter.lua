@@ -13,14 +13,14 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
 local COMPONENT_NAME = "Adapter"
 
-local DvbTunerMonitor   = require "src.adapters.dvb_tuner"
-local DvbMonitorDispatcher = require "src.dispatchers.dvb_monitor_dispatcher"
+local DvbTunerMonitor   = require "lib-monitor.src.adapters.dvb_tuner"
+local DvbMonitorDispatcher = require "lib-monitor.src.dispatchers.dvb_monitor_dispatcher"
 
 local dvb_monitor_manager = DvbMonitorDispatcher:new()
 

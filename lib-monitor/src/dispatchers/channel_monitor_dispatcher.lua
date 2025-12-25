@@ -4,18 +4,18 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitor = require "src.channel.channel_monitor"
-local MonitorConfig  = require "src.config.monitor_config"
-local Utils          = require "src.utils.utils" -- Добавляем require для utils.utils
+local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
+local MonitorConfig  = require "lib-monitor.src.config.monitor_config"
+local Utils          = require "lib-monitor.src.utils.utils" -- Добавляем require для utils.utils
 local validate_monitor_name = Utils.validate_monitor_name
 
 -- Предполагаем, что эти глобальные функции доступны в окружении Astra
-local parse_url = parse_url
-local init_input = init_input
+local parse_url = _G.parse_url
+local init_input = _G.init_input
 
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 

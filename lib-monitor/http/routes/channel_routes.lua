@@ -1,13 +1,13 @@
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitorManager = require "src.dispatchers.channel_monitor_dispatcher"
-local ChannelModule = require "src.channel.channel"
+local ChannelMonitorManager = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
+local ChannelModule = require "lib-monitor.src.channel.channel"
 
 local channel_monitor_manager = ChannelMonitorManager:new()
 
-local http_helpers = require "http.http_helpers"
+local http_helpers = require "lib-monitor.http.http_helpers"
 
 local COMPONENT_NAME = "ChannelRoutes" -- Определяем COMPONENT_NAME для логирования
 local validate_request = http_helpers.validate_request
@@ -22,6 +22,8 @@ local json_encode = http_helpers.json_encode
 local json_decode = http_helpers.json_decode -- Добавляем json_decode
 local string_split = http_helpers.string_split
 local table_copy = http_helpers.table_copy -- Используем из http_helpers
+
+local channel_list = _G.channel_list -- Явно объявляем глобальную переменную
 
 -- =============================================
 -- Управление каналами и их мониторами (Route Handlers)

@@ -24,30 +24,30 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
-local Logger = require "src.utils.logger"
+local Logger = require "lib-monitor.src.utils.logger"
 local log_info  = Logger.info
 local log_error = Logger.error
 
 local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local Utils = require "src.utils.utils"
+local Utils = require "lib-monitor.src.utils.utils"
 local table_copy   = Utils.table_copy
-local string_split = string.split
-local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
-local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
-local kill_channel = kill_channel -- Предполагаем, что kill_channel является глобальной функцией
+local string_split = _G.string.split
+local find_channel = _G.find_channel
+local make_channel = _G.make_channel
+local kill_channel = _G.kill_channel
 local get_stream   = Utils.get_stream
 
 -- Модули мониторинга
-local ChannelMonitor = require "src.channel.channel_monitor"
-local ChannelMonitorDispatcher = require "src.dispatchers.channel_monitor_dispatcher"
-local Adapter = require "src.adapters.adapter"
+local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
+local ChannelMonitorDispatcher = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
+local Adapter = require "lib-monitor.src.adapters.adapter"
 
 -- Модули мониторинга
-local ChannelMonitor = require "src.channel.channel_monitor"
-local ChannelMonitorDispatcher = require "src.dispatchers.channel_monitor_dispatcher"
-local LoadAdapter = require "src.adapters.adapter"
+local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
+local ChannelMonitorDispatcher = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
+local LoadAdapter = require "lib-monitor.src.adapters.adapter"
 -- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
 -- local parse_url = parse_url
 -- local init_input = init_input
@@ -56,7 +56,7 @@ local LoadAdapter = require "src.adapters.adapter"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local MonitorConfig = require "src.config.monitor_config"
+local MonitorConfig = require "lib-monitor.src.config.monitor_config"
 
 -- Константы для валидации параметров монитора
 local MONITOR_LIMIT         = MonitorConfig.MonitorLimit

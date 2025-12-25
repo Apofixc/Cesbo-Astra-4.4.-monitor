@@ -7,13 +7,13 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local ipairs      = ipairs
-local http_request = http_request
-local astra_version = astra.version
+local http_request = _G.http_request
+local astra_version = _G.astra.version
 
 local COMPONENT_NAME = "Utils"
 
@@ -21,13 +21,13 @@ local COMPONENT_NAME = "Utils"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "src.config.monitor_settings"
-local MonitorConfig = require "src.config.monitor_config"
+local config = require "lib-monitor.src.config.monitor_settings"
+local MonitorConfig = require "lib-monitor.src.config.monitor_config"
 
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.
 
-local hostname      = utils.hostname()
+local hostname      = _G.utils.hostname()
 
 local STREAM        = config.STREAM or {}
 local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей

@@ -3,19 +3,19 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local json_encode = json.encode -- Предполагается, что json.encode глобально доступен
+local json_encode = _G.json.encode -- Предполагается, что json.encode глобально доступен
 
-local Utils                = require "src.utils.utils"
+local Utils                = require "lib-monitor.src.utils.utils"
 local ratio                = Utils.ratio
 local get_server_name      = Utils.get_server_name
 local send_monitor         = Utils.send_monitor
-local MonitorConfig        = require "src.config.monitor_config"
+local MonitorConfig        = require "lib-monitor.src.config.monitor_config"
 local validate_monitor_param = Utils.validate_monitor_param
 
-local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
+local dvb_tune = _G.dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
 
 local COMPONENT_NAME = "DvbTunerMonitor"
 

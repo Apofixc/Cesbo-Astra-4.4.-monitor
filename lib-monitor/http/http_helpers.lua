@@ -1,16 +1,16 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local Logger      = require "src.utils.logger"
+local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local utils = require "src.utils.utils" -- Возвращено
-local timer_lib   = timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
-local json_decode = json.decode
-local json_encode = json.encode
-local string_split = string_split
-local os_exit_func = os.exit -- Переименовано
-local astra_version_var = astra.version -- Переименовано
-local astra_reload_func = astra.reload -- Переименовано
+local utils = require "lib-monitor.src.utils.utils" -- Возвращено
+local timer_lib   = _G.timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
+local json_decode = _G.json.decode
+local json_encode = _G.json.encode
+local string_split = _G.string.split
+local os_exit_func = _G.os.exit -- Переименовано
+local astra_version_var = _G.astra.version -- Переименовано
+local astra_reload_func = _G.astra.reload -- Переименовано
 
 -- ===========================================================================
 -- Константы и конфигурация
