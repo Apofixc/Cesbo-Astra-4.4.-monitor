@@ -2,8 +2,8 @@ local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
-local ChannelModule = require "channel.channel"
+local ChannelMonitorManager = require "src.dispatchers.channel_monitor_dispatcher"
+local ChannelModule = require "src.channel.channel"
 
 local channel_monitor_manager = ChannelMonitorManager:new()
 

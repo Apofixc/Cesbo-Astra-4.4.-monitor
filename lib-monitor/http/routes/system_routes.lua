@@ -1,8 +1,8 @@
-local Logger = require "utils.logger"
+local Logger = require "src.utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local ResourceMonitor = require "resource_adapters.resource_adapter"
+local ResourceMonitor = require "src.system.resource_monitor"
 local resource_monitor_instance = ResourceMonitor:new("system_monitor")
 local http_helpers = require "http.http_helpers"
 local validate_request = http_helpers.validate_request

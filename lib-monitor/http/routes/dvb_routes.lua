@@ -9,7 +9,7 @@ local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
 
-local DvbMonitorManager = require "dispatcher.dvb_monitor_manager"
+local DvbMonitorManager = require "src.dispatchers.dvb_monitor_dispatcher"
 local dvb_monitor_manager = DvbMonitorManager:new()
 
 local COMPONENT_NAME = "DvbRoutes" -- Определяем COMPONENT_NAME для логирования

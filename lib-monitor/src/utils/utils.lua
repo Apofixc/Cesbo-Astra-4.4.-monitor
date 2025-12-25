@@ -7,7 +7,7 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local Logger      = require "utils.logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
@@ -19,8 +19,8 @@ local astra_version = astra.version
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "config.monitor_settings"
-local MonitorConfig = require "config.monitor_config"
+local config = require "src.config.monitor_settings"
+local MonitorConfig = require "src.config.monitor_config"
 
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.

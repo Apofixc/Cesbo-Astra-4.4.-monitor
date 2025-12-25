@@ -5,7 +5,7 @@ local log_info    = Logger.info
 local channel_routes = require "http.routes.channel_routes"
 local dvb_routes = require "http.routes.dvb_routes"
 local system_routes = require "http.routes.system_routes"
-local ResourceMonitor = require "resource_adapters.resource_adapter" -- Изменено на ResourceMonitor
+local ResourceMonitor = require "src.system.resource_monitor"
 
 --- Запускает HTTP-сервер мониторинга.
 -- @param string addr IP-адрес, на котором будет слушать сервер.
