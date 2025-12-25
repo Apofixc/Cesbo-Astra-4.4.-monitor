@@ -5,13 +5,13 @@ local log_info    = Logger.info
 local log_error   = Logger.error
 local utils = require "lib-monitor.src.utils.utils" -- Возвращено
 local AstraAPI = require "lib-monitor.src.api.astra_api"
-local timer_lib   = _G.timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
-local json_decode = _G.json.decode
-local json_encode = _G.json.encode
-local string_split = _G.string.split
-local os_exit_func = _G.os.exit -- Переименовано
-local astra_version_var = _G.astra.version -- Переименовано
-local astra_reload_func = _G.astra.reload -- Переименовано
+local timer_lib   = AstraAPI.timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
+local json_decode = AstraAPI.json_decode
+local json_encode = AstraAPI.json_encode
+local string_split = AstraAPI.string_split
+local os_exit_func = AstraAPI.os_exit -- Переименовано
+local astra_version_var = AstraAPI.astra_version -- Переименовано
+local astra_reload_func = AstraAPI.astra_reload -- Переименовано
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -127,7 +127,7 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
         return send_response(server, client, 400, "Missing channel name in request.") 
     end
 
-    local data = find_func(name)
+    local data, find_err = find_func(name)
     if not data then 
         return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown")) 
     end
