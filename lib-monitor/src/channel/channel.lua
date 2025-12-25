@@ -188,24 +188,24 @@ function make_monitor(monitor_config_table, channel_data_obj)
     local ch_data = type(channel_data_obj) == "table" and channel_data_obj or find_channel(tostring(channel_data_obj))
 
     if not (type(monitor_config_table) == 'table') then
-        local error_msg = "[make_monitor] Invalid config table. Expected table, got " .. type(monitor_config_table) .. "."
+        local error_msg = "Invalid config table. Expected table, got " .. type(monitor_config_table) .. "."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not (monitor_config_table.name and type(monitor_config_table.name) == 'string') then
-        local error_msg = "[make_monitor] config.name is required and must be a string."
+        local error_msg = "config.name is required and must be a string."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not (monitor_config_table.monitor and type(monitor_config_table.monitor) == 'string') then
-        local error_msg = "[make_monitor] config.monitor is required and must be a string."
+        local error_msg = "config.monitor is required and must be a string."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     
     local stream_json, err = create_stream_json_representation(ch_data)
     if err then
-        log_error(COMPONENT_NAME, "[make_monitor] Failed to create stream JSON: %s", err)
+        log_error(COMPONENT_NAME, "Failed to create stream JSON: %s", err)
         return nil, err
     end
     monitor_config_table.stream_json = stream_json
@@ -355,7 +355,7 @@ function make_stream(conf)
 
     local stream_json, err = create_stream_json_representation(channel_data)
     if err then
-        log_error(COMPONENT_NAME, "[make_stream] Failed to create stream JSON: %s", err)
+        log_error(COMPONENT_NAME, "Failed to create stream JSON: %s", err)
         return nil, err
     end
     monitor_config.stream_json = stream_json
