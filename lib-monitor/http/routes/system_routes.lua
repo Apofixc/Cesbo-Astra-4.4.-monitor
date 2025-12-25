@@ -118,7 +118,7 @@ local health = function (server, client, request)
     -- Кодируем в JSON
     local json_content = json_encode(response_data)
     if not json_content then
-        local error_msg = "Failed to encode health data to JSON: " .. (encode_err or "unknown")
+        local error_msg = "Failed to encode health data to JSON"
         log_error(COMPONENT_NAME, error_msg)
         return send_response(server, client, 500, "Internal server error: " .. error_msg)
     end
@@ -151,7 +151,7 @@ local get_system_resources = function (server, client, request)
     local data = resource_monitor_instance:collect_system_data()
     local json_content = json_encode(data)
     if not json_content then
-        local error_msg = "Failed to encode system resource data to JSON: " .. (encode_err or "unknown")
+        local error_msg = "Failed to encode system resource data to JSON"
         log_error(COMPONENT_NAME, error_msg)
         return send_response(server, client, 500, "Internal server error: " .. error_msg)
     end
@@ -185,7 +185,7 @@ local get_monitor_stats = function (server, client, request)
         local stats = resource_monitor_instance:get_stats()
         local json_content = json_encode(stats)
         if not json_content then
-            local error_msg = "Failed to encode monitor stats to JSON: " .. (encode_err or "unknown")
+            local error_msg = "Failed to encode monitor stats to JSON"
             log_error(COMPONENT_NAME, error_msg)
             return send_response(server, client, 500, "Internal server error: " .. error_msg)
         end
@@ -278,7 +278,6 @@ return {
     kill_astra = kill_astra,
     health = health,
     get_system_resources = get_system_resources,
-    get_process_resources = get_process_resources,
     get_monitor_stats = get_monitor_stats,
     clear_monitor_cache = clear_monitor_cache,
     set_monitor_cache_interval = set_monitor_cache_interval

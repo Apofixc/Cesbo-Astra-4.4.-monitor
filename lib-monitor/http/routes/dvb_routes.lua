@@ -37,9 +37,9 @@ local get_adapters = function(server, client, request)
         table.insert(content, name)
     end
     
-    local json_content, encode_err = json_encode(content)
+    local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Failed to encode adapter list to JSON: %s", encode_err or "unknown")
+        log_error(COMPONENT_NAME, "Failed to encode adapter list to JSON")
         return send_response(server, client, 500, "Internal server error: Failed to encode adapter list.")
     end
 

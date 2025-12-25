@@ -162,7 +162,7 @@ local get_channels = function(server, client, request)
     
     local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Failed to encode channel list to JSON: %s", encode_err or "unknown")
+        log_error(COMPONENT_NAME, "Failed to encode channel list to JSON")
         return send_response(server, client, 500, "Internal server error: Failed to encode channel list.")
     end
 
@@ -196,9 +196,9 @@ local get_channel_monitors = function(server, client, request)
         table.insert(content, name)
     end
     
-    local json_content, encode_err = json_encode(content)
+    local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Failed to encode monitor list to JSON: %s", encode_err or "unknown")
+        log_error(COMPONENT_NAME, "Failed to encode monitor list to JSON")
         return send_response(server, client, 500, "Internal server error: Failed to encode monitor list.")
     end
 
@@ -298,7 +298,7 @@ local get_channel_psi = function(server, client, request)
 
     local json_content = json_encode(psi_cache_table)
     if not json_content then
-        log_error(COMPONENT_NAME, "Failed to encode PSI data to JSON: %s", encode_err or "unknown")
+        log_error(COMPONENT_NAME, "Failed to encode PSI data to JSON")
         return send_response(server, client, 500, "Internal server error: Failed to encode PSI data.")
     end
 
