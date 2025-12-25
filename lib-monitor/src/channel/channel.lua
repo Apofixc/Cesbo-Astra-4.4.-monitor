@@ -31,13 +31,18 @@ local log_error = Logger.error
 local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local utils = require "src.utils.utils"
-local table_copy   = utils.table_copy
+local Utils = require "src.utils.utils"
+local table_copy   = Utils.table_copy
 local string_split = string.split
 local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
 local make_channel = make_channel -- Предполагаем, что make_channel является глобальной функцией
 local kill_channel = kill_channel -- Предполагаем, что kill_channel является глобальной функцией
-local get_stream   = get_stream     -- Предполагаем, что get_stream является глобальной функцией
+local get_stream   = Utils.get_stream
+
+-- Модули мониторинга
+local ChannelMonitor = require "src.channel.channel_monitor"
+local ChannelMonitorDispatcher = require "src.dispatchers.channel_monitor_dispatcher"
+local Adapter = require "src.adapters.adapter"
 
 -- Модули мониторинга
 local ChannelMonitor = require "src.channel.channel_monitor"
@@ -115,7 +120,7 @@ end
 local format_handlers = {
     dvb = function(config)
         local cfg = {format = config.format, addr = config.addr}
-        local adap_conf = find_dvb_conf(config.addr)
+        local adap_conf = Adapter.find_dvb_conf(config.addr)
         cfg.stream = adap_conf and adap_conf.source or "dvb"
         return cfg
     end,

@@ -8,11 +8,12 @@ local log_info    = Logger.info
 local log_error   = Logger.error
 local json_encode = json.encode -- Предполагается, что json.encode глобально доступен
 
-local ratio                = ratio -- Предполагается, что ratio глобально доступен
-local get_server_name      = get_server_name -- Предполагается, что get_server_name глобально доступен
-local send_monitor         = send_monitor -- Предполагается, что send_monitor глобально доступен
+local Utils                = require "src.utils.utils"
+local ratio                = Utils.ratio
+local get_server_name      = Utils.get_server_name
+local send_monitor         = Utils.send_monitor
 local MonitorConfig        = require "src.config.monitor_config"
-local validate_monitor_param = require "src.utils.utils".validate_monitor_param
+local validate_monitor_param = Utils.validate_monitor_param
 
 local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
 
@@ -47,6 +48,13 @@ local dvb_monitor_method_comparison = {
         return false
     end
 }
+
+-- Заглушка для kill_dvb_tune, так как она должна быть реализована в lib-monitor
+local function kill_dvb_tune(instance)
+    -- Здесь будет логика для остановки DVB-тюнера
+    -- Временно просто логируем
+    Logger.info("DvbTunerMonitor", "kill_dvb_tune called for instance: %s", tostring(instance))
+end
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации DVB.
 -- @param table self Объект DvbTunerMonitor.
@@ -181,11 +189,7 @@ end
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
 function DvbTunerMonitor:kill()
     if self.instance then
-        -- Предполагается, что есть глобальная функция kill_dvb_tune или аналогичная
-        -- Если нет, то нужно будет уточнить, как остановить dvb_tune instance
-        -- В данном случае, если dvb_tune возвращает userdata, то его нужно будет остановить
-        -- Если dvb_tune не предоставляет метода остановки, то очистка ссылок - это все, что можно сделать.
-        -- kill_dvb_tune(self.instance) -- Пример
+        kill_dvb_tune(self.instance)
         self.instance = nil
     end
     self.conf = nil
