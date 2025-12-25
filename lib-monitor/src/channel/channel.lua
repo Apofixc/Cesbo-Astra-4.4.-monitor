@@ -24,14 +24,14 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
-local Logger = require "utils.logger"
+local Logger = require "src.utils.logger"
 local log_info  = Logger.info
 local log_error = Logger.error
 
 local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local utils = require "utils.utils"
+local utils = require "src.utils.utils"
 local table_copy   = utils.table_copy
 local string_split = string.split
 local find_channel = find_channel -- Предполагаем, что find_channel является глобальной функцией
@@ -40,9 +40,9 @@ local kill_channel = kill_channel -- Предполагаем, что kill_chann
 local get_stream   = get_stream     -- Предполагаем, что get_stream является глобальной функцией
 
 -- Модули мониторинга
-local ChannelMonitor = require "channel.channel_monitor"
-local ChannelMonitorManager = require "dispatcher.channel_monitor_manager"
-local LoadAdapter = require "adapters.adapter"
+local ChannelMonitor = require "src.channel.channel_monitor"
+local ChannelMonitorDispatcher = require "src.dispatchers.channel_monitor_dispatcher"
+local LoadAdapter = require "src.adapters.adapter"
 -- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
 -- local parse_url = parse_url
 -- local init_input = init_input
@@ -51,7 +51,7 @@ local LoadAdapter = require "adapters.adapter"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local MonitorConfig = require "config.monitor_config"
+local MonitorConfig = require "src.config.monitor_config"
 
 -- Константы для валидации параметров монитора
 local MONITOR_LIMIT         = MonitorConfig.MonitorLimit
@@ -71,7 +71,7 @@ local MONITOR_TYPE_IP     = "ip"
 -- Основные функции модуля
 -- ===========================================================================
 
-local channel_monitor_manager = ChannelMonitorManager:new()
+local channel_monitor_manager = ChannelMonitorDispatcher:new()
 
 --- Возвращает список всех активных мониторов каналов.
 -- Эта функция запрашивает у `ChannelMonitorManager` список всех зарегистрированных

@@ -3,7 +3,7 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "utils.logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local json_encode = json.encode -- Предполагается, что json.encode глобально доступен
@@ -11,8 +11,8 @@ local json_encode = json.encode -- Предполагается, что json.enc
 local ratio                = ratio -- Предполагается, что ratio глобально доступен
 local get_server_name      = get_server_name -- Предполагается, что get_server_name глобально доступен
 local send_monitor         = send_monitor -- Предполагается, что send_monitor глобально доступен
-local MonitorConfig        = require "config.monitor_config"
-local validate_monitor_param = require "utils.utils".validate_monitor_param
+local MonitorConfig        = require "src.config.monitor_config"
+local validate_monitor_param = require "src.utils.utils".validate_monitor_param
 
 local dvb_tune = dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
 

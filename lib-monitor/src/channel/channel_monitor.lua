@@ -23,11 +23,11 @@ local send_monitor    = send_monitor -- Предполагается, что sen
 local ratio           = ratio -- Предполагается, что ratio глобально доступен
 
 -- Локальные модули
-local Logger = require "utils.logger"
+local Logger = require "src.utils.logger"
 local log_info           = Logger.info
 local log_error          = Logger.error
-local MonitorConfig      = require "config.monitor_config"
-local validate_monitor_param = require "utils.utils".validate_monitor_param
+local MonitorConfig      = require "src.config.monitor_config"
+local validate_monitor_param = require "src.utils.utils".validate_monitor_param
 
 local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
 

@@ -1,48 +1,48 @@
 -- ===========================================================================
--- ChannelMonitorManager Class
+-- ChannelMonitorDispatcher Class
 -- Управляет жизненным циклом и состоянием мониторов каналов.
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "utils.logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitor = require "channel.channel_monitor"
-local MonitorConfig  = require "config.monitor_config"
-local Utils          = require "utils.utils" -- Добавляем require для utils.utils
+local ChannelMonitor = require "src.channel.channel_monitor"
+local MonitorConfig  = require "src.config.monitor_config"
+local Utils          = require "src.utils.utils" -- Добавляем require для utils.utils
 local validate_monitor_name = Utils.validate_monitor_name
 
 -- Предполагаем, что эти глобальные функции доступны в окружении Astra
 local parse_url = parse_url
 local init_input = init_input
 
-local COMPONENT_NAME = "ChannelMonitorManager"
+local COMPONENT_NAME = "ChannelMonitorDispatcher"
 
-local ChannelMonitorManager = {}
-ChannelMonitorManager.__index = ChannelMonitorManager
+local ChannelMonitorDispatcher = {}
+ChannelMonitorDispatcher.__index = ChannelMonitorDispatcher
 
 local instance = nil -- Переменная для хранения единственного экземпляра
 
---- Создает новый экземпляр ChannelMonitorManager (или возвращает существующий).
+--- Создает новый экземпляр ChannelMonitorDispatcher (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов мониторов каналов.
--- @return ChannelMonitorManager Единственный объект ChannelMonitorManager.
-function ChannelMonitorManager:new()
+-- @return ChannelMonitorDispatcher Единственный объект ChannelMonitorDispatcher.
+function ChannelMonitorDispatcher:new()
     if not instance then
-        local self = setmetatable({}, ChannelMonitorManager)
+        local self = setmetatable({}, ChannelMonitorDispatcher)
         self.monitors = {} -- Таблица для хранения мониторов каналов по их уникальному имени
         self.count = 0     -- Явный счетчик мониторов
         instance = self
-        log_info(COMPONENT_NAME, "ChannelMonitorManager initialized.")
+        log_info(COMPONENT_NAME, "ChannelMonitorDispatcher initialized.")
     end
     return instance
 end
 
---- Добавляет уже созданный и запущенный объект монитора канала в менеджер.
+--- Добавляет уже созданный и запущенный объект монитора канала в диспетчер.
 -- @param string name Уникальное имя монитора.
 -- @param table monitor_obj Объект монитора канала, который должен быть таблицей.
 -- @return boolean true, если монитор успешно добавлен; `nil` и сообщение об ошибке в случае ошибки.
-function ChannelMonitorManager:add_monitor(name, monitor_obj)
+function ChannelMonitorDispatcher:add_monitor(name, monitor_obj)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -75,7 +75,7 @@ end
 -- @param table config Таблица конфигурации для нового монитора.
 -- @param table channel_data (optional) Таблица с данными канала или его имя (string).
 -- @return userdata monitor Экземпляр монитора, если успешно создан и зарегистрирован, иначе `nil` и сообщение об ошибке.
-function ChannelMonitorManager:create_and_register_channel_monitor(config, channel_data)
+function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, channel_data)
     if not config or type(config) ~= 'table' then
         local error_msg = "Invalid configuration table. Expected table, got " .. type(config) .. "."
         log_error(COMPONENT_NAME, error_msg)
@@ -134,8 +134,8 @@ function ChannelMonitorManager:create_and_register_channel_monitor(config, chann
             log_info(COMPONENT_NAME, "Channel monitor '%s' created and added successfully.", monitor.name)
             return instance, nil
         else
-            log_error(COMPONENT_NAME, "Failed to add channel monitor '%s' to manager: %s", monitor.name, add_err or "unknown error")
-            return nil, add_err or "Failed to add monitor to manager"
+            log_error(COMPONENT_NAME, "Failed to add channel monitor '%s' to dispatcher: %s", monitor.name, add_err or "unknown error")
+            return nil, add_err or "Failed to add monitor to dispatcher"
         end
     else
         local error_msg = "ChannelMonitor:start returned nil for monitor '" .. (config.name or "unknown") .. "'. Error: " .. (err or "unknown")
@@ -147,7 +147,7 @@ end
 --- Получает объект монитора канала по его имени.
 -- @param string name Уникальное имя монитора.
 -- @return table Объект монитора, если найден; `nil` и сообщение об ошибке, если монитор с таким именем не существует или имя невалидно.
-function ChannelMonitorManager:get_monitor(name)
+function ChannelMonitorDispatcher:get_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -155,11 +155,11 @@ function ChannelMonitorManager:get_monitor(name)
     return self.monitors[name], nil
 end
 
---- Удаляет монитор канала из менеджера по его имени.
+--- Удаляет монитор канала из диспетчера по его имени.
 -- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
 -- @param string name Уникальное имя монитора.
 -- @return boolean true, если монитор успешно удален; `nil` и сообщение об ошибке в случае ошибки.
-function ChannelMonitorManager:remove_monitor(name)
+function ChannelMonitorDispatcher:remove_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -182,10 +182,10 @@ function ChannelMonitorManager:remove_monitor(name)
     return true, nil
 end
 
---- Возвращает таблицу всех активных мониторов каналов, управляемых менеджером.
+--- Возвращает таблицу всех активных мониторов каналов, управляемых диспетчером.
 -- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
 -- @return table Таблица, содержащая все объекты мониторов каналов.
-function ChannelMonitorManager:get_all_monitors()
+function ChannelMonitorDispatcher:get_all_monitors()
     return self.monitors
 end
 
@@ -194,7 +194,7 @@ end
 -- @param string name Уникальное имя монитора.
 -- @param table params Таблица, содержащая новые параметры для обновления.
 -- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
-function ChannelMonitorManager:update_monitor_parameters(name, params)
+function ChannelMonitorDispatcher:update_monitor_parameters(name, params)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -228,4 +228,4 @@ function ChannelMonitorManager:update_monitor_parameters(name, params)
     end
 end
 
-return ChannelMonitorManager
+return ChannelMonitorDispatcher

@@ -13,16 +13,16 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "utils.logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
 local COMPONENT_NAME = "Adapter"
 
-local DvbTunerMonitor   = require "adapters.dvb_tuner"
-local DvbMonitorManager = require "dispatcher.dvb_monitor_manager"
+local DvbTunerMonitor   = require "src.adapters.dvb_tuner"
+local DvbMonitorDispatcher = require "src.dispatchers.dvb_monitor_dispatcher"
 
-local dvb_monitor_manager = DvbMonitorManager:new()
+local dvb_monitor_manager = DvbMonitorDispatcher:new()
 
 --- Возвращает список всех активных DVB-мониторов.
 -- Эта функция запрашивает у `DvbMonitorManager` список всех зарегистрированных

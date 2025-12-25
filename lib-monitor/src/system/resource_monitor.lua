@@ -11,7 +11,7 @@ local table_insert = table.insert
 local os_time = os.time
 local os_date = os.date
 
-local Logger = require "utils.logger"
+local Logger = require "src.utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug

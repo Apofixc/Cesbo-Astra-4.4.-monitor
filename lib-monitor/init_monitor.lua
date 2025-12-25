@@ -7,9 +7,9 @@
 -- и диспетчеров мониторинга.
 -- ===========================================================================
 
-require "utils.utils"
-require "adapters.adapter"
-require "channel.channel"
+require "src.utils.utils"
+require "src.adapters.adapter"
+require "src.channel.channel"
 require "http.http_server"
-require "dispatcher.channel_monitor_manager"
-require "dispatcher.dvb_monitor_manager"
+require "src.dispatchers.channel_monitor_dispatcher"
+require "src.dispatchers.dvb_monitor_dispatcher"

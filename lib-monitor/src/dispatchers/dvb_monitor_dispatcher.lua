@@ -1,44 +1,44 @@
 -- ===========================================================================
--- DvbMonitorManager Class
+-- DvbMonitorDispatcher Class
 -- Управляет жизненным циклом и состоянием DVB-тюнер мониторов.
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "utils.logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local DvbTunerMonitor = require "adapters.dvb_tuner"
-local MonitorConfig   = require "config.monitor_config"
-local Utils           = require "utils.utils" -- Добавляем require для utils.utils
+local DvbTunerMonitor = require "src.adapters.dvb_tuner"
+local MonitorConfig   = require "src.config.monitor_config"
+local Utils           = require "src.utils.utils" -- Добавляем require для utils.utils
 local validate_monitor_name = Utils.validate_monitor_name
 
-local COMPONENT_NAME = "DvbMonitorManager"
+local COMPONENT_NAME = "DvbMonitorDispatcher"
 
-local DvbMonitorManager = {}
-DvbMonitorManager.__index = DvbMonitorManager
+local DvbMonitorDispatcher = {}
+DvbMonitorDispatcher.__index = DvbMonitorDispatcher
 
 local instance = nil -- Переменная для хранения единственного экземпляра
 
---- Создает новый экземпляр DvbMonitorManager (или возвращает существующий).
+--- Создает новый экземпляр DvbMonitorDispatcher (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов DVB-мониторов.
--- @return DvbMonitorManager Единственный объект DvbMonitorManager.
-function DvbMonitorManager:new()
+-- @return DvbMonitorDispatcher Единственный объект DvbMonitorDispatcher.
+function DvbMonitorDispatcher:new()
     if not instance then
-        local self = setmetatable({}, DvbMonitorManager)
+        local self = setmetatable({}, DvbMonitorDispatcher)
         self.monitors = {} -- Таблица для хранения DVB-мониторов по их уникальному имени
         self.count = 0     -- Явный счетчик мониторов
         instance = self
-        log_info(COMPONENT_NAME, "DvbMonitorManager initialized.")
+        log_info(COMPONENT_NAME, "DvbMonitorDispatcher initialized.")
     end
     return instance
 end
 
---- Добавляет уже созданный и запущенный объект DVB-монитора в менеджер.
+--- Добавляет уже созданный и запущенный объект DVB-монитора в диспетчер.
 -- @param string name Уникальное имя монитора.
 -- @param table monitor_obj Объект DVB-монитора, который должен быть таблицей.
 -- @return boolean true, если монитор успешно добавлен; `nil` и сообщение об ошибке в случае ошибки.
-function DvbMonitorManager:add_monitor(name, monitor_obj)
+function DvbMonitorDispatcher:add_monitor(name, monitor_obj)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -68,7 +68,7 @@ end
 --- Создает, инициализирует и регистрирует новый DVB-тюнер монитор.
 -- @param table conf Таблица конфигурации для DVB-тюнера.
 -- @return userdata instance Экземпляр DVB-тюнера, если успешно создан и зарегистрирован, иначе `nil` и сообщение об ошибке.
-function DvbMonitorManager:create_and_register_dvb_monitor(conf)
+function DvbMonitorDispatcher:create_and_register_dvb_monitor(conf)
     if not conf or type(conf) ~= 'table' then
         local error_msg = "Invalid configuration table. Expected table, got " .. type(conf) .. "."
         log_error(COMPONENT_NAME, error_msg)
@@ -100,8 +100,8 @@ function DvbMonitorManager:create_and_register_dvb_monitor(conf)
             log_info(COMPONENT_NAME, "DVB Tuner monitor '%s' started and added successfully.", conf.name_adapter)
             return instance, nil
         else
-            log_error(COMPONENT_NAME, "Failed to add DVB Tuner monitor '%s' to manager: %s", conf.name_adapter, add_err or "unknown error")
-            return nil, add_err or "Failed to add monitor to manager"
+            log_error(COMPONENT_NAME, "Failed to add DVB Tuner monitor '%s' to dispatcher: %s", conf.name_adapter, add_err or "unknown error")
+            return nil, add_err or "Failed to add monitor to dispatcher"
         end
     else
         local error_msg = "Failed to start DVB Tuner monitor '" .. conf.name_adapter .. "'. Error: " .. (start_err or "unknown")
@@ -113,7 +113,7 @@ end
 --- Получает объект DVB-монитора по его имени.
 -- @param string name Уникальное имя монитора.
 -- @return table Объект монитора, если найден; `nil` и сообщение об ошибке, если монитор с таким именем не существует или имя невалидно.
-function DvbMonitorManager:get_monitor(name)
+function DvbMonitorDispatcher:get_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -121,11 +121,11 @@ function DvbMonitorManager:get_monitor(name)
     return self.monitors[name], nil
 end
 
---- Удаляет DVB-монитор из менеджера по его имени.
+--- Удаляет DVB-монитор из диспетчера по его имени.
 -- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
 -- @param string name Уникальное имя монитора.
 -- @return boolean true, если монитор успешно удален; `nil` и сообщение об ошибке в случае ошибки.
-function DvbMonitorManager:remove_monitor(name)
+function DvbMonitorDispatcher:remove_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -148,10 +148,10 @@ function DvbMonitorManager:remove_monitor(name)
     return true, nil
 end
 
---- Возвращает таблицу всех активных DVB-мониторов, управляемых менеджером.
+--- Возвращает таблицу всех активных DVB-мониторов, управляемых диспетчером.
 -- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
 -- @return table Таблица, содержащая все объекты DVB-мониторов.
-function DvbMonitorManager:get_all_monitors()
+function DvbMonitorDispatcher:get_all_monitors()
     return self.monitors
 end
 
@@ -160,7 +160,7 @@ end
 -- @param string name Уникальное имя монитора.
 -- @param table params Таблица, содержащая новые параметры для обновления.
 -- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
-function DvbMonitorManager:update_monitor_parameters(name, params)
+function DvbMonitorDispatcher:update_monitor_parameters(name, params)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
         return nil, name_err
@@ -194,4 +194,4 @@ function DvbMonitorManager:update_monitor_parameters(name, params)
     end
 end
 
-return DvbMonitorManager
+return DvbMonitorDispatcher
