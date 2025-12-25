@@ -45,11 +45,6 @@ local get_stream   = Utils.get_stream
 local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
 local ChannelMonitorDispatcher = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
 local Adapter = require "lib-monitor.src.adapters.adapter"
-
--- Модули мониторинга
-local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
-local ChannelMonitorDispatcher = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
-local LoadAdapter = require "lib-monitor.src.adapters.adapter"
 -- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
 -- local parse_url = parse_url
 -- local init_input = init_input
@@ -59,15 +54,6 @@ local LoadAdapter = require "lib-monitor.src.adapters.adapter"
 -- ===========================================================================
 
 local MonitorConfig = require "lib-monitor.src.config.monitor_config"
-
--- Константы для валидации параметров монитора
-local MONITOR_LIMIT         = MonitorConfig.MonitorLimit
-local MIN_RATE              = MonitorConfig.MinRate
-local MAX_RATE              = MonitorConfig.MaxRate
-local MIN_TIME_CHECK        = MonitorConfig.MinTimeCheck
-local MAX_TIME_CHECK        = MonitorConfig.MaxTimeCheck
-local MIN_METHOD_COMPARISON = MonitorConfig.MinMethodComparison
-local MAX_METHOD_COMPARISON = MonitorConfig.MaxMethodComparison
 
 -- Константы для типов мониторов
 local MONITOR_TYPE_INPUT  = "input"
@@ -321,7 +307,7 @@ function make_stream(conf)
         return nil, error_msg
     end
 
-    local function get_monitor_params(stream_conf)
+      local function get_monitor_params(stream_conf)
         local name = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.name) == "string" and stream_conf.monitor.name) or stream_conf.name
         local m_type = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.monitor_type) == "string" and string_lower(stream_conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
         return name, m_type

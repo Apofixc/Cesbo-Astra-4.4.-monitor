@@ -274,8 +274,9 @@ function ResourceMonitor:get_process_cpu_usage()
     end
 
     -- Нам нужны utime (14) и stime (15)
-    local utime = tonumber(fields[14]) or 0
-    local stime = tonumber(fields[15]) or 0
+    -- Проверяем наличие полей перед доступом
+    local utime = (fields[14] and tonumber(fields[14])) or 0
+    local stime = (fields[15] and tonumber(fields[15])) or 0
     local current_process_time = utime + stime
 
     -- Чтение общей статистики системы
@@ -304,6 +305,8 @@ function ResourceMonitor:get_process_cpu_usage()
         if delta_system > 0 then
             local usage = (delta_process / delta_system) * 100
             cpu_data.usage_percent = math.max(0, usage)
+        else
+            log_debug(COMPONENT_NAME, "Delta system time is zero, cannot calculate process CPU usage.")
         end
     end
 

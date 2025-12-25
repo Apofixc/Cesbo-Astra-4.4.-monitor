@@ -40,9 +40,17 @@ local dvb_monitor_method_comparison = {
         return false
     end,
     [3] = function(prev, curr, rate) -- по любому измнению параметров, с учетом погрешности 
+        local signal_ratio, signal_err = ratio(prev.signal, curr.signal)
+        local snr_ratio, snr_err = ratio(prev.snr, curr.snr)
+
+        if signal_err or snr_err then
+            log_error(COMPONENT_NAME, "Error calculating ratio for DVB monitor: Signal error: %s, SNR error: %s", signal_err or "none", snr_err or "none")
+            return true -- Считаем это изменением, чтобы не пропустить потенциальную проблему
+        end
+
         if prev.status ~= curr.status or 
-            ratio(prev.signal, curr.signal) > rate or 
-            ratio(prev.snr, curr.snr) > rate or 
+            signal_ratio > rate or 
+            snr_ratio > rate or 
             prev.ber ~= curr.ber or 
             prev.unc ~= curr.unc then
                 return true
@@ -53,9 +61,9 @@ local dvb_monitor_method_comparison = {
 
 -- Заглушка для kill_dvb_tune, так как она должна быть реализована в lib-monitor
 local function kill_dvb_tune(instance)
+    log_info(COMPONENT_NAME, "kill_dvb_tune called for instance: %s. This function is a placeholder and needs to be implemented.", tostring(instance))
     -- Здесь будет логика для остановки DVB-тюнера
-    -- Временно просто логируем
-    log_info("DvbTunerMonitor", "kill_dvb_tune called for instance: %s", tostring(instance))
+    -- Например: AstraAPI.kill_dvb_tune(instance)
 end
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации DVB.

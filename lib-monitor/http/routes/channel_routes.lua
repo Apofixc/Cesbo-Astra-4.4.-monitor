@@ -46,7 +46,7 @@ local kill_stream = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(AstraAPI.find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
+    handle_kill_with_reboot(AstraAPI.find_channel, ChannelModule.kill_stream, ChannelModule.make_stream, "Stream", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
@@ -86,7 +86,7 @@ local kill_monitor = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_monitor, kill_monitor, make_monitor, "Monitor", server, client, validate_request(request))
+    handle_kill_with_reboot(ChannelModule.find_monitor, ChannelModule.kill_monitor, ChannelModule.make_monitor, "Monitor", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.
