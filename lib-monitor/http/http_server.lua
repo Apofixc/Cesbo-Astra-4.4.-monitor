@@ -1,4 +1,6 @@
-local http_server = http_server
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local http_server = AstraAPI.http_server
 local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 
