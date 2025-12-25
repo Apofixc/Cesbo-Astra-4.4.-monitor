@@ -1,4 +1,0 @@
-require "utils.utils"
-require "adapters.adapter"
-require "channel.channel"
-require "http.http_server"
