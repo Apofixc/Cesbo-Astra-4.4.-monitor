@@ -6,7 +6,9 @@ local type        = type
 local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local json_encode = _G.json.encode -- Предполагается, что json.encode глобально доступен
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local json_encode = AstraAPI.json_encode -- Предполагается, что json.encode глобально доступен
 
 local Utils                = require "lib-monitor.src.utils.utils"
 local ratio                = Utils.ratio
@@ -15,7 +17,7 @@ local send_monitor         = Utils.send_monitor
 local MonitorConfig        = require "lib-monitor.src.config.monitor_config"
 local validate_monitor_param = Utils.validate_monitor_param
 
-local dvb_tune = _G.dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
+local dvb_tune = AstraAPI.dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
 
 local COMPONENT_NAME = "DvbTunerMonitor"
 
@@ -53,7 +55,7 @@ local dvb_monitor_method_comparison = {
 local function kill_dvb_tune(instance)
     -- Здесь будет логика для остановки DVB-тюнера
     -- Временно просто логируем
-    Logger.info("DvbTunerMonitor", "kill_dvb_tune called for instance: %s", tostring(instance))
+    log_info("DvbTunerMonitor", "kill_dvb_tune called for instance: %s", tostring(instance))
 end
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации DVB.
@@ -189,7 +191,7 @@ end
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
 function DvbTunerMonitor:kill()
     if self.instance then
-        kill_dvb_tune(self.instance)
+        --kill_dvb_tune(self.instance)
         self.instance = nil
     end
     self.conf = nil

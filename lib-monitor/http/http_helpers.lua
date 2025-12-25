@@ -4,6 +4,7 @@ local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local utils = require "lib-monitor.src.utils.utils" -- Возвращено
+local AstraAPI = require "lib-monitor.src.api.astra_api"
 local timer_lib   = _G.timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
 local json_decode = _G.json.decode
 local json_encode = _G.json.encode

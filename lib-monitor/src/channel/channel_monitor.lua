@@ -16,8 +16,10 @@ local math_max   = math.max
 local table_insert = table.insert
 
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local json_encode     = _G.json.encode -- Предполагается, что json.encode глобально доступен
-local analyze         = _G.analyze -- Предполагается, что analyze глобально доступен
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local json_encode     = AstraAPI.json_encode -- Предполагается, что json.encode глобально доступен
+local analyze         = AstraAPI.analyze -- Предполагается, что analyze глобально доступен
 
 local Utils           = require "lib-monitor.src.utils.utils"
 local get_server_name = Utils.get_server_name -- Предполагается, что get_server_name глобально доступен

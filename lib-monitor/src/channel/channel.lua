@@ -33,10 +33,12 @@ local COMPONENT_NAME = "Channel" -- Имя компонента для логи�
 -- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
 local Utils = require "lib-monitor.src.utils.utils"
 local table_copy   = Utils.table_copy
-local string_split = _G.string.split
-local find_channel = _G.find_channel
-local make_channel = _G.make_channel
-local kill_channel = _G.kill_channel
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local string_split = AstraAPI.string_split
+local find_channel = AstraAPI.find_channel
+local make_channel = AstraAPI.make_channel
+local kill_channel = AstraAPI.kill_channel
 local get_stream   = Utils.get_stream
 
 -- Модули мониторинга

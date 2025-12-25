@@ -14,8 +14,10 @@ local Utils          = require "lib-monitor.src.utils.utils" -- Добавляе
 local validate_monitor_name = Utils.validate_monitor_name
 
 -- Предполагаем, что эти глобальные функции доступны в окружении Astra
-local parse_url = _G.parse_url
-local init_input = _G.init_input
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local parse_url = AstraAPI.parse_url
+local init_input = AstraAPI.init_input
 
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 

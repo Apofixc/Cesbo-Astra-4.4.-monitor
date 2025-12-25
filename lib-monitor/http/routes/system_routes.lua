@@ -14,7 +14,9 @@ local timer_lib = http_helpers.timer_lib
 local os_exit_func = http_helpers.os_exit_func
 local astra_version_var = http_helpers.astra_version_var
 local astra_reload_func = http_helpers.astra_reload_func
-local json_encode = http_helpers.json_encode
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local json_encode = AstraAPI.json_encode
 
 local COMPONENT_NAME = "SystemRoutes"
 
@@ -42,7 +44,7 @@ local astra_reload = function(server, client, request)
         callback = function(t) 
             t:close()
             log_info(COMPONENT_NAME, "[Astra] Reloaded")
-            astra_reload_func()
+            AstraAPI.astra_reload()
         end
     })
 end
@@ -67,7 +69,7 @@ local kill_astra = function(server, client, request)
         callback = function(t) 
             t:close() 
             log_info(COMPONENT_NAME, "[Astra] Stopped")
-            os_exit_func(0)
+            AstraAPI.os_exit(0)
         end
     })
 end
@@ -92,7 +94,7 @@ local health = function (server, client, request)
     local response_data = {
         addr = server.__options.addr,
         port = server.__options.port,
-        version = astra_version_var,
+        version = AstraAPI.astra_version,
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
     }
 

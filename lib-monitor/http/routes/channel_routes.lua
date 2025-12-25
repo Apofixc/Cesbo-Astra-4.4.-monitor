@@ -20,10 +20,12 @@ local string_lower = http_helpers.string_lower
 local timer_lib = http_helpers.timer_lib
 local json_encode = http_helpers.json_encode
 local json_decode = http_helpers.json_decode -- Добавляем json_decode
-local string_split = http_helpers.string_split
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local string_split = AstraAPI.string_split
 local table_copy = http_helpers.table_copy -- Используем из http_helpers
 
-local channel_list = _G.channel_list -- Явно объявляем глобальную переменную
+local channel_list = AstraAPI.channel_list -- Явно объявляем глобальную переменную
 
 -- =============================================
 -- Управление каналами и их мониторами (Route Handlers)
@@ -44,7 +46,7 @@ local kill_stream = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
+    handle_kill_with_reboot(AstraAPI.find_channel, kill_stream, make_stream, "Stream", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
@@ -62,11 +64,11 @@ local kill_channel = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(find_channel, function(channel_data)
+    handle_kill_with_reboot(AstraAPI.find_channel, function(channel_data)
         local cfg = table_copy(channel_data.config) 
-        kill_channel(channel_data)
+        AstraAPI.kill_channel(channel_data)
         return cfg
-    end, make_channel, "Channel", server, client, validate_request(request))
+    end, AstraAPI.make_channel, "Channel", server, client, validate_request(request))
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки монитора канала.

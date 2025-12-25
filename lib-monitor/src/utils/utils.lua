@@ -12,8 +12,10 @@ local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local ipairs      = ipairs
-local http_request = _G.http_request
-local astra_version = _G.astra.version
+local AstraAPI = require "lib-monitor.src.api.astra_api"
+
+local http_request = AstraAPI.http_request
+local astra_version = AstraAPI.astra_version
 
 local COMPONENT_NAME = "Utils"
 
@@ -27,7 +29,7 @@ local MonitorConfig = require "lib-monitor.src.config.monitor_config"
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.
 
-local hostname      = _G.utils.hostname()
+local hostname      = AstraAPI.utils_hostname()
 
 local STREAM        = config.STREAM or {}
 local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей
@@ -79,7 +81,7 @@ end
 -- @return table Копия таблицы; `nil` и сообщение об ошибке, если входной аргумент невалиден.
 -- table.copy: Предполагается, что эта функция может быть предоставлена Astra глобально.
 -- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
-local table_copy = table.copy or function(t)
+local table_copy = function(t)
     if type(t) ~= "table" then
         local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
         log_error(COMPONENT_NAME, error_msg)
