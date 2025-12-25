@@ -24,17 +24,15 @@ lib-monitor/
 ├── adapters/
 │   ├── adapter.lua
 │   └── dvb_tuner.lua
-├── resource_adapters/
-│   └── resource_adapter.lua
 ├── channel/
 │   ├── channel_monitor.lua
 │   └── channel.lua
 ├── config/
 │   ├── monitor_config.lua
 │   └── monitor_settings.lua
-├── dispatcher/
-│   ├── channel_monitor_manager.lua
-│   └── dvb_monitor_manager.lua
+├── dispatchers/
+│   ├── channel_monitor_dispatcher.lua
+│   └── dvb_monitor_dispatcher.lua
 ├── http/
 │   ├── http_helpers.lua
 │   ├── http_server.lua
@@ -42,6 +40,8 @@ lib-monitor/
 │       ├── channel_routes.lua
 │       ├── dvb_routes.lua
 │       └── system_routes.lua
+├── system/
+│   └── resource_monitor.lua
 └── utils/
     ├── logger.lua
     └── utils.lua
