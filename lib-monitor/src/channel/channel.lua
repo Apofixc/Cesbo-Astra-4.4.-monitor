@@ -20,6 +20,7 @@ local type         = type
 local tostring     = tostring
 local ipairs       = ipairs
 local math_max     = math.max
+local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули

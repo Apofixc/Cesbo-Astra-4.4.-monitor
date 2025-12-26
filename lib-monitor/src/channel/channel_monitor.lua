@@ -310,6 +310,11 @@ function ChannelMonitor:send_channel_status(data)
     self.status.bitrate = data.total.bitrate or 0
     
     local current_json_status = json_encode(self.status)
+    if not current_json_status then
+        log_error(COMPONENT_NAME, "Failed to encode channel status to JSON: %s", encode_err)
+        return -- Прекращаем отправку, если кодирование не удалось
+    end
+
     if current_json_status ~= self.json_status_cache then
         send_monitor(current_json_status, "channels")
         self.json_status_cache = current_json_status

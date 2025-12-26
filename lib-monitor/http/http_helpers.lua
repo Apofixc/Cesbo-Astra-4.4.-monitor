@@ -1,12 +1,12 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local Logger      = require "../src/utils/logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local COMPONENT_NAME = "HTTPHelpers"
-local utils = require "../src/utils/utils"
-local AstraAPI = require "../src/api/astra_api"
+local utils = require "src.utils.utils"
+local AstraAPI = require "src.api.astra_api"
 local timer_lib   = AstraAPI.timer
 local json_decode = AstraAPI.json_decode
 local json_encode = AstraAPI.json_encode
@@ -90,7 +90,11 @@ local function get_param(req, key)
         return nil
     end
     
-    return req[key] -- Возвращаем значение напрямую, nil если отсутствует
+    local value = req[key]
+    if type(value) == "string" then
+        return sanitize_input(value)
+    end
+    return value
 end
 
 --- Валидирует значение задержки.
