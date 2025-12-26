@@ -59,13 +59,6 @@ local dvb_monitor_method_comparison = {
     end
 }
 
--- Заглушка для kill_dvb_tune, так как она должна быть реализована в lib-monitor
-local function kill_dvb_tune(instance)
-    log_info(COMPONENT_NAME, "kill_dvb_tune called for instance: %s. This function is a placeholder and needs to be implemented.", tostring(instance))
-    -- Здесь будет логика для остановки DVB-тюнера
-    -- Например: AstraAPI.kill_dvb_tune(instance)
-end
-
 --- Вспомогательная функция для валидации и установки параметра конфигурации DVB.
 -- @param table self Объект DvbTunerMonitor.
 -- @param string param_name Имя параметра (например, "dvb_rate").
@@ -199,7 +192,6 @@ end
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
 function DvbTunerMonitor:kill()
     if self.instance then
-        --kill_dvb_tune(self.instance)
         self.instance = nil
     end
     self.conf = nil
