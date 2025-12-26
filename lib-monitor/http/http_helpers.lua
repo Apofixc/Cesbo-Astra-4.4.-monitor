@@ -22,17 +22,17 @@ local astra_reload_func = AstraAPI.astra_reload
 local API_SECRET = os.getenv("ASTRA_API_KEY") or "test"
 
 if not API_SECRET then
-    log_error(COMPONENT_NAME, "ASTRA_API_KEY is not set. API authentication will fail.")
+    log_error(COMPONENT_NAME, "ASTRA_API_KEY не установлен. Аутентификация API завершится неудачей.")
 end
 local DELAY = 1
 
 -- =============================================
--- Хелперы (Helpers)
+-- Вспомогательные функции
 -- =============================================
 
 local function sanitize_input(str)
     if not str or type(str) ~= "string" then return nil end
-    -- Удалить опасные символы
+    -- Удаление опасных символов
     return str:gsub("[<>%[%]{}()$&|;`]", "")
 end
 
@@ -42,7 +42,7 @@ end
 -- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
-        log_error(COMPONENT_NAME, "[validate_request] request is nil.")
+        log_error(COMPONENT_NAME, "[validate_request] запрос равен nil.")
         return {}
     end
     
@@ -56,11 +56,11 @@ local function validate_request(request)
         if success and type(decoder) == "table" then -- Проверяем, что декодированный JSON является таблицей
             return decoder
         else
-            log_error(COMPONENT_NAME, "[validate_request] Failed to decode JSON or decoded content is not a table: %s", tostring(decoder))
+            log_error(COMPONENT_NAME, "[validate_request] Не удалось декодировать JSON или декодированное содержимое не является таблицей: %s", tostring(decoder))
         end
     end
 
-    log_error(COMPONENT_NAME, "[validate_request] Invalid or empty request content") 
+    log_error(COMPONENT_NAME, "[validate_request] Недопустимое или пустое содержимое запроса") 
     return {}
 end
 
@@ -70,11 +70,11 @@ end
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not API_SECRET then
-        log_error(COMPONENT_NAME, "[Security] API_SECRET is not configured. Unauthorized request.")
+        log_error(COMPONENT_NAME, "[Безопасность] API_SECRET не настроен. Несанкционированный запрос.")
         return false
     end
     if not api_key or api_key ~= API_SECRET then
-        log_info(COMPONENT_NAME, string.format("[Security] Unauthorized request"))
+        log_info(COMPONENT_NAME, string.format("[Безопасность] Несанкционированный запрос"))
         return false
     end
     return true
@@ -86,7 +86,7 @@ end
 -- @return any Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
-        log_error(COMPONENT_NAME, "[get_param] req is nil.")
+        log_error(COMPONENT_NAME, "[get_param] req равен nil.")
         return nil
     end
     
@@ -105,7 +105,7 @@ local function validate_delay(value)
     if i and i >= 1 then
         return i
     else
-        log_error(COMPONENT_NAME, "[validate_delay] Invalid delay value: %s, using default %d", tostring(value), DELAY)
+        log_error(COMPONENT_NAME, "[validate_delay] Недопустимое значение задержки: %s, используется значение по умолчанию %d", tostring(value), DELAY)
         return DELAY
     end
 end
@@ -125,7 +125,7 @@ local function send_response(server, client, code, msg, headers)
             content = msg or ""
         })
     else
-        local error_message = msg or "Unknown error"
+        local error_message = msg or "Неизвестная ошибка"
         log_error(COMPONENT_NAME, string.format("[send_response] %s (code: %d)", error_message, code))
         server:abort(client, code, error_message) -- Передаем сообщение об ошибке в abort
     end
@@ -144,24 +144,24 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     local name = get_param(req, "channel")
 
     if not name then 
-        return send_response(server, client, 400, "Missing channel name in request.") 
+        return send_response(server, client, 400, "Отсутствует имя канала в запросе.") 
     end
 
     local data, find_err = find_func(name)
     if not data then 
-        return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown error")) 
+        return send_response(server, client, 404, "Элемент '" .. name .. "' не найден. Ошибка: " .. (find_err or "неизвестная ошибка")) 
     end
     
     local cfg, kill_err = kill_func(data)
     if not cfg then
-        return send_response(server, client, 500, "Failed to kill item '" .. name .. "'. Error: " .. (kill_err or "unknown error"))
+        return send_response(server, client, 500, "Не удалось остановить элемент '" .. name .. "'. Ошибка: " .. (kill_err or "неизвестная ошибка"))
     end
-    log_info(COMPONENT_NAME, string.format("[%s] %s killed", log_prefix, name))
+    log_info(COMPONENT_NAME, string.format("[%s] %s остановлен", log_prefix, name))
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(COMPONENT_NAME, string.format("[%s] %s scheduled for reboot after %d seconds", log_prefix, name, delay)) 
+        log_info(COMPONENT_NAME, string.format("[%s] %s запланирован на перезагрузку через %d секунд", log_prefix, name, delay)) 
 
         timer_lib({
             interval = delay, 
@@ -169,15 +169,15 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
                 t:close()
                 local make_result, make_err = make_func(cfg, name)
                 if not make_result then
-                    log_error(COMPONENT_NAME, string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown error"))
+                    log_error(COMPONENT_NAME, string.format("[%s] Не удалось перезагрузить %s. Ошибка: %s", log_prefix, name, make_err or "неизвестная ошибка"))
                 else
-                    log_info(COMPONENT_NAME, string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
+                    log_info(COMPONENT_NAME, string.format("[%s] %s был успешно перезагружен", log_prefix, name)) 
                 end
             end
         })
     end
 
-    send_response(server, client, 200, "OK")
+    send_response(server, client, 200, "ОК")
 end
 
 return {
@@ -196,6 +196,6 @@ return {
     json_encode = json_encode,
     string_split = string_split,
     string_lower = string_lower,
-    shallow_table_copy = utils.shallow_table_copy, -- Добавлено
+    shallow_table_copy = utils.shallow_table_copy, -- Поверхностное копирование таблицы
     sanitize_input = sanitize_input,
 }

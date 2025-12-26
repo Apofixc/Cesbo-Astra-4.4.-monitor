@@ -79,7 +79,7 @@ function ResourceMonitor:new(name)
             last_reset = os_time()
         }
         
-        log_info(COMPONENT_NAME, "ResourceMonitor '%s' initialized. PID: %s", 
+        log_info(COMPONENT_NAME, "ResourceMonitor '%s' инициализирован. PID: %s", 
                  self.name, tostring(self.pid))
         
         self:get_system_cpu_usage()
@@ -105,7 +105,7 @@ end
 local function safe_command(cmd, default)
     local f = io_popen(cmd .. " 2>/dev/null", "r")
     if not f then
-        log_error(COMPONENT_NAME, "Failed to execute command: %s", cmd)
+        log_error(COMPONENT_NAME, "Не удалось выполнить команду: %s", cmd)
         return default
     end
     
@@ -145,7 +145,7 @@ function ResourceMonitor:collect_system_data()
     self.cache.last_update = now
     self.stats.collections = self.stats.collections + 1
     
-    log_debug(COMPONENT_NAME, "Collected system data for '%s'", self.name)
+    log_debug(COMPONENT_NAME, "Собраны системные данные для '%s'", self.name)
     return data
 end
 
@@ -172,7 +172,7 @@ function ResourceMonitor:collect_process_data()
     self.cache.last_update = now
     self.stats.collections = self.stats.collections + 1
     
-    log_debug(COMPONENT_NAME, "Collected process data for PID '%s'", tostring(self.pid))
+    log_debug(COMPONENT_NAME, "Собраны данные процесса для PID '%s'", tostring(self.pid))
     return data
 end
 
@@ -306,7 +306,7 @@ function ResourceMonitor:get_process_cpu_usage()
             local usage = (delta_process / delta_system) * 100
             cpu_data.usage_percent = math.max(0, usage)
         else
-            log_debug(COMPONENT_NAME, "Delta system time is zero, cannot calculate process CPU usage.")
+            log_debug(COMPONENT_NAME, "Время дельты системы равно нулю, невозможно рассчитать использование ЦП процесса.")
         end
     end
 
@@ -418,7 +418,7 @@ function ResourceMonitor:get_network_usage()
                 local rx_speed = 0
                 local tx_speed = 0
                 
-                log_debug(COMPONENT_NAME, "Interface %s: current_rx_bytes: %s, last_rx_bytes: %s", interface, tostring(current_rx_bytes), tostring(last_rx_bytes))
+                log_debug(COMPONENT_NAME, "Интерфейс %s: current_rx_bytes: %s, last_rx_bytes: %s", interface, tostring(current_rx_bytes), tostring(last_rx_bytes))
                 if current_rx_bytes >= last_rx_bytes then
                     rx_speed = (current_rx_bytes - last_rx_bytes) / delta_time
                 end
@@ -469,7 +469,7 @@ function ResourceMonitor:clear_cache()
     self.cache.system = nil
     self.cache.process = nil
     self.cache.last_update = 0
-    log_debug(COMPONENT_NAME, "Cache cleared for '%s'", self.name)
+    log_debug(COMPONENT_NAME, "Кэш очищен для '%s'", self.name)
 end
 
 --- Устанавливает интервал кэширования.
@@ -478,7 +478,7 @@ end
 function ResourceMonitor:set_cache_interval(seconds)
     if type(seconds) == "number" and seconds >= 0 then
         self.cache_interval = seconds
-        log_debug(COMPONENT_NAME, "Cache interval set to %d seconds for '%s'", seconds, self.name)
+        log_debug(COMPONENT_NAME, "Интервал кэширования установлен на %d секунд для '%s'", seconds, self.name)
         return true
     end
     return false
@@ -501,7 +501,7 @@ end
 function ResourceMonitor:reset_stats()
     self.stats.collections = 0
     self.stats.last_reset = os_time()
-    log_debug(COMPONENT_NAME, "Statistics reset for '%s'", self.name)
+    log_debug(COMPONENT_NAME, "Статистика сброшена для '%s'", self.name)
 end
 
 return ResourceMonitor

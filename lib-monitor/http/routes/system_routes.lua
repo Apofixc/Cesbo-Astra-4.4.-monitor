@@ -18,7 +18,7 @@ local json_encode = AstraAPI.json_encode
 local COMPONENT_NAME = "SystemRoutes"
 
 -- =============================================
--- Управление системой Astra (Route Handlers)
+-- Управление системой Astra (Обработчики маршрутов)
 -- =============================================
 
 --- Обработчик HTTP-запроса для перезагрузки Astra.
@@ -31,16 +31,16 @@ local astra_reload = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end    
 
     local req = validate_request(request)
-    send_response(server, client, 200, "Reload scheduled")
+    send_response(server, client, 200, "Перезагрузка запланирована")
     timer_lib({
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close()
-            log_info(COMPONENT_NAME, "[Astra] Reloaded")
+            log_info(COMPONENT_NAME, "[Astra] Перезагружено")
             AstraAPI.astra_reload()
         end
     })
@@ -56,16 +56,16 @@ local kill_astra = function(server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end   
 
     local req = validate_request(request)
-    send_response(server, client, 200, "Shutdown scheduled")
+    send_response(server, client, 200, "Завершение работы запланировано")
     timer_lib({
         interval = validate_delay(get_param(req, "delay")), 
         callback = function(t) 
             t:close() 
-            log_info(COMPONENT_NAME, "[Astra] Stopped")
+            log_info(COMPONENT_NAME, "[Astra] Остановлено")
             AstraAPI.os_exit(0)
         end
     })
@@ -85,7 +85,7 @@ local health = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end   
 
     local response_data = {
@@ -104,22 +104,22 @@ local health = function (server, client, request)
             memory_usage_kb = process_data.process.memory and process_data.process.memory.rss_kb or 0
         }
     else
-        log_error(COMPONENT_NAME, "Failed to collect process data for health endpoint: %s", 
+        log_error(COMPONENT_NAME, "Не удалось собрать данные процесса для конечной точки health: %s", 
                  tostring(process_data))
         response_data.process = {
             pid = resource_monitor_instance.pid or 0,
             cpu_usage_percent = -1,
             memory_usage_mb = -1,
-            error = "Failed to collect process data"
+            error = "Не удалось собрать данные процесса"
         }
     end
 
     -- Кодируем в JSON
     local json_content = json_encode(response_data)
     if not json_content then
-        local error_msg = "Failed to encode health data to JSON"
+        local error_msg = "Не удалось закодировать данные health в JSON"
         log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: " .. error_msg)
     end
 
     local headers = {
@@ -139,20 +139,20 @@ local get_system_resources = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end
 
     if not resource_monitor_instance then
-        log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
-        return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
+        log_error(COMPONENT_NAME, "Экземпляр ResourceMonitor недоступен.")
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: ResourceMonitor не инициализирован.")
     end
 
     local data = resource_monitor_instance:collect_system_data()
     local json_content = json_encode(data)
     if not json_content then
-        local error_msg = "Failed to encode system resource data to JSON"
+        local error_msg = "Не удалось закодировать данные системных ресурсов в JSON"
         log_error(COMPONENT_NAME, error_msg)
-        return send_response(server, client, 500, "Internal server error: " .. error_msg)
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: " .. error_msg)
     end
 
     local headers = {
@@ -172,21 +172,21 @@ local get_monitor_stats = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end
 
     if not resource_monitor_instance then
-        log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
-        return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
+        log_error(COMPONENT_NAME, "Экземпляр ResourceMonitor недоступен.")
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: ResourceMonitor не инициализирован.")
     end
 
     if resource_monitor_instance.get_stats then
         local stats = resource_monitor_instance:get_stats()
         local json_content = json_encode(stats)
         if not json_content then
-            local error_msg = "Failed to encode monitor stats to JSON"
+            local error_msg = "Не удалось закодировать статистику монитора в JSON"
             log_error(COMPONENT_NAME, error_msg)
-            return send_response(server, client, 500, "Internal server error: " .. error_msg)
+            return send_response(server, client, 500, "Внутренняя ошибка сервера: " .. error_msg)
         end
 
         local headers = {
@@ -197,8 +197,8 @@ local get_monitor_stats = function (server, client, request)
         
         send_response(server, client, 200, json_content, headers)
     else
-        log_error(COMPONENT_NAME, "ResourceMonitor does not support get_stats method.")
-        return send_response(server, client, 501, "Not Implemented: get_stats method not available")
+        log_error(COMPONENT_NAME, "ResourceMonitor не поддерживает метод get_stats.")
+        return send_response(server, client, 501, "Не реализовано: метод get_stats недоступен")
     end
 end
 
@@ -210,21 +210,21 @@ local clear_monitor_cache = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end
 
     if not resource_monitor_instance then
-        log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
-        return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
+        log_error(COMPONENT_NAME, "Экземпляр ResourceMonitor недоступен.")
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: ResourceMonitor не инициализирован.")
     end
 
     if resource_monitor_instance.clear_cache then
         resource_monitor_instance:clear_cache()
-        log_info(COMPONENT_NAME, "ResourceMonitor cache cleared via API request.")
-        send_response(server, client, 200, "Cache cleared successfully")
+        log_info(COMPONENT_NAME, "Кэш ResourceMonitor очищен через API-запрос.")
+        send_response(server, client, 200, "Кэш успешно очищен")
     else
-        log_error(COMPONENT_NAME, "ResourceMonitor does not support clear_cache method.")
-        return send_response(server, client, 501, "Not Implemented: clear_cache method not available")
+        log_error(COMPONENT_NAME, "ResourceMonitor не поддерживает метод clear_cache.")
+        return send_response(server, client, 501, "Не реализовано: метод clear_cache недоступен")
     end
 end
 --- Обработчик HTTP-запроса для установки интервала кэширования ResourceMonitor.
@@ -237,38 +237,38 @@ local set_monitor_cache_interval = function (server, client, request)
     if not request then return nil end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end
 
     if not resource_monitor_instance then
-        log_error(COMPONENT_NAME, "ResourceMonitor instance is not available.")
-        return send_response(server, client, 500, "Internal server error: ResourceMonitor not initialized.")
+        log_error(COMPONENT_NAME, "Экземпляр ResourceMonitor недоступен.")
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: ResourceMonitor не инициализирован.")
     end
 
     local req = validate_request(request)
     local interval_str = get_param(req, "interval")
     
     if not interval_str then
-        return send_response(server, client, 400, "Missing 'interval' parameter")
+        return send_response(server, client, 400, "Отсутствует параметр 'interval'")
     end
     
     local interval = tonumber(interval_str)
     if not interval or interval < 0 then
-        return send_response(server, client, 400, "Invalid interval value. Must be a non-negative number.")
+        return send_response(server, client, 400, "Недопустимое значение интервала. Должно быть неотрицательным числом.")
     end
 
     if resource_monitor_instance.set_cache_interval then
         local success = resource_monitor_instance:set_cache_interval(interval)
         if success then
-            log_info(COMPONENT_NAME, "ResourceMonitor cache interval set to %d seconds via API request.", interval)
-            send_response(server, client, 200, string.format("Cache interval set to %d seconds", interval))
+            log_info(COMPONENT_NAME, "Интервал кэширования ResourceMonitor установлен на %d секунд через API-запрос.", interval)
+            send_response(server, client, 200, string.format("Интервал кэширования установлен на %d секунд", interval))
         else
-            log_error(COMPONENT_NAME, "Failed to set cache interval for ResourceMonitor.")
-            send_response(server, client, 500, "Failed to set cache interval")
+            log_error(COMPONENT_NAME, "Не удалось установить интервал кэширования для ResourceMonitor.")
+            send_response(server, client, 500, "Не удалось установить интервал кэширования")
         end
     else
-        log_error(COMPONENT_NAME, "ResourceMonitor does not support set_cache_interval method.")
-        return send_response(server, client, 501, "Not Implemented: set_cache_interval method not available")
+        log_error(COMPONENT_NAME, "ResourceMonitor не поддерживает метод set_cache_interval.")
+        return send_response(server, client, 501, "Не реализовано: метод set_cache_interval недоступен")
     end
 end
 

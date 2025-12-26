@@ -16,7 +16,7 @@ local dvb_monitor_manager = DvbMonitorManager:new()
 local COMPONENT_NAME = "DvbRoutes"
 
 -- =============================================
--- Управление DVB-адаптерами (Route Handlers)
+-- Управление DVB-адаптерами (Обработчики маршрутов)
 -- =============================================
 
 --- Обработчик HTTP-запроса для получения списка DVB-адаптеров.
@@ -30,7 +30,7 @@ local COMPONENT_NAME = "DvbRoutes"
 -- }
 local get_adapters = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end
 
     local content = {}
@@ -40,8 +40,8 @@ local get_adapters = function(server, client, request)
     
     local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Failed to encode adapter list to JSON")
-        return send_response(server, client, 500, "Internal server error: Failed to encode adapter list.")
+        log_error(COMPONENT_NAME, "Не удалось закодировать список адаптеров в JSON")
+        return send_response(server, client, 500, "Внутренняя ошибка сервера: Не удалось закодировать список адаптеров.")
     end
 
     local headers = {
@@ -72,25 +72,25 @@ end
 -- }
 local get_adapter_data = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end    
 
     local req = validate_request(request)
 
     local name = get_param(req, "name_adapter")
     if not name then 
-        return send_response(server, client, 400, "Missing adapter name in request.")   
+        return send_response(server, client, 400, "Отсутствует имя адаптера в запросе.")   
     end
 
     local monitor, get_err = dvb_monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "DVB Monitor '" .. name .. "' not found. Error: " .. (get_err or "unknown"))
+        return send_response(server, client, 404, "Монитор DVB '" .. name .. "' не найден. Ошибка: " .. (get_err or "неизвестно"))
     end
 
     local json_cache = monitor:get_json_cache()
     if not json_cache then
-        return send_response(server, client, 404, "Monitor cache for '" .. name .. "' not found or empty.")
+        return send_response(server, client, 404, "Кэш монитора для '" .. name .. "' не найден или пуст.")
     end
 
     local headers = {
@@ -112,14 +112,14 @@ end
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_dvb_monitor = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Unauthorized")
+        return send_response(server, client, 401, "Несанкционированный доступ")
     end    
 
     local req = validate_request(request)
 
     local name_adapter = get_param(req, "name_adapter")
     if not name_adapter then 
-        return send_response(server, client, 400, "Missing adapter")   
+        return send_response(server, client, 400, "Отсутствует адаптер")   
     end
 
     local params = {}
@@ -133,11 +133,11 @@ local update_dvb_monitor = function(server, client, request)
 
     local success, err = dvb_monitor_manager:update_monitor_parameters(name_adapter, params)
     if success then
-        log_info(COMPONENT_NAME, string.format("[Monitor] %s updated successfully", name_adapter))
-        send_response(server, client, 200, "OK")
+        log_info(COMPONENT_NAME, string.format("[Монитор] %s успешно обновлен", name_adapter))
+        send_response(server, client, 200, "ОК")
     else
-        log_error(COMPONENT_NAME, string.format("[Monitor] %s update failed: %s", name_adapter, err or "unknown error"))
-        send_response(server, client, 400, "Update failed: " .. (err or "unknown error"))
+        log_error(COMPONENT_NAME, string.format("[Монитор] Обновление %s не удалось: %s", name_adapter, err or "неизвестная ошибка"))
+        send_response(server, client, 400, "Обновление не удалось: " .. (err or "неизвестная ошибка"))
     end
 end
 
