@@ -21,10 +21,10 @@ local STREAM = {
 -- Значения представляют собой таблицы с конфигурациями HTTP-адресов (host, port, path).
 -- В настоящее время все адреса закомментированы.
 local MONIT_ADDRESS = {
-    -- ["channels"] = {{host = "127.0.0.1", port = 8081, path = "/channels"}, {host = "127.0.0.1", port = 5000, path = "/channels"}}, 
-    -- ["analyze"]  = {{host = "127.0.0.1", port = 8082, path = "/analyze"}},    
-    -- ["errors"]   = {{host = "127.0.0.1", port = 8083, path = "/errors"}}, 
-    -- ["dvb"]      = {{host = "127.0.0.1", port = 8084, path = "/dvb"}, {host = "127.0.0.1", port = 5000, path = "/dvb"}}, 
+    ["channels"] = {{host = "127.0.0.1", port = 8081, path = "/channels"}, {host = "127.0.0.1", port = 5000, path = "/channels"}},
+    ["analyze"]  = {{host = "127.0.0.1", port = 8082, path = "/analyze"}},
+    ["errors"]   = {{host = "127.0.0.1", port = 8083, path = "/errors"}},
+    ["dvb"]      = {{host = "127.0.0.1", port = 8084, path = "/dvb"}, {host = "127.0.0.1", port = 5000, path = "/dvb"}},
 }
 
 return {

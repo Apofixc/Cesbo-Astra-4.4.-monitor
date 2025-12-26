@@ -23,8 +23,8 @@ local COMPONENT_NAME = "Utils"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "../config/monitor_settings"
-local MonitorConfig = require "../config/monitor_config"
+local config = require "src.config.monitor_settings"
+local MonitorConfig = require "src.config.monitor_config"
 
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.
@@ -295,6 +295,7 @@ end
 function send_monitor(content, feed)
     log_debug(COMPONENT_NAME, "Sending monitor data for feed '%s'. Content: %s", feed, content)
     local recipients = MONIT_ADDRESS[feed]
+    print(content)    
     if recipients and #recipients > 0 then
         local content_length = #content
         local common_headers = {
@@ -303,6 +304,7 @@ function send_monitor(content, feed)
             "Content-Length: " .. content_length,
             "Connection: close",
         }
+
 
         for _, addr in ipairs(recipients) do
             local headers = shallow_table_copy(common_headers) -- Копируем общие заголовки
