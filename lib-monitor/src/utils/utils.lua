@@ -111,19 +111,19 @@ local function validate_monitoring_params(host, port, path, feed)
 
     if not (type(port) == "number" and port > 0) then
         local error_msg = "Port must be a positive number. Got " .. tostring(port) .. "."
-        log_error(COMPONENT_NAME, "[validate_monitoring_params]", error_msg)
+        log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
 
     if not (type(path) == "string" and path ~= "") then
         local error_msg = "Path must be a non-empty string. Got " .. tostring(path) .. "."
-        log_error(COMPONENT_NAME, "[validate_monitoring_params]", error_msg)
+        log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
 
     if feed and not (type(feed) == "string" and feed ~= "") then
         local error_msg = "Feed must be a non-empty string if provided. Got " .. tostring(feed) .. "."
-        log_error(COMPONENT_NAME, "[validate_monitoring_params]", error_msg)
+        log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
     return true, nil
