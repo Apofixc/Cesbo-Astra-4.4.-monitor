@@ -1,13 +1,13 @@
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../../src/api/astra_api"
 
 local http_server = AstraAPI.http_server
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "../src/utils/logger"
 local log_info    = Logger.info
 
-local channel_routes = require "lib-monitor.http.routes.channel_routes"
-local dvb_routes = require "lib-monitor.http.routes.dvb_routes"
-local system_routes = require "lib-monitor.http.routes.system_routes"
-local ResourceMonitor = require "lib-monitor.src.system.resource_monitor"
+local channel_routes = require "./routes/channel_routes"
+local dvb_routes = require "./routes/dvb_routes"
+local system_routes = require "./routes/system_routes"
+local ResourceMonitor = require "../../src/system/resource_monitor"
 
 --- Запускает HTTP-сервер мониторинга.
 -- @param string addr IP-адрес, на котором будет слушать сервер.

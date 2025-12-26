@@ -1,10 +1,10 @@
-local Logger = require "lib-monitor.src.utils.logger"
+local Logger = require "../../../src/utils/logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local ResourceMonitor = require "lib-monitor.src.system.resource_monitor"
+local ResourceMonitor = require "../../../src/system/resource_monitor"
 local resource_monitor_instance = ResourceMonitor:new("system_monitor")
-local http_helpers = require "lib-monitor.http.http_helpers"
+local http_helpers = require "../http_helpers"
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
@@ -14,7 +14,7 @@ local timer_lib = http_helpers.timer_lib
 local os_exit_func = http_helpers.os_exit_func
 local astra_version_var = http_helpers.astra_version_var
 local astra_reload_func = http_helpers.astra_reload_func
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../../../src/api/astra_api"
 
 local json_encode = AstraAPI.json_encode
 

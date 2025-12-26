@@ -24,16 +24,15 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
-local Logger = require "lib-monitor.src.utils.logger"
+local Logger = require "../utils/logger"
 local log_info  = Logger.info
 local log_error = Logger.error
 
-local COMPONENT_NAME = "Channel" -- Имя компонента для логирования
+local COMPONENT_NAME = "Channel"
 
--- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local Utils = require "lib-monitor.src.utils.utils"
-local table_copy   = Utils.table_copy
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local Utils = require "../utils/utils"
+local shallow_table_copy   = Utils.shallow_table_copy
+local AstraAPI = require "../api/astra_api"
 
 local string_split = AstraAPI.string_split
 local find_channel = AstraAPI.find_channel
@@ -42,18 +41,15 @@ local kill_channel = AstraAPI.kill_channel
 local get_stream   = Utils.get_stream
 
 -- Модули мониторинга
-local ChannelMonitor = require "lib-monitor.src.channel.channel_monitor"
-local ChannelMonitorDispatcher = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
-local Adapter = require "lib-monitor.src.adapters.adapter"
--- parse_url и init_input теперь используются внутри MonitorManager, поэтому их можно удалить отсюда
--- local parse_url = parse_url
--- local init_input = init_input
+local ChannelMonitor = require "./channel_monitor"
+local ChannelMonitorDispatcher = require "../dispatchers/channel_monitor_dispatcher"
+local Adapter = require "../adapters/adapter"
 
 -- ===========================================================================
 -- Константы и конфигурация
 -- ===========================================================================
 
-local MonitorConfig = require "lib-monitor.src.config.monitor_config"
+local MonitorConfig = require "../config/monitor_config"
 
 -- Константы для типов мониторов
 local MONITOR_TYPE_INPUT  = "input"
@@ -226,7 +222,7 @@ function kill_monitor(monitor_obj)
         return nil, error_msg
     end
 
-    local config = table_copy(monitor_obj.config)
+    local config = shallow_table_copy(monitor_obj.config)
     local success, err = channel_monitor_manager:remove_monitor(monitor_obj.name)
 
     if success then
@@ -309,7 +305,7 @@ function make_stream(conf)
 
       local function get_monitor_params(stream_conf)
         local name = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.name) == "string" and stream_conf.monitor.name) or stream_conf.name
-        local m_type = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.monitor_type) == "string" and string_lower(stream_conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
+        local m_type = (stream_conf.monitor and type(stream_conf.monitor) == "table" and type(stream_conf.monitor.monitor_type) == "string" and string_lower(stream_conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
         return name, m_type
     end
 
@@ -385,7 +381,7 @@ function kill_stream(channel_data)
         log_info(COMPONENT_NAME, "No monitor found for stream '%s'.", monitor_name)
     end
 
-    local config = table_copy(channel_data.config)
+    local config = shallow_table_copy(channel_data.config)
     kill_channel(channel_data) -- Предполагаем, что kill_channel всегда успешен или обрабатывает свои ошибки
 
     log_info(COMPONENT_NAME, "Stream '%s' shutdown successfully.", config.name)

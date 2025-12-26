@@ -6,14 +6,14 @@
 local type      = type
 local tonumber  = tonumber
 local string_format = string.format
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../api/astra_api"
 
 local io_popen = AstraAPI.io_popen
 local table_insert = AstraAPI.table_insert
 local os_time = AstraAPI.os_time
 local os_date = AstraAPI.os_date
 
-local Logger = require "lib-monitor.src.utils.logger"
+local Logger = require "../utils/logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug

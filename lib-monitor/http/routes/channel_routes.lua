@@ -1,15 +1,15 @@
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "../../../src/utils/logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitorManager = require "lib-monitor.src.dispatchers.channel_monitor_dispatcher"
-local ChannelModule = require "lib-monitor.src.channel.channel"
+local ChannelMonitorManager = require "../../../src/dispatchers/channel_monitor_dispatcher"
+local ChannelModule = require "../../../src/channel/channel"
 
 local channel_monitor_manager = ChannelMonitorManager:new()
 
-local http_helpers = require "lib-monitor.http.http_helpers"
+local http_helpers = require "../http_helpers"
 
-local COMPONENT_NAME = "ChannelRoutes" -- Определяем COMPONENT_NAME для логирования
+local COMPONENT_NAME = "ChannelRoutes"
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
@@ -19,13 +19,13 @@ local handle_kill_with_reboot = http_helpers.handle_kill_with_reboot
 local string_lower = http_helpers.string_lower
 local timer_lib = http_helpers.timer_lib
 local json_encode = http_helpers.json_encode
-local json_decode = http_helpers.json_decode -- Добавляем json_decode
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local json_decode = http_helpers.json_decode
+local AstraAPI = require "../../../src/api/astra_api"
 
 local string_split = AstraAPI.string_split
-local table_copy = http_helpers.table_copy -- Используем из http_helpers
+local shallow_table_copy = http_helpers.shallow_table_copy
 
-local channel_list = AstraAPI.channel_list -- Явно объявляем глобальную переменную
+local channel_list = AstraAPI.channel_list
 
 -- =============================================
 -- Управление каналами и их мониторами (Route Handlers)
@@ -65,7 +65,7 @@ local kill_channel = function(server, client, request)
     end
 
     handle_kill_with_reboot(AstraAPI.find_channel, function(channel_data)
-        local cfg = table_copy(channel_data.config) 
+        local cfg = shallow_table_copy(channel_data.config) 
         AstraAPI.kill_channel(channel_data)
         return cfg
     end, AstraAPI.make_channel, "Channel", server, client, validate_request(request))
@@ -176,7 +176,7 @@ local get_channels = function(server, client, request)
         "Connection: close",
     }    
 
-    send_response(server, client, 200, json_content, headers)   
+    send_response(server, client, 200, json_content, headers)
 end
 
 --- Обработчик HTTP-запроса для получения списка активных мониторов каналов.
@@ -212,7 +212,7 @@ local get_channel_monitors = function(server, client, request)
         "Connection: close",
     }    
     
-    send_response(server, client, 200, json_content, headers) 
+    send_response(server, client, 200, json_content, headers)
 end
 
 --- Обработчик HTTP-запроса для получения данных монитора канала.

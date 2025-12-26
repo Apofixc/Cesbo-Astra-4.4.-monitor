@@ -15,25 +15,23 @@ local ipairs     = ipairs
 local math_max   = math.max
 local table_insert = table.insert
 
--- Глобальные функции Astra (предполагается, что они доступны в глобальной области видимости)
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../api/astra_api"
 
-local json_encode     = AstraAPI.json_encode -- Предполагается, что json.encode глобально доступен
-local analyze         = AstraAPI.analyze -- Предполагается, что analyze глобально доступен
+local json_encode     = AstraAPI.json_encode
+local analyze         = AstraAPI.analyze
 
-local Utils           = require "lib-monitor.src.utils.utils"
-local get_server_name = Utils.get_server_name -- Предполагается, что get_server_name глобально доступен
-local send_monitor    = Utils.send_monitor -- Предполагается, что send_monitor глобально доступен
-local ratio           = Utils.ratio -- Предполагается, что ratio глобально доступен
+local Utils           = require "../utils/utils"
+local get_server_name = Utils.get_server_name
+local send_monitor    = Utils.send_monitor
+local ratio           = Utils.ratio
+local validate_monitor_param = Utils.validate_monitor_param
 
--- Локальные модули
-local Logger = require "lib-monitor.src.utils.logger"
+local Logger = require "../utils/logger"
 local log_info           = Logger.info
 local log_error          = Logger.error
-local MonitorConfig      = require "lib-monitor.src.config.monitor_config"
-local validate_monitor_param = require "lib-monitor.src.utils.utils".validate_monitor_param
+local MonitorConfig      = require "../config/monitor_config"
 
-local COMPONENT_NAME = "ChannelMonitor" -- Имя компонента для логирования
+local COMPONENT_NAME = "ChannelMonitor"
 
 --- Таблица методов сравнения для монитора канала.
 -- Каждый метод определяет логику, по которой определяется, изменилось ли состояние канала

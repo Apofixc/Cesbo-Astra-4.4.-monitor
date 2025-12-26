@@ -1,17 +1,17 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "../src/utils/logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local utils = require "lib-monitor.src.utils.utils" -- Возвращено
-local AstraAPI = require "lib-monitor.src.api.astra_api"
-local timer_lib   = AstraAPI.timer -- Переименовано, чтобы избежать конфликта с локальной переменной timer
+local utils = require "../src/utils/utils"
+local AstraAPI = require "../src/api/astra_api"
+local timer_lib   = AstraAPI.timer
 local json_decode = AstraAPI.json_decode
 local json_encode = AstraAPI.json_encode
 local string_split = AstraAPI.string_split
-local os_exit_func = AstraAPI.os_exit -- Переименовано
-local astra_version_var = AstraAPI.astra_version -- Переименовано
-local astra_reload_func = AstraAPI.astra_reload -- Переименовано
+local os_exit_func = AstraAPI.os_exit
+local astra_version_var = AstraAPI.astra_version
+local astra_reload_func = AstraAPI.astra_reload
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -176,5 +176,5 @@ return {
     json_encode = json_encode,
     string_split = string_split,
     string_lower = string_lower,
-    table_copy = utils.table_copy, -- Добавлено
+    shallow_table_copy = utils.shallow_table_copy, -- Добавлено
 }

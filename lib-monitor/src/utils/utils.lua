@@ -7,12 +7,12 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "./logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local ipairs      = ipairs
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../api/astra_api"
 
 local http_request = AstraAPI.http_request
 local astra_version = AstraAPI.astra_version
@@ -23,8 +23,8 @@ local COMPONENT_NAME = "Utils"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "lib-monitor.src.config.monitor_settings"
-local MonitorConfig = require "lib-monitor.src.config.monitor_config"
+local config = require "../config/monitor_settings"
+local MonitorConfig = require "../config/monitor_config"
 
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.
@@ -81,7 +81,7 @@ end
 -- @return table Копия таблицы; `nil` и сообщение об ошибке, если входной аргумент невалиден.
 -- table.copy: Предполагается, что эта функция может быть предоставлена Astra глобально.
 -- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
-local table_copy = function(t)
+local shallow_table_copy = function(t)
     if type(t) ~= "table" then
         local error_msg = "Invalid argument: must be a table. Got " .. type(t) .. "."
         log_error(COMPONENT_NAME, error_msg)
@@ -303,7 +303,7 @@ function send_monitor(content, feed)
         }
 
         for _, addr in ipairs(recipients) do
-            local headers = table_copy(common_headers) -- Копируем общие заголовки
+            local headers = shallow_table_copy(common_headers) -- Копируем общие заголовки
             table.insert(headers, "Host: " .. addr.host .. ":" .. addr.port) -- Добавляем специфичный заголовок Host
 
             http_request({
@@ -334,7 +334,7 @@ end
 return {
     get_stream = get_stream,
     ratio = ratio,
-    table_copy = table_copy,
+    shallow_table_copy = shallow_table_copy,
     validate_monitor_param = validate_monitor_param,
     validate_monitor_name = validate_monitor_name,
     set_client_monitoring = set_client_monitoring,

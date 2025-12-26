@@ -6,18 +6,18 @@ local type        = type
 local Logger      = require "lib-monitor.src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local AstraAPI = require "lib-monitor.src.api.astra_api"
+local AstraAPI = require "../../api/astra_api"
 
-local json_encode = AstraAPI.json_encode -- Предполагается, что json.encode глобально доступен
+local json_encode = AstraAPI.json_encode
 
-local Utils                = require "lib-monitor.src.utils.utils"
+local Utils                = require "../utils/utils"
 local ratio                = Utils.ratio
 local get_server_name      = Utils.get_server_name
 local send_monitor         = Utils.send_monitor
-local MonitorConfig        = require "lib-monitor.src.config.monitor_config"
 local validate_monitor_param = Utils.validate_monitor_param
+local MonitorConfig        = require "../../config/monitor_config"
 
-local dvb_tune = AstraAPI.dvb_tune -- Предполагается, что эта функция глобально доступна или будет передана
+local dvb_tune = AstraAPI.dvb_tune
 
 local COMPONENT_NAME = "DvbTunerMonitor"
 

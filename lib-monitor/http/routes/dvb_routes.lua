@@ -1,18 +1,18 @@
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "../../../src/utils/logger"
 local log_error   = Logger.error
 local tonumber = tonumber
 
-local http_helpers = require "lib-monitor.http.http_helpers"
+local http_helpers = require "../http_helpers"
 local json_encode = http_helpers.json_encode
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
 
-local DvbMonitorManager = require "lib-monitor.src.dispatchers.dvb_monitor_dispatcher"
+local DvbMonitorManager = require "../../../src/dispatchers/dvb_monitor_dispatcher"
 local dvb_monitor_manager = DvbMonitorManager:new()
 
-local COMPONENT_NAME = "DvbRoutes" -- Определяем COMPONENT_NAME для логирования
+local COMPONENT_NAME = "DvbRoutes"
 
 -- =============================================
 -- Управление DVB-адаптерами (Route Handlers)

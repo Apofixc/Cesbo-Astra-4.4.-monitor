@@ -17,7 +17,7 @@ local LOG_LEVELS = {
     NONE = 5,  -- Отключить все логи.
 }
 
-local MonitorConfig = require "lib-monitor.src.config.monitor_config"
+local MonitorConfig = require "../config/monitor_config"
 
 --- Текущий активный уровень логирования.
 -- Инициализируется значением из `MonitorConfig.LogLevel` (приведенным к верхнему регистру)
