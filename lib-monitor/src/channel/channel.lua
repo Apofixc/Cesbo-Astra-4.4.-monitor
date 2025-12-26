@@ -20,13 +20,13 @@ local type         = type
 local tostring     = tostring
 local ipairs       = ipairs
 local math_max     = math.max
-local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
 local Logger = require "src.utils.logger"
 local log_info  = Logger.info
 local log_error = Logger.error
+local log_debug = Logger.debug
 
 local COMPONENT_NAME = "Channel"
 

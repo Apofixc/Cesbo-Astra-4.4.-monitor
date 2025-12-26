@@ -47,7 +47,18 @@ local kill_stream = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(AstraAPI.find_channel, ChannelModule.kill_stream, ChannelModule.make_stream, "Stream", server, client, validate_request(request))
+    handle_kill_with_reboot(
+        function(name)
+            local channel_data = AstraAPI.find_channel(name)
+            if not channel_data then
+                return nil, "Stream '" .. name .. "' not found."
+            end
+            return channel_data, nil
+        end, 
+        function(channel_data) return ChannelModule.kill_stream(channel_data) end,
+        function(cfg, name) return ChannelModule.make_stream(cfg) end,
+        "Stream", server, client, validate_request(request)
+    )
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
@@ -65,11 +76,29 @@ local kill_channel = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(AstraAPI.find_channel, function(channel_data)
-        local cfg = shallow_table_copy(channel_data.config) 
-        AstraAPI.kill_channel(channel_data)
-        return cfg
-    end, AstraAPI.make_channel, "Channel", server, client, validate_request(request))
+    handle_kill_with_reboot(
+        function(name)
+            local channel_data = AstraAPI.find_channel(name)
+            if not channel_data then
+                return nil, "Channel '" .. name .. "' not found."
+            end
+            return channel_data, nil
+        end, 
+        function(channel_data)
+            local cfg = shallow_table_copy(channel_data.config) 
+            AstraAPI.kill_channel(channel_data) -- AstraAPI.kill_channel ничего не возвращает, предполагаем успех
+            log_info(COMPONENT_NAME, "Channel '%s' killed via AstraAPI.kill_channel", channel_data.config.name)
+            return cfg, nil
+        end, 
+        function(cfg, name)
+            local new_channel = AstraAPI.make_channel(cfg)
+            if not new_channel then
+                return nil, "Failed to create channel '" .. name .. "'."
+            end
+            return new_channel, nil
+        end, 
+        "Channel", server, client, validate_request(request)
+    )
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки монитора канала.
@@ -87,7 +116,18 @@ local kill_monitor = function(server, client, request)
         return send_response(server, client, 401, "Unauthorized")
     end
 
-    handle_kill_with_reboot(ChannelModule.find_monitor, ChannelModule.kill_monitor, ChannelModule.make_monitor, "Monitor", server, client, validate_request(request))
+    handle_kill_with_reboot(
+        function(name)
+            local monitor_data, err = ChannelModule.find_monitor(name)
+            if not monitor_data then
+                return nil, err or "Channel Monitor '" .. name .. "' not found."
+            end
+            return monitor_data, nil
+        end, 
+        function(monitor_data) return ChannelModule.kill_monitor(monitor_data) end,
+        function(cfg, name) return ChannelModule.make_monitor(cfg, name) end,
+        "Monitor", server, client, validate_request(request)
+    )
 end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.
@@ -117,12 +157,23 @@ local update_channel_monitor = function(server, client, request)
     local params = {}
     for _, param_name in ipairs({ "analyze", "time_check", "rate", "method_comparison" }) do
         local val = get_param(req, param_name)
-        if param_name == "analyze" then
-            if val and val ~= "" then params[param_name] = val end            
-        else
-            if val and val ~= "" then 
+        if val ~= nil then
+            if param_name == "analyze" then
+                if type(val) == "boolean" then
+                    params[param_name] = val
+                elseif type(val) == "string" then
+                    local lower_val = string_lower(val)
+                    if lower_val == "true" then
+                        params[param_name] = true
+                    elseif lower_val == "false" then
+                        params[param_name] = false
+                    end
+                end
+            else
                 local num = tonumber(val)
-                if num then params[param_name] = num end
+                if num ~= nil then
+                    params[param_name] = num
+                end
             end
         end
     end

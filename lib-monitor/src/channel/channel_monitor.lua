@@ -29,6 +29,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 local Logger = require "src.utils.logger"
 local log_info           = Logger.info
 local log_error          = Logger.error
+local log_debug          = Logger.debug
 local MonitorConfig      = require "src.config.monitor_config"
 
 local COMPONENT_NAME = "ChannelMonitor"

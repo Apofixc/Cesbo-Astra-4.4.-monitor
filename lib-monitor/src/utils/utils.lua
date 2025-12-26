@@ -185,7 +185,7 @@ function validate_monitor_name(name)
     end
 
     -- Проверка на допустимые символы (буквы, цифры, дефисы, подчеркивания, точки)
-    if not string.match(name, "^[a-zA-Z0-9%._-]+$") then
+    if not name:match("^[a-zA-Z0-9%._-]+$") then
         local error_msg = "Invalid monitor name: contains disallowed characters. Only alphanumeric, hyphens, underscores, and dots are allowed."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg

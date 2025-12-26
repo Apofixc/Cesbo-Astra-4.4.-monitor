@@ -11,9 +11,6 @@ local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
 local timer_lib = http_helpers.timer_lib
-local os_exit_func = http_helpers.os_exit_func
-local astra_version_var = http_helpers.astra_version_var
-local astra_reload_func = http_helpers.astra_reload_func
 local AstraAPI = require "src.api.astra_api"
 
 local json_encode = AstraAPI.json_encode

@@ -3,6 +3,7 @@ local string_lower = string.lower
 local Logger      = require "../src/utils/logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
+local log_debug   = Logger.debug
 local COMPONENT_NAME = "HTTPHelpers"
 local utils = require "../src/utils/utils"
 local AstraAPI = require "../src/api/astra_api"
@@ -144,12 +145,12 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
 
     local data, find_err = find_func(name)
     if not data then 
-        return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown")) 
+        return send_response(server, client, 404, "Item '" .. name .. "' not found. Error: " .. (find_err or "unknown error")) 
     end
     
     local cfg, kill_err = kill_func(data)
     if not cfg then
-        return send_response(server, client, 500, "Failed to kill item '" .. name .. "'. Error: " .. (kill_err or "unknown"))
+        return send_response(server, client, 500, "Failed to kill item '" .. name .. "'. Error: " .. (kill_err or "unknown error"))
     end
     log_info(COMPONENT_NAME, string.format("[%s] %s killed", log_prefix, name))
 
@@ -162,11 +163,11 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
             interval = delay, 
             callback = function(t) 
                 t:close()
-                local success, make_err = make_func(cfg, name)
-                if success then
-                    log_info(COMPONENT_NAME, string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
+                local make_result, make_err = make_func(cfg, name)
+                if not make_result then
+                    log_error(COMPONENT_NAME, string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown error"))
                 else
-                    log_error(COMPONENT_NAME, string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown"))
+                    log_info(COMPONENT_NAME, string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
                 end
             end
         })
