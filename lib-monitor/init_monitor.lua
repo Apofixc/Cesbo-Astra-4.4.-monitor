@@ -7,7 +7,7 @@
 -- и диспетчеров мониторинга.
 -- ===========================================================================
 
-require "lib-monitor.src.utils.logger"
+require "./src/utils/logger"
 require "lib-monitor.src.utils.utils"
 require "lib-monitor.src.adapters.adapter"
 require "lib-monitor.src.channel.channel"

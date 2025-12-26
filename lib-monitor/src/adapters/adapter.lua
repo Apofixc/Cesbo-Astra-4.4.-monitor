@@ -13,7 +13,7 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "lib-monitor.src.utils.logger"
+local Logger      = require "../utils/logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
