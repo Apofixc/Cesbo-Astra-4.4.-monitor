@@ -303,13 +303,8 @@ function make_stream(conf)
         return nil, error_msg
     end
 
-      local function get_monitor_params(stream_conf)
-        local name = (stream_conf.monitor and type(stream_conf.monitor) == 'table' and type(stream_conf.monitor.name) == "string" and stream_conf.monitor.name) or stream_conf.name
-        local m_type = (stream_conf.monitor and type(stream_conf.monitor) == "table" and type(stream_conf.monitor.monitor_type) == "string" and string_lower(stream_conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
-        return name, m_type
-    end
-
-    local monitor_name, monitor_type = get_monitor_params(conf)
+    local monitor_name = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
+    local monitor_type = (conf.monitor and type(conf.monitor) == "table" and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
     local upstream, monitor_target, handler_err
     local handler = monitor_type_handlers[monitor_type]
