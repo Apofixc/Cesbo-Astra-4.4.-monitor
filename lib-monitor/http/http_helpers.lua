@@ -19,11 +19,21 @@ local astra_reload_func = AstraAPI.astra_reload
 -- ===========================================================================
 
 local API_SECRET = os.getenv("ASTRA_API_KEY") or "test"
+
+if not API_SECRET then
+    log_error(COMPONENT_NAME, "ASTRA_API_KEY is not set. API authentication will fail.")
+end
 local DELAY = 1
 
 -- =============================================
 -- Хелперы (Helpers)
 -- =============================================
+
+local function sanitize_input(str)
+    if not str or type(str) ~= "string" then return nil end
+    -- Удалить опасные символы
+    return str:gsub("[<>%[%]{}()$&|;`]", "")
+end
 
 --- Валидирует входящий HTTP-запрос и извлекает параметры.
 -- Поддерживает параметры из query string или из JSON-тела запроса.
@@ -58,8 +68,12 @@ end
 -- @return boolean true, если аутентификация успешна, иначе `false`.
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
+    if not API_SECRET then
+        log_error(COMPONENT_NAME, "[Security] API_SECRET is not configured. Unauthorized request.")
+        return false
+    end
     if not api_key or api_key ~= API_SECRET then
-        log_info(COMPONENT_NAME, string.format("[Security] Unauthorized request")) -- Добавлено логирование IP-адреса
+        log_info(COMPONENT_NAME, string.format("[Security] Unauthorized request"))
         return false
     end
     return true
@@ -178,4 +192,5 @@ return {
     string_split = string_split,
     string_lower = string_lower,
     shallow_table_copy = utils.shallow_table_copy, -- Добавлено
+    sanitize_input = sanitize_input,
 }
