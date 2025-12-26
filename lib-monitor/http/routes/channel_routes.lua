@@ -128,10 +128,10 @@ local update_channel_monitor = function(server, client, request)
 
     local success, err = channel_monitor_manager:update_monitor_parameters(name, params)
     if success then
-        log_info(string.format("[Monitor] %s updated successfully", name))
+        log_info(COMPONENT_NAME, string.format("[Monitor] %s updated successfully", name))
         send_response(server, client, 200, "OK")
     else
-        log_error(string.format("[Monitor] %s update failed: %s", name, err or "unknown error"))
+        log_error(COMPONENT_NAME, string.format("[Monitor] %s update failed: %s", name, err or "unknown error"))
         send_response(server, client, 400, "Update failed: " .. (err or "unknown error"))
     end
 end

@@ -1,4 +1,5 @@
 local Logger      = require "../../../src/utils/logger"
+local log_info    = Logger.info
 local log_error   = Logger.error
 local tonumber = tonumber
 
@@ -132,10 +133,10 @@ local update_dvb_monitor = function(server, client, request)
 
     local success, err = dvb_monitor_manager:update_monitor_parameters(name_adapter, params)
     if success then
-        log_info(string.format("[Monitor] %s updated successfully", name_adapter))
+        log_info(COMPONENT_NAME, string.format("[Monitor] %s updated successfully", name_adapter))
         send_response(server, client, 200, "OK")
     else
-        log_error(string.format("[Monitor] %s update failed: %s", name_adapter, err or "unknown error"))
+        log_error(COMPONENT_NAME, string.format("[Monitor] %s update failed: %s", name_adapter, err or "unknown error"))
         send_response(server, client, 400, "Update failed: " .. (err or "unknown error"))
     end
 end

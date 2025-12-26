@@ -31,7 +31,7 @@ local DELAY = 1
 -- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
-        log_error("[validate_request] request is nil.")
+        log_error(COMPONENT_NAME, "[validate_request] request is nil.")
         return {}
     end
     
@@ -45,11 +45,11 @@ local function validate_request(request)
         if success and type(decoder) == "table" then -- Проверяем, что декодированный JSON является таблицей
             return decoder
         else
-            log_error("[validate_request] Failed to decode JSON or decoded content is not a table: %s", tostring(decoder))
+            log_error(COMPONENT_NAME, "[validate_request] Failed to decode JSON or decoded content is not a table: %s", tostring(decoder))
         end
     end
 
-    log_error("[validate_request] Invalid or empty request content") 
+    log_error(COMPONENT_NAME, "[validate_request] Invalid or empty request content") 
     return {}
 end
 
@@ -71,7 +71,7 @@ end
 -- @return any Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
-        log_error("[get_param] req is nil.")
+        log_error(COMPONENT_NAME, "[get_param] req is nil.")
         return nil
     end
     
@@ -86,7 +86,7 @@ local function validate_delay(value)
     if i and i >= 1 then
         return i
     else
-        log_error("[validate_delay] Invalid delay value: %s, using default %d", tostring(value), DELAY)
+        log_error(COMPONENT_NAME, "[validate_delay] Invalid delay value: %s, using default %d", tostring(value), DELAY)
         return DELAY
     end
 end
@@ -107,7 +107,7 @@ local function send_response(server, client, code, msg, headers)
         })
     else
         local error_message = msg or "Unknown error"
-        log_error(string.format("[send_response] %s (code: %d)", error_message, code))
+        log_error(COMPONENT_NAME, string.format("[send_response] %s (code: %d)", error_message, code))
         server:abort(client, code, error_message) -- Передаем сообщение об ошибке в abort
     end
 end
