@@ -65,15 +65,17 @@ function ratio(old, new)
         return nil, error_msg
     end
     
-    if new == 0 then
-        if old == 0 then
-            return 0, nil -- Если оба 0, изменение 0%
-        else
-            return 1, nil -- Если old не 0, а new 0, это 100% изменение (или полная потеря)
-        end
+    local abs_old = math_abs(old)
+    local abs_new = math_abs(new)
+    local max_abs = math_max(abs_old, abs_new)
+
+    if max_abs == 0 then
+        return 0, nil
+    elseif abs_old == 0 or abs_new == 0 then
+        return 1, nil
     end
 
-    return math_abs(old - new) / math_max(old, new), nil
+    return math_abs(old - new) / max_abs, nil
 end
 
 --- Создает поверхностную копию таблицы.

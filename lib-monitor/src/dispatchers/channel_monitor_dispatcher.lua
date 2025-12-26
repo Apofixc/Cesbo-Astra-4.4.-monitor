@@ -88,7 +88,12 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
         return nil, error_msg
     end
 
-    if self:get_monitor(config.name) then
+    local existing_monitor, get_err = self:get_monitor(config.name)
+    if get_err then
+        log_error(COMPONENT_NAME, get_err)
+        return nil, get_err
+    end
+    if existing_monitor then
         local error_msg = "Monitor with name '" .. config.name .. "' already exists."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
