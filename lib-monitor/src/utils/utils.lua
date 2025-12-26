@@ -308,8 +308,6 @@ function send_monitor(content, feed)
 
         for _, addr in ipairs(recipients) do
             local headers = shallow_table_copy(common_headers) -- Копируем общие заголовки
-            table.insert(headers, "Host: " .. addr.host .. ":" .. addr.port) -- Добавляем специфичный заголовок Host
-
             http_request({
                 host = addr.host,
                 path = addr.path,
