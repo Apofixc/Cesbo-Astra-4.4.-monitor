@@ -4,16 +4,16 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "../utils/logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitor = require "../channel/channel_monitor"
-local MonitorConfig  = require "../config/monitor_config"
-local Utils          = require "../utils/utils"
+local ChannelMonitor = require "src.channel.channel_monitor"
+local MonitorConfig  = require "src.config.monitor_config"
+local Utils          = require "src.utils.utils"
 local validate_monitor_name = Utils.validate_monitor_name
 
-local AstraAPI = require "../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local parse_url = AstraAPI.parse_url
 local init_input = AstraAPI.init_input

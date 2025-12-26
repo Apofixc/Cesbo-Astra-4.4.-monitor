@@ -15,21 +15,21 @@ local ipairs     = ipairs
 local math_max   = math.max
 local table_insert = table.insert
 
-local AstraAPI = require "../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local json_encode     = AstraAPI.json_encode
 local analyze         = AstraAPI.analyze
 
-local Utils           = require "../utils/utils"
+local Utils           = require "src.utils.utils"
 local get_server_name = Utils.get_server_name
 local send_monitor    = Utils.send_monitor
 local ratio           = Utils.ratio
 local validate_monitor_param = Utils.validate_monitor_param
 
-local Logger = require "../utils/logger"
+local Logger = require "src.utils.logger"
 local log_info           = Logger.info
 local log_error          = Logger.error
-local MonitorConfig      = require "../config/monitor_config"
+local MonitorConfig      = require "src.config.monitor_config"
 
 local COMPONENT_NAME = "ChannelMonitor"
 

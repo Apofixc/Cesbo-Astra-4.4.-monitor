@@ -7,12 +7,12 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local Logger      = require "./logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local ipairs      = ipairs
-local AstraAPI = require "../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local http_request = AstraAPI.http_request
 local astra_version = AstraAPI.astra_version

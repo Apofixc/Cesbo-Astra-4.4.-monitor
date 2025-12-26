@@ -1,13 +1,13 @@
-local Logger      = require "../../../src/utils/logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitorManager = require "../../../src/dispatchers/channel_monitor_dispatcher"
-local ChannelModule = require "../../../src/channel/channel"
+local ChannelMonitorManager = require "src.dispatchers.channel_monitor_dispatcher"
+local ChannelModule = require "src.channel.channel"
 
 local channel_monitor_manager = ChannelMonitorManager:new()
 
-local http_helpers = require "../http_helpers"
+local http_helpers = require "http.http_helpers"
 
 local COMPONENT_NAME = "ChannelRoutes"
 local validate_request = http_helpers.validate_request
@@ -20,10 +20,11 @@ local string_lower = http_helpers.string_lower
 local timer_lib = http_helpers.timer_lib
 local json_encode = http_helpers.json_encode
 local json_decode = http_helpers.json_decode
-local AstraAPI = require "../../../src/api/astra_api"
+local AstraAPI = require "src.api.astra_api"
+local Utils = require "src.utils.utils"
 
 local string_split = AstraAPI.string_split
-local shallow_table_copy = http_helpers.shallow_table_copy
+local shallow_table_copy = Utils.shallow_table_copy
 
 local channel_list = AstraAPI.channel_list
 

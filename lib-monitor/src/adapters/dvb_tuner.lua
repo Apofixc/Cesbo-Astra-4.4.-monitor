@@ -3,19 +3,19 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "../utils/logger"
+local Logger      = require "src.utils.logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
-local AstraAPI = require "../../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local json_encode = AstraAPI.json_encode
 
-local Utils                = require "../utils/utils"
+local Utils                = require "src.utils.utils"
 local ratio                = Utils.ratio
 local get_server_name      = Utils.get_server_name
 local send_monitor         = Utils.send_monitor
 local validate_monitor_param = Utils.validate_monitor_param
-local MonitorConfig        = require "../../config/monitor_config"
+local MonitorConfig        = require "src.config.monitor_config"
 
 local dvb_tune = AstraAPI.dvb_tune
 
@@ -40,17 +40,19 @@ local dvb_monitor_method_comparison = {
         return false
     end,
     [3] = function(prev, curr, rate) -- по любому измнению параметров, с учетом погрешности 
+        log_debug(COMPONENT_NAME, "Ratio comparison: prev.signal=%s, curr.signal=%s, prev.snr=%s, curr.snr=%s", tostring(prev.signal), tostring(curr.signal), tostring(prev.snr), tostring(curr.snr))
         local signal_ratio, signal_err = ratio(prev.signal, curr.signal)
         local snr_ratio, snr_err = ratio(prev.snr, curr.snr)
 
         if signal_err or snr_err then
-            log_error(COMPONENT_NAME, "Error calculating ratio for DVB monitor: Signal error: %s, SNR error: %s", signal_err or "none", snr_err or "none")
+            log_error(COMPONENT_NAME, "Error calculating ratio for DVB monitor: Signal error: %s, SNR error: %s. Forcing update.", signal_err or "none", snr_err or "none")
             return true -- Считаем это изменением, чтобы не пропустить потенциальную проблему
         end
 
+        -- Теперь signal_ratio и snr_ratio гарантированно являются числами, если нет ошибок
         if prev.status ~= curr.status or 
-            signal_ratio > rate or 
-            snr_ratio > rate or 
+            (signal_ratio and signal_ratio > rate) or 
+            (snr_ratio and snr_ratio > rate) or 
             prev.ber ~= curr.ber or 
             prev.unc ~= curr.unc then
                 return true

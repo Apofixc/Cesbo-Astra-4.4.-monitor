@@ -6,14 +6,14 @@
 local type      = type
 local tonumber  = tonumber
 local string_format = string.format
-local AstraAPI = require "../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local io_popen = AstraAPI.io_popen
 local table_insert = AstraAPI.table_insert
 local os_time = AstraAPI.os_time
 local os_date = AstraAPI.os_date
 
-local Logger = require "../utils/logger"
+local Logger = require "src.utils.logger"
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
@@ -418,6 +418,7 @@ function ResourceMonitor:get_network_usage()
                 local rx_speed = 0
                 local tx_speed = 0
                 
+                log_debug(COMPONENT_NAME, "Interface %s: current_rx_bytes: %s, last_rx_bytes: %s", interface, tostring(current_rx_bytes), tostring(last_rx_bytes))
                 if current_rx_bytes >= last_rx_bytes then
                     rx_speed = (current_rx_bytes - last_rx_bytes) / delta_time
                 end

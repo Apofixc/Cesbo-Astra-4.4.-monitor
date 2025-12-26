@@ -24,15 +24,15 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
-local Logger = require "../utils/logger"
+local Logger = require "src.utils.logger"
 local log_info  = Logger.info
 local log_error = Logger.error
 
 local COMPONENT_NAME = "Channel"
 
-local Utils = require "../utils/utils"
+local Utils = require "src.utils.utils"
 local shallow_table_copy   = Utils.shallow_table_copy
-local AstraAPI = require "../api/astra_api"
+local AstraAPI = require "src.api.astra_api"
 
 local string_split = AstraAPI.string_split
 local find_channel = AstraAPI.find_channel
@@ -41,15 +41,15 @@ local kill_channel = AstraAPI.kill_channel
 local get_stream   = Utils.get_stream
 
 -- Модули мониторинга
-local ChannelMonitor = require "./channel_monitor"
-local ChannelMonitorDispatcher = require "../dispatchers/channel_monitor_dispatcher"
-local Adapter = require "../adapters/adapter"
+local ChannelMonitor = require "src.channel.channel_monitor"
+local ChannelMonitorDispatcher = require "src.dispatchers.channel_monitor_dispatcher"
+local Adapter = require "src.adapters.adapter"
 
 -- ===========================================================================
 -- Константы и конфигурация
 -- ===========================================================================
 
-local MonitorConfig = require "../config/monitor_config"
+local MonitorConfig = require "src.config.monitor_config"
 
 -- Константы для типов мониторов
 local MONITOR_TYPE_INPUT  = "input"
