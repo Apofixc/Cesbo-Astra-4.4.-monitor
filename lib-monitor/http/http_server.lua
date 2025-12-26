@@ -4,6 +4,8 @@ local http_server = AstraAPI.http_server
 local Logger      = require "../src/utils/logger"
 local log_info    = Logger.info
 
+local COMPONENT_NAME = "HTTPServer"
+
 local channel_routes = require "./routes/channel_routes"
 local dvb_routes = require "./routes/dvb_routes"
 local system_routes = require "./routes/system_routes"
@@ -13,7 +15,7 @@ local ResourceMonitor = require "../../src/system/resource_monitor"
 -- @param string addr IP-адрес, на котором будет слушать сервер.
 -- @param number port Порт, на котором будет слушать сервер.
 function server_start(addr, port)
-    log_info(string.format("[Server] Type of system_routes: %s", type(system_routes)))
+    log_info(COMPONENT_NAME, string.format("[Server] Type of system_routes: %s", type(system_routes)))
     http_server({
         addr = addr,
         port = port,
@@ -43,5 +45,5 @@ function server_start(addr, port)
             {"/api/system/set-cache-interval", system_routes.set_monitor_cache_interval},
         }
     })
-    log_info(string.format("[Server] Started on %s:%d", addr, port))
+    log_info(COMPONENT_NAME, string.format("[Server] Started on %s:%d", addr, port))
 end

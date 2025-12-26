@@ -3,6 +3,7 @@ local string_lower = string.lower
 local Logger      = require "../src/utils/logger"
 local log_info    = Logger.info
 local log_error   = Logger.error
+local COMPONENT_NAME = "HTTPHelpers"
 local utils = require "../src/utils/utils"
 local AstraAPI = require "../src/api/astra_api"
 local timer_lib   = AstraAPI.timer
@@ -58,7 +59,7 @@ end
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not api_key or api_key ~= API_SECRET then
-        log_info(string.format("[Security] Unauthorized request")) -- Добавлено логирование IP-адреса
+        log_info(COMPONENT_NAME, string.format("[Security] Unauthorized request")) -- Добавлено логирование IP-адреса
         return false
     end
     return true
@@ -136,12 +137,12 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
     if not cfg then
         return send_response(server, client, 500, "Failed to kill item '" .. name .. "'. Error: " .. (kill_err or "unknown"))
     end
-    log_info(string.format("[%s] %s killed", log_prefix, name))
+    log_info(COMPONENT_NAME, string.format("[%s] %s killed", log_prefix, name))
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(string.format("[%s] %s scheduled for reboot after %d seconds", log_prefix, name, delay)) 
+        log_info(COMPONENT_NAME, string.format("[%s] %s scheduled for reboot after %d seconds", log_prefix, name, delay)) 
 
         timer_lib({
             interval = delay, 
@@ -149,9 +150,9 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
                 t:close()
                 local success, make_err = make_func(cfg, name)
                 if success then
-                    log_info(string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
+                    log_info(COMPONENT_NAME, string.format("[%s] %s was successfully rebooted", log_prefix, name)) 
                 else
-                    log_error(string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown"))
+                    log_error(COMPONENT_NAME, string.format("[%s] Failed to reboot %s. Error: %s", log_prefix, name, make_err or "unknown"))
                 end
             end
         })
