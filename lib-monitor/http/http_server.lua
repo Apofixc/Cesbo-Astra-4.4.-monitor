@@ -1,4 +1,3 @@
-local ModuleManager = require "src.module_manager"
 
 local http_server = ModuleManager.get_global_dependency("http_server")
 local Logger      = ModuleManager.get_module("utils.logger")
