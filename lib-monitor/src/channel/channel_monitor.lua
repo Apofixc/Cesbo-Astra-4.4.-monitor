@@ -15,9 +15,8 @@ local ipairs     = ipairs
 local math_max   = math.max
 local table_insert = table.insert
 
-local ModuleManager = require "src.module_manager"
 
-local json_encode     = ModuleManager.get_global_dependency("json.encode")
+local json_encode     = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
 local analyze         = ModuleManager.get_global_dependency("analyze")
 
 local Utils           = ModuleManager.get_module("utils.utils")

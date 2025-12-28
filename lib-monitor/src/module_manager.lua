@@ -159,17 +159,19 @@ function ModuleManager.load_modules()
         local module_info = registered_modules[name]
         log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s)", name, module_info.path)
         
-        local success, module = pcall(require, module_info.path)
+        local success, module_or_err = pcall(require, module_info.path)
         
         if not success then
-            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s': %s", name, module)
+            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s", name, module_info.path, module_or_err)
             return false
         end
         
-        if module == nil then
-            log_error(COMPONENT_NAME, "Модуль '%s' вернул nil", name)
+        if module_or_err == nil then
+            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil", name, module_info.path)
             return false
         end
+        
+        local module = module_or_err
         
         loaded_modules[name] = module
         log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен", name)
@@ -212,19 +214,12 @@ function ModuleManager.validate_dependencies()
 end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
--- При успешной проверке сохраняет ссылку на найденный объект.
 -- @param string path_str Строка, представляющая путь к переменной/функции (например, "find_channel" или utils.version).
--- @return boolean true, если переменная/функция существует, иначе false.
+-- @return any, boolean Найденный объект и true, если переменная/функция существует, иначе nil и false.
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
         log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости")
-        return false
-    end
-    
-    -- Если уже проверяли и сохранили, сразу возвращаем true
-    if global_dependencies[path_str] ~= nil then
-        log_debug(COMPONENT_NAME, "Зависимость '%s' уже проверена и сохранена", path_str)
-        return true
+        return nil, false
     end
     
     local parts = {}
@@ -234,7 +229,7 @@ function ModuleManager.check_nested_dependency(path_str)
     
     if #parts == 0 then
         log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости")
-        return false
+        return nil, false
     end
     
     local current_scope = _G
@@ -249,66 +244,56 @@ function ModuleManager.check_nested_dependency(path_str)
         end
         
         if type(current_scope) ~= "table" then
-            log_error(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица)", path_str, full_path)
-            return false
+            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица)", path_str, full_path)
+            return nil, false
         end
         
         if current_scope[part] == nil then
-            log_error(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'", path_str, full_path)
-            return false
+            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'", path_str, full_path)
+            return nil, false
         end
         
         current_scope = current_scope[part]
         
-        -- Сохраняем последний найденный объект
         if i == #parts then
             found_object = current_scope
         end
     end
     
-    -- Сохраняем найденную зависимость
-    global_dependencies[path_str] = found_object
-    
-    log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена и сохранена.", path_str)
-    return true
+    log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
+    return found_object, true
 end
 
 --- Возвращает сохраненную ссылку на глобальную зависимость.
--- @param string path_str Путь к зависимости (например, "find_channel" или utils.version).
--- @return any Сохраненный объект или nil, если зависимость не была проверена.
-function ModuleManager.get_global_dependency(path_str)
-    return global_dependencies[path_str]
-end
-
---- Проверяет и возвращает глобальную зависимость.
--- Если зависимость еще не проверена, проверяет и сохраняет ее.
--- @param string path_str Путь к зависимости.
--- @return any, boolean Объект зависимости и флаг успеха (true если найден).
-function ModuleManager.get_or_check_dependency(path_str)
-    local obj = global_dependencies[path_str]
-    
-    if obj ~= nil then
-        return obj, true
-    end
-    
-    local success = ModuleManager.check_nested_dependency(path_str)
-    if success then
-        return global_dependencies[path_str], true
-    end
-    
-    return nil, false
+-- @param string name Имя зависимости.
+-- @return any Сохраненный объект или nil, если зависимость не найдена.
+function ModuleManager.get_global_dependency(name)
+    return global_dependencies[name]
 end
 
 --- Удаляет сохраненную глобальную зависимость из кэша.
--- @param string path_str Путь к зависимости.
+-- @param string name Имя зависимости.
 -- @return boolean true, если зависимость была удалена.
-function ModuleManager.remove_global_dependency(path_str)
-    if global_dependencies[path_str] ~= nil then
-        global_dependencies[path_str] = nil
-        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена из кэша", path_str)
+function ModuleManager.remove_global_dependency(name)
+    if global_dependencies[name] ~= nil then
+        global_dependencies[name] = nil
+        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена из кэша", name)
         return true
     end
     return false
+end
+
+--- Устанавливает глобальные зависимости.
+-- @param table deps Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости.
+function ModuleManager.set_global_dependencies(deps)
+    if type(deps) ~= "table" then
+        log_error(COMPONENT_NAME, "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица)")
+        return
+    end
+    for path, obj in pairs(deps) do
+        global_dependencies[path] = obj
+        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' установлена.", path)
+    end
 end
 
 --- Получает список всех сохраненных глобальных зависимостей.
@@ -352,7 +337,7 @@ end
 function ModuleManager.reset()
     registered_modules = {}
     loaded_modules = {}
-    global_dependencies = {}
+    global_dependencies = {} -- Сбрасываем только Astra-специфичные зависимости
     log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено")
 end
 

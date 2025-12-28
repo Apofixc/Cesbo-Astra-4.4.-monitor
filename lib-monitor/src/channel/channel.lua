@@ -24,7 +24,6 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- Локальные модули
-local ModuleManager = require "src.module_manager"
 local Logger = ModuleManager.get_module("utils.logger")
 local log_info  = Logger.info
 local log_error = Logger.error
@@ -34,7 +33,7 @@ local COMPONENT_NAME = "Channel"
 
 local Utils = ModuleManager.get_module("utils.utils")
 local shallow_table_copy   = Utils.shallow_table_copy
-local string_split = ModuleManager.get_global_dependency("string.split")
+local string_split = ModuleManager.get_global_dependency("string.split") -- Astra-специфичная функция
 local find_channel = ModuleManager.get_global_dependency("find_channel")
 local make_channel = ModuleManager.get_global_dependency("make_channel")
 local kill_channel = ModuleManager.get_global_dependency("kill_channel")

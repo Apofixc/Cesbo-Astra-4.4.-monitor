@@ -4,7 +4,6 @@
 -- ===========================================================================
 
 local type        = type
-local ModuleManager = require "src.module_manager"
 local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
@@ -14,8 +13,8 @@ local MonitorConfig  = ModuleManager.get_module("config.monitor_config")
 local Utils          = ModuleManager.get_module("utils.utils")
 local validate_monitor_name = Utils.validate_monitor_name
 
-local parse_url = ModuleManager.get_global_dependency("parse_url")
-local init_input = ModuleManager.get_global_dependency("init_input")
+local parse_url = ModuleManager.get_global_dependency("parse_url") -- Astra-специфичная функция
+local init_input = ModuleManager.get_global_dependency("init_input") -- Astra-специфичная функция
 
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 

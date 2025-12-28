@@ -1,4 +1,3 @@
-local ModuleManager = require "src.module_manager"
 local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error

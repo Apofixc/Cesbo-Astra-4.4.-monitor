@@ -55,20 +55,26 @@ local global_dependencies_to_check = {
     "json.encode",
     "json.decode",
     "timer",
-    "os.exit",
     "astra.reload",
-    "astra_.version",
-    "io.popen",
-    "os.time",
-    "os.date",
+    "astra.version",
 }
 
-local all_deps_found = true
+local found_astra_deps = {}
+local all_astra_deps_found = true
 
 for _, dep_path in ipairs(global_dependencies_to_check) do
-    local success = ModuleManager.check_nested_dependency(dep_path)
+    local obj, success = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
+        all_astra_deps_found = false
         return
     end
+    found_astra_deps[dep_path] = obj
 end
+
+if not all_astra_deps_found then
+    return
+end
+
+-- Установка найденных Astra-специфичных глобальных зависимостей в ModuleManager
+ModuleManager.set_global_dependencies(found_astra_deps)

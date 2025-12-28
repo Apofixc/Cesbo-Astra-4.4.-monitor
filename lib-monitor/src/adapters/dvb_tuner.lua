@@ -3,12 +3,11 @@
 -- ===========================================================================
 
 local type        = type
-local ModuleManager = require "src.module_manager"
 local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local json_encode = ModuleManager.get_global_dependency("json.encode")
+local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
 
 local Utils                = ModuleManager.get_module("utils.utils")
 local ratio                = Utils.ratio

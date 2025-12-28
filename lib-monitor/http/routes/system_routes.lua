@@ -1,4 +1,3 @@
-local ModuleManager = require "src.module_manager"
 local Logger = ModuleManager.get_module("utils.logger")
 local log_info = Logger.info
 local log_error = Logger.error
@@ -11,12 +10,12 @@ local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
-local timer_lib = http_helpers.timer_lib
+local timer_lib = ModuleManager.get_global_dependency("timer") -- Astra-специфичная функция
+local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
 
-local json_encode = ModuleManager.get_global_dependency("json.encode")
 local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
-local os_exit_func = ModuleManager.get_global_dependency("os.exit")
-local astra_version_var = ModuleManager.get_global_dependency("astra_.version")
+local os_exit_func = os.exit -- Встроенная функция Lua
+local astra_version_var = ModuleManager.get_global_dependency("astra.version")
 
 local COMPONENT_NAME = "SystemRoutes"
 
@@ -95,7 +94,7 @@ local health = function (server, client, request)
         addr = server.__options.addr,
         port = server.__options.port,
         version = astra_version_var,
-        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"), -- Встроенная функция Lua
     }
 
     local process_data = resource_monitor_instance:collect_process_data()

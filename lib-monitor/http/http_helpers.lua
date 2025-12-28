@@ -1,19 +1,18 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local ModuleManager = require "src.module_manager"
 local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local COMPONENT_NAME = "HTTPHelpers"
 local utils = ModuleManager.get_module("utils.utils")
-local timer_lib   = ModuleManager.get_global_dependency("timer")
-local json_decode = ModuleManager.get_global_dependency("json.decode")
-local json_encode = ModuleManager.get_global_dependency("json.encode")
-local string_split = ModuleManager.get_global_dependency("string.split")
-local os_exit_func = ModuleManager.get_global_dependency("os.exit")
-local astra_version_var = ModuleManager.get_global_dependency("astra_.version")
-local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
+local timer_lib   = ModuleManager.get_global_dependency("timer") -- Astra-специфичная функция
+local json_decode = ModuleManager.get_global_dependency("json.decode") -- Astra-специфичная функция
+local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
+local string_split = ModuleManager.get_global_dependency("string.split") -- Astra-специфичная функция
+local os_exit_func = os.exit -- Встроенная функция Lua
+local astra_version_var = ModuleManager.get_global_dependency("astra_.version") -- Astra-специфичная переменная
+local astra_reload_func = ModuleManager.get_global_dependency("astra.reload") -- Astra-специфичная функция
 
 -- ===========================================================================
 -- Константы и конфигурация
@@ -189,12 +188,6 @@ return {
     handle_kill_with_reboot = handle_kill_with_reboot,
     API_SECRET = API_SECRET,
     DELAY = DELAY,
-    timer_lib = timer_lib,
-    os_exit_func = os_exit_func,
-    astra_version_var = astra_version_var,
-    astra_reload_func = astra_reload_func,
-    json_encode = json_encode,
-    string_split = string_split,
     string_lower = string_lower,
     shallow_table_copy = utils.shallow_table_copy, -- Поверхностное копирование таблицы
     sanitize_input = sanitize_input,
