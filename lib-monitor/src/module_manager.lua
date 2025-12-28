@@ -3,51 +3,43 @@
 -- Отвечает за централизованную загрузку модулей и валидацию их зависимостей.
 -- ===========================================================================
 
-local type = type
-local pairs = pairs
-local ipairs = ipairs
-local table_concat = table.concat
-local table_insert = table.insert
+-- 1. Стандартные Lua функции
+local type, pairs, ipairs, tostring, pcall
+local table_concat, table_insert = table.concat, table.insert
+local string_gmatch = string.gmatch
 
--- Используем существующий Logger, если он доступен
+-- 2. Функции из ModuleManager.get_module()
+-- Logger будет загружен позже, чтобы избежать циклической зависимости при инициализации ModuleManager
 local Logger
-local function log_info(component, format_str, ...)
-    if Logger and Logger.info then
-        Logger.info(component, format_str, ...)
-    end
-end
+local log_info = function(component, format_str, ...) if Logger and Logger.info then Logger.info(component, format_str, ...) end end
+local log_error = function(component, format_str, ...) if Logger and Logger.error then Logger.error(component, format_str, ...) end end
+local log_debug = function(component, format_str, ...) if Logger and Logger.debug then Logger.debug(component, format_str, ...) end end
 
-local function log_error(component, format_str, ...)
-    if Logger and Logger.error then
-        Logger.error(component, format_str, ...)
-    end
-end
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- Нет прямых глобальных зависимостей Astra, кроме тех, что управляются самим ModuleManager.
 
-local function log_debug(component, format_str, ...)
-    if Logger and Logger.debug then
-        Logger.debug(component, format_str, ...)
-    end
-end
-
--- Пробуем загрузить Logger, но не падаем если его нет
-local success, logger_module = pcall(require, "src.utils.logger")
-if success then
-    Logger = logger_module
-end
-
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "ModuleManager"
 
+-- 5. Инициализация объектов из загруженных модулей
 local ModuleManager = {}
 ModuleManager.__index = ModuleManager
 
--- Таблица для хранения зарегистрированных модулей
 local registered_modules = {}
-
--- Таблица для хранения загруженных модулей
 local loaded_modules = {}
-
--- Таблица для хранения найденных глобальных зависимостей
 local global_dependencies = {}
+
+-- Пост-инициализация Logger после того, как ModuleManager будет доступен
+local function init_logger()
+    if not Logger then
+        Logger = ModuleManager.get_module("utils.logger")
+        if Logger then
+            log_info = Logger.info
+            log_error = Logger.error
+            log_debug = Logger.debug
+        end
+    end
+end
 
 --- Регистрирует модуль в ModuleManager.
 -- @param string name Имя модуля (например, "utils.logger").

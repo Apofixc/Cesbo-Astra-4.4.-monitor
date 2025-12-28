@@ -1,18 +1,30 @@
-local tonumber = tonumber
+-- 1. Стандартные Lua функции
+local type, tostring, tonumber
 local string_lower = string.lower
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
-local log_debug   = Logger.debug
-local COMPONENT_NAME = "HTTPHelpers"
+
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
+local log_debug = Logger.debug
 local utils = ModuleManager.get_module("utils.utils")
-local timer_lib   = ModuleManager.get_global_dependency("timer") -- Astra-специфичная функция
-local json_decode = ModuleManager.get_global_dependency("json.decode") -- Astra-специфичная функция
-local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
-local string_split = ModuleManager.get_global_dependency("string.split") -- Astra-специфичная функция
+
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local timer_lib = ModuleManager.get_global_dependency("timer")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local string_split = ModuleManager.get_global_dependency("string.split")
 local os_exit_func = os.exit -- Встроенная функция Lua
-local astra_version_var = ModuleManager.get_global_dependency("astra.version") -- Astra-специфичная переменная
-local astra_reload_func = ModuleManager.get_global_dependency("astra.reload") -- Astra-специфичная функция
+local astra_version_var = ModuleManager.get_global_dependency("astra.version")
+local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "HTTPHelpers"
+local API_SECRET = os.getenv("ASTRA_API_KEY") or "test"
+local DELAY = 1
+
+-- 5. Инициализация объектов из загруженных модулей
+-- Нет объектов для инициализации в этом модуле
 
 -- ===========================================================================
 -- Константы и конфигурация

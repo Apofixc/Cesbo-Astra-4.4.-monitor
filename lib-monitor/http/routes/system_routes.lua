@@ -1,21 +1,33 @@
+-- 1. Стандартные Lua функции
+local type, tostring, tonumber
+local string_format = string.format
+local os_date = os.date
+local os_exit = os.exit
+
+-- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("utils.logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
 local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
-local resource_monitor_instance = ResourceMonitor:new("system_monitor")
 local http_helpers = ModuleManager.get_module("http.http_helpers")
+
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local timer_lib = ModuleManager.get_global_dependency("timer")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
+local astra_version_var = ModuleManager.get_global_dependency("astra.version")
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "SystemRoutes"
+
+-- 5. Инициализация объектов из загруженных модулей
+local resource_monitor_instance = ResourceMonitor:new("system_monitor")
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
-local timer_lib = ModuleManager.get_global_dependency("timer") -- Astra-специфичная функция
-local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
-
-local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
-local os_exit_func = os.exit -- Встроенная функция Lua
-local astra_version_var = ModuleManager.get_global_dependency("astra.version")
 
 local COMPONENT_NAME = "SystemRoutes"
 

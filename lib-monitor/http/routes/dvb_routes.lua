@@ -1,19 +1,25 @@
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
+-- 1. Стандартные Lua функции
 local tonumber = tonumber
 
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
 local http_helpers = ModuleManager.get_module("http.http_helpers")
-local json_encode = http_helpers.json_encode
+local DvbMonitorManager = ModuleManager.get_module("dispatchers.dvb_monitor_dispatcher")
+
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "DvbRoutes"
+
+-- 5. Инициализация объектов из загруженных модулей
+local dvb_monitor_manager = DvbMonitorManager:new()
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
-
-local DvbMonitorManager = ModuleManager.get_module("dispatchers.dvb_monitor_dispatcher")
-local dvb_monitor_manager = DvbMonitorManager:new()
-
-local COMPONENT_NAME = "DvbRoutes"
 
 -- =============================================
 -- Управление DVB-адаптерами (Обработчики маршрутов)

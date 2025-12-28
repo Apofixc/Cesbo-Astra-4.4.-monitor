@@ -2,37 +2,32 @@
 -- Кэширование встроенных функций для производительности
 -- ===========================================================================
 
-local type        = type
-local tostring    = tostring
+-- 1. Стандартные Lua функции
+local type, tostring, ipairs, pairs
 local string_format = string.format
-local math_max    = math.max
-local math_abs    = math.abs
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
-local log_debug   = Logger.debug
-local ipairs      = ipairs
+local math_max, math_abs = math.max, math.abs
 
-local http_request = ModuleManager.get_global_dependency("http_request") -- Astra-специфичная функция
-local astra_version = ModuleManager.get_global_dependency("astra.version") -- Astra-специфичная переменная
-
-local COMPONENT_NAME = "Utils"
-
--- ===========================================================================
--- Константы и конфигурация
--- ===========================================================================
-
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
+local log_debug = Logger.debug
 local config = ModuleManager.get_module("config.monitor_settings")
 local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
--- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
--- Если это не так, их нужно будет передавать или явно требовать.
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local http_request = ModuleManager.get_global_dependency("http_request")
+local astra_version = ModuleManager.get_global_dependency("astra.version")
+local hostname = ModuleManager.get_global_dependency("utils.hostname")()
 
-local hostname      = ModuleManager.get_global_dependency("utils.hostname")() -- Astra-специфичная функция
-
-local STREAM        = config.STREAM or {}
-local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "Utils"
+local STREAM = config.STREAM or {}
+local MONIT_ADDRESS = config.MONIT_ADDRESS or {}
 local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
+
+-- 5. Инициализация объектов из загруженных модулей
+-- Нет объектов для инициализации в этом модуле
 
 -- ===========================================================================
 -- Основные функции модуля

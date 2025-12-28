@@ -15,51 +15,39 @@
 -- - Остановка потока и связанного с ним монитора.
 -- ===========================================================================
 
--- Стандартные функции Lua
-local type         = type
-local tostring     = tostring
-local ipairs       = ipairs
-local math_max     = math.max
+-- 1. Стандартные Lua функции
+local type, tostring, ipairs
+local math_max = math.max
 local string_lower = string.lower
 local table_insert = table.insert
 
--- Локальные модули
+-- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("utils.logger")
-local log_info  = Logger.info
+local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-
-local COMPONENT_NAME = "Channel"
-
 local Utils = ModuleManager.get_module("utils.utils")
-local shallow_table_copy   = Utils.shallow_table_copy
-local string_split = ModuleManager.get_global_dependency("string.split") -- Astra-специфичная функция
-local find_channel = ModuleManager.get_global_dependency("find_channel")
-local make_channel = ModuleManager.get_global_dependency("make_channel")
-local kill_channel = ModuleManager.get_global_dependency("kill_channel")
-local get_stream   = Utils.get_stream
-
--- Модули мониторинга
 local ChannelMonitor = ModuleManager.get_module("channel.channel_monitor")
 local ChannelMonitorDispatcher = ModuleManager.get_module("dispatchers.channel_monitor_dispatcher")
 local Adapter = ModuleManager.get_module("adapters.adapter")
-
--- ===========================================================================
--- Константы и конфигурация
--- ===========================================================================
-
 local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
--- Константы для типов мониторов
-local MONITOR_TYPE_INPUT  = "input"
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local string_split = ModuleManager.get_global_dependency("string.split")
+local find_channel = ModuleManager.get_global_dependency("find_channel")
+local make_channel = ModuleManager.get_global_dependency("make_channel")
+local kill_channel = ModuleManager.get_global_dependency("kill_channel")
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "Channel"
+local MONITOR_TYPE_INPUT = "input"
 local MONITOR_TYPE_OUTPUT = "output"
-local MONITOR_TYPE_IP     = "ip"
+local MONITOR_TYPE_IP = "ip"
 
--- ===========================================================================
--- Основные функции модуля
--- ===========================================================================
-
+-- 5. Инициализация объектов из загруженных модулей
 local channel_monitor_manager = ChannelMonitorDispatcher:new()
+local shallow_table_copy = Utils.shallow_table_copy
+local get_stream = Utils.get_stream
 
 --- Возвращает список всех активных мониторов каналов.
 -- Эта функция запрашивает у `ChannelMonitorManager` список всех зарегистрированных

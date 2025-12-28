@@ -3,22 +3,28 @@
 -- Управляет жизненным циклом и состоянием DVB-тюнер мониторов.
 -- ===========================================================================
 
-local type        = type
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
+-- 1. Стандартные Lua функции
+local type = type
 
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
 local DvbTunerMonitor = ModuleManager.get_module("adapters.dvb_tuner")
-local MonitorConfig   = ModuleManager.get_module("config.monitor_config")
-local Utils           = ModuleManager.get_module("utils.utils")
-local validate_monitor_name = Utils.validate_monitor_name
+local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local Utils = ModuleManager.get_module("utils.utils")
 
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- Нет глобальных зависимостей Astra в этом модуле
+
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbMonitorDispatcher"
 
+-- 5. Инициализация объектов из загруженных модулей
 local DvbMonitorDispatcher = {}
 DvbMonitorDispatcher.__index = DvbMonitorDispatcher
-
-local instance = nil -- Переменная для хранения единственного экземпляра
+local instance = nil
+local validate_monitor_name = Utils.validate_monitor_name
 
 --- Создает новый экземпляр DvbMonitorDispatcher (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов DVB-мониторов.

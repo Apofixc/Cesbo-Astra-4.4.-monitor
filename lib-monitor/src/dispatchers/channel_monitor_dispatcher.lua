@@ -3,25 +3,29 @@
 -- Управляет жизненным циклом и состоянием мониторов каналов.
 -- ===========================================================================
 
-local type        = type
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
+-- 1. Стандартные Lua функции
+local type = type
 
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
 local ChannelMonitor = ModuleManager.get_module("channel.channel_monitor")
-local MonitorConfig  = ModuleManager.get_module("config.monitor_config")
-local Utils          = ModuleManager.get_module("utils.utils")
-local validate_monitor_name = Utils.validate_monitor_name
+local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local Utils = ModuleManager.get_module("utils.utils")
 
-local parse_url = ModuleManager.get_global_dependency("parse_url") -- Astra-специфичная функция
-local init_input = ModuleManager.get_global_dependency("init_input") -- Astra-специфичная функция
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local parse_url = ModuleManager.get_global_dependency("parse_url")
+local init_input = ModuleManager.get_global_dependency("init_input")
 
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 
+-- 5. Инициализация объектов из загруженных модулей
 local ChannelMonitorDispatcher = {}
 ChannelMonitorDispatcher.__index = ChannelMonitorDispatcher
-
-local instance = nil -- Переменная для хранения единственного экземпляра
+local instance = nil
+local validate_monitor_name = Utils.validate_monitor_name
 
 --- Создает новый экземпляр ChannelMonitorDispatcher (или возвращает существующий).
 -- Инициализирует пустую таблицу для хранения объектов мониторов каналов.

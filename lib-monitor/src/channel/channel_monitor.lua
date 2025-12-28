@@ -8,30 +8,35 @@
 -- Отвечает за запуск анализа потока, обработку данных и отправку статусов.
 -- ===========================================================================
 
--- Стандартные функции Lua
-local type       = type
-local tostring   = tostring
-local ipairs     = ipairs
-local math_max   = math.max
+-- 1. Стандартные Lua функции
+local type, tostring, ipairs
+local math_max = math.max
 local table_insert = table.insert
 
-
-local json_encode     = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
-local analyze         = ModuleManager.get_global_dependency("analyze")
-
-local Utils           = ModuleManager.get_module("utils.utils")
-local get_server_name = Utils.get_server_name
-local send_monitor    = Utils.send_monitor
-local ratio           = Utils.ratio
-local validate_monitor_param = Utils.validate_monitor_param
-
+-- 2. Функции из ModuleManager.get_module()
+local Utils = ModuleManager.get_module("utils.utils")
 local Logger = ModuleManager.get_module("utils.logger")
-local log_info           = Logger.info
-local log_error          = Logger.error
-local log_debug          = Logger.debug
-local MonitorConfig      = ModuleManager.get_module("config.monitor_config")
+local log_info = Logger.info
+local log_error = Logger.error
+local log_debug = Logger.debug
+local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local analyze = ModuleManager.get_global_dependency("analyze")
+local kill_input = ModuleManager.get_global_dependency("kill_input")
+
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
+local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+
+-- 5. Инициализация объектов из загруженных модулей
+local ChannelMonitor = {}
+ChannelMonitor.__index = ChannelMonitor
+local get_server_name = Utils.get_server_name
+local send_monitor = Utils.send_monitor
+local ratio = Utils.ratio
+local validate_monitor_param = Utils.validate_monitor_param
 
 --- Таблица методов сравнения для монитора канала.
 -- Каждый метод определяет логику, по которой определяется, изменилось ли состояние канала

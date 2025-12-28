@@ -1,35 +1,38 @@
-local ModuleManager = require "src.module_manager"
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
+-- 1. Стандартные Lua функции
+local type, tostring, tonumber
+local string_lower = string.lower
 
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
 local ChannelMonitorManager = ModuleManager.get_module("dispatchers.channel_monitor_dispatcher")
 local ChannelModule = ModuleManager.get_module("channel.channel")
-
-local channel_monitor_manager = ChannelMonitorManager:new()
-
 local http_helpers = ModuleManager.get_module("http.http_helpers")
+local Utils = ModuleManager.get_module("utils.utils")
 
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local timer_lib = ModuleManager.get_global_dependency("timer")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local make_channel = ModuleManager.get_global_dependency("make_channel")
+local find_channel = ModuleManager.get_global_dependency("find_channel")
+local kill_channel = ModuleManager.get_global_dependency("kill_channel")
+local string_split = ModuleManager.get_global_dependency("string.split")
+local channel_list = ModuleManager.get_global_dependency("channel_list")
+
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRoutes"
+
+-- 5. Инициализация объектов из загруженных модулей
+local channel_monitor_manager = ChannelMonitorManager:new()
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
 local handle_kill_with_reboot = http_helpers.handle_kill_with_reboot
-local string_lower = http_helpers.string_lower
-local timer_lib = ModuleManager.get_global_dependency("timer") -- Astra-специфичная функция
-local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
-local json_decode = ModuleManager.get_global_dependency("json.decode") -- Astra-специфичная функция
-local make_channel = ModuleManager.get_global_dependency("make_channel")
-local find_channel = ModuleManager.get_global_dependency("find_channel")
-local kill_channel = ModuleManager.get_global_dependency("kill_channel")
-local Utils = ModuleManager.get_module("utils.utils")
-
-local string_split = ModuleManager.get_global_dependency("string.split")
 local shallow_table_copy = Utils.shallow_table_copy
-
-local channel_list = ModuleManager.get_global_dependency("channel_list")
 
 -- =============================================
 -- Управление каналами и их мониторами (Обработчики маршрутов)

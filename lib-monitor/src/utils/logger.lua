@@ -4,27 +4,44 @@
 -- (DEBUG, INFO, WARN, ERROR) и управляет текущим уровнем логирования.
 -- ===========================================================================
 
+-- 1. Стандартные Lua функции
+local type
+local string_format = string.format
+local os_date = os.date
+local io_write, io_stderr = io.write, io.stderr
+
+-- 2. Функции из ModuleManager.get_module()
+-- Нет функций из ModuleManager.get_module() в этом модуле
+
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- Нет глобальных зависимостей Astra в этом модуле
+
+-- 4. Константы и конфигурации
+local LOG_LEVELS = {
+    DEBUG = 1,
+    INFO = 2,
+    WARN = 3,
+    ERROR = 4,
+    NONE = 5,
+}
+local COMPONENT_NAME = "Logger"
+
+-- 5. Инициализация объектов из загруженных модулей
 local Logger = {}
 Logger.__index = Logger
-
---- Таблица, определяющая уровни логирования и их числовые значения.
--- Используется для фильтрации сообщений в зависимости от текущего уровня логирования.
-local LOG_LEVELS = {
-    DEBUG = 1, -- Отладочные сообщения, наиболее подробные.
-    INFO = 2,  -- Информационные сообщения о ходе выполнения программы.
-    WARN = 3,  -- Предупреждения о потенциальных проблемах.
-    ERROR = 4, -- Сообщения об ошибках, которые могут повлиять на работу программы.
-    NONE = 5,  -- Отключить все логи.
-}
-
-
---- Текущий активный уровень логирования.
--- Инициализируется значением из `MonitorConfig.LogLevel` (приведенным к верхнему регистру)
--- или `LOG_LEVELS.INFO` по умолчанию, если значение не определено или некорректно.
-local initial_log_level_name = MonitorConfig.LogLevel
 local current_log_level
 
+-- Временная функция для получения MonitorConfig, пока ModuleManager не загружен
+local function get_monitor_config_log_level()
+    local success, MonitorConfig = pcall(ModuleManager.get_module, "config.monitor_config")
+    if success and MonitorConfig and MonitorConfig.LogLevel then
+        return MonitorConfig.LogLevel
+    end
+    return "INFO" -- Значение по умолчанию, если MonitorConfig недоступен
+end
+
 -- Инициализация уровня логирования с проверкой на nil и тип
+local initial_log_level_name = get_monitor_config_log_level()
 if initial_log_level_name and type(initial_log_level_name) == "string" then
     current_log_level = LOG_LEVELS[initial_log_level_name:upper()] or LOG_LEVELS.INFO
 else
@@ -36,15 +53,15 @@ end
 -- @param string level_name Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
 function Logger.set_log_level(level_name)
     if not level_name or type(level_name) ~= "string" then
-        io.stderr:write(format_message("ERROR", "Logger", "Invalid log level name: expected string, got %s.", type(level_name)) .. "\n")
+        io_stderr(format_message("ERROR", COMPONENT_NAME, "Invalid log level name: expected string, got %s.", type(level_name)) .. "\n")
         return
     end
     local level = LOG_LEVELS[level_name:upper()]
     if level then
         current_log_level = level
-        io.write(format_message("INFO", "Logger", "Log level set to: %s", level_name:upper()) .. "\n")
+        io_write(format_message("INFO", COMPONENT_NAME, "Log level set to: %s", level_name:upper()) .. "\n")
     else
-        io.stderr:write(format_message("ERROR", "Logger", "Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name) .. "\n")
+        io_stderr(format_message("ERROR", COMPONENT_NAME, "Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name) .. "\n")
     end
 end
 
@@ -62,8 +79,8 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 -- @return string Полностью отформатированное сообщение лога.
 local function format_message(level, component, format_str, ...)
-    local timestamp = os.date("%Y-%m-%d %H:%M:%S")
-    return string.format("[%s] [%s] [%s] " .. format_str, timestamp, level, component, ...)
+    local timestamp = os_date("%Y-%m-%d %H:%M:%S")
+    return string_format("[%s] [%s] [%s] " .. format_str, timestamp, level, component, ...)
 end
 
 --- Логирует сообщение на уровне DEBUG.
@@ -73,7 +90,7 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 function Logger.debug(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.DEBUG then
-        io.write(format_message("DEBUG", component, format_str, ...) .. "\n")
+        io_write(format_message("DEBUG", component, format_str, ...) .. "\n")
     end
 end
 
@@ -84,7 +101,7 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 function Logger.info(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.INFO then
-        io.write(format_message("INFO", component, format_str, ...) .. "\n")
+        io_write(format_message("INFO", component, format_str, ...) .. "\n")
     end
 end
 
@@ -95,7 +112,7 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 function Logger.warn(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.WARN then
-        io.write(format_message("WARN", component, format_str, ...) .. "\n")
+        io_write(format_message("WARN", component, format_str, ...) .. "\n")
     end
 end
 
@@ -107,7 +124,7 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 function Logger.error(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.ERROR then
-        io.stderr:write(format_message("ERROR", component, format_str, ...) .. "\n")
+        io_stderr(format_message("ERROR", component, format_str, ...) .. "\n")
     end
 end
 

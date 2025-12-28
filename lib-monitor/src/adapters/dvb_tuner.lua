@@ -2,26 +2,32 @@
 -- Класс DvbTunerMonitor
 -- ===========================================================================
 
-local type        = type
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
-local log_error   = Logger.error
+-- 1. Стандартные Lua функции
+local type, tostring
+local math_max = math.max
 
-local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
+local log_error = Logger.error
+local log_debug = Logger.debug
+local Utils = ModuleManager.get_module("utils.utils")
+local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
-local Utils                = ModuleManager.get_module("utils.utils")
-local ratio                = Utils.ratio
-local get_server_name      = Utils.get_server_name
-local send_monitor         = Utils.send_monitor
-local validate_monitor_param = Utils.validate_monitor_param
-local MonitorConfig        = ModuleManager.get_module("config.monitor_config")
-
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTunerMonitor"
 
+-- 5. Инициализация объектов из загруженных модулей
 local DvbTunerMonitor = {}
 DvbTunerMonitor.__index = DvbTunerMonitor
+local ratio = Utils.ratio
+local get_server_name = Utils.get_server_name
+local send_monitor = Utils.send_monitor
+local validate_monitor_param = Utils.validate_monitor_param
 
 -- Методы сравнения для DVB-монитора
 local dvb_monitor_method_comparison = {

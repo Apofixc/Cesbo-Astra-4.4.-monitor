@@ -1,14 +1,23 @@
 
-local http_server = ModuleManager.get_global_dependency("http_server")
-local Logger      = ModuleManager.get_module("utils.logger")
-local log_info    = Logger.info
+-- 1. Стандартные Lua функции
+local type = type
 
-local COMPONENT_NAME = "HTTPServer"
-
+-- 2. Функции из ModuleManager.get_module()
+local Logger = ModuleManager.get_module("utils.logger")
+local log_info = Logger.info
 local channel_routes = ModuleManager.get_module("http.routes.channel_routes")
 local dvb_routes = ModuleManager.get_module("http.routes.dvb_routes")
 local system_routes = ModuleManager.get_module("http.routes.system_routes")
 local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
+
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+local http_server = ModuleManager.get_global_dependency("http_server")
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "HTTPServer"
+
+-- 5. Инициализация объектов из загруженных модулей
+-- Нет объектов для инициализации в этом модуле
 
 --- Запускает HTTP-сервер мониторинга.
 -- @param string addr IP-адрес, на котором будет слушать сервер.

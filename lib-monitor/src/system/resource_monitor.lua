@@ -3,25 +3,29 @@
 -- Менеджер для мониторинга системных ресурсов (CPU, RAM, Disk I/O, Network I/O).
 -- ===========================================================================
 
-local type      = type
-local tonumber  = tonumber
+-- 1. Стандартные Lua функции
+local type, tostring, tonumber
 local string_format = string.format
-
-local io_popen = io.popen -- Встроенная функция Lua
+local io_open, io_popen = io.open, io.popen
 local table_insert = table.insert
-local os_time = os.time -- Встроенная функция Lua
-local os_date = os.date -- Встроенная функция Lua
+local os_time, os_date = os.time, os.date
+local math_max = math.max
 
+-- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("utils.logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
 
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- Нет глобальных зависимостей Astra в этом модуле
+
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
 
+-- 5. Инициализация объектов из загруженных модулей
 local ResourceMonitor = {}
 ResourceMonitor.__index = ResourceMonitor
-
 local instance = nil
 
 local function get_current_pid()
