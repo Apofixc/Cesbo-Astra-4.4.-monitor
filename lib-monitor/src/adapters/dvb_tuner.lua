@@ -3,21 +3,21 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
-local AstraAPI = require "src.api.astra_api"
 
-local json_encode = AstraAPI.json_encode
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
-local Utils                = require "src.utils.utils"
+local Utils                = ModuleManager.get_module("utils.utils")
 local ratio                = Utils.ratio
 local get_server_name      = Utils.get_server_name
 local send_monitor         = Utils.send_monitor
 local validate_monitor_param = Utils.validate_monitor_param
-local MonitorConfig        = require "src.config.monitor_config"
+local MonitorConfig        = ModuleManager.get_module("config.monitor_config")
 
-local dvb_tune = AstraAPI.dvb_tune
+local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 
 local COMPONENT_NAME = "DvbTunerMonitor"
 

@@ -4,13 +4,14 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local DvbTunerMonitor = require "src.adapters.dvb_tuner"
-local MonitorConfig   = require "src.config.monitor_config"
-local Utils           = require "src.utils.utils"
+local DvbTunerMonitor = ModuleManager.get_module("adapters.dvb_tuner")
+local MonitorConfig   = ModuleManager.get_module("config.monitor_config")
+local Utils           = ModuleManager.get_module("utils.utils")
 local validate_monitor_name = Utils.validate_monitor_name
 
 local COMPONENT_NAME = "DvbMonitorDispatcher"

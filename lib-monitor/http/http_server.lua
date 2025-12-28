@@ -1,15 +1,15 @@
-local AstraAPI = require "src.api.astra_api"
+local ModuleManager = require "src.module_manager"
 
-local http_server = AstraAPI.http_server
-local Logger      = require "src.utils.logger"
+local http_server = ModuleManager.get_global_dependency("http_server")
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 
 local COMPONENT_NAME = "HTTPServer"
 
-local channel_routes = require "http.routes.channel_routes"
-local dvb_routes = require "http.routes.dvb_routes"
-local system_routes = require "http.routes.system_routes"
-local ResourceMonitor = require "src.system.resource_monitor"
+local channel_routes = ModuleManager.get_module("http.routes.channel_routes")
+local dvb_routes = ModuleManager.get_module("http.routes.dvb_routes")
+local system_routes = ModuleManager.get_module("http.routes.system_routes")
+local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
 
 --- Запускает HTTP-сервер мониторинга.
 -- @param string addr IP-адрес, на котором будет слушать сервер.

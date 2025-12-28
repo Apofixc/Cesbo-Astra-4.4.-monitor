@@ -1,19 +1,22 @@
-local Logger = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger = ModuleManager.get_module("utils.logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local ResourceMonitor = require "src.system.resource_monitor"
+local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
 local resource_monitor_instance = ResourceMonitor:new("system_monitor")
-local http_helpers = require "http.http_helpers"
+local http_helpers = ModuleManager.get_module("http.http_helpers")
 local validate_request = http_helpers.validate_request
 local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
 local timer_lib = http_helpers.timer_lib
-local AstraAPI = require "src.api.astra_api"
 
-local json_encode = AstraAPI.json_encode
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
+local os_exit_func = ModuleManager.get_global_dependency("os.exit")
+local astra_version_var = ModuleManager.get_global_dependency("astra_.version")
 
 local COMPONENT_NAME = "SystemRoutes"
 
@@ -41,7 +44,7 @@ local astra_reload = function(server, client, request)
         callback = function(t) 
             t:close()
             log_info(COMPONENT_NAME, "[Astra] Перезагружено")
-            AstraAPI.astra_reload()
+            astra_reload_func()
         end
     })
 end
@@ -66,7 +69,7 @@ local kill_astra = function(server, client, request)
         callback = function(t) 
             t:close() 
             log_info(COMPONENT_NAME, "[Astra] Остановлено")
-            AstraAPI.os_exit(0)
+            os_exit_func(0)
         end
     })
 end
@@ -91,7 +94,7 @@ local health = function (server, client, request)
     local response_data = {
         addr = server.__options.addr,
         port = server.__options.port,
-        version = AstraAPI.astra_version,
+        version = astra_version_var,
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
     }
 

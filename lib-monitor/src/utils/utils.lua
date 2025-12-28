@@ -7,15 +7,15 @@ local tostring    = tostring
 local string_format = string.format
 local math_max    = math.max
 local math_abs    = math.abs
-local Logger      = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local ipairs      = ipairs
-local AstraAPI = require "src.api.astra_api"
 
-local http_request = AstraAPI.http_request
-local astra_version = AstraAPI.astra_version
+local http_request = ModuleManager.get_global_dependency("http_request")
+local astra_version = ModuleManager.get_global_dependency("astra_.version")
 
 local COMPONENT_NAME = "Utils"
 
@@ -23,13 +23,13 @@ local COMPONENT_NAME = "Utils"
 -- Константы и конфигурация
 -- ===========================================================================
 
-local config = require "src.config.monitor_settings"
-local MonitorConfig = require "src.config.monitor_config"
+local config = ModuleManager.get_module("config.monitor_settings")
+local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
 -- Предполагаем, что astra.version и http_request доступны глобально в окружении Astra.
 -- Если это не так, их нужно будет передавать или явно требовать.
 
-local hostname      = AstraAPI.utils_hostname()
+local hostname      = ModuleManager.get_global_dependency("utils.hostname")()
 
 local STREAM        = config.STREAM or {}
 local MONIT_ADDRESS = config.MONIT_ADDRESS or {} -- Убедиться, что MONIT_ADDRESS всегда является таблицей

@@ -1,19 +1,19 @@
 local tonumber = tonumber
 local string_lower = string.lower
-local Logger      = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 local log_debug   = Logger.debug
 local COMPONENT_NAME = "HTTPHelpers"
-local utils = require "src.utils.utils"
-local AstraAPI = require "src.api.astra_api"
-local timer_lib   = AstraAPI.timer
-local json_decode = AstraAPI.json_decode
-local json_encode = AstraAPI.json_encode
-local string_split = AstraAPI.string_split
-local os_exit_func = AstraAPI.os_exit
-local astra_version_var = AstraAPI.astra_version
-local astra_reload_func = AstraAPI.astra_reload
+local utils = ModuleManager.get_module("utils.utils")
+local timer_lib   = ModuleManager.get_global_dependency("timer")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local string_split = ModuleManager.get_global_dependency("string.split")
+local os_exit_func = ModuleManager.get_global_dependency("os.exit")
+local astra_version_var = ModuleManager.get_global_dependency("astra_.version")
+local astra_reload_func = ModuleManager.get_global_dependency("astra.reload")
 
 -- ===========================================================================
 -- Константы и конфигурация

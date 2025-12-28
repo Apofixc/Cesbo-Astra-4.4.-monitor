@@ -15,22 +15,22 @@ local ipairs     = ipairs
 local math_max   = math.max
 local table_insert = table.insert
 
-local AstraAPI = require "src.api.astra_api"
+local ModuleManager = require "src.module_manager"
 
-local json_encode     = AstraAPI.json_encode
-local analyze         = AstraAPI.analyze
+local json_encode     = ModuleManager.get_global_dependency("json.encode")
+local analyze         = ModuleManager.get_global_dependency("analyze")
 
-local Utils           = require "src.utils.utils"
+local Utils           = ModuleManager.get_module("utils.utils")
 local get_server_name = Utils.get_server_name
 local send_monitor    = Utils.send_monitor
 local ratio           = Utils.ratio
 local validate_monitor_param = Utils.validate_monitor_param
 
-local Logger = require "src.utils.logger"
+local Logger = ModuleManager.get_module("utils.logger")
 local log_info           = Logger.info
 local log_error          = Logger.error
 local log_debug          = Logger.debug
-local MonitorConfig      = require "src.config.monitor_config"
+local MonitorConfig      = ModuleManager.get_module("config.monitor_config")
 
 local COMPONENT_NAME = "ChannelMonitor"
 
@@ -344,7 +344,7 @@ end
 function ChannelMonitor:kill()
     if self.monitor_instance then
         -- kill_input - это глобальная функция Astra, используемая для остановки экземпляра монитора
-        _G.kill_input(self.monitor_instance)
+        ModuleManager.get_global_dependency("kill_input")(self.monitor_instance)
         self.monitor_instance = nil
     end
     -- self.input_instance = nil -- Удалено, так как не используется

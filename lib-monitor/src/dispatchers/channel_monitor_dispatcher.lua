@@ -4,19 +4,18 @@
 -- ===========================================================================
 
 local type        = type
-local Logger      = require "src.utils.logger"
+local ModuleManager = require "src.module_manager"
+local Logger      = ModuleManager.get_module("utils.logger")
 local log_info    = Logger.info
 local log_error   = Logger.error
 
-local ChannelMonitor = require "src.channel.channel_monitor"
-local MonitorConfig  = require "src.config.monitor_config"
-local Utils          = require "src.utils.utils"
+local ChannelMonitor = ModuleManager.get_module("channel.channel_monitor")
+local MonitorConfig  = ModuleManager.get_module("config.monitor_config")
+local Utils          = ModuleManager.get_module("utils.utils")
 local validate_monitor_name = Utils.validate_monitor_name
 
-local AstraAPI = require "src.api.astra_api"
-
-local parse_url = AstraAPI.parse_url
-local init_input = AstraAPI.init_input
+local parse_url = ModuleManager.get_global_dependency("parse_url")
+local init_input = ModuleManager.get_global_dependency("init_input")
 
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 

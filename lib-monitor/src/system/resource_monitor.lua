@@ -6,14 +6,14 @@
 local type      = type
 local tonumber  = tonumber
 local string_format = string.format
-local AstraAPI = require "src.api.astra_api"
+local ModuleManager = require "src.module_manager"
 
-local io_popen = AstraAPI.io_popen
-local table_insert = AstraAPI.table_insert
-local os_time = AstraAPI.os_time
-local os_date = AstraAPI.os_date
+local io_popen = ModuleManager.get_global_dependency("io.popen")
+local table_insert = table.insert -- table.insert is a global Lua function, not from AstraAPI
+local os_time = ModuleManager.get_global_dependency("os.time")
+local os_date = ModuleManager.get_global_dependency("os.date")
 
-local Logger = require "src.utils.logger"
+local Logger = ModuleManager.get_module("utils.logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug

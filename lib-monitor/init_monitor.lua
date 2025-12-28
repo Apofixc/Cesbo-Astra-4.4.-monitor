@@ -39,6 +39,12 @@ if not ModuleManager.validate_dependencies() then
     return
 end
 
+-- Проверка и сохранение глобальной зависимости AstraAPI до загрузки модулей
+if not ModuleManager.check_nested_dependency("AstraAPI") then
+    Logger.error("init_monitor", "Отсутствует глобальная зависимость 'AstraAPI'. Завершение работы.")
+    return
+end
+
 -- Загрузка модулей
 if not ModuleManager.load_modules() then
     Logger.error("init_monitor", "Ошибка загрузки модулей. Завершение работы.")
