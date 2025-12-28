@@ -103,6 +103,8 @@ local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации.
+-- Эта функция используется для проверки и установки параметров конфигурации монитора.
+-- Она использует `validate_monitor_param` для обеспечения корректности значений.
 -- @param table self Объект ChannelMonitor.
 -- @param string param_name Имя параметра (например, "channel_rate").
 -- @param any value Значение для установки.
@@ -132,19 +134,26 @@ function ChannelMonitor:new(config, channel_data)
     self.channel_data = channel_data
 
     -- Установка значений по умолчанию для параметров конфигурации, если они не заданы
-    set_config_param(self, "channel_rate", config.rate)
-    set_config_param(self, "channel_time_check", config.time_check)
-    set_config_param(self, "channel_analyze", config.analyze)
-    set_config_param(self, "channel_method_comparison", config.method_comparison)
+    for param_name, schema in pairs(MonitorConfig.ValidationSchema) do
+        if param_name:find("channel_", 1, true) then
+            local config_key = param_name:gsub("channel_", "")
+            if config[config_key] ~= nil then
+                local success, err = set_config_param(self, param_name, config[config_key])
+                if not success then
+                    log_error(COMPONENT_NAME, "Failed to set initial config parameter '%s': %s", param_name, err)
+                end
+            end
+        end
+    end
 
     self.name = self.channel_data and self.channel_data.name or self.config.name
     self.stream_json = config.stream_json or {}
     self.psi_data_cache = {}
     self.json_status_cache = nil
-    self.input_instance = nil
 
     self.time = 0
     self.force_timer = 0
+    -- Инициализация статуса после stream_json, так как create_status_template использует get_cached_source, который зависит от stream_json
     self.status = self:create_status_template()
     self.status.ready = false
     self.status.scrambled = true
@@ -213,6 +222,8 @@ function ChannelMonitor:start()
                 local psi_key = data.psi
                 self_ref.psi_data_cache[psi_key] = json_encode(data)
             elseif data.total then
+               -- Если включен анализ и есть данные анализа с ошибками CC/PES в общем потоке,
+               -- то детализируем ошибки по PID-ам и отправляем их.
                if self_ref.config.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
                     local analyze_errors = {}
                     local has_errors = false
@@ -239,7 +250,10 @@ function ChannelMonitor:start()
                 end
                 self_ref.time = 0
 
-                -- Проверяем, нужно ли отправлять статус
+                -- Проверяем, нужно ли отправлять статус.
+                -- force_timer используется для принудительной отправки статуса каждые 300 итераций
+                -- (примерно 5 минут при 1-секундном интервале), чтобы обеспечить регулярные обновления,
+                -- даже если параметры не изменились.
                 if comparison_method(self_ref.status, data, self_ref.config.rate) or self_ref.force_timer > 300 then -- FORCE_SEND = 300
                     self_ref:send_channel_status(data)
                     self_ref.force_timer = 0
@@ -311,7 +325,7 @@ function ChannelMonitor:send_channel_status(data)
     
     local current_json_status = json_encode(self.status)
     if not current_json_status then
-        log_error(COMPONENT_NAME, "Failed to encode channel status to JSON: %s", encode_err)
+        log_error(COMPONENT_NAME, "Failed to encode channel status to JSON")
         return -- Прекращаем отправку, если кодирование не удалось
     end
 
@@ -328,12 +342,12 @@ end
 -- Если существует `input_instance`, он будет остановлен.
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
 function ChannelMonitor:kill()
-    if self.input_instance then
-        -- kill_input - это глобальная функция Astra
-        _G.kill_input(self.input_instance)
-        self.input_instance = nil
+    if self.monitor_instance then
+        -- kill_input - это глобальная функция Astra, используемая для остановки экземпляра монитора
+        _G.kill_input(self.monitor_instance)
+        self.monitor_instance = nil
     end
-    self.monitor_instance = nil
+    -- self.input_instance = nil -- Удалено, так как не используется
     self.config = nil
     self.channel_data = nil
     self.stream_json = nil

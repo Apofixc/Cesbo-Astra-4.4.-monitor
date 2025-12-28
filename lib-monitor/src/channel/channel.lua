@@ -304,7 +304,6 @@ function make_stream(conf)
         return nil, error_msg
     end
 
-    local monitor_name = (conf.monitor and type(conf.monitor) == 'table' and type(conf.monitor.name) == "string" and conf.monitor.name) or conf.name
     local monitor_type = (conf.monitor and type(conf.monitor) == "table" and type(conf.monitor.monitor_type) == "string" and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
     local upstream, monitor_target, handler_err
@@ -329,7 +328,7 @@ function make_stream(conf)
     end
 
     local monitor_config = {
-        name = monitor_name,
+        name = conf.name,
         upstream = upstream,
         monitor = monitor_target,
         rate = conf.monitor and conf.monitor.rate,
