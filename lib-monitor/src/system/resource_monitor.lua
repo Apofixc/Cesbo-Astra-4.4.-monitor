@@ -9,7 +9,7 @@ local string_format = string.format
 local ModuleManager = require "src.module_manager"
 
 local io_popen = ModuleManager.get_global_dependency("io.popen")
-local table_insert = table.insert -- table.insert is a global Lua function, not from AstraAPI
+local table_insert = table.insert
 local os_time = ModuleManager.get_global_dependency("os.time")
 local os_date = ModuleManager.get_global_dependency("os.date")
 

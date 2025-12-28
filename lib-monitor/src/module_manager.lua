@@ -213,7 +213,7 @@ end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
 -- При успешной проверке сохраняет ссылку на найденный объект.
--- @param string path_str Строка, представляющая путь к переменной/функции (например, "AstraAPI.find_channel").
+-- @param string path_str Строка, представляющая путь к переменной/функции (например, "find_channel" или utils.version).
 -- @return boolean true, если переменная/функция существует, иначе false.
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
@@ -274,7 +274,7 @@ function ModuleManager.check_nested_dependency(path_str)
 end
 
 --- Возвращает сохраненную ссылку на глобальную зависимость.
--- @param string path_str Путь к зависимости (например, "AstraAPI.find_channel").
+-- @param string path_str Путь к зависимости (например, "find_channel" или utils.version).
 -- @return any Сохраненный объект или nil, если зависимость не была проверена.
 function ModuleManager.get_global_dependency(path_str)
     return global_dependencies[path_str]

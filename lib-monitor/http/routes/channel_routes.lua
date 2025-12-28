@@ -21,7 +21,9 @@ local string_lower = http_helpers.string_lower
 local timer_lib = http_helpers.timer_lib
 local json_encode = http_helpers.json_encode
 local json_decode = http_helpers.json_decode
-local AstraAPI = ModuleManager.get_global_dependency("AstraAPI")
+local make_channel = ModuleManager.get_global_dependency("make_channel")
+local find_channel = ModuleManager.get_global_dependency("find_channel")
+local kill_channel = ModuleManager.get_global_dependency("kill_channel")
 local Utils = ModuleManager.get_module("utils.utils")
 
 local string_split = ModuleManager.get_global_dependency("string.split")
@@ -50,7 +52,7 @@ local kill_stream = function(server, client, request)
 
     handle_kill_with_reboot(
         function(name)
-            local channel_data = AstraAPI.find_channel(name)
+            local channel_data = find_channel(name)
             if not channel_data then
                 return nil, "Поток '" .. name .. "' не найден."
             end
@@ -79,7 +81,7 @@ local kill_channel = function(server, client, request)
 
     handle_kill_with_reboot(
         function(name)
-            local channel_data = AstraAPI.find_channel(name)
+            local channel_data = find_channel(name)
             if not channel_data then
                 return nil, "Канал '" .. name .. "' не найден."
             end
@@ -87,12 +89,12 @@ local kill_channel = function(server, client, request)
         end, 
         function(channel_data)
             local cfg = shallow_table_copy(channel_data.config) 
-            AstraAPI.kill_channel(channel_data) -- AstraAPI.kill_channel ничего не возвращает, предполагаем успех
-            log_info(COMPONENT_NAME, "Канал '%s' остановлен через AstraAPI.kill_channel", channel_data.config.name)
+            kill_channel(channel_data) -- kill_channel ничего не возвращает, предполагаем успех
+            log_info(COMPONENT_NAME, "Канал '%s' остановлен через kill_channel", channel_data.config.name)
             return cfg, nil
         end, 
         function(cfg, name)
-            local new_channel = AstraAPI.make_channel(cfg)
+            local new_channel = make_channel(cfg)
             if not new_channel then
                 return nil, "Не удалось создать канал '" .. name .. "'."
             end
