@@ -14,7 +14,7 @@ local log_debug   = Logger.debug
 local ipairs      = ipairs
 
 local http_request = ModuleManager.get_global_dependency("http_request") -- Astra-специфичная функция
-local astra_version = ModuleManager.get_global_dependency("astra_.version") -- Astra-специфичная переменная
+local astra_version = ModuleManager.get_global_dependency("astra.version") -- Astra-специфичная переменная
 
 local COMPONENT_NAME = "Utils"
 

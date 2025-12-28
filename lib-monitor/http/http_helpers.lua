@@ -11,7 +11,7 @@ local json_decode = ModuleManager.get_global_dependency("json.decode") -- Astra-
 local json_encode = ModuleManager.get_global_dependency("json.encode") -- Astra-специфичная функция
 local string_split = ModuleManager.get_global_dependency("string.split") -- Astra-специфичная функция
 local os_exit_func = os.exit -- Встроенная функция Lua
-local astra_version_var = ModuleManager.get_global_dependency("astra_.version") -- Astra-специфичная переменная
+local astra_version_var = ModuleManager.get_global_dependency("astra.version") -- Astra-специфичная переменная
 local astra_reload_func = ModuleManager.get_global_dependency("astra.reload") -- Astra-специфичная функция
 
 -- ===========================================================================
