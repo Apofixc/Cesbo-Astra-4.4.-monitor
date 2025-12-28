@@ -8,8 +8,6 @@
 -- ===========================================================================
 
 local ModuleManager = require "src.module_manager"
-local Logger = require "src.utils.logger"
-
 
 -- Регистрация модулей
 ModuleManager.register_module("utils.logger", "src.utils.logger")
@@ -34,16 +32,10 @@ ModuleManager.register_module("http.routes.system_routes", "http.routes.system_r
 ModuleManager.register_module("http.http_server", "http.http_server", {"utils.logger", "utils.utils"})
 
 -- Валидация зависимостей
-if not ModuleManager.validate_dependencies() then
-    Logger.error("init_monitor", "Ошибка валидации зависимостей. Завершение работы.")
-    return
-end
+if not ModuleManager.validate_dependencies() then return end
 
 -- Загрузка модулей
-if not ModuleManager.load_modules() then
-    Logger.error("init_monitor", "Ошибка загрузки модулей. Завершение работы.")
-    return
-end
+if not ModuleManager.load_modules() then return end
 
 -- Проверка и сохранение глобальных зависимостей от AstraAPI
 local global_dependencies_to_check = {
@@ -72,19 +64,11 @@ local global_dependencies_to_check = {
 }
 
 local all_deps_found = true
-local optional_deps_missing = {}
 
 for _, dep_path in ipairs(global_dependencies_to_check) do
     local success = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
-        Logger.error("init_monitor", "Отсутствует обязательная зависимость '%s'. Завершение работы.", dep_path)
-        all_deps_found = false
-        break
+        return
     end
-end
-
-if not all_deps_found then
-    Logger.error("init_monitor", "Не все обязательные зависимости AstraAPI найдены. Завершение работы.")
-    return
 end

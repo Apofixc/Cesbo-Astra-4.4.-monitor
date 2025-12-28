@@ -356,4 +356,7 @@ function ModuleManager.reset()
     log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено")
 end
 
+-- Регистрируем себя в глобальном пространстве
+_G.ModuleManager = ModuleManager
+
 return ModuleManager
