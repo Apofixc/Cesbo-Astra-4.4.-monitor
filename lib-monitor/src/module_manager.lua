@@ -51,12 +51,12 @@ end
 -- @param table dependencies Таблица строк, содержащих имена зависимостей этого модуля.
 function ModuleManager.register_module(name, path, dependencies)
     if not name or type(name) ~= "string" then
-        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем")
+        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
         return
     end
     
     if not path or type(path) ~= "string" then
-        log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой", name)
+        log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
         return
     end
     
@@ -71,7 +71,7 @@ function ModuleManager.register_module(name, path, dependencies)
             if type(dep) == "string" and dep ~= "" then
                 table_insert(valid_dependencies, dep)
             else
-                log_error(COMPONENT_NAME, "Модуль '%s': игнорируем невалидную зависимость", name)
+                log_error(COMPONENT_NAME, "Модуль '%s': игнорируем невалидную зависимость.", name)
             end
         end
     end
@@ -81,7 +81,7 @@ function ModuleManager.register_module(name, path, dependencies)
         dependencies = valid_dependencies
     }
     
-    log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s", 
+    log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.", 
              name, table_concat(valid_dependencies, ", "))
 end
 
@@ -93,7 +93,7 @@ local function topological_sort()
     
     local function visit(name)
         if not registered_modules[name] then
-            log_error(COMPONENT_NAME, "Попытка загрузить незарегистрированный модуль: %s", name)
+            log_error(COMPONENT_NAME, "Попытка загрузить незарегистрированный модуль: %s.", name)
             return false
         end
         
@@ -102,7 +102,7 @@ local function topological_sort()
         end
         
         if temp_visited[name] then
-            log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость с участием модуля: %s", name)
+            log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость с участием модуля: %s.", name)
             return false
         end
         
@@ -139,31 +139,31 @@ function ModuleManager.load_modules()
     local load_order, err = topological_sort()
     
     if not load_order then
-        log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки: %s", err)
+        log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки: %s.", err)
         return false
     end
     
-    log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s", table_concat(load_order, ", "))
+    log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
     
     for _, name in ipairs(load_order) do
         -- Пропускаем уже загруженные модули
         if loaded_modules[name] then
-            log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем", name)
+            log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем.", name)
             goto continue
         end
         
         local module_info = registered_modules[name]
-        log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s)", name, module_info.path)
+        log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path)
         
         local success, module_or_err = pcall(require, module_info.path)
         
         if not success then
-            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s", name, module_info.path, module_or_err)
+            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
             return false
         end
         
         if module_or_err == nil then
-            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil", name, module_info.path)
+            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
             return false
         end
         
@@ -175,12 +175,12 @@ function ModuleManager.load_modules()
             init_logger()
         end
 
-        log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен", name)
+        log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name)
         
         ::continue::
     end
     
-    log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d", #load_order)
+    log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
     return true
 end
 
@@ -199,7 +199,7 @@ function ModuleManager.validate_dependencies()
     for name, module_info in pairs(registered_modules) do
         for _, dep_name in ipairs(module_info.dependencies) do
             if not registered_modules[dep_name] then
-                log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'", name, dep_name)
+                log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
                 all_dependencies_met = false
             end
         end
@@ -219,7 +219,7 @@ end
 -- @return any, boolean Найденный объект и true, если переменная/функция существует, иначе nil и false.
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
-        log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости")
+        log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
         return nil, false
     end
     
@@ -229,7 +229,7 @@ function ModuleManager.check_nested_dependency(path_str)
     end
     
     if #parts == 0 then
-        log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости")
+        log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости.")
         return nil, false
     end
     
@@ -245,12 +245,12 @@ function ModuleManager.check_nested_dependency(path_str)
         end
         
         if type(current_scope) ~= "table" then
-            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица)", path_str, full_path)
+            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица).", path_str, full_path)
             return nil, false
         end
         
         if current_scope[part] == nil then
-            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'", path_str, full_path)
+            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'.", path_str, full_path)
             return nil, false
         end
         
@@ -278,7 +278,7 @@ end
 function ModuleManager.remove_global_dependency(name)
     if global_dependencies[name] ~= nil then
         global_dependencies[name] = nil
-        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена из кэша", name)
+        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена из кэша.", name)
         return true
     end
     return false
@@ -288,7 +288,7 @@ end
 -- @param table deps Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости.
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
-        log_error(COMPONENT_NAME, "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица)")
+        log_error(COMPONENT_NAME, "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица).")
         return
     end
     for path, obj in pairs(deps) do
@@ -339,7 +339,7 @@ function ModuleManager.reset()
     registered_modules = {}
     loaded_modules = {}
     global_dependencies = {} -- Сбрасываем только Astra-специфичные зависимости
-    log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено")
+    log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
 end
 
 -- Регистрируем себя в глобальном пространстве

@@ -55,7 +55,7 @@ end
 -- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
-        log_error(COMPONENT_NAME, "[validate_request] запрос равен nil.")
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
         return {}
     end
     
@@ -69,11 +69,11 @@ local function validate_request(request)
         if success and type(decoder) == "table" then -- Проверяем, что декодированный JSON является таблицей
             return decoder
         else
-            log_error(COMPONENT_NAME, "[validate_request] Не удалось декодировать JSON или декодированное содержимое не является таблицей: %s", tostring(decoder))
+            log_error(COMPONENT_NAME, "Не удалось декодировать JSON или декодированное содержимое не является таблицей: %s.", tostring(decoder))
         end
     end
 
-    log_error(COMPONENT_NAME, "[validate_request] Недопустимое или пустое содержимое запроса") 
+    log_error(COMPONENT_NAME, "Недопустимое или пустое содержимое запроса.") 
     return {}
 end
 
@@ -83,11 +83,11 @@ end
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not API_SECRET then
-        log_error(COMPONENT_NAME, "[Безопасность] API_SECRET не настроен. Несанкционированный запрос.")
+        log_error(COMPONENT_NAME, "[Безопасность] API_SECRET не настроен. Аутентификация API завершится неудачей.")
         return false
     end
     if not api_key or api_key ~= API_SECRET then
-        log_info(COMPONENT_NAME, string.format("[Безопасность] Несанкционированный запрос"))
+        log_info(COMPONENT_NAME, "Несанкционированный запрос.")
         return false
     end
     return true
@@ -99,7 +99,7 @@ end
 -- @return any Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
-        log_error(COMPONENT_NAME, "[get_param] req равен nil.")
+        log_error(COMPONENT_NAME, "req равен nil.")
         return nil
     end
     
@@ -118,7 +118,7 @@ local function validate_delay(value)
     if i and i >= 1 then
         return i
     else
-        log_error(COMPONENT_NAME, "[validate_delay] Недопустимое значение задержки: %s, используется значение по умолчанию %d", tostring(value), DELAY)
+        log_error(COMPONENT_NAME, "Недопустимое значение задержки: %s, используется значение по умолчанию %d.", tostring(value), DELAY)
         return DELAY
     end
 end
@@ -138,8 +138,8 @@ local function send_response(server, client, code, msg, headers)
             content = msg or ""
         })
     else
-        local error_message = msg or "Неизвестная ошибка"
-        log_error(COMPONENT_NAME, string.format("[send_response] %s (code: %d)", error_message, code))
+        local error_message = msg or "Неизвестная ошибка."
+        log_error(COMPONENT_NAME, "Ошибка HTTP-ответа: %s (код: %d).", error_message, code)
         server:abort(client, code, error_message) -- Передаем сообщение об ошибке в abort
     end
 end
@@ -162,19 +162,19 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
 
     local data, find_err = find_func(name)
     if not data then 
-        return send_response(server, client, 404, "Элемент '" .. name .. "' не найден. Ошибка: " .. (find_err or "неизвестная ошибка")) 
+        return send_response(server, client, 404, "Элемент '%s' не найден. Ошибка: %s.", name, (find_err or "неизвестная ошибка")) 
     end
     
     local cfg, kill_err = kill_func(data)
     if not cfg then
-        return send_response(server, client, 500, "Не удалось остановить элемент '" .. name .. "'. Ошибка: " .. (kill_err or "неизвестная ошибка"))
+        return send_response(server, client, 500, "Не удалось остановить элемент '%s'. Ошибка: %s.", name, (kill_err or "неизвестная ошибка"))
     end
-    log_info(COMPONENT_NAME, string.format("[%s] %s остановлен", log_prefix, name))
+    log_info(COMPONENT_NAME, "%s '%s' остановлен.", log_prefix, name)
 
     local reboot = get_param(req, "reboot")
     if type(reboot) == "boolean" and reboot == true or string_lower(tostring(reboot)) == "true" then 
         local delay = validate_delay(get_param(req, "delay"))
-        log_info(COMPONENT_NAME, string.format("[%s] %s запланирован на перезагрузку через %d секунд", log_prefix, name, delay)) 
+        log_info(COMPONENT_NAME, "%s '%s' запланирован на перезагрузку через %d секунд.", log_prefix, name, delay) 
 
         timer_lib({
             interval = delay, 
@@ -182,9 +182,9 @@ local function handle_kill_with_reboot(find_func, kill_func, make_func, log_pref
                 t:close()
                 local make_result, make_err = make_func(cfg, name)
                 if not make_result then
-                    log_error(COMPONENT_NAME, string.format("[%s] Не удалось перезагрузить %s. Ошибка: %s", log_prefix, name, make_err or "неизвестная ошибка"))
+                    log_error(COMPONENT_NAME, "Не удалось перезагрузить %s '%s'. Ошибка: %s.", log_prefix, name, make_err or "неизвестная ошибка")
                 else
-                    log_info(COMPONENT_NAME, string.format("[%s] %s был успешно перезагружен", log_prefix, name)) 
+                    log_info(COMPONENT_NAME, "%s '%s' был успешно перезагружен.", log_prefix, name) 
                 end
             end
         })

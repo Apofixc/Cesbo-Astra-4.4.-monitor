@@ -43,7 +43,7 @@ local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
 -- @return string Имя потока или исходный IP-адрес, если имя не найдено; `nil` и сообщение об ошибке, если `ip_address` невалиден.
 function get_stream(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
-        local error_msg = "Недопустимый ip_address: должна быть непустая строка. Получено " .. tostring(ip_address) .. "."
+        local error_msg = "Недопустимый ip_address: должна быть непустая строка. Получено: %s.", tostring(ip_address)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -58,7 +58,7 @@ end
 -- @return number Отношение (от 0 до 1) или `nil` и сообщение об ошибке, если входные данные невалидны.
 function ratio(old, new)
     if type(old) ~= "number" or type(new) ~= "number" then
-        local error_msg = string_format("Недопустимые типы: old и new должны быть числами. Получено old: %s, new: %s", type(old), type(new))
+        local error_msg = string_format("Недопустимые типы: old и new должны быть числами. Получено old: %s, new: %s.", type(old), type(new))
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -83,7 +83,7 @@ end
 -- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
 local shallow_table_copy = function(t)
     if type(t) ~= "table" then
-        local error_msg = "Недопустимый аргумент: должна быть таблица. Получено " .. type(t) .. "."
+        local error_msg = "Недопустимый аргумент: должна быть таблица. Получено: %s.", type(t)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -104,25 +104,25 @@ end
 -- @return boolean true, если все параметры валидны, иначе `nil` и сообщение об ошибке.
 local function validate_monitoring_params(host, port, path, feed)
     if not (type(host) == "string" and host ~= "") then
-        local error_msg = "Хост должен быть непустой строкой. Получено " .. tostring(host) .. "."
-        log_error(COMPONENT_NAME, error_msg)
+        local error_msg = "Хост должен быть непустой строкой. Получено: %s.", tostring(host)
+        log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
 
     if not (type(port) == "number" and port > 0) then
-        local error_msg = "Порт должен быть положительным числом. Получено " .. tostring(port) .. "."
+        local error_msg = "Порт должен быть положительным числом. Получено: %s.", tostring(port)
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
 
     if not (type(path) == "string" and path ~= "") then
-        local error_msg = "Путь должен быть непустой строкой. Получено " .. tostring(path) .. "."
+        local error_msg = "Путь должен быть непустой строкой. Получено: %s.", tostring(path)
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
 
     if feed and not (type(feed) == "string" and feed ~= "") then
-        local error_msg = "Feed должен быть непустой строкой, если предоставлен. Получено " .. tostring(feed) .. "."
+        local error_msg = "Feed должен быть непустой строкой, если предоставлен. Получено: %s.", tostring(feed)
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
         return nil, error_msg
     end
@@ -136,7 +136,7 @@ end
 function validate_monitor_param(name, value)
     local schema = MonitorConfig.ValidationSchema[name]
     if not schema then
-        local error_msg = string_format("Неизвестный параметр монитора в схеме: %s", name)
+        local error_msg = string_format("Неизвестный параметр монитора в схеме: %s.", name)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -177,7 +177,7 @@ end
 -- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
 function validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
-        local error_msg = "Недопустимое имя монитора: ожидалась непустая строка, получено " .. tostring(name) .. "."
+        local error_msg = "Недопустимое имя монитора: ожидалась непустая строка, получено: %s.", tostring(name)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -230,13 +230,13 @@ function set_client_monitoring(host, port, path, feed)
             log_info(COMPONENT_NAME, "Адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s уже существует. Пропуск добавления.", feed, host, tostring(port), path)
         else
             table.insert(MONIT_ADDRESS[feed], new_address)
-            log_info(COMPONENT_NAME, "Добавлен адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s", feed, host, tostring(port), path)
+            log_info(COMPONENT_NAME, "Добавлен адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s.", feed, host, tostring(port), path)
         end
     else
         for _, feed_name in ipairs(DEFAULT_FEEDS) do
             -- Очистить существующий список и добавить новый адрес
             MONIT_ADDRESS[feed_name] = {{host = host, port = port, path = path}}
-            log_info(COMPONENT_NAME, "Установлен адрес мониторинга по умолчанию для клиента '%s' с host=%s, port=%s, path=%s", feed_name, host, tostring(port), path)
+            log_info(COMPONENT_NAME, "Установлен адрес мониторинга по умолчанию для клиента '%s' с host=%s, port=%s, path=%s.", feed_name, host, tostring(port), path)
         end
     end
 
@@ -267,7 +267,7 @@ function remove_client_monitoring(host, port, path, feed)
         if addr.host == host and addr.port == port and addr.path == path then
             table.remove(recipients, i)
             removed = true
-            log_info(COMPONENT_NAME, "Удален адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s", feed, host, tostring(port), path)
+            log_info(COMPONENT_NAME, "Удален адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s.", feed, host, tostring(port), path)
             break
         end
     end
@@ -291,9 +291,7 @@ end
 -- @param string content Содержимое для отправки (JSON-строка).
 -- @param string feed Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
 function send_monitor(content, feed)
-    log_debug(COMPONENT_NAME, "Отправка данных монитора для фида '%s'. Содержимое: %s", feed, content)
-    local recipients = MONIT_ADDRESS[feed]
-    print(content)    
+    log_debug(COMPONENT_NAME, "Отправка данных монитора для фида '%s'. Содержимое: %s.", feed, content)
     if recipients and #recipients > 0 then
         local content_length = #content
         local common_headers = {
@@ -315,11 +313,11 @@ function send_monitor(content, feed)
                 headers = headers,
                 callback = function(s,r)
                     if not s then
-                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: status=connection_error", feed, addr.host, tostring(addr.port), addr.path)
+                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: status=connection_error.", feed, addr.host, tostring(addr.port), addr.path)
                     elseif type(r) == "table" and r.code and r.code ~= 200 then
-                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: status=%s", feed, addr.host, tostring(addr.port), addr.path, r.code)
+                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: status=%s.", feed, addr.host, tostring(addr.port), addr.path, r.code)
                     elseif type(r) == "string" then -- Если r - это строка с ошибкой
-                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: error=%s", feed, addr.host, tostring(addr.port), addr.path, r)
+                        log_error(COMPONENT_NAME, "HTTP-запрос не удался для фида '%s' к %s:%s%s: error=%s.", feed, addr.host, tostring(addr.port), addr.path, r)
                     end
                 end
             })
@@ -329,6 +327,7 @@ function send_monitor(content, feed)
         log_info(COMPONENT_NAME, "Для фида '%s' не настроены получатели. Пропуск отправки.", feed)
         return nil, "Для фида '" .. feed .. "' не настроены получатели"
     end
+end
 end
 
 return {

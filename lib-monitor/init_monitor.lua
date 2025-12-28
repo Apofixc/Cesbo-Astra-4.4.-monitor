@@ -83,13 +83,15 @@ ModuleManager.register_module("http.http_server", "http.http_server", {
 
 -- Валидация зависимостей
 if not ModuleManager.validate_dependencies() then 
-    print("[ERROR] Module dependencies validation failed")
+    -- Logger еще не загружен, используем print
+    print("[ERROR] Валидация зависимостей модуля не удалась")
     return false
 end
 
 -- Загрузка модулей
 if not ModuleManager.load_modules() then
-    print("[ERROR] Failed to load modules")
+    -- Logger еще не загружен, используем print
+    print("[ERROR] Не удалось загрузить модули")
     return false
 end
 
@@ -98,12 +100,12 @@ local MonitorConfig = ModuleManager.get_module("config.monitor_config")
 
 -- Проверяем, что модули загружены
 if not Logger then
-    print("[ERROR] Logger module not loaded")
+    print("[ERROR] Модуль Logger не загружен")
     return false
 end
 
 if not MonitorConfig then
-    print("[ERROR] MonitorConfig module not loaded")
+    Logger.error("init_monitor", "Модуль MonitorConfig не загружен")
     return false
 end
 

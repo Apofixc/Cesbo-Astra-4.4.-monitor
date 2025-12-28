@@ -51,10 +51,13 @@ local shallow_table_copy = Utils.shallow_table_copy
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_stream = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     handle_kill_with_reboot(
@@ -80,10 +83,13 @@ end
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_channel = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     handle_kill_with_reboot(
@@ -97,7 +103,7 @@ local kill_channel = function(server, client, request)
         function(channel_data)
             local cfg = shallow_table_copy(channel_data.config) 
             kill_channel(channel_data) -- kill_channel ничего не возвращает, предполагаем успех
-            log_info(COMPONENT_NAME, "Канал '%s' остановлен через kill_channel", channel_data.config.name)
+            log_info(COMPONENT_NAME, "Канал '%s' остановлен через kill_channel.", channel_data.config.name)
             return cfg, nil
         end, 
         function(cfg, name)
@@ -120,10 +126,13 @@ end
 --   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
 local kill_monitor = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
 
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     handle_kill_with_reboot(
@@ -151,17 +160,20 @@ end
 --   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_channel_monitor = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
     if not name then 
-        return send_response(server, client, 400, "Отсутствует канал")   
+        return send_response(server, client, 400, "Отсутствует канал.")   
     end
 
     local params = {}
@@ -190,10 +202,10 @@ local update_channel_monitor = function(server, client, request)
 
     local success, err = channel_monitor_manager:update_monitor_parameters(name, params)
     if success then
-        log_info(COMPONENT_NAME, string.format("[Монитор] %s успешно обновлен", name))
+        log_info(COMPONENT_NAME, "Монитор '%s' успешно обновлен.", name)
         send_response(server, client, 200, "ОК")
     else
-        log_error(COMPONENT_NAME, string.format("[Монитор] Обновление %s не удалось: %s", name, err or "неизвестная ошибка"))
+        log_error(COMPONENT_NAME, "Обновление монитора '%s' не удалось: %s.", name, err or "неизвестная ошибка")
         send_response(server, client, 400, "Обновление не удалось: " .. (err or "неизвестная ошибка"))
     end
 end
@@ -210,14 +222,17 @@ end
 --   channel_2 (table): { ... }
 -- }
 local get_channels = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     if not channel_list then
-        log_error(COMPONENT_NAME, "[get_channels] channel_list равен nil.")
+        log_error(COMPONENT_NAME, "channel_list равен nil.")
         return send_response(server, client, 500, "Внутренняя ошибка сервера: Список каналов недоступен.")
     end
 
@@ -228,7 +243,7 @@ local get_channels = function(server, client, request)
     
     local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Не удалось закодировать список каналов в JSON")
+        log_error(COMPONENT_NAME, "Не удалось закодировать список каналов в JSON.")
         return send_response(server, client, 500, "Внутренняя ошибка сервера: Не удалось закодировать список каналов.")
     end
 
@@ -251,10 +266,13 @@ end
 --   ...
 -- }
 local get_channel_monitors = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     local content = {}
@@ -264,7 +282,7 @@ local get_channel_monitors = function(server, client, request)
     
     local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Не удалось закодировать список мониторов в JSON")
+        log_error(COMPONENT_NAME, "Не удалось закодировать список мониторов в JSON.")
         return send_response(server, client, 500, "Внутренняя ошибка сервера: Не удалось закодировать список мониторов.")
     end
 
@@ -297,28 +315,31 @@ end
 --   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
 -- }
 local get_channel_monitor_data = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
     if not name then 
-        return send_response(server, client, 400, "Отсутствует канал")   
+        return send_response(server, client, 400, "Отсутствует канал.")   
     end
 
     local monitor, get_err = channel_monitor_manager:get_monitor(name)
     
     if not monitor then
-        return send_response(server, client, 404, "Монитор канала '" .. name .. "' не найден. Ошибка: " .. (get_err or "неизвестно"))
+        return send_response(server, client, 404, "Монитор канала '%s' не найден. Ошибка: %s.", name, (get_err or "неизвестно"))
     end
 
     local json_cache = monitor:get_json_cache()
     if not json_cache then
-        return send_response(server, client, 404, "Кэш монитора для '" .. name .. "' не найден или пуст.")
+        return send_response(server, client, 404, "Кэш монитора для '%s' не найден или пуст.", name)
     end
 
     local headers = {
@@ -338,33 +359,36 @@ end
 --   psi (string): Тип PSI данных (например, "pmt", "sdt").
 -- }
 local get_channel_psi = function(server, client, request)
-    if not request then return nil end
+    if not request then 
+        log_error(COMPONENT_NAME, "Запрос равен nil.")
+        return nil 
+    end
     
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     local req = validate_request(request)
 
     local name = get_param(req, "channel")
     if not name then 
-        return send_response(server, client, 400, "Отсутствует канал")   
+        return send_response(server, client, 400, "Отсутствует канал.")   
     end
 
     local monitor, get_err = channel_monitor_manager:get_monitor(name)
 
     if not monitor then
-        return send_response(server, client, 404, "Монитор канала '" .. name .. "' не найден. Ошибка: " .. (get_err or "неизвестно"))
+        return send_response(server, client, 404, "Монитор канала '%s' не найден. Ошибка: %s.", name, (get_err or "неизвестно"))
     end
 
     local psi_cache_table = monitor:get_psi_data_cache()
     if not psi_cache_table or next(psi_cache_table) == nil then -- Проверяем, что таблица не пуста
-        return send_response(server, client, 404, "Кэш PSI для '" .. name .. "' не найден или пуст.")
+        return send_response(server, client, 404, "Кэш PSI для '%s' не найден или пуст.", name)
     end
 
     local json_content = json_encode(psi_cache_table)
     if not json_content then
-        log_error(COMPONENT_NAME, "Не удалось закодировать данные PSI в JSON")
+        log_error(COMPONENT_NAME, "Не удалось закодировать данные PSI в JSON.")
         return send_response(server, client, 500, "Внутренняя ошибка сервера: Не удалось закодировать данные PSI.")
     end
 

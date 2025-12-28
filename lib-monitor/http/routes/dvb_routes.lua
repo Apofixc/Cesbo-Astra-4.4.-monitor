@@ -40,7 +40,7 @@ local send_response = http_helpers.send_response
 -- }
 local get_adapters = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end
 
     local content = {}
@@ -50,7 +50,7 @@ local get_adapters = function(server, client, request)
     
     local json_content = json_encode(content)
     if not json_content then
-        log_error(COMPONENT_NAME, "Не удалось закодировать список адаптеров в JSON")
+        log_error(COMPONENT_NAME, "Не удалось закодировать список адаптеров в JSON.")
         return send_response(server, client, 500, "Внутренняя ошибка сервера: Не удалось закодировать список адаптеров.")
     end
 
@@ -82,7 +82,7 @@ end
 -- }
 local get_adapter_data = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end    
 
     local req = validate_request(request)
@@ -122,14 +122,14 @@ end
 -- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
 local update_dvb_monitor = function(server, client, request)
     if not check_auth(request) then
-        return send_response(server, client, 401, "Несанкционированный доступ")
+        return send_response(server, client, 401, "Несанкционированный доступ.")
     end    
 
     local req = validate_request(request)
 
     local name_adapter = get_param(req, "name_adapter")
     if not name_adapter then 
-        return send_response(server, client, 400, "Отсутствует адаптер")   
+        return send_response(server, client, 400, "Отсутствует адаптер.")   
     end
 
     local params = {}
@@ -143,10 +143,10 @@ local update_dvb_monitor = function(server, client, request)
 
     local success, err = dvb_monitor_manager:update_monitor_parameters(name_adapter, params)
     if success then
-        log_info(COMPONENT_NAME, string.format("[Монитор] %s успешно обновлен", name_adapter))
+        log_info(COMPONENT_NAME, "Монитор '%s' успешно обновлен.", name_adapter)
         send_response(server, client, 200, "ОК")
     else
-        log_error(COMPONENT_NAME, string.format("[Монитор] Обновление %s не удалось: %s", name_adapter, err or "неизвестная ошибка"))
+        log_error(COMPONENT_NAME, "Обновление монитора '%s' не удалось: %s.", name_adapter, err or "неизвестная ошибка")
         send_response(server, client, 400, "Обновление не удалось: " .. (err or "неизвестная ошибка"))
     end
 end

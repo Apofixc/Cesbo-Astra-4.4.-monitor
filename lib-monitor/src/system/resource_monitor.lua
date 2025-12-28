@@ -111,7 +111,7 @@ end
 local function safe_command(cmd, default)
     local f = io_popen(cmd .. " 2>/dev/null", "r")
     if not f then
-        log_error(COMPONENT_NAME, "Не удалось выполнить команду: %s", cmd)
+        log_error(COMPONENT_NAME, "Не удалось выполнить команду: %s.", cmd)
         return default
     end
     
@@ -151,7 +151,7 @@ function ResourceMonitor:collect_system_data()
     self.cache.last_update = now
     self.stats.collections = self.stats.collections + 1
     
-    log_debug(COMPONENT_NAME, "Собраны системные данные для '%s'", self.name)
+    log_debug(COMPONENT_NAME, "Собраны системные данные для '%s'.", self.name)
     return data
 end
 
@@ -178,7 +178,7 @@ function ResourceMonitor:collect_process_data()
     self.cache.last_update = now
     self.stats.collections = self.stats.collections + 1
     
-    log_debug(COMPONENT_NAME, "Собраны данные процесса для PID '%s'", tostring(self.pid))
+    log_debug(COMPONENT_NAME, "Собраны данные процесса для PID '%s'.", tostring(self.pid))
     return data
 end
 

@@ -68,12 +68,12 @@ end
 -- @return boolean true, если параметры успешно обновлены, иначе `false`.
 function update_monitor_parameters(name, params)
     if not name or type(name) ~= 'string' then
-        local error_msg = "Invalid name: expected string, got " .. type(name) .. "."
+        local error_msg = "Неверное имя: ожидалась строка, получено: %s.", type(name)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not params or type(params) ~= 'table' then
-        local error_msg = "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. "."
+        local error_msg = "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -81,9 +81,9 @@ function update_monitor_parameters(name, params)
     -- Делегируем обновление параметров менеджеру каналов
     local success, err = channel_monitor_manager:update_monitor_parameters(name, params)
     if success then
-        log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: %s", name)
+        log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", name)
     else
-        log_error(COMPONENT_NAME, "Failed to update parameters for monitor: %s. Error: %s", name, err or "unknown error")
+        log_error(COMPONENT_NAME, "Не удалось обновить параметры для монитора: %s. Ошибка: %s.", name, err or "неизвестная ошибка")
     end
     return success, err
 end
@@ -133,14 +133,14 @@ local function create_stream_json_representation(channel_data_obj)
             if handler then
                 config_entry = handler(input_entry.config)
             else
-                local error_msg = "Unknown or unsupported stream format: " .. tostring(input_entry.config.format) .. " for entry " .. key .. ". Cannot create stream JSON."
+                local error_msg = "Неизвестный или неподдерживаемый формат потока: %s для записи %s. Невозможно создать JSON потока.", tostring(input_entry.config.format), key
                 log_error(COMPONENT_NAME, error_msg)
                 return nil, error_msg
             end
             table_insert(stream_json_list, config_entry)
         end
     else
-        local error_msg = "Invalid channel data provided. Expected table, got " .. type(channel_data_obj) .. "."
+        local error_msg = "Предоставлены неверные данные канала. Ожидалась таблица, получено: %s.", type(channel_data_obj)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -164,24 +164,24 @@ function make_monitor(monitor_config_table, channel_data_obj)
     local ch_data = type(channel_data_obj) == "table" and channel_data_obj or find_channel(tostring(channel_data_obj))
 
     if not (type(monitor_config_table) == 'table') then
-        local error_msg = "Invalid config table. Expected table, got " .. type(monitor_config_table) .. "."
+        local error_msg = "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(monitor_config_table)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not (monitor_config_table.name and type(monitor_config_table.name) == 'string') then
-        local error_msg = "config.name is required and must be a string."
+        local error_msg = "config.name является обязательным и должен быть строкой."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not (monitor_config_table.monitor and type(monitor_config_table.monitor) == 'string') then
-        local error_msg = "config.monitor is required and must be a string."
+        local error_msg = "config.monitor является обязательным и должен быть строкой."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     
     local stream_json, err = create_stream_json_representation(ch_data)
     if err then
-        log_error(COMPONENT_NAME, "Failed to create stream JSON: %s", err)
+        log_error(COMPONENT_NAME, "Не удалось создать JSON потока: %s.", err)
         return nil, err
     end
     monitor_config_table.stream_json = stream_json
@@ -204,7 +204,7 @@ end
 -- @return table config Копия конфигурации остановленного монитора, если успешно, иначе `false`.
 function kill_monitor(monitor_obj)
     if not monitor_obj then
-        local error_msg = "Attempted to kill a nil monitor object."
+        local error_msg = "Попытка остановить nil-объект монитора."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -213,10 +213,10 @@ function kill_monitor(monitor_obj)
     local success, err = channel_monitor_manager:remove_monitor(monitor_obj.name)
 
     if success then
-        log_info(COMPONENT_NAME, "Monitor '%s' killed successfully.", monitor_obj.name)
+        log_info(COMPONENT_NAME, "Монитор '%s' успешно остановлен.", monitor_obj.name)
     else
-        log_error(COMPONENT_NAME, "Failed to remove monitor '%s'. Error: %s", monitor_obj.name, err or "unknown error")
-        return nil, err or "Failed to remove monitor"
+        log_error(COMPONENT_NAME, "Не удалось удалить монитор '%s'. Ошибка: %s.", monitor_obj.name, err or "неизвестная ошибка")
+        return nil, err or "Не удалось удалить монитор"
     end
     return config, nil
 end
@@ -229,7 +229,7 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
         local input_data = channel_data.input[1]
         if not input_data then
-            local error_msg = "Input data is missing for input monitor type in stream '" .. conf.name .. "'."
+            local error_msg = "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name
             log_error(COMPONENT_NAME, error_msg)
             return nil, nil, error_msg
         end
@@ -245,7 +245,7 @@ local monitor_type_handlers = {
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
         if not channel_data.output or #channel_data.output == 0 then
-            local error_msg = "channel_data.output is missing for ip monitor in stream '" .. conf.name .. "'."
+            local error_msg = "Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name
             log_error(COMPONENT_NAME, error_msg)
             return nil, nil, error_msg
         end
@@ -261,7 +261,7 @@ local monitor_type_handlers = {
         local split_result = string_split(conf.output[key], "#")
         local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
-        log_info(COMPONENT_NAME, "Using output key %d for IP monitor in stream '%s'.", key, conf.name)
+        log_info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
         return nil, monitor_target, nil -- upstream не используется для IP-монитора
     end,
 }
@@ -285,7 +285,7 @@ local monitor_type_handlers = {
 function make_stream(conf)
     local channel_data, err_channel = make_channel(conf)
     if not channel_data then 
-        local error_msg = "Failed to create channel data for stream '" .. (conf.name or "unknown") .. "'. Error: " .. (err_channel or "unknown")
+        local error_msg = "Не удалось создать данные канала для потока '%s'. Ошибка: %s.", (conf.name or "unknown"), (err_channel or "unknown")
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -297,18 +297,18 @@ function make_stream(conf)
     if handler then
         upstream, monitor_target, handler_err = handler(conf, channel_data)
     else
-        local error_msg = "Invalid monitor_type: '" .. tostring(monitor_type) .. "' for stream '" .. conf.name .. "'."
+        local error_msg = "Неверный monitor_type: '%s' для потока '%s'.", tostring(monitor_type), conf.name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
     if handler_err then
-        log_error(COMPONENT_NAME, "Error from monitor type handler for stream '%s': %s", conf.name, handler_err)
+        log_error(COMPONENT_NAME, "Ошибка от обработчика типа монитора для потока '%s': %s.", conf.name, handler_err)
         return nil, handler_err
     end
 
     if not monitor_target then
-        local error_msg = "Failed to determine monitor target for stream '" .. conf.name .. "'."
+        local error_msg = "Не удалось определить цель монитора для потока '%s'.", conf.name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -325,12 +325,12 @@ function make_stream(conf)
 
     local stream_json, err = create_stream_json_representation(channel_data)
     if err then
-        log_error(COMPONENT_NAME, "Failed to create stream JSON: %s", err)
+        log_error(COMPONENT_NAME, "Не удалось создать JSON потока: %s.", err)
         return nil, err
     end
     monitor_config.stream_json = stream_json
 
-    log_info(COMPONENT_NAME, "Attempting to create monitor for stream '%s'.", conf.name)
+    log_info(COMPONENT_NAME, "Попытка создать монитор для потока '%s'.", conf.name)
     -- Делегируем создание и регистрацию монитора ChannelMonitorManager
     return channel_monitor_manager:create_and_register_channel_monitor(monitor_config, channel_data)
 end
@@ -342,7 +342,7 @@ end
 -- @return table config Копия конфигурации остановленного канала, если успешно, иначе `nil` и сообщение об ошибке.
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config or not channel_data.config.name then 
-        local error_msg = "Invalid channel_data or config provided to kill_stream."
+        local error_msg = "Предоставлены неверные channel_data или config для kill_stream."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -353,19 +353,19 @@ function kill_stream(channel_data)
     if monitor_data then
         local success, err = kill_monitor(monitor_data)
         if success then
-            log_info(COMPONENT_NAME, "Monitor '%s' was killed as part of stream shutdown.", monitor_name)
+            log_info(COMPONENT_NAME, "Монитор '%s' был остановлен в рамках завершения работы потока.", monitor_name)
         else
-            log_error(COMPONENT_NAME, "Failed to kill monitor '%s' as part of stream shutdown. Error: %s", monitor_name, err or "unknown error")
-            return nil, err or "Failed to kill monitor during stream shutdown"
+            log_error(COMPONENT_NAME, "Не удалось остановить монитор '%s' в рамках завершения работы потока. Ошибка: %s.", monitor_name, err or "неизвестная ошибка")
+            return nil, err or "Не удалось остановить монитор во время завершения работы потока"
         end
     else
-        log_info(COMPONENT_NAME, "No monitor found for stream '%s'.", monitor_name)
+        log_info(COMPONENT_NAME, "Монитор для потока '%s' не найден.", monitor_name)
     end
 
     local config = shallow_table_copy(channel_data.config)
     kill_channel(channel_data) -- Предполагаем, что kill_channel всегда успешен или обрабатывает свои ошибки
 
-    log_info(COMPONENT_NAME, "Stream '%s' shutdown successfully.", config.name)
+    log_info(COMPONENT_NAME, "Поток '%s' успешно остановлен.", config.name)
 
     return config, nil
 end

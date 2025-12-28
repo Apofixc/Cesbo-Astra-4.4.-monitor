@@ -48,7 +48,7 @@ local dvb_monitor_method_comparison = {
         return false
     end,
     [3] = function(prev, curr, rate) -- по любому изменению параметров, с учетом погрешности 
-        log_debug(COMPONENT_NAME, "Сравнение отношения: prev.signal=%s, curr.signal=%s, prev.snr=%s, curr.snr=%s", tostring(prev.signal), tostring(curr.signal), tostring(prev.snr), tostring(curr.snr))
+        log_debug(COMPONENT_NAME, "Сравнение отношения: prev.signal=%s, curr.signal=%s, prev.snr=%s, curr.snr=%s.", tostring(prev.signal), tostring(curr.signal), tostring(prev.snr), tostring(curr.snr))
         local signal_ratio, signal_err = ratio(prev.signal, curr.signal)
         local snr_ratio, snr_err = ratio(prev.snr, curr.snr)
 
@@ -77,7 +77,7 @@ local dvb_monitor_method_comparison = {
 local function set_dvb_config_param(self, param_name, value)
     local updated_value, err = validate_monitor_param(param_name, value)
     if err then
-        log_error(COMPONENT_NAME, "Не удалось проверить параметр '%s': %s", param_name, err)
+        log_error(COMPONENT_NAME, "Не удалось проверить параметр '%s': %s.", param_name, err)
         return nil, err
     end
     -- Извлекаем фактическое имя параметра из "dvb_param_name"
@@ -123,7 +123,7 @@ end
 function DvbTunerMonitor:start()
     local comparison_method = dvb_monitor_method_comparison[self.conf.method_comparison]
     if not comparison_method then
-        local error_msg = "Указан недопустимый метод сравнения: " .. tostring(self.conf.method_comparison)
+        local error_msg = "Указан недопустимый метод сравнения: %s.", tostring(self.conf.method_comparison)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -155,10 +155,10 @@ function DvbTunerMonitor:start()
     self.instance = dvb_tune(self.conf)
 
     if self.instance then
-        log_info(COMPONENT_NAME, "Запущен монитор для адаптера: %s", self.conf.name_adapter)
+        log_info(COMPONENT_NAME, "Запущен монитор для адаптера: %s.", self.conf.name_adapter)
         return self.instance, nil
     else
-        local error_msg = "Не удалось запустить монитор для адаптера: " .. self.conf.name_adapter .. ". dvb_tune вернул nil."
+        local error_msg = "Не удалось запустить монитор для адаптера: %s. dvb_tune вернул nil.", self.conf.name_adapter
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -169,7 +169,7 @@ end
 -- @return boolean true, если параметры успешно обновлены, иначе `nil` и сообщение об ошибке.
 function DvbTunerMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        local error_msg = "update_parameters: params должен быть таблицей. Получено " .. type(params) .. "."
+        local error_msg = "update_parameters: params должен быть таблицей. Получено: %s.", type(params)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -188,7 +188,7 @@ function DvbTunerMonitor:update_parameters(params)
         if not success then return nil, err end
     end
 
-    log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s", self.conf.name_adapter)
+    log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", self.conf.name_adapter)
     return true, nil
 end
 
@@ -207,7 +207,7 @@ function DvbTunerMonitor:kill()
     self.conf = nil
     self.status_signal = nil
     self.json_cache = nil
-    log_info(COMPONENT_NAME, "Монитор DVB-тюнера остановлен для адаптера: %s", self.conf.name_adapter)
+    log_info(COMPONENT_NAME, "Монитор DVB-тюнера остановлен для адаптера: %s.", self.conf.name_adapter)
 end
 
 return DvbTunerMonitor

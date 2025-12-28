@@ -30,7 +30,7 @@ local COMPONENT_NAME = "HTTPServer"
 -- @param string addr IP-адрес, на котором будет слушать сервер.
 -- @param number port Порт, на котором будет слушать сервер.
 function server_start(addr, port)
-    log_info(COMPONENT_NAME, string.format("[Server] Type of system_routes: %s", type(system_routes)))
+    log_info(COMPONENT_NAME, "Тип system_routes: %s.", type(system_routes))
     http_server({
         addr = addr,
         port = port,
@@ -60,5 +60,5 @@ function server_start(addr, port)
             {"/api/system/set-cache-interval", system_routes.set_monitor_cache_interval},
         }
     })
-    log_info(COMPONENT_NAME, string.format("[Server] Started on %s:%d", addr, port))
+    log_info(COMPONENT_NAME, "Сервер запущен на %s:%d.", addr, port)
 end

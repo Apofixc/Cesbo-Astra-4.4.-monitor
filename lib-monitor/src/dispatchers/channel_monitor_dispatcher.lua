@@ -38,7 +38,7 @@ function ChannelMonitorDispatcher:new()
         self.monitors = {} -- Таблица для хранения мониторов каналов по их уникальному имени
         self.count = 0     -- Явный счетчик мониторов
         instance = self
-        log_info(COMPONENT_NAME, "ChannelMonitorDispatcher initialized.")
+        log_info(COMPONENT_NAME, "ChannelMonitorDispatcher инициализирован.")
     end
     return instance
 end
@@ -53,24 +53,24 @@ function ChannelMonitorDispatcher:add_monitor(name, monitor_obj)
         return nil, name_err
     end
     if not monitor_obj or type(monitor_obj) ~= "table" then
-        local error_msg = "Invalid monitor object for '" .. name .. "': expected table, got " .. type(monitor_obj) .. "."
+        local error_msg = "Неверный объект монитора для '%s': ожидалась таблица, получено: %s.", name, type(monitor_obj)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if self.monitors[name] then
-        local error_msg = "Monitor with name '" .. name .. "' already exists. Cannot add duplicate."
+        local error_msg = "Монитор с именем '%s' уже существует. Невозможно добавить дубликат.", name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if self.count >= MonitorConfig.ChannelMonitorLimit then
-        local error_msg = string.format("Channel Monitor list overflow. Cannot add more than %s monitors.", MonitorConfig.ChannelMonitorLimit)
+        local error_msg = string.format("Переполнение списка мониторов каналов. Невозможно добавить более %s мониторов.", MonitorConfig.ChannelMonitorLimit)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
     self.monitors[name] = monitor_obj
     self.count = self.count + 1
-    log_info(COMPONENT_NAME, "Channel Monitor '%s' added successfully. Total: %d", name, self.count)
+    log_info(COMPONENT_NAME, "Монитор канала '%s' успешно добавлен. Всего: %d.", name, self.count)
     return true, nil
 end
 
@@ -82,12 +82,12 @@ end
 -- @return userdata monitor Экземпляр монитора, если успешно создан и зарегистрирован, иначе `nil` и сообщение об ошибке.
 function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, channel_data)
     if not config or type(config) ~= 'table' then
-        local error_msg = "Invalid configuration table. Expected table, got " .. type(config) .. "."
+        local error_msg = "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(config)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if not config.name or type(config.name) ~= 'string' then
-        local error_msg = "config.name is required and must be a string."
+        local error_msg = "config.name является обязательным и должен быть строкой."
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -98,7 +98,7 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
         return nil, get_err
     end
     if existing_monitor then
-        local error_msg = "Monitor with name '" .. config.name .. "' already exists."
+        local error_msg = "Монитор с именем '%s' уже существует.", config.name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -106,33 +106,33 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
     -- Инициализация upstream, если он не предоставлен
     if not config.upstream then
         if not parse_url then
-            local error_msg = "Global function 'parse_url' is not available."
+            local error_msg = "Глобальная функция 'parse_url' недоступна."
             log_error(COMPONENT_NAME, error_msg)
             return nil, error_msg
         end
         if not init_input then
-            local error_msg = "Global function 'init_input' is not available."
+            local error_msg = "Глобальная функция 'init_input' недоступна."
             log_error(COMPONENT_NAME, error_msg)
             return nil, error_msg
         end
 
         local cfg = parse_url(config.monitor)
         if not cfg then
-            local error_msg = "Monitoring address does not exist for channel '" .. config.name .. "'."
+            local error_msg = "Адрес мониторинга не существует для канала '%s'.", config.name
             log_error(COMPONENT_NAME, error_msg)
             return nil, error_msg
         end
         cfg.name = config.name
         local input_instance = init_input(cfg)
         if not input_instance then
-            local error_msg = "init_input returned nil, upstream is required for channel '" .. config.name .. "'."
+            local error_msg = "init_input вернул nil, upstream требуется для канала '%s'.", config.name
             log_error(COMPONENT_NAME, error_msg)
             return nil, error_msg
         end
         config.upstream = input_instance.tail
-        log_info(COMPONENT_NAME, "Upstream initialized for channel '%s' from monitor config.", config.name)
+        log_info(COMPONENT_NAME, "Upstream инициализирован для канала '%s' из конфигурации монитора.", config.name)
     else
-        log_info(COMPONENT_NAME, "Upstream already provided for channel '%s'. Skipping initialization.", config.name)
+        log_info(COMPONENT_NAME, "Upstream уже предоставлен для канала '%s'. Пропускаем инициализацию.", config.name)
     end
 
     local monitor = ChannelMonitor:new(config, channel_data)
@@ -141,14 +141,14 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
     if instance then
         local success, add_err = self:add_monitor(monitor.name, monitor)
         if success then
-            log_info(COMPONENT_NAME, "Channel monitor '%s' created and added successfully.", monitor.name)
+            log_info(COMPONENT_NAME, "Монитор канала '%s' успешно создан и добавлен.", monitor.name)
             return instance, nil
         else
-            log_error(COMPONENT_NAME, "Failed to add channel monitor '%s' to dispatcher: %s", monitor.name, add_err or "unknown error")
-            return nil, add_err or "Failed to add monitor to dispatcher"
+            log_error(COMPONENT_NAME, "Не удалось добавить монитор канала '%s' в диспетчер: %s.", monitor.name, add_err or "неизвестная ошибка")
+            return nil, add_err or "Не удалось добавить монитор в диспетчер"
         end
     else
-        local error_msg = "ChannelMonitor:start returned nil for monitor '" .. (config.name or "unknown") .. "'. Error: " .. (err or "unknown")
+        local error_msg = "ChannelMonitor:start вернул nil для монитора '%s'. Ошибка: %s.", (config.name or "unknown"), (err or "unknown")
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -176,19 +176,19 @@ function ChannelMonitorDispatcher:remove_monitor(name)
     end
     local monitor_obj, get_err = self:get_monitor(name)
     if not monitor_obj then
-        local error_msg = "Monitor with name '" .. name .. "' not found. Cannot remove. Error: " .. (get_err or "unknown")
+        local error_msg = "Монитор с именем '%s' не найден. Невозможно удалить. Ошибка: %s.", name, (get_err or "неизвестная ошибка")
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if monitor_obj.kill and type(monitor_obj.kill) == "function" then
         monitor_obj:kill() -- Вызываем метод kill у самого монитора
-        log_info(COMPONENT_NAME, "Called kill() on channel monitor '%s'.", name)
+        log_info(COMPONENT_NAME, "Вызван kill() для монитора канала '%s'.", name)
     else
-        log_info(COMPONENT_NAME, "Channel Monitor '%s' does not have a kill() method.", name)
+        log_info(COMPONENT_NAME, "Монитор канала '%s' не имеет метода kill().", name)
     end
     self.monitors[name] = nil
     self.count = self.count - 1 -- Уменьшаем счетчик активных мониторов
-    log_info(COMPONENT_NAME, "Channel Monitor '%s' removed successfully. Total: %d", name, self.count)
+    log_info(COMPONENT_NAME, "Монитор канала '%s' успешно удален. Всего: %d.", name, self.count)
     return true, nil
 end
 
@@ -210,29 +210,29 @@ function ChannelMonitorDispatcher:update_monitor_parameters(name, params)
         return nil, name_err
     end
     if not params or type(params) ~= "table" then
-        local error_msg = "Invalid parameters for '" .. name .. "': expected table, got " .. type(params) .. "."
+        local error_msg = "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
     local monitor_obj, get_err = self:get_monitor(name)
     if not monitor_obj then
-        local error_msg = "Channel Monitor '" .. name .. "' not found. Cannot update parameters. Error: " .. (get_err or "unknown")
+        local error_msg = "Монитор канала '%s' не найден. Невозможно обновить параметры. Ошибка: %s.", name, (get_err or "неизвестная ошибка")
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
     if monitor_obj.update_parameters and type(monitor_obj.update_parameters) == "function" then
         local success, err = pcall(monitor_obj.update_parameters, monitor_obj, params)
         if success then
-            log_info(COMPONENT_NAME, "Parameters updated successfully for channel monitor '%s'.", name)
+            log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора канала '%s'.", name)
             return true, nil
         else
-            local error_msg = "Error updating parameters for channel monitor '" .. name .. "': " .. tostring(err)
+            local error_msg = "Ошибка при обновлении параметров для монитора канала '%s': %s.", name, tostring(err)
             log_error(COMPONENT_NAME, error_msg)
             return nil, error_msg
         end
     else
-        local error_msg = "Channel Monitor '" .. name .. "' does not support update_parameters method."
+        local error_msg = "Монитор канала '%s' не поддерживает метод update_parameters.", name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end

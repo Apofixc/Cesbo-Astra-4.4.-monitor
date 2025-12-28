@@ -163,7 +163,7 @@ function ChannelMonitor:new(config, channel_data)
     self.status.cc_errors = 0
     self.status.pes_errors = 0
 
-    log_info(COMPONENT_NAME, "New ChannelMonitor instance created for channel: " .. self.name)
+    log_info(COMPONENT_NAME, "Новый экземпляр ChannelMonitor создан для канала: %s.", self.name)
     return self
 end
 
@@ -205,7 +205,7 @@ end
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
     if not comparison_method then
-        local error_msg = "Invalid comparison method specified: " .. tostring(self.config.method_comparison)
+        local error_msg = "Указан недопустимый метод сравнения: %s.", tostring(self.config.method_comparison)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -265,12 +265,12 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then 
-        local error_msg = "analyze returned nil for channel '" .. self.name .. "'. Failed to start monitor."
+        local error_msg = "analyze вернул nil для канала '%s'. Не удалось запустить монитор.", self.name
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
 
-    log_info(COMPONENT_NAME, "Started monitor for channel: " .. self.name)
+    log_info(COMPONENT_NAME, "Монитор запущен для канала: %s.", self.name)
     return self.monitor_instance, nil
 end
 
@@ -282,7 +282,7 @@ end
 -- или содержит невалидные значения.
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        local error_msg = "Invalid parameters for update_parameters: expected table, got " .. type(params) .. "."
+        local error_msg = "Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params)
         log_error(COMPONENT_NAME, error_msg)
         return nil, error_msg
     end
@@ -305,7 +305,7 @@ function ChannelMonitor:update_parameters(params)
         if not success then return nil, err end
     end
 
-    log_info(COMPONENT_NAME, "Parameters updated successfully for monitor: " .. self.name)
+    log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", self.name)
     return true, nil
 end
 
@@ -327,7 +327,7 @@ function ChannelMonitor:send_channel_status(data)
     
     local current_json_status = json_encode(self.status)
     if not current_json_status then
-        log_error(COMPONENT_NAME, "Failed to encode channel status to JSON")
+        log_error(COMPONENT_NAME, "Не удалось закодировать статус канала в JSON.")
         return -- Прекращаем отправку, если кодирование не удалось
     end
 
@@ -356,7 +356,7 @@ function ChannelMonitor:kill()
     self.psi_data_cache = nil
     self.json_status_cache = nil
     self.status = nil -- Очищаем статус
-    log_info(COMPONENT_NAME, "Monitor killed for channel: " .. self.name)
+    log_info(COMPONENT_NAME, "Монитор остановлен для канала: %s.", self.name)
 end
 
 --- Возвращает PSI-data.
