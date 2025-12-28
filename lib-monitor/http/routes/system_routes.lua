@@ -1,3 +1,11 @@
+-- ===========================================================================
+-- Модуль `http.routes.system_routes`
+--
+-- Определяет HTTP-маршруты и обработчики для управления системными функциями Astra.
+-- Предоставляет API-эндпоинты для перезагрузки/остановки Astra, проверки состояния
+-- сервера, получения данных о системных ресурсах и управления ResourceMonitor.
+-- ===========================================================================
+
 -- 1. Стандартные Lua функции
 local type, tostring, tonumber
 local string_format = string.format
@@ -28,8 +36,6 @@ local check_auth = http_helpers.check_auth
 local get_param = http_helpers.get_param
 local validate_delay = http_helpers.validate_delay
 local send_response = http_helpers.send_response
-
-local COMPONENT_NAME = "SystemRoutes"
 
 -- =============================================
 -- Управление системой Astra (Обработчики маршрутов)
