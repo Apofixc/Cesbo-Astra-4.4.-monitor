@@ -107,12 +107,6 @@ if not MonitorConfig then
     return false
 end
 
--- Устанавливаем уровень логирования из конфигурации
-if MonitorConfig.LogLevel and Logger.set_log_level then
-    Logger.set_log_level(MonitorConfig.LogLevel)
-    Logger.info("ModuleManager", "Log level set to: %s", MonitorConfig.LogLevel)
-end
-
 -- Проверка и сохранение глобальных зависимостей от AstraAPI
 local global_dependencies_to_check = {
     "analyze",

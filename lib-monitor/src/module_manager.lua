@@ -34,8 +34,10 @@ local global_dependencies = {}
 -- Пост-инициализация Logger после того, как ModuleManager будет доступен
 local function init_logger()
     if not Logger then
-        Logger = ModuleManager.get_module("utils.logger")
-        if Logger then
+        -- Использовать require вместо ModuleManager.get_module для избежания рекурсии
+        local success, logger_module = pcall(require, "src.utils.logger")
+        if success and logger_module then
+            Logger = logger_module
             log_info = Logger.info
             log_error = Logger.error
             log_debug = Logger.debug
@@ -168,6 +170,11 @@ function ModuleManager.load_modules()
         local module = module_or_err
         
         loaded_modules[name] = module
+
+        if name == "utils.logger" and not Logger then
+            init_logger()
+        end
+
         log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен", name)
         
         ::continue::
