@@ -6,7 +6,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring
+local type, tostring = type, tostring
 local math_max = math.max
 
 -- 2. Функции из ModuleManager.get_module()

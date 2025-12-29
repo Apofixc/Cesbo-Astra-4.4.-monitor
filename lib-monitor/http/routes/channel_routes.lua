@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring, tonumber
+local type, tostring, tonumber = type, tostring, tonumber
 local string_lower = string.lower
 
 -- 2. Функции из ModuleManager.get_module()

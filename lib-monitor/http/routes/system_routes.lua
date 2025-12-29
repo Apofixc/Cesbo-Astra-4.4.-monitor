@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring, tonumber
+local type, tostring, tonumber = type, tostring, tonumber
 local string_format = string.format
 local os_date = os.date
 local os_exit = os.exit

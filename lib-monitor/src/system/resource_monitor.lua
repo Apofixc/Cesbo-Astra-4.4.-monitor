@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring, tonumber
+local type, tostring, tonumber = type, tostring, tonumber
 local string_format = string.format
 local io_open, io_popen = io.open, io.popen
 local table_insert = table.insert

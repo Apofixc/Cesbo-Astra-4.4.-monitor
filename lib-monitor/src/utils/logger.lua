@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type
+local type = type
 local string_format = string.format
 local os_date = os.date
 local io_write, io_stderr = io.write, io.stderr

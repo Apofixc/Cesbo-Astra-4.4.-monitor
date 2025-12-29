@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring, ipairs, pairs
+local type, tostring, ipairs, pairs = type, tostring, ipairs, pairs
 local string_format = string.format
 local math_max, math_abs = math.max, math.abs
 

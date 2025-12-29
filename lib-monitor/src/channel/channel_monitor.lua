@@ -7,7 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, tostring, ipairs
+local type, tostring, ipairs = type, tostring, ipairs
 local math_max = math.max
 local table_insert = table.insert
 
