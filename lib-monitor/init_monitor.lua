@@ -11,75 +11,75 @@ local ModuleManager = require "src.module_manager"
 
 -- Регистрация модулей
 -- 1. Сначала регистрируем базовые конфигурационные модули (без зависимостей)
-ModuleManager.register_module("config.monitor_config", "src.config.monitor_config")
-ModuleManager.register_module("config.monitor_settings", "src.config.monitor_settings")
+ModuleManager.register_module("monitor_config", "src.config.monitor_config")
+ModuleManager.register_module("monitor_settings", "src.config.monitor_settings")
 
 -- 2. Регистрируем утилиты (зависит только от конфигурации)
-ModuleManager.register_module("utils.logger", "src.utils.logger")
-ModuleManager.register_module("utils.utils", "src.utils.utils", {"utils.logger"})
+ModuleManager.register_module("logger", "src.utils.logger")
+ModuleManager.register_module("utils", "src.utils.utils", {"logger"})
 
 -- 3. Регистрируем адаптеры (зависят от утилит)
-ModuleManager.register_module("adapters.adapter", "src.adapters.adapter", {"utils.logger", "utils.utils"})
-ModuleManager.register_module("adapters.dvb_tuner", "src.adapters.dvb_tuner", {
-    "utils.logger", 
-    "utils.utils", 
-    "config.monitor_config"
+ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "utils"})
+ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {
+    "logger", 
+    "utils", 
+    "monitor_config"
 })
 
 -- 4. Регистрируем диспетчеры (зависят от утилит и адаптеров)
-ModuleManager.register_module("dispatchers.dvb_monitor_dispatcher", "src.dispatchers.dvb_monitor_dispatcher", {
-    "utils.logger", 
-    "utils.utils"
+ModuleManager.register_module("dvb_monitor_dispatcher", "src.dispatchers.dvb_monitor_dispatcher", {
+    "logger", 
+    "utils"
 })
-ModuleManager.register_module("dispatchers.channel_monitor_dispatcher", "src.dispatchers.channel_monitor_dispatcher", {
-    "utils.logger", 
-    "utils.utils", 
-    "channel.channel"
+ModuleManager.register_module("channel_monitor_dispatcher", "src.dispatchers.channel_monitor_dispatcher", {
+    "logger", 
+    "utils", 
+    "channel"
 })
 
 -- 5. Регистрируем модули каналов (зависят от утилит и адаптеров)
-ModuleManager.register_module("channel.channel", "src.channel.channel", {
-    "utils.logger", 
-    "utils.utils", 
-    "adapters.adapter"
+ModuleManager.register_module("channel", "src.channel.channel", {
+    "logger", 
+    "utils", 
+    "adapter"
 })
-ModuleManager.register_module("channel.channel_monitor", "src.channel.channel_monitor", {
-    "utils.logger", 
-    "utils.utils", 
-    "config.monitor_config"
-})
-
--- 6. Регистрируем системные модули (зависят от утилит)
-ModuleManager.register_module("system.resource_monitor", "src.system.resource_monitor", {
-    "utils.logger", 
-    "utils.utils"
+ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {
+    "logger", 
+    "utils", 
+    "monitor_config"
 })
 
--- 7. Регистрируем HTTP-хелперы (зависят от утилит и конфигурации)
-ModuleManager.register_module("http.http_helpers", "http.http_helpers", {
-    "utils.logger", 
-    "utils.utils", 
-    "config.monitor_config"
-})
+-- -- 6. Регистрируем системные модули (зависят от утилит)
+-- ModuleManager.register_module("system.resource_monitor", "src.system.resource_monitor", {
+--     "utils.logger", 
+--     "utils.utils"
+-- })
 
--- 8. Регистрируем HTTP-роуты (зависят от соответствующих модулей и хелперов)
-ModuleManager.register_module("http.routes.channel_routes", "http.routes.channel_routes", {
-    "channel.channel", 
-    "http.http_helpers"
-})
-ModuleManager.register_module("http.routes.dvb_routes", "http.routes.dvb_routes", {
-    "http.http_helpers"
-})
-ModuleManager.register_module("http.routes.system_routes", "http.routes.system_routes", {
-    "http.http_helpers", 
-    "system.resource_monitor"
-})
+-- -- 7. Регистрируем HTTP-хелперы (зависят от утилит и конфигурации)
+-- ModuleManager.register_module("http.http_helpers", "http.http_helpers", {
+--     "utils.logger", 
+--     "utils.utils", 
+--     "config.monitor_config"
+-- })
 
--- 9. Регистрируем HTTP-сервер (зависит от утилит)
-ModuleManager.register_module("http.http_server", "http.http_server", {
-    "utils.logger", 
-    "utils.utils"
-})
+-- -- 8. Регистрируем HTTP-роуты (зависят от соответствующих модулей и хелперов)
+-- ModuleManager.register_module("http.routes.channel_routes", "http.routes.channel_routes", {
+--     "channel.channel", 
+--     "http.http_helpers"
+-- })
+-- ModuleManager.register_module("http.routes.dvb_routes", "http.routes.dvb_routes", {
+--     "http.http_helpers"
+-- })
+-- ModuleManager.register_module("http.routes.system_routes", "http.routes.system_routes", {
+--     "http.http_helpers", 
+--     "system.resource_monitor"
+-- })
+
+-- -- 9. Регистрируем HTTP-сервер (зависит от утилит)
+-- ModuleManager.register_module("http.http_server", "http.http_server", {
+--     "utils.logger", 
+--     "utils.utils"
+-- })
 
 -- Валидация зависимостей
 if not ModuleManager.validate_dependencies() then 
