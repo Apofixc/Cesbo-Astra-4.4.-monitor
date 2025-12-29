@@ -38,11 +38,10 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
     local obj, success = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
-        print("[ERROR] Missing Astra dependency")
         all_astra_deps_found = false
+        break
     else
         found_astra_deps[dep_path] = obj
-        print("[ERROR] Found Astra dependency")
     end
 end
 
@@ -88,11 +87,5 @@ end
 if not ModuleManager.load_modules() then
     -- Logger еще не загружен, используем print
     print("[ERROR] Не удалось загрузить модули")
-    return false
-end
-
-
-if not MonitorConfig then
-    print("[ERROR] Модуль MonitorConfig не загружен")
     return false
 end
