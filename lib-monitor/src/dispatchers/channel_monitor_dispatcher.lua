@@ -9,12 +9,12 @@
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
-local ChannelMonitor = ModuleManager.get_module("channel.channel_monitor")
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
-local Utils = ModuleManager.get_module("utils.utils")
+local ChannelMonitor = ModuleManager.get_module("channel_monitor")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local parse_url = ModuleManager.get_global_dependency("parse_url")

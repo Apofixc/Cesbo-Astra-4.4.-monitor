@@ -10,12 +10,12 @@ local type, tostring = type, tostring
 local math_max = math.max
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local Utils = ModuleManager.get_module("utils.utils")
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local Utils = ModuleManager.get_module("utils")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_encode = ModuleManager.get_global_dependency("json.encode")

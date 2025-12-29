@@ -12,12 +12,12 @@ local string_format = string.format
 local math_max, math_abs = math.max, math.abs
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local config = ModuleManager.get_module("config.monitor_settings")
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local config = ModuleManager.get_module("monitor_settings")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -327,7 +327,6 @@ function send_monitor(content, feed)
         log_info(COMPONENT_NAME, "Для фида '%s' не настроены получатели. Пропуск отправки.", feed)
         return nil, "Для фида '" .. feed .. "' не настроены получатели"
     end
-end
 end
 
 return {

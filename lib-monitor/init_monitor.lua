@@ -9,106 +9,6 @@
 
 local ModuleManager = require "src.module_manager"
 
--- Регистрация модулей
--- 1. Сначала регистрируем базовые конфигурационные модули (без зависимостей)
-ModuleManager.register_module("monitor_config", "src.config.monitor_config")
-ModuleManager.register_module("monitor_settings", "src.config.monitor_settings")
-
--- 2. Регистрируем утилиты (зависит только от конфигурации)
-ModuleManager.register_module("logger", "src.utils.logger")
-ModuleManager.register_module("utils", "src.utils.utils", {"logger"})
-
--- 3. Регистрируем адаптеры (зависят от утилит)
-ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "utils"})
-ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {
-    "logger", 
-    "utils", 
-    "monitor_config"
-})
-
--- 4. Регистрируем диспетчеры (зависят от утилит и адаптеров)
-ModuleManager.register_module("dvb_monitor_dispatcher", "src.dispatchers.dvb_monitor_dispatcher", {
-    "logger", 
-    "utils"
-})
-ModuleManager.register_module("channel_monitor_dispatcher", "src.dispatchers.channel_monitor_dispatcher", {
-    "logger", 
-    "utils", 
-    "channel"
-})
-
--- 5. Регистрируем модули каналов (зависят от утилит и адаптеров)
-ModuleManager.register_module("channel", "src.channel.channel", {
-    "logger", 
-    "utils", 
-    "adapter"
-})
-ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {
-    "logger", 
-    "utils", 
-    "monitor_config"
-})
-
--- -- 6. Регистрируем системные модули (зависят от утилит)
--- ModuleManager.register_module("system.resource_monitor", "src.system.resource_monitor", {
---     "utils.logger", 
---     "utils.utils"
--- })
-
--- -- 7. Регистрируем HTTP-хелперы (зависят от утилит и конфигурации)
--- ModuleManager.register_module("http.http_helpers", "http.http_helpers", {
---     "utils.logger", 
---     "utils.utils", 
---     "config.monitor_config"
--- })
-
--- -- 8. Регистрируем HTTP-роуты (зависят от соответствующих модулей и хелперов)
--- ModuleManager.register_module("http.routes.channel_routes", "http.routes.channel_routes", {
---     "channel.channel", 
---     "http.http_helpers"
--- })
--- ModuleManager.register_module("http.routes.dvb_routes", "http.routes.dvb_routes", {
---     "http.http_helpers"
--- })
--- ModuleManager.register_module("http.routes.system_routes", "http.routes.system_routes", {
---     "http.http_helpers", 
---     "system.resource_monitor"
--- })
-
--- -- 9. Регистрируем HTTP-сервер (зависит от утилит)
--- ModuleManager.register_module("http.http_server", "http.http_server", {
---     "utils.logger", 
---     "utils.utils"
--- })
-
--- Валидация зависимостей
-if not ModuleManager.validate_dependencies() then 
-    -- Logger еще не загружен, используем print
-    print("[ERROR] Валидация зависимостей модуля не удалась")
-    return false
-end
-
--- Загрузка модулей
-if not ModuleManager.load_modules() then
-    -- Logger еще не загружен, используем print
-    print("[ERROR] Не удалось загрузить модули")
-    return false
-end
-
-local Logger = ModuleManager.get_module("utils.logger")
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
-
--- Проверяем, что модули загружены
-if not Logger then
-    print("[ERROR] Модуль Logger не загружен")
-    return false
-end
-
-if not MonitorConfig then
-    Logger.error("init_monitor", "Модуль MonitorConfig не загружен")
-    return false
-end
-
 -- Проверка и сохранение глобальных зависимостей от AstraAPI
 local global_dependencies_to_check = {
     "analyze",
@@ -138,18 +38,61 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
     local obj, success = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
-        Logger.error("ModuleManager", "Missing Astra dependency: %s", dep_path)
+        print("[ERROR] Missing Astra dependency")
         all_astra_deps_found = false
     else
         found_astra_deps[dep_path] = obj
-        Logger.debug("ModuleManager", "Found Astra dependency: %s", dep_path)
+        print("[ERROR] Found Astra dependency")
     end
 end
 
 if not all_astra_deps_found then
-    Logger.error("ModuleManager", "Some Astra dependencies are missing")
+     print("[ERROR] Some Astra dependencies are missing")
     return false
 end
 
 -- Установка найденных Astra-специфичных глобальных зависимостей в ModuleManager
 ModuleManager.set_global_dependencies(found_astra_deps)
+
+-- Регистрация модулей
+ModuleManager.register_module("monitor_config", "src.config.monitor_config")
+ModuleManager.register_module("monitor_settings", "src.config.monitor_settings")
+
+ModuleManager.register_module("logger", "src.utils.logger")
+ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_config", "monitor_settings"})
+
+ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config"})
+ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "dvb_tuner", "dvb_monitor_dispatcher"})
+ModuleManager.register_module("dvb_monitor_dispatcher", "src.dispatchers.dvb_monitor_dispatcher", {"logger", "utils", "dvb_tuner", "monitor_config"})
+
+ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config"})
+ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "adapter", "channel_monitor", "channel_monitor_dispatcher", "monitor_config"})
+ModuleManager.register_module("channel_monitor_dispatcher", "src.dispatchers.channel_monitor_dispatcher", {"logger", "channel_monitor", "monitor_config", "utils"})
+
+ModuleManager.register_module("resource_monitor", "src.system.resource_monitor", {"logger"})
+
+-- ModuleManager.register_module("http.http_helpers", "http.http_helpers", {"logger", "utils"})
+-- ModuleManager.register_module("http.routes.channel_routes", "http.routes.channel_routes", {"logger", "channel_monitor_dispatcher", "channel", "http_helpers", "utils"})
+-- ModuleManager.register_module("http.routes.dvb_routes", "http.routes.dvb_routes", {"logger", "http_helpers", "dvb_monitor_dispatcher"})
+-- ModuleManager.register_module("http.routes.system_routes", "http.routes.system_routes", {"logger", "resource_monitor", "http_helpers"})
+-- ModuleManager.register_module("http.http_server", "http.http_server", {"logger", "channel_routes", "dvb_routes", "system_routes", "resource_monitor"})
+
+-- Валидация зависимостей
+if not ModuleManager.validate_dependencies() then 
+    -- Logger еще не загружен, используем print
+    print("[ERROR] Валидация зависимостей модуля не удалась")
+    return false
+end
+
+-- Загрузка модулей
+if not ModuleManager.load_modules() then
+    -- Logger еще не загружен, используем print
+    print("[ERROR] Не удалось загрузить модули")
+    return false
+end
+
+
+if not MonitorConfig then
+    print("[ERROR] Модуль MonitorConfig не загружен")
+    return false
+end

@@ -10,12 +10,12 @@
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
-local channel_routes = ModuleManager.get_module("http.routes.channel_routes")
-local dvb_routes = ModuleManager.get_module("http.routes.dvb_routes")
-local system_routes = ModuleManager.get_module("http.routes.system_routes")
-local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
+local channel_routes = ModuleManager.get_module("channel_routes")
+local dvb_routes = ModuleManager.get_module("dvb_routes")
+local system_routes = ModuleManager.get_module("system_routes")
+local ResourceMonitor = ModuleManager.get_module("resource_monitor")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_server = ModuleManager.get_global_dependency("http_server")

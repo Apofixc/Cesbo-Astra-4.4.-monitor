@@ -12,12 +12,12 @@ local math_max = math.max
 local table_insert = table.insert
 
 -- 2. Функции из ModuleManager.get_module()
-local Utils = ModuleManager.get_module("utils.utils")
-local Logger = ModuleManager.get_module("utils.logger")
+local Utils = ModuleManager.get_module("utils")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_encode = ModuleManager.get_global_dependency("json.encode")

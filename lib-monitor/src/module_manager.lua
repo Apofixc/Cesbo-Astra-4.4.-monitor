@@ -93,7 +93,8 @@ local function topological_sort()
     
     local function visit(name)
         if not registered_modules[name] then
-            log_error(COMPONENT_NAME, "Попытка загрузить незарегистрированный модуль: %s.", name)
+            local msg = string.format("Попытка загрузить незарегистрированный модуль: %s.", name)
+            if Logger then log_error(COMPONENT_NAME, msg) else print("[ERROR] " .. COMPONENT_NAME .. ": " .. msg) end
             return false
         end
         
@@ -102,7 +103,8 @@ local function topological_sort()
         end
         
         if temp_visited[name] then
-            log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость с участием модуля: %s.", name)
+            local msg = string.format("Обнаружена циклическая зависимость с участием модуля: %s.", name)
+            if Logger then log_error(COMPONENT_NAME, msg) else print("[ERROR] " .. COMPONENT_NAME .. ": " .. msg) end
             return false
         end
         
@@ -139,32 +141,35 @@ function ModuleManager.load_modules()
     local load_order, err = topological_sort()
     
     if not load_order then
-        log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки: %s.", err)
-        return false
+        local msg = string.format("Не удалось определить порядок загрузки: %s.", err)
+        if Logger then log_error(COMPONENT_NAME, msg) else print("[ERROR] " .. COMPONENT_NAME .. ": " .. msg) end
+        return false, err -- Возвращаем ошибку для отладки
     end
     
-    log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
+    if Logger then log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) end
     
     for _, name in ipairs(load_order) do
         -- Пропускаем уже загруженные модули
         if loaded_modules[name] then
-            log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем.", name)
+            if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем.", name) end
             goto continue
         end
         
         local module_info = registered_modules[name]
-        log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path)
+        if Logger then log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path) end
         
         local success, module_or_err = pcall(require, module_info.path)
         
         if not success then
-            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
-            return false
+            local msg = string.format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
+            if Logger then log_error(COMPONENT_NAME, msg) else print("[ERROR] " .. COMPONENT_NAME .. ": " .. msg) end
+            return false, msg -- Возвращаем ошибку для отладки
         end
         
         if module_or_err == nil then
-            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
-            return false
+            local msg = string.format("Модуль '%s' из '%s' вернул nil.", name, module_info.path)
+            if Logger then log_error(COMPONENT_NAME, msg) else print("[ERROR] " .. COMPONENT_NAME .. ": " .. msg) end
+            return false, msg -- Возвращаем ошибку для отладки
         end
         
         local module = module_or_err
@@ -175,12 +180,12 @@ function ModuleManager.load_modules()
             init_logger()
         end
 
-        log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name)
+        if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name) end
         
         ::continue::
     end
     
-    log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
+    if Logger then log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order) end
     return true
 end
 

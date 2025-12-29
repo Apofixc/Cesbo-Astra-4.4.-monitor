@@ -22,15 +22,15 @@ local string_lower = string.lower
 local table_insert = table.insert
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local Utils = ModuleManager.get_module("utils.utils")
-local ChannelMonitor = ModuleManager.get_module("channel.channel_monitor")
-local ChannelMonitorDispatcher = ModuleManager.get_module("dispatchers.channel_monitor_dispatcher")
-local Adapter = ModuleManager.get_module("adapters.adapter")
-local MonitorConfig = ModuleManager.get_module("config.monitor_config")
+local Utils = ModuleManager.get_module("utils")
+local ChannelMonitor = ModuleManager.get_module("channel_monitor")
+local ChannelMonitorDispatcher = ModuleManager.get_module("channel_monitor_dispatcher")
+local Adapter = ModuleManager.get_module("adapter")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local string_split = ModuleManager.get_global_dependency("string.split")

@@ -15,7 +15,7 @@ local os_time, os_date = os.time, os.date
 local math_max = math.max
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug

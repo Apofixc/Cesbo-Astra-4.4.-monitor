@@ -12,11 +12,11 @@ local type, tostring, tonumber = type, tostring, tonumber
 local string_lower = string.lower
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local utils = ModuleManager.get_module("utils.utils")
+local utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer_lib = ModuleManager.get_global_dependency("timer")

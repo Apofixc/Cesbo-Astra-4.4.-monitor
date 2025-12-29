@@ -13,12 +13,12 @@ local os_date = os.date
 local os_exit = os.exit
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("utils.logger")
+local Logger = ModuleManager.get_module("logger")
 local log_info = Logger.info
 local log_error = Logger.error
 local log_debug = Logger.debug
-local ResourceMonitor = ModuleManager.get_module("system.resource_monitor")
-local http_helpers = ModuleManager.get_module("http.http_helpers")
+local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+local http_helpers = ModuleManager.get_module("http_helpers")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer_lib = ModuleManager.get_global_dependency("timer")
