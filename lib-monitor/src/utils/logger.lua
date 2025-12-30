@@ -82,7 +82,21 @@ end
 -- @return string Полностью отформатированное сообщение лога.
 local function format_message(level, component, format_str, ...)
     local timestamp = os_date("%Y-%m-%d %H:%M:%S")
-    return string_format("[%s] [%s] [%s] %s", timestamp, level, component, string_format(format_str, ...))
+    -- Безопасный вызов string_format с проверкой аргументов
+    local message = format_str
+    local args = {...}
+    
+    if select('#', ...) > 0 then
+        local success, result = pcall(string_format, format_str, ...)
+        if success then
+            message = result
+        else
+            -- Если форматирование не удалось, выводим исходную строку и аргументы
+            message = string_format("%s [args: %s]", format_str, table.concat(args, ", "))
+        end
+    end
+    
+    return string_format("[%s] [%s] [%s] %s", timestamp, level, component, message)
 end
 
 --- Логирует сообщение на уровне DEBUG.
@@ -126,7 +140,7 @@ end
 -- @param ... Переменное количество аргументов для форматной строки.
 function Logger.error(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.ERROR then
-        io_stderr(format_message("ERROR", component, format_str, ...) .. "\n")
+        io_stderr:write(format_message("ERROR", component, format_str, ...) .. "\n")
     end
 end
 
