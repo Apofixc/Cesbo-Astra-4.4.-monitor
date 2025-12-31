@@ -23,14 +23,18 @@ local Utils = ModuleManager.get_module("utils")
 local COMPONENT_NAME = "DvbMonitorDispatcher"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class DvbMonitorDispatcher
+--- @field monitors table<string, DvbTunerMonitor> Таблица для хранения DVB-мониторов
+--- @field count number Счетчик мониторов
 local DvbMonitorDispatcher = {}
 DvbMonitorDispatcher.__index = DvbMonitorDispatcher
+--- @type DvbMonitorDispatcher|nil
 local instance = nil
 local validate_monitor_name = Utils.validate_monitor_name
 
 --- Создает новый экземпляр DvbMonitorDispatcher (или возвращает существующий).
--- Инициализирует пустую таблицу для хранения объектов DVB-мониторов.
--- @return DvbMonitorDispatcher Единственный объект DvbMonitorDispatcher.
+--- Инициализирует пустую таблицу для хранения объектов DVB-мониторов.
+--- @return DvbMonitorDispatcher Единственный объект DvbMonitorDispatcher.
 function DvbMonitorDispatcher:new()
     if not instance then
         local self = setmetatable({}, DvbMonitorDispatcher)
@@ -43,9 +47,10 @@ function DvbMonitorDispatcher:new()
 end
 
 --- Добавляет уже созданный и запущенный объект DVB-монитора в диспетчер.
--- @param string name Уникальное имя монитора.
--- @param table monitor_obj Объект DVB-монитора, который должен быть таблицей.
--- @return boolean true, если монитор успешно добавлен; `nil` и сообщение об ошибке в случае ошибки.
+--- @param name string Уникальное имя монитора.
+--- @param monitor_obj DvbTunerMonitor Объект DVB-монитора.
+--- @return boolean success true, если монитор успешно добавлен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function DvbMonitorDispatcher:add_monitor(name, monitor_obj)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -74,8 +79,9 @@ function DvbMonitorDispatcher:add_monitor(name, monitor_obj)
 end
 
 --- Создает, инициализирует и регистрирует новый DVB-тюнер монитор.
--- @param table conf Таблица конфигурации для DVB-тюнера.
--- @return userdata instance Экземпляр DVB-тюнера, если успешно создан и зарегистрирован, иначе `nil` и сообщение об ошибке.
+--- @param conf table Таблица конфигурации для DVB-тюнера.
+--- @return any|nil instance Экземпляр DVB-тюнера, если успешно создан и зарегистрирован
+--- @return string|nil error_message Сообщение об ошибке
 function DvbMonitorDispatcher:create_and_register_dvb_monitor(conf)
     if not conf or type(conf) ~= 'table' then
         local error_msg = "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(conf)
@@ -119,8 +125,9 @@ function DvbMonitorDispatcher:create_and_register_dvb_monitor(conf)
 end
 
 --- Получает объект DVB-монитора по его имени.
--- @param string name Уникальное имя монитора.
--- @return table Объект монитора, если найден; `nil` и сообщение об ошибке, если монитор с таким именем не существует или имя невалидно.
+--- @param name string Уникальное имя монитора.
+--- @return DvbTunerMonitor|nil monitor Объект монитора, если найден
+--- @return string|nil error_message Сообщение об ошибке
 function DvbMonitorDispatcher:get_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -130,9 +137,10 @@ function DvbMonitorDispatcher:get_monitor(name)
 end
 
 --- Удаляет DVB-монитор из диспетчера по его имени.
--- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
--- @param string name Уникальное имя монитора.
--- @return boolean true, если монитор успешно удален; `nil` и сообщение об ошибке в случае ошибки.
+--- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
+--- @param name string Уникальное имя монитора.
+--- @return boolean success true, если монитор успешно удален
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function DvbMonitorDispatcher:remove_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -157,17 +165,18 @@ function DvbMonitorDispatcher:remove_monitor(name)
 end
 
 --- Возвращает таблицу всех активных DVB-мониторов, управляемых диспетчером.
--- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
--- @return table Таблица, содержащая все объекты DVB-мониторов.
+--- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
+--- @return table<string, DvbTunerMonitor> monitors Таблица, содержащая все объекты DVB-мониторов.
 function DvbMonitorDispatcher:get_all_monitors()
     return self.monitors
 end
 
 --- Обновляет параметры существующего DVB-монитора по его имени.
--- Если монитор поддерживает метод `update_parameters`, он будет вызван с новыми параметрами.
--- @param string name Уникальное имя монитора.
--- @param table params Таблица, содержащая новые параметры для обновления.
--- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
+--- Если монитор поддерживает метод `update_parameters`, он будет вызван с новыми параметрами.
+--- @param name string Уникальное имя монитора.
+--- @param params table Таблица, содержащая новые параметры для обновления.
+--- @return boolean success true, если параметры успешно обновлены
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function DvbMonitorDispatcher:update_monitor_parameters(name, params)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then

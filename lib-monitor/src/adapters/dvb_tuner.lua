@@ -25,6 +25,12 @@ local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local COMPONENT_NAME = "DvbTunerMonitor"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class DvbTunerMonitor
+--- @field conf table Конфигурация монитора
+--- @field status_signal table Текущий статус сигнала
+--- @field time number Счетчик времени для проверки
+--- @field json_cache string|nil Кэш JSON статуса
+--- @field instance any|nil Экземпляр dvb_tune
 local DvbTunerMonitor = {}
 DvbTunerMonitor.__index = DvbTunerMonitor
 local ratio = Utils.ratio
@@ -33,6 +39,7 @@ local send_monitor = Utils.send_monitor
 local validate_monitor_param = Utils.validate_monitor_param
 
 -- Методы сравнения для DVB-монитора
+--- @type table<number, function>
 local dvb_monitor_method_comparison = {
     [1] = function() -- для совместимости
         return true
@@ -70,10 +77,11 @@ local dvb_monitor_method_comparison = {
 }
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации DVB.
--- @param table self Объект DvbTunerMonitor.
--- @param string param_name Имя параметра (например, "dvb_rate").
--- @param any value Значение для установки.
--- @return boolean true, если параметр успешно установлен; nil и сообщение об ошибке в случае ошибки.
+--- @param self DvbTunerMonitor Объект DvbTunerMonitor.
+--- @param param_name string Имя параметра (например, "dvb_rate").
+--- @param value any Значение для установки.
+--- @return boolean success true, если параметр успешно установлен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 local function set_dvb_config_param(self, param_name, value)
     local updated_value, err = validate_monitor_param(param_name, value)
     if err then
@@ -87,8 +95,8 @@ local function set_dvb_config_param(self, param_name, value)
 end
 
 --- Конструктор для DvbTunerMonitor.
--- @param table conf Таблица конфигурации для DVB-тюнера.
--- @return DvbTunerMonitor Новый экземпляр DvbTunerMonitor.
+--- @param conf table Таблица конфигурации для DVB-тюнера.
+--- @return DvbTunerMonitor Новый экземпляр DvbTunerMonitor.
 function DvbTunerMonitor:new(conf)
     local self = setmetatable({}, DvbTunerMonitor)
     self.conf = conf
@@ -119,7 +127,8 @@ function DvbTunerMonitor:new(conf)
 end
 
 --- Запускает мониторинг DVB-тюнера.
--- @return userdata Экземпляр DVB-тюнера, если инициализация прошла успешно, иначе `nil` и сообщение об ошибке.
+--- @return any|nil instance Экземпляр DVB-тюнера, если инициализация прошла успешно
+--- @return string|nil error_message Сообщение об ошибке
 function DvbTunerMonitor:start()
     local comparison_method = dvb_monitor_method_comparison[self.conf.method_comparison]
     if not comparison_method then
@@ -165,8 +174,9 @@ function DvbTunerMonitor:start()
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
--- @param table params Таблица с новыми параметрами.
--- @return boolean true, если параметры успешно обновлены, иначе `nil` и сообщение об ошибке.
+--- @param params table Таблица с новыми параметрами.
+--- @return boolean success true, если параметры успешно обновлены
+--- @return string|nil error_message Сообщение об ошибке
 function DvbTunerMonitor:update_parameters(params)
     if type(params) ~= 'table' then
         local error_msg = "update_parameters: params должен быть таблицей. Получено: %s.", type(params)
@@ -193,7 +203,7 @@ function DvbTunerMonitor:update_parameters(params)
 end
 
 --- Возвращает текущий кэш JSON статуса.
--- @return string Кэш JSON.
+--- @return string|nil json_cache Кэш JSON.
 function DvbTunerMonitor:get_json_cache()
     return self.json_cache
 end

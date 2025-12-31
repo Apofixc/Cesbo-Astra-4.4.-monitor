@@ -15,6 +15,7 @@
 -- Нет глобальных зависимостей Astra в этом модуле
 
 -- 4. Константы и конфигурации
+--- @type table<string, string>
 local STREAM = {
     ["127.0.0.1"] = "Узда",
     ["127.0.0.2"] = "Дружный",
@@ -27,6 +28,7 @@ local STREAM = {
     ["127.0.0.9"] = "WikiLink",
 }
 
+--- @type table<string, table>
 local MONIT_ADDRESS = {
 }
 

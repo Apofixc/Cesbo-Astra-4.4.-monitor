@@ -30,14 +30,10 @@ local get_param = http_helpers.get_param
 local send_response = http_helpers.send_response
 
 --- Обработчик HTTP-запроса для получения списка DVB-адаптеров.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект со списком адаптеров. Структура JSON:
--- {
---   adapter_1 (string): Имя адаптера,
---   adapter_2 (string): Имя адаптера,
---   ...
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_adapters = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")
@@ -64,22 +60,10 @@ local get_adapters = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения данных DVB-адаптера.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект со статусом DVB-адаптера. Структура JSON:
--- {
---   type (string): "dvb",
---   server (string): Имя сервера,
---   format (string): Формат DVB (например, "T", "S", "C"),
---   modulation (string): Тип модуляции,
---   source (string/number): Транспондер или частота,
---   name_adapter (string): Имя адаптера,
---   status (number): Статус сигнала (-1 по умолчанию),
---   signal (number): Уровень сигнала (-1 по умолчанию),
---   snr (number): Соотношение сигнал/шум (-1 по умолчанию),
---   ber (number): Коэффициент битовых ошибок (-1 по умолчанию),
---   unc (number): Количество некорректируемых ошибок (-1 по умолчанию)
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_adapter_data = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")
@@ -113,13 +97,15 @@ local get_adapter_data = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для обновления параметров DVB-монитора.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - name_adapter (string): Имя адаптера (обязательно).
---   - time_check (number, optional): Новый интервал проверки в секундах (неотрицательное число).
---   - rate (number, optional): Новое значение допустимой погрешности (от 0.001 до 1).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - name_adapter (string): Имя адаптера (обязательно).
+---   - time_check (number, optional): Новый интервал проверки в секундах (неотрицательное число).
+---   - rate (number, optional): Новое значение допустимой погрешности (от 0.001 до 1).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local update_dvb_monitor = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")

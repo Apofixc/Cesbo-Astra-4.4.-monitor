@@ -24,14 +24,18 @@ local init_input = ModuleManager.get_global_dependency("init_input")
 local COMPONENT_NAME = "ChannelMonitorDispatcher"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class ChannelMonitorDispatcher
+--- @field monitors table<string, ChannelMonitor> Таблица для хранения мониторов каналов
+--- @field count number Счетчик мониторов
 local ChannelMonitorDispatcher = {}
 ChannelMonitorDispatcher.__index = ChannelMonitorDispatcher
+--- @type ChannelMonitorDispatcher|nil
 local instance = nil
 local validate_monitor_name = Utils.validate_monitor_name
 
 --- Создает новый экземпляр ChannelMonitorDispatcher (или возвращает существующий).
--- Инициализирует пустую таблицу для хранения объектов мониторов каналов.
--- @return ChannelMonitorDispatcher Единственный объект ChannelMonitorDispatcher.
+--- Инициализирует пустую таблицу для хранения объектов мониторов каналов.
+--- @return ChannelMonitorDispatcher Единственный объект ChannelMonitorDispatcher.
 function ChannelMonitorDispatcher:new()
     if not instance then
         local self = setmetatable({}, ChannelMonitorDispatcher)
@@ -44,9 +48,10 @@ function ChannelMonitorDispatcher:new()
 end
 
 --- Добавляет уже созданный и запущенный объект монитора канала в диспетчер.
--- @param string name Уникальное имя монитора.
--- @param table monitor_obj Объект монитора канала, который должен быть таблицей.
--- @return boolean true, если монитор успешно добавлен; `nil` и сообщение об ошибке в случае ошибки.
+--- @param name string Уникальное имя монитора.
+--- @param monitor_obj ChannelMonitor Объект монитора канала.
+--- @return boolean success true, если монитор успешно добавлен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function ChannelMonitorDispatcher:add_monitor(name, monitor_obj)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -75,11 +80,12 @@ function ChannelMonitorDispatcher:add_monitor(name, monitor_obj)
 end
 
 --- Создает, инициализирует и регистрирует новый монитор канала.
--- Этот метод централизует логику создания монитора, включая проверку лимитов,
--- инициализацию upstream и запуск монитора.
--- @param table config Таблица конфигурации для нового монитора.
--- @param table channel_data (optional) Таблица с данными канала или его имя (string).
--- @return userdata monitor Экземпляр монитора, если успешно создан и зарегистрирован, иначе `nil` и сообщение об ошибке.
+--- Этот метод централизует логику создания монитора, включая проверку лимитов,
+--- инициализацию upstream и запуск монитора.
+--- @param config table Таблица конфигурации для нового монитора.
+--- @param channel_data table|string|nil [channel_data] Таблица с данными канала или его имя (string).
+--- @return any|nil monitor Экземпляр монитора, если успешно создан и зарегистрирован
+--- @return string|nil error_message Сообщение об ошибке
 function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, channel_data)
     if not config or type(config) ~= 'table' then
         local error_msg = "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(config)
@@ -155,8 +161,9 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
 end
 
 --- Получает объект монитора канала по его имени.
--- @param string name Уникальное имя монитора.
--- @return table Объект монитора, если найден; `nil` и сообщение об ошибке, если монитор с таким именем не существует или имя невалидно.
+--- @param name string Уникальное имя монитора.
+--- @return ChannelMonitor|nil monitor Объект монитора, если найден
+--- @return string|nil error_message Сообщение об ошибке
 function ChannelMonitorDispatcher:get_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -166,9 +173,10 @@ function ChannelMonitorDispatcher:get_monitor(name)
 end
 
 --- Удаляет монитор канала из диспетчера по его имени.
--- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
--- @param string name Уникальное имя монитора.
--- @return boolean true, если монитор успешно удален; `nil` и сообщение об ошибке в случае ошибки.
+--- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
+--- @param name string Уникальное имя монитора.
+--- @return boolean success true, если монитор успешно удален
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function ChannelMonitorDispatcher:remove_monitor(name)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then
@@ -193,17 +201,18 @@ function ChannelMonitorDispatcher:remove_monitor(name)
 end
 
 --- Возвращает таблицу всех активных мониторов каналов, управляемых диспетчером.
--- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
--- @return table Таблица, содержащая все объекты мониторов каналов.
+--- Ключами таблицы являются имена мониторов, значениями - соответствующие объекты мониторов.
+--- @return table<string, ChannelMonitor> monitors Таблица, содержащая все объекты мониторов каналов.
 function ChannelMonitorDispatcher:get_all_monitors()
     return self.monitors
 end
 
 --- Обновляет параметры существующего монитора канала по его имени.
--- Если монитор поддерживает метод `update_parameters`, он будет вызван с новыми параметрами.
--- @param string name Уникальное имя монитора.
--- @param table params Таблица, содержащая новые параметры для обновления.
--- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке в случае ошибки.
+--- Если монитор поддерживает метод `update_parameters`, он будет вызван с новыми параметрами.
+--- @param name string Уникальное имя монитора.
+--- @param params table Таблица, содержащая новые параметры для обновления.
+--- @return boolean success true, если параметры успешно обновлены
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function ChannelMonitorDispatcher:update_monitor_parameters(name, params)
     local is_name_valid, name_err = validate_monitor_name(name)
     if not is_name_valid then

@@ -27,10 +27,24 @@ local log_debug = Logger.debug
 local COMPONENT_NAME = "ResourceMonitor"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class ResourceMonitor
+--- @field name string Имя монитора
+--- @field pid number PID процесса
+--- @field last_net_stats table Статистика сети
+--- @field last_system_cpu_total_time number
+--- @field last_system_cpu_active_time number
+--- @field last_process_cpu_time number
+--- @field last_system_cpu_time_at_process_check number
+--- @field last_network_check_time number
+--- @field cache table Кэш данных
+--- @field cache_interval number Интервал кэширования
+--- @field stats table Статистика использования
 local ResourceMonitor = {}
 ResourceMonitor.__index = ResourceMonitor
+--- @type ResourceMonitor|nil
 local instance = nil
 
+--- @return number|nil pid
 local function get_current_pid()
     local file = io.open("/proc/self/stat", "r")
     if file then
@@ -43,8 +57,8 @@ local function get_current_pid()
 end
 
 --- Создает или возвращает единственный экземпляр ResourceMonitor.
--- @param string name (optional) Уникальное имя монитора (используется только при первом создании).
--- @return ResourceMonitor Единственный объект ResourceMonitor.
+--- @param name string|nil [name] Уникальное имя монитора (используется только при первом создании).
+--- @return ResourceMonitor Единственный объект ResourceMonitor.
 function ResourceMonitor:new(name)
     if not instance then
         local self = setmetatable({}, ResourceMonitor)
@@ -98,16 +112,16 @@ function ResourceMonitor:new(name)
 end
 
 --- Возвращает единственный экземпляр ResourceMonitor, создавая его при необходимости.
--- @param string name (optional) Имя монитора (используется только при первом вызове).
--- @return ResourceMonitor Единственный экземпляр.
+--- @param name string|nil [name] Имя монитора (используется только при первом вызове).
+--- @return ResourceMonitor Единственный экземпляр.
 function ResourceMonitor.getInstance(name)
     return ResourceMonitor:new(name)
 end
 
 --- Вспомогательная функция для безопасного выполнения команд.
--- @param string cmd Команда для выполнения.
--- @param any default Значение по умолчанию при ошибке.
--- @return string Результат выполнения команды или значение по умолчанию.
+--- @param cmd string Команда для выполнения.
+--- @param default any Значение по умолчанию при ошибке.
+--- @return string Результат выполнения команды или значение по умолчанию.
 local function safe_command(cmd, default)
     local f = io_popen(cmd .. " 2>/dev/null", "r")
     if not f then
@@ -122,13 +136,13 @@ local function safe_command(cmd, default)
 end
 
 --- Получает текущее время в миллисекундах.
--- @return number Время в мс.
+--- @return number time_ms Время в мс.
 local function get_current_time_ms()
     return os_time() * 1000
 end
 
 --- Собирает данные о системных ресурсах.
--- @return table Таблица с данными о системных ресурсах.
+--- @return table system_data Таблица с данными о системных ресурсах.
 function ResourceMonitor:collect_system_data()
     -- Проверяем кэш
     local now = os_time()
@@ -156,7 +170,7 @@ function ResourceMonitor:collect_system_data()
 end
 
 --- Собирает данные о ресурсах текущего процесса.
--- @return table Таблица с данными о ресурсах процесса.
+--- @return table process_data Таблица с данными о ресурсах процесса.
 function ResourceMonitor:collect_process_data()
     -- Проверяем кэш
     local now = os_time()
@@ -183,7 +197,7 @@ function ResourceMonitor:collect_process_data()
 end
 
 --- Получает использование CPU системы.
--- @return table Таблица с данными об использовании CPU системы.
+--- @return table cpu_data Таблица с данными об использовании CPU системы.
 function ResourceMonitor:get_system_cpu_usage()
     local cpu_data = {usage_percent = 0, cores = 1}
     
@@ -234,7 +248,7 @@ function ResourceMonitor:get_system_cpu_usage()
 end
 
 --- Получает использование памяти системы.
--- @return table Таблица с данными об использовании памяти системы.
+--- @return table mem_data Таблица с данными об использовании памяти системы.
 function ResourceMonitor:get_system_memory_usage()
     local mem_data = {total_mb = 0, used_mb = 0, usage_percent = 0}
     
@@ -258,7 +272,7 @@ function ResourceMonitor:get_system_memory_usage()
 end
 
 --- Получает использование CPU текущего процесса.
--- @return table Таблица с данными об использовании CPU процесса.
+--- @return table cpu_data Таблица с данными об использовании CPU процесса.
 function ResourceMonitor:get_process_cpu_usage()
     local cpu_data = {usage_percent = 0}
     if self.pid <= 0 then 
@@ -323,7 +337,7 @@ function ResourceMonitor:get_process_cpu_usage()
 end
 
 --- Получает использование памяти текущего процесса.
--- @return table Таблица с данными об использовании памяти процесса.
+--- @return table mem_data Таблица с данными об использовании памяти процесса.
 function ResourceMonitor:get_process_memory_usage()
     local mem_data = {rss_mb = 0, rss_kb = 0}
     
@@ -353,7 +367,7 @@ function ResourceMonitor:get_process_memory_usage()
 end
 
 --- Получает использование диска.
--- @return table Таблица с данными об использовании диска.
+--- @return table disk_data Таблица с данными об использовании диска.
 function ResourceMonitor:get_disk_usage()
     local disk_data = {usage_percent = 0, total_gb = 0, used_gb = 0, free_gb = 0}
     
@@ -381,7 +395,7 @@ function ResourceMonitor:get_disk_usage()
 end
 
 --- Получает сетевую активность.
--- @return table Таблица с данными о сетевой активности.
+--- @return table net_data Таблица с данными о сетевой активности.
 function ResourceMonitor:get_network_usage()
     local net_data = {
         interfaces = {},
@@ -479,8 +493,8 @@ function ResourceMonitor:clear_cache()
 end
 
 --- Устанавливает интервал кэширования.
--- @param number seconds Интервал в секундах.
--- @return boolean Успешность установки.
+--- @param seconds number Интервал в секундах.
+--- @return boolean success Успешность установки.
 function ResourceMonitor:set_cache_interval(seconds)
     if type(seconds) == "number" and seconds >= 0 then
         self.cache_interval = seconds
@@ -491,7 +505,7 @@ function ResourceMonitor:set_cache_interval(seconds)
 end
 
 --- Возвращает статистику использования монитора.
--- @return table Статистика.
+--- @return table stats Статистика.
 function ResourceMonitor:get_stats()
     return {
         name = self.name,

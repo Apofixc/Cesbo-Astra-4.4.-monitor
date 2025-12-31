@@ -45,27 +45,29 @@ local MONITOR_TYPE_OUTPUT = "output"
 local MONITOR_TYPE_IP = "ip"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @type ChannelMonitorDispatcher
 local channel_monitor_manager = ChannelMonitorDispatcher:new()
 local shallow_table_copy = Utils.shallow_table_copy
 local get_stream = Utils.get_stream
 
 --- Возвращает список всех активных мониторов каналов.
--- Эта функция запрашивает у `ChannelMonitorManager` список всех зарегистрированных
--- и активных мониторов каналов.
--- @return table monitor_list Таблица со списком активных мониторов.
+--- Эта функция запрашивает у `ChannelMonitorManager` список всех зарегистрированных
+--- и активных мониторов каналов.
+--- @return table monitor_list Таблица со списком активных мониторов.
 function get_list_monitor()
     return channel_monitor_manager:get_all_monitors()
 end
 
 --- Обновляет параметры существующего монитора канала.
--- Обновляет параметры существующего монитора канала, идентифицируемого по имени.
--- @param string name Имя монитора, который нужно обновить.
--- @param table params Таблица с новыми параметрами. Поддерживаемые параметры:
---   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
---   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
---   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
--- @return boolean true, если параметры успешно обновлены, иначе `false`.
+--- Обновляет параметры существующего монитора канала, идентифицируемого по имени.
+--- @param name string Имя монитора, который нужно обновить.
+--- @param params table Таблица с новыми параметрами. Поддерживаемые параметры:
+---   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
+---   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
+---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
+---   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
+--- @return boolean success true, если параметры успешно обновлены
+--- @return string|nil error_message Сообщение об ошибке
 function update_monitor_parameters(name, params)
     if not name or type(name) ~= 'string' then
         local error_msg = "Неверное имя: ожидалась строка, получено: %s.", type(name)
@@ -120,10 +122,11 @@ local format_handlers = {
 }
 
 --- Создает JSON-представление потока на основе данных канала.
--- Эта функция обрабатывает входные данные канала и формирует соответствующий
--- JSON-объект, описывающий поток.
--- @param table channel_data_obj Таблица с данными канала, содержащая информацию о входах.
--- @return table stream_json_list Таблица, представляющая JSON-объект потока, или `nil` и сообщение об ошибке в случае ошибки.
+--- Эта функция обрабатывает входные данные канала и формирует соответствующий
+--- JSON-объект, описывающий поток.
+--- @param channel_data_obj table Таблица с данными канала, содержащая информацию о входах.
+--- @return table|nil stream_json_list Таблица, представляющая JSON-объект потока
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 local function create_stream_json_representation(channel_data_obj)
     local stream_json_list = {}
     if channel_data_obj and type(channel_data_obj) == "table" then
@@ -148,18 +151,19 @@ local function create_stream_json_representation(channel_data_obj)
 end
 
 --- Создает и регистрирует новый монитор канала.
--- Эта функция подготавливает конфигурацию и данные канала, а затем делегирует
--- создание и регистрацию монитора `ChannelMonitorManager`.
--- @param table monitor_config_table Таблица конфигурации для нового монитора.
---   - name (string): Имя монитора.
---   - monitor (string): Адрес мониторинга.
---   - upstream (userdata, optional): Экземпляр upstream, если уже инициализирован.
---   - rate (number, optional): Погрешность сравнения битрейта.
---   - time_check (number, optional): Интервал проверки данных.
---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
---   - method_comparison (number, optional): Метод сравнения состояния потока.
--- @param table channel_data_obj (optional) Таблица с данными канала или его имя (string).
--- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `nil` и сообщение об ошибке.
+--- Эта функция подготавливает конфигурацию и данные канала, а затем делегирует
+--- создание и регистрацию монитора `ChannelMonitorManager`.
+--- @param monitor_config_table table Таблица конфигурации для нового монитора.
+---   - name (string): Имя монитора.
+---   - monitor (string): Адрес мониторинга.
+---   - upstream (userdata, optional): Экземпляр upstream, если уже инициализирован.
+---   - rate (number, optional): Погрешность сравнения битрейта.
+---   - time_check (number, optional): Интервал проверки данных.
+---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
+---   - method_comparison (number, optional): Метод сравнения состояния потока.
+--- @param channel_data_obj table|string|nil [channel_data_obj] Таблица с данными канала или его имя (string).
+--- @return any|nil monitor Экземпляр монитора, если успешно создан
+--- @return string|nil error_message Сообщение об ошибке
 function make_monitor(monitor_config_table, channel_data_obj)
     local ch_data = type(channel_data_obj) == "table" and channel_data_obj or find_channel(tostring(channel_data_obj))
 
@@ -191,17 +195,18 @@ function make_monitor(monitor_config_table, channel_data_obj)
 end
 
 --- Находит монитор по его имени.
--- Ищет зарегистрированный монитор канала по его имени.
--- @param string name Имя монитора для поиска.
--- @return table monitor_data Таблица с данными монитора, если найден, иначе `nil`.
+--- Ищет зарегистрированный монитор канала по его имени.
+--- @param name string Имя монитора для поиска.
+--- @return table|nil monitor_data Таблица с данными монитора, если найден, иначе `nil`.
 function find_monitor(name)
     return channel_monitor_manager:get_monitor(name)
 end
 
 --- Останавливает и удаляет монитор.
--- Останавливает работу указанного монитора и удаляет его из `ChannelMonitorManager`.
--- @param table monitor_obj Объект монитора, который нужно остановить.
--- @return table config Копия конфигурации остановленного монитора, если успешно, иначе `false`.
+--- Останавливает работу указанного монитора и удаляет его из `ChannelMonitorManager`.
+--- @param monitor_obj table Объект монитора, который нужно остановить.
+--- @return table|nil config Копия конфигурации остановленного монитора
+--- @return string|nil error_message Сообщение об ошибке
 function kill_monitor(monitor_obj)
     if not monitor_obj then
         local error_msg = "Попытка остановить nil-объект монитора."
@@ -267,21 +272,22 @@ local monitor_type_handlers = {
 }
 
 --- Создает и запускает поток с мониторингом.
--- Эта функция создает канал с помощью `make_channel`, затем определяет тип монитора
--- (input, output, ip) и соответствующие `upstream` и `monitor_target`.
--- После этого она создает и регистрирует монитор канала через `ChannelMonitorManager`.
--- @param table conf Таблица конфигурации потока, содержащая:
---   - name (string): Имя потока.
---   - input (table): Конфигурация входных данных.
---   - output (table): Конфигурация выходных данных.
---   - monitor (table, optional): Конфигурация монитора, содержащая:
---     - name (string, optional): Имя монитора (по умолчанию совпадает с именем потока).
---     - monitor_type (string, optional): Тип монитора ("input", "output", "ip", по умолчанию "output").
---     - rate (number, optional): Погрешность сравнения битрейта.
---     - time_check (number, optional): Время до сравнения данных.
---     - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
---     - method_comparison (number, optional): Метод сравнения состояния потока.
--- @return userdata monitor Экземпляр монитора, если успешно создан, иначе `nil` и сообщение об ошибке.
+--- Эта функция создает канал с помощью `make_channel`, затем определяет тип монитора
+--- (input, output, ip) и соответствующие `upstream` и `monitor_target`.
+--- После этого она создает и регистрирует монитор канала через `ChannelMonitorManager`.
+--- @param conf table Таблица конфигурации потока, содержащая:
+---   - name (string): Имя потока.
+---   - input (table): Конфигурация входных данных.
+---   - output (table): Конфигурация выходных данных.
+---   - monitor (table, optional): Конфигурация монитора, содержащая:
+---     - name (string, optional): Имя монитора (по умолчанию совпадает с именем потока).
+---     - monitor_type (string, optional): Тип монитора ("input", "output", "ip", по умолчанию "output").
+---     - rate (number, optional): Погрешность сравнения битрейта.
+---     - time_check (number, optional): Время до сравнения данных.
+---     - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках.
+---     - method_comparison (number, optional): Метод сравнения состояния потока.
+--- @return any|nil monitor Экземпляр монитора, если успешно создан
+--- @return string|nil error_message Сообщение об ошибке
 function make_stream(conf)
     local channel_data, err_channel = make_channel(conf)
     if not channel_data then 
@@ -336,10 +342,11 @@ function make_stream(conf)
 end
 
 --- Останавливает поток и связанный с ним монитор.
--- Эта функция останавливает работу канала с помощью `kill_channel` и, если
--- существует связанный монитор, останавливает и удаляет его через `kill_monitor`.
--- @param table channel_data Таблица с данными канала, который нужно остановить.
--- @return table config Копия конфигурации остановленного канала, если успешно, иначе `nil` и сообщение об ошибке.
+--- Эта функция останавливает работу канала с помощью `kill_channel` и, если
+--- существует связанный монитор, останавливает и удаляет его через `kill_monitor`.
+--- @param channel_data table Таблица с данными канала, который нужно остановить.
+--- @return table|nil config Копия конфигурации остановленного канала
+--- @return string|nil error_message Сообщение об ошибке
 function kill_stream(channel_data)
     if not channel_data or not channel_data.config or not channel_data.config.name then 
         local error_msg = "Предоставлены неверные channel_data или config для kill_stream."

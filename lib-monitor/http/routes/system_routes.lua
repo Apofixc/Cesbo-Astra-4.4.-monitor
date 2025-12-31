@@ -30,29 +30,33 @@ local astra_version_var = ModuleManager.get_global_dependency("astra.version")
 local COMPONENT_NAME = "SystemRoutes"
 
 -- 5. Инициализация объектов из загруженных модулей
-local resource_monitor_instance = ResourceMonitor:new("system_monitor")
-local validate_request = http_helpers.validate_request
-local check_auth = http_helpers.check_auth
-local get_param = http_helpers.get_param
-local validate_delay = http_helpers.validate_delay
-local send_response = http_helpers.send_response
+local resource_monitor_instance = ResourceMonitor and ResourceMonitor:new("system_monitor") or nil
+local validate_request = http_helpers and http_helpers.validate_request or nil
+local check_auth = http_helpers and http_helpers.check_auth or nil
+local get_param = http_helpers and http_helpers.get_param or nil
+local validate_delay = http_helpers and http_helpers.validate_delay or nil
+local send_response = http_helpers and http_helpers.send_response or nil
 
 -- =============================================
 -- Управление системой Astra (Обработчики маршрутов)
 -- =============================================
 
 --- Обработчик HTTP-запроса для перезагрузки Astra.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
--- Возвращает: HTTP 200 OK или 401 Unauthorized.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local astra_reload = function(server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response or not validate_request or not get_param or not validate_delay then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
-    end    
+    end
 
     local req = validate_request(request)
     send_response(server, client, 200, "Перезагрузка запланирована")
@@ -67,17 +71,21 @@ local astra_reload = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для остановки Astra.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - delay (number, optional): Задержка в секундах перед остановкой (по умолчанию 30).
--- Возвращает: HTTP 200 OK или 401 Unauthorized.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - delay (number, optional): Задержка в секундах перед остановкой (по умолчанию 30).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local kill_astra = function(server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response or not validate_request or not get_param or not validate_delay then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
-    end   
+    end
 
     local req = validate_request(request)
     send_response(server, client, 200, "Завершение работы запланировано")
@@ -92,21 +100,18 @@ local kill_astra = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для проверки состояния сервера.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект с информацией о сервере. Структура JSON:
--- {
---   addr (string): IP-адрес сервера,
---   port (number): Порт сервера,
---   version (string): Версия Astra,
---   process (table, optional): Данные о ресурсах процесса (если доступен ResourceMonitor)
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local health = function (server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
-    end   
+    end
 
     local response_data = {
         addr = server.__options.addr,
@@ -152,11 +157,15 @@ local health = function (server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения данных о системных ресурсах.
--- Требует аутентификации по API-ключу.
--- Метод: GET
--- Возвращает: JSON-объект с данными о системных ресурсах.
+--- Требует аутентификации по API-ключу.
+--- Метод: GET
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_system_resources = function (server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
@@ -185,11 +194,15 @@ local get_system_resources = function (server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения статистики работы ResourceMonitor.
--- Требует аутентификации по API-ключу.
--- Метод: GET
--- Возвращает: JSON-объект со статистикой работы монитора ресурсов.
+--- Требует аутентификации по API-ключу.
+--- Метод: GET
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_monitor_stats = function (server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
@@ -223,11 +236,15 @@ local get_monitor_stats = function (server, client, request)
 end
 
 --- Обработчик HTTP-запроса для очистки кэша ResourceMonitor.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Возвращает: HTTP 200 OK или ошибку.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local clear_monitor_cache = function (server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")
@@ -248,13 +265,17 @@ local clear_monitor_cache = function (server, client, request)
     end
 end
 --- Обработчик HTTP-запроса для установки интервала кэширования ResourceMonitor.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса:
---   - interval (number): Новый интервал кэширования в секундах.
--- Возвращает: HTTP 200 OK или ошибку.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса:
+---   - interval (number): Новый интервал кэширования в секундах.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local set_monitor_cache_interval = function (server, client, request)
-    if not request then return nil end
+    if not request or not check_auth or not send_response or not validate_request or not get_param then
+        return nil
+    end
 
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ")

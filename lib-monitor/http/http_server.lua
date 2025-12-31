@@ -27,8 +27,8 @@ local COMPONENT_NAME = "HTTPServer"
 -- Нет объектов для инициализации в этом модуле
 
 --- Запускает HTTP-сервер мониторинга.
--- @param string addr IP-адрес, на котором будет слушать сервер.
--- @param number port Порт, на котором будет слушать сервер.
+--- @param addr string IP-адрес, на котором будет слушать сервер.
+--- @param port number Порт, на котором будет слушать сервер.
 function server_start(addr, port)
     log_info(COMPONENT_NAME, "Тип system_routes: %s.", type(system_routes))
     http_server({

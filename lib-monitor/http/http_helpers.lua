@@ -50,9 +50,9 @@ local function sanitize_input(str)
 end
 
 --- Валидирует входящий HTTP-запрос и извлекает параметры.
--- Поддерживает параметры из query string или из JSON-тела запроса.
--- @param table request Объект HTTP-запроса.
--- @return table Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
+--- Поддерживает параметры из query string или из JSON-тела запроса.
+--- @param request table Объект HTTP-запроса.
+--- @return table params Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -78,8 +78,8 @@ local function validate_request(request)
 end
 
 --- Проверяет наличие и валидность API-ключа в заголовках запроса.
--- @param table request Объект HTTP-запроса.
--- @return boolean true, если аутентификация успешна, иначе `false`.
+--- @param request table Объект HTTP-запроса.
+--- @return boolean success true, если аутентификация успешна, иначе `false`.
 local function check_auth(request)
     local api_key = request and request.headers and request.headers["x-api-key"]
     if not API_SECRET then
@@ -94,9 +94,9 @@ local function check_auth(request)
 end
 
 --- Извлекает параметр из таблицы запроса.
--- @param table req Таблица с параметрами запроса.
--- @param string key Ключ параметра.
--- @return any Значение параметра или `nil`, если параметр отсутствует.
+--- @param req table Таблица с параметрами запроса.
+--- @param key string Ключ параметра.
+--- @return any|nil value Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
         log_error(COMPONENT_NAME, "req равен nil.")
@@ -111,8 +111,8 @@ local function get_param(req, key)
 end
 
 --- Валидирует значение задержки.
--- @param any value Значение для валидации (может быть строкой или числом).
--- @return number Валидное значение задержки (не менее 1) или значение по умолчанию.
+--- @param value any Значение для валидации (может быть строкой или числом).
+--- @return number delay Валидное значение задержки (не менее 1) или значение по умолчанию.
 local function validate_delay(value) 
     local i = tonumber(value)
     if i and i >= 1 then
@@ -124,11 +124,11 @@ local function validate_delay(value)
 end
 
 --- Отправляет HTTP-ответ клиенту.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param number code HTTP-код ответа.
--- @param string msg (optional) Сообщение для отправки в теле ответа.
--- @param table headers (optional) Таблица с дополнительными HTTP-заголовками.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param code number HTTP-код ответа.
+--- @param msg string|nil [msg] Сообщение для отправки в теле ответа.
+--- @param headers table|nil [headers] Таблица с дополнительными HTTP-заголовками.
 local function send_response(server, client, code, msg, headers)
     local response_headers = headers or {"Connection: close"}
     if code == 200 then
@@ -146,13 +146,13 @@ end
 
 -- Основной хелпер для логики kill/reboot
 --- Универсальный обработчик для операций остановки/перезагрузки потоков, каналов или мониторов.
--- @param function find_func Функция для поиска объекта (поток, канал, монитор) по имени.
--- @param function kill_func Функция для остановки объекта.
--- @param function make_func Функция для создания/перезапуска объекта.
--- @param string log_prefix Префикс для сообщений в логе.
--- @param table server Объект HTTP-сервера.
--- @param table client Объект клиента.
--- @param table req Таблица с параметрами запроса (должна содержать "channel" и опционально "reboot", "delay").
+--- @param find_func function Функция для поиска объекта (поток, канал, монитор) по имени.
+--- @param kill_func function Функция для остановки объекта.
+--- @param make_func function Функция для создания/перезапуска объекта.
+--- @param log_prefix string Префикс для сообщений в логе.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param req table Таблица с параметрами запроса (должна содержать "channel" и опционально "reboot", "delay").
 local function handle_kill_with_reboot(find_func, kill_func, make_func, log_prefix, server, client, req)
     local name = get_param(req, "channel")
 

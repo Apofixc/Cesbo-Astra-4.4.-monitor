@@ -29,8 +29,10 @@ local LOG_LEVELS = {
 local COMPONENT_NAME = "Logger"
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class Logger
 local Logger = {}
 Logger.__index = Logger
+--- @type number
 local current_log_level
 
 -- Временная функция для получения MonitorConfig, пока ModuleManager не загружен
@@ -51,8 +53,8 @@ else
 end
 
 --- Устанавливает глобальный уровень логирования для всех сообщений.
--- Сообщения с уровнем ниже установленного не будут выводиться.
--- @param string level_name Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
+--- Сообщения с уровнем ниже установленного не будут выводиться.
+--- @param level_name string Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
 function Logger.set_log_level(level_name)
     if not level_name or type(level_name) ~= "string" then
         io_stderr(format_message("ERROR", COMPONENT_NAME, "Invalid log level name: expected string, got %s.", type(level_name)) .. "\n")
@@ -68,18 +70,18 @@ function Logger.set_log_level(level_name)
 end
 
 --- Возвращает текущий установленный уровень логирования.
--- @return number Числовое значение текущего уровня логирования.
+--- @return number Числовое значение текущего уровня логирования.
 function Logger.get_log_level()
     return current_log_level
 end
 
 --- Внутренняя функция для форматирования сообщения лога.
--- Добавляет временную метку, уровень лога и имя компонента к сообщению.
--- @param string level Уровень лога (например, "INFO", "ERROR").
--- @param string component Имя компонента или модуля, откуда было вызвано логирование.
--- @param string format_str Форматная строка для сообщения.
--- @param ... Переменное количество аргументов для форматной строки.
--- @return string Полностью отформатированное сообщение лога.
+--- Добавляет временную метку, уровень лога и имя компонента к сообщению.
+--- @param level string Уровень лога (например, "INFO", "ERROR").
+--- @param component string Имя компонента или модуля, откуда было вызвано логирование.
+--- @param format_str string Форматная строка для сообщения.
+--- @param ... any Переменное количество аргументов для форматной строки.
+--- @return string Полностью отформатированное сообщение лога.
 local function format_message(level, component, format_str, ...)
     local timestamp = os_date("%Y-%m-%d %H:%M:%S")
     -- Безопасный вызов string_format с проверкой аргументов
@@ -100,10 +102,10 @@ local function format_message(level, component, format_str, ...)
 end
 
 --- Логирует сообщение на уровне DEBUG.
--- Сообщения DEBUG используются для детальной отладки и обычно отключаются в production.
--- @param string component Имя компонента, генерирующего лог.
--- @param string format_str Форматная строка для сообщения.
--- @param ... Переменное количество аргументов для форматной строки.
+--- Сообщения DEBUG используются для детальной отладки и обычно отключаются в production.
+--- @param component string Имя компонента, генерирующего лог.
+--- @param format_str string Форматная строка для сообщения.
+--- @param ... any Переменное количество аргументов для форматной строки.
 function Logger.debug(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.DEBUG then
         io_write(format_message("DEBUG", component, format_str, ...) .. "\n")
@@ -111,10 +113,10 @@ function Logger.debug(component, format_str, ...)
 end
 
 --- Логирует сообщение на уровне INFO.
--- Информационные сообщения о нормальной работе приложения.
--- @param string component Имя компонента, генерирующего лог.
--- @param string format_str Форматная строка для сообщения.
--- @param ... Переменное количество аргументов для форматной строки.
+--- Информационные сообщения о нормальной работе приложения.
+--- @param component string Имя компонента, генерирующего лог.
+--- @param format_str string Форматная строка для сообщения.
+--- @param ... any Переменное количество аргументов для форматной строки.
 function Logger.info(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.INFO then
         io_write(format_message("INFO", component, format_str, ...) .. "\n")
@@ -122,10 +124,10 @@ function Logger.info(component, format_str, ...)
 end
 
 --- Логирует сообщение на уровне WARN.
--- Предупреждающие сообщения о потенциальных проблемах, которые не блокируют работу.
--- @param string component Имя компонента, генерирующего лог.
--- @param string format_str Форматная строка для сообщения.
--- @param ... Переменное количество аргументов для форматной строки.
+--- Предупреждающие сообщения о потенциальных проблемах, которые не блокируют работу.
+--- @param component string Имя компонента, генерирующего лог.
+--- @param format_str string Форматная строка для сообщения.
+--- @param ... any Переменное количество аргументов для форматной строки.
 function Logger.warn(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.WARN then
         io_write(format_message("WARN", component, format_str, ...) .. "\n")
@@ -133,11 +135,11 @@ function Logger.warn(component, format_str, ...)
 end
 
 --- Логирует сообщение на уровне ERROR.
--- Сообщения об ошибках, которые требуют внимания и могут указывать на сбои.
--- Выводится в `io.stderr`.
--- @param string component Имя компонента, генерирующего лог.
--- @param string format_str Форматная строка для сообщения.
--- @param ... Переменное количество аргументов для форматной строки.
+--- Сообщения об ошибках, которые требуют внимания и могут указывать на сбои.
+--- Выводится в `io.stderr`.
+--- @param component string Имя компонента, генерирующего лог.
+--- @param format_str string Форматная строка для сообщения.
+--- @param ... any Переменное количество аргументов для форматной строки.
 function Logger.error(component, format_str, ...)
     if current_log_level <= LOG_LEVELS.ERROR then
         io_stderr:write(format_message("ERROR", component, format_str, ...) .. "\n")

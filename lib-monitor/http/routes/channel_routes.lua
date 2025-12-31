@@ -43,13 +43,15 @@ local handle_kill_with_reboot = http_helpers.handle_kill_with_reboot
 local shallow_table_copy = Utils.shallow_table_copy
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки потока.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - channel (string): Имя потока (обязательно).
---   - reboot (boolean, optional): true для перезагрузки потока после остановки.
---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - channel (string): Имя потока (обязательно).
+---   - reboot (boolean, optional): true для перезагрузки потока после остановки.
+---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local kill_stream = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -75,13 +77,15 @@ local kill_stream = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки канала.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - channel (string): Имя канала (обязательно).
---   - reboot (boolean, optional): true для перезагрузки канала после остановки.
---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - channel (string): Имя канала (обязательно).
+---   - reboot (boolean, optional): true для перезагрузки канала после остановки.
+---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local kill_channel = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -118,13 +122,15 @@ local kill_channel = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для остановки или перезагрузки монитора канала.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - channel (string): Имя монитора канала (обязательно).
---   - reboot (boolean, optional): true для перезагрузки монитора канала после остановки.
---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized / 404 Not Found.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - channel (string): Имя монитора канала (обязательно).
+---   - reboot (boolean, optional): true для перезагрузки монитора канала после остановки.
+---   - delay (number, optional): Задержка в секундах перед перезагрузкой (по умолчанию 30).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local kill_monitor = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -150,15 +156,17 @@ local kill_monitor = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для обновления параметров монитора канала.
--- Требует аутентификации по API-ключу.
--- Метод: POST
--- Параметры запроса (JSON или Query String):
---   - channel (string): Имя канала (обязательно).
---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
---   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
---   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
---   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
--- Возвращает: HTTP 200 OK или 400 Bad Request / 401 Unauthorized.
+--- Требует аутентификации по API-ключу.
+--- Метод: POST
+--- Параметры запроса (JSON или Query String):
+---   - channel (string): Имя канала (обязательно).
+---   - analyze (boolean, optional): Включить/отключить расширенную информацию об ошибках потока.
+---   - time_check (number, optional): Новый интервал проверки данных (от 0 до 300).
+---   - rate (number, optional): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
+---   - method_comparison (number, optional): Новый метод сравнения состояния потока (от 1 до 4).
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local update_channel_monitor = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -211,16 +219,10 @@ local update_channel_monitor = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения списка каналов.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект со списком каналов. Структура JSON:
--- {
---   channel_1 (table): {
---     name (string): Имя канала,
---     addr (string): Адрес канала
---   },
---   channel_2 (table): { ... }
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_channels = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -257,14 +259,10 @@ local get_channels = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения списка активных мониторов каналов.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект со списком мониторов каналов. Структура JSON:
--- {
---   monitor_1 (string): Имя монитора канала,
---   monitor_2 (string): Имя монитора канала,
---   ...
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_channel_monitors = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -296,24 +294,10 @@ local get_channel_monitors = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения данных монитора канала.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект со статусом монитора. Структура JSON:
--- {
---   type (string): "Channel",
---   server (string): Имя сервера,
---   channel (string): Имя канала,
---   output (string): Адрес мониторинга,
---   stream (string): Имя потока,
---   format (string): Формат потока,
---   addr (string): Адрес потока,
---   ready (boolean): Готовность канала,
---   scrambled (boolean): Зашифрован ли канал,
---   bitrate (number): Битрейт канала,
---   cc_errors (number): Количество CC-ошибок,
---   pes_errors (number): Количество PES-ошибок,
---   analyze (table, optional): Таблица с деталями ошибок PID, если включен анализ.
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_channel_monitor_data = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -352,12 +336,10 @@ local get_channel_monitor_data = function(server, client, request)
 end
 
 --- Обработчик HTTP-запроса для получения данных PSI канала.
--- Требует аутентификации по API-ключу.
---
--- Возвращает JSON-объект с данными PSI. Структура JSON:
--- {
---   psi (string): Тип PSI данных (например, "pmt", "sdt").
--- }
+--- Требует аутентификации по API-ключу.
+--- @param server table Объект HTTP-сервера.
+--- @param client table Объект клиента.
+--- @param request table Объект HTTP-запроса.
 local get_channel_psi = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")

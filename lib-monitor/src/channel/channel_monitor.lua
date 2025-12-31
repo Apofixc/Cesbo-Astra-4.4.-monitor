@@ -29,6 +29,19 @@ local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
 
 -- 5. Инициализация объектов из загруженных модулей
+--- @class ChannelMonitor
+--- @field config table Конфигурация монитора
+--- @field channel_data table|nil Данные канала
+--- @field name string Имя монитора
+--- @field stream_json table JSON-представление потока
+--- @field psi_data_cache table Кэш PSI-данных
+--- @field json_status_cache string|nil Кэш JSON статуса
+--- @field time number Счетчик времени для проверки
+--- @field force_timer number Счетчик для принудительной отправки
+--- @field status table Текущий статус канала
+--- @field monitor_instance any|nil Экземпляр analyze
+--- @field last_active_id number|nil Последний активный ID входа
+--- @field cached_source table|nil Кэшированная информация об источнике
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 local get_server_name = Utils.get_server_name
@@ -37,8 +50,9 @@ local ratio = Utils.ratio
 local validate_monitor_param = Utils.validate_monitor_param
 
 --- Таблица методов сравнения для монитора канала.
--- Каждый метод определяет логику, по которой определяется, изменилось ли состояние канала
--- достаточно для отправки нового статуса.
+--- Каждый метод определяет логику, по которой определяется, изменилось ли состояние канала
+--- достаточно для отправки нового статуса.
+--- @type table<number, function>
 local channel_monitor_method_comparison = {
     --- Метод 1: Сравнение по таймеру. Всегда возвращает true, что означает отправку статуса
     -- по истечении заданного интервала `time_check`.
@@ -105,12 +119,13 @@ local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
 --- Вспомогательная функция для валидации и установки параметра конфигурации.
--- Эта функция используется для проверки и установки параметров конфигурации монитора.
--- Она использует `validate_monitor_param` для обеспечения корректности значений.
--- @param table self Объект ChannelMonitor.
--- @param string param_name Имя параметра (например, "channel_rate").
--- @param any value Значение для установки.
--- @return boolean true, если параметр успешно установлен; nil и сообщение об ошибке в случае ошибки.
+--- Эта функция используется для проверки и установки параметров конфигурации монитора.
+--- Она использует `validate_monitor_param` для обеспечения корректности значений.
+--- @param self ChannelMonitor Объект ChannelMonitor.
+--- @param param_name string Имя параметра (например, "channel_rate").
+--- @param value any Значение для установки.
+--- @return boolean success true, если параметр успешно установлен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 local function set_config_param(self, param_name, value)
     local updated_value, err = validate_monitor_param(param_name, value)
     if err then
@@ -124,12 +139,12 @@ local function set_config_param(self, param_name, value)
 end
 
 --- Создает новый экземпляр ChannelMonitor.
--- Инициализирует монитор с предоставленной конфигурацией и данными канала,
--- устанавливает значения по умолчанию для отсутствующих параметров конфигурации
--- и подготавливает внутренние состояния для мониторинга.
--- @param table config Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
--- @param table channel_data Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
--- @return ChannelMonitor Новый объект ChannelMonitor.
+--- Инициализирует монитор с предоставленной конфигурацией и данными канала,
+--- устанавливает значения по умолчанию для отсутствующих параметров конфигурации
+--- и подготавливает внутренние состояния для мониторинга.
+--- @param config table Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
+--- @param channel_data table|string|nil [channel_data] Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
+--- @return ChannelMonitor Новый объект ChannelMonitor.
 function ChannelMonitor:new(config, channel_data)
     local self = setmetatable({}, ChannelMonitor)
     self.config = config
@@ -168,8 +183,8 @@ function ChannelMonitor:new(config, channel_data)
 end
 
 --- Возвращает кэшированную информацию об активном источнике канала.
--- Обновляет кэш, если `active_input_id` канала изменился.
--- @return table Таблица с информацией об активном источнике (`format`, `addr`, `stream`).
+--- Обновляет кэш, если `active_input_id` канала изменился.
+--- @return table source Таблица с информацией об активном источнике (`format`, `addr`, `stream`).
 function ChannelMonitor:get_cached_source()
     local active_id = self.channel_data and self.channel_data.active_input_id or 1
     if active_id ~= self.last_active_id then 
@@ -181,9 +196,9 @@ function ChannelMonitor:get_cached_source()
 end
 
 --- Создает базовый шаблон статуса для канала.
--- Включает общую информацию о канале, такую как тип, сервер, имя канала,
--- выходной поток и данные источника.
--- @return table Таблица, представляющая текущий статус канала.
+--- Включает общую информацию о канале, такую как тип, сервер, имя канала,
+--- выходной поток и данные источника.
+--- @return table status Таблица, представляющая текущий статус канала.
 function ChannelMonitor:create_status_template()
     local source = self:get_cached_source()
     return {
@@ -198,10 +213,11 @@ function ChannelMonitor:create_status_template()
 end
 
 --- Запускает процесс мониторинга для канала.
--- Инициализирует функцию `analyze` Astra с колбэком для обработки входящих данных
--- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
--- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
--- @return userdata Экземпляр монитора Astra, если успешно запущен; `nil` и сообщение об ошибке в случае ошибки.
+--- Инициализирует функцию `analyze` Astra с колбэком для обработки входящих данных
+--- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
+--- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
+--- @return any|nil monitor_instance Экземпляр монитора Astra, если успешно запущен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
     if not comparison_method then
@@ -275,11 +291,11 @@ function ChannelMonitor:start()
 end
 
 --- Обновляет параметры конфигурации монитора канала.
--- Проверяет и применяет новые значения для `rate`, `time_check`, `analyze` и `method_comparison`,
--- если они предоставлены и валидны.
--- @param table params Таблица, содержащая новые параметры для обновления.
--- @return boolean true, если параметры успешно обновлены; `nil` и сообщение об ошибке, если `params` не является таблицей
--- или содержит невалидные значения.
+--- Проверяет и применяет новые значения для `rate`, `time_check`, `analyze` и `method_comparison`,
+--- если они предоставлены и валидны.
+--- @param params table Таблица, содержащая новые параметры для обновления.
+--- @return boolean success true, если параметры успешно обновлены
+--- @return string|nil error_message Сообщение об ошибке
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
         local error_msg = "Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params)
@@ -310,9 +326,9 @@ function ChannelMonitor:update_parameters(params)
 end
 
 --- Отправляет текущий статус канала.
--- Обновляет данные статуса на основе текущих данных потока и отправляет их
--- через `send_monitor`. Также обновляет кэш последнего отправленного статуса.
--- @param table data Текущие данные потока, полученные от `analyze`.
+--- Обновляет данные статуса на основе текущих данных потока и отправляет их
+--- через `send_monitor`. Также обновляет кэш последнего отправленного статуса.
+--- @param data table Текущие данные потока, полученные от `analyze`.
 function ChannelMonitor:send_channel_status(data)
     local source = self:get_cached_source()
     if source then
@@ -360,15 +376,13 @@ function ChannelMonitor:kill()
 end
 
 --- Возвращает PSI-data.
--- @param table self Объект ChannelMonitor.
--- @return table Кэшированная PSI-data.
+--- @return table psi_data_cache Кэшированная PSI-data.
 function ChannelMonitor:get_psi_data_cache()
     return self.psi_data_cache
 end
 
 --- Возвращает кэшированную JSON-строку статуса монитора.
--- @param table self Объект ChannelMonitor.
--- @return string Кэшированная JSON-строка статуса.
+--- @return string|nil json_status_cache Кэшированная JSON-строка статуса.
 function ChannelMonitor:get_json_cache()
     return self.json_status_cache
 end

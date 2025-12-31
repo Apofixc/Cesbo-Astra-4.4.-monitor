@@ -38,9 +38,10 @@ local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
 -- ===========================================================================
 
 --- Возвращает имя потока по IP-адресу, используя предопределенную карту STREAM.
--- Если IP-адрес не найден в карте, возвращает сам IP-адрес.
--- @param string ip_address IP-адрес потока.
--- @return string Имя потока или исходный IP-адрес, если имя не найдено; `nil` и сообщение об ошибке, если `ip_address` невалиден.
+--- Если IP-адрес не найден в карте, возвращает сам IP-адрес.
+--- @param ip_address string IP-адрес потока.
+--- @return string|nil stream_name Имя потока или исходный IP-адрес, если имя не найдено
+--- @return string|nil error_message Сообщение об ошибке, если `ip_address` невалиден
 function get_stream(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
         local error_msg = "Недопустимый ip_address: должна быть непустая строка. Получено: %s.", tostring(ip_address)
@@ -52,10 +53,11 @@ function get_stream(ip_address)
 end
 
 --- Вычисляет отношение абсолютной разницы между двумя числами к их максимальному значению.
--- Используется для определения относительного изменения.
--- @param number old Старое значение.
--- @param number new Новое значение.
--- @return number Отношение (от 0 до 1) или `nil` и сообщение об ошибке, если входные данные невалидны.
+--- Используется для определения относительного изменения.
+--- @param old number Старое значение.
+--- @param new number Новое значение.
+--- @return number|nil ratio Отношение (от 0 до 1)
+--- @return string|nil error_message Сообщение об ошибке, если входные данные невалидны
 function ratio(old, new)
     if type(old) ~= "number" or type(new) ~= "number" then
         local error_msg = string_format("Недопустимые типы: old и new должны быть числами. Получено old: %s, new: %s.", type(old), type(new))
@@ -77,10 +79,9 @@ function ratio(old, new)
 end
 
 --- Создает поверхностную копию таблицы.
--- @param table t Исходная таблица.
--- @return table Копия таблицы; `nil` и сообщение об ошибке, если входной аргумент невалиден.
--- table.copy: Предполагается, что эта функция может быть предоставлена Astra глобально.
--- Если Astra не предоставляет table.copy, то можно использовать следующую реализацию:
+--- @param t table Исходная таблица.
+--- @return table|nil copy Копия таблицы
+--- @return string|nil error_message Сообщение об ошибке, если входной аргумент невалиден
 local shallow_table_copy = function(t)
     if type(t) ~= "table" then
         local error_msg = "Недопустимый аргумент: должна быть таблица. Получено: %s.", type(t)
@@ -97,11 +98,12 @@ local shallow_table_copy = function(t)
 end
 
 --- Вспомогательная функция для валидации общих параметров мониторинга.
--- @param string host Хост.
--- @param number port Порт.
--- @param string path Путь.
--- @param string feed (optional) Имя клиента.
--- @return boolean true, если все параметры валидны, иначе `nil` и сообщение об ошибке.
+--- @param host string Хост.
+--- @param port number Порт.
+--- @param path string Путь.
+--- @param feed string|nil [feed] Имя клиента.
+--- @return boolean success true, если все параметры валидны
+--- @return string|nil error_message Сообщение об ошибке
 local function validate_monitoring_params(host, port, path, feed)
     if not (type(host) == "string" and host ~= "") then
         local error_msg = "Хост должен быть непустой строкой. Получено: %s.", tostring(host)
@@ -130,9 +132,10 @@ local function validate_monitoring_params(host, port, path, feed)
 end
 
 --- Валидирует параметр монитора на основе его имени, значения и типа/диапазона, используя схему.
--- @param string name Имя параметра.
--- @param any value Значение параметра для валидации.
--- @return any Валидное значение параметра или `nil` и сообщение об ошибке, если значение невалидно.
+--- @param name string Имя параметра.
+--- @param value any Значение параметра для валидации.
+--- @return any|nil valid_value Валидное значение параметра
+--- @return string|nil error_message Сообщение об ошибке, если значение невалидно
 function validate_monitor_param(name, value)
     local schema = MonitorConfig.ValidationSchema[name]
     if not schema then
@@ -168,13 +171,11 @@ function validate_monitor_param(name, value)
 end
 
 --- Вспомогательная функция для валидации имени монитора.
--- @param string name Имя монитора.
--- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
---- Вспомогательная функция для валидации имени монитора.
--- Имя монитора должно быть непустой строкой, содержать только буквенно-цифровые символы,
--- дефисы, подчеркивания и точки, а также иметь ограниченную длину.
--- @param string name Имя монитора.
--- @return boolean true, если имя валидно; `nil` и сообщение об ошибке в случае ошибки.
+--- Имя монитора должно быть непустой строкой, содержать только буквенно-цифровые символы,
+--- дефисы, подчеркивания и точки, а также иметь ограниченную длину.
+--- @param name string Имя монитора.
+--- @return boolean success true, если имя валидно
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
         local error_msg = "Недопустимое имя монитора: ожидалась непустая строка, получено: %s.", tostring(name)
@@ -200,11 +201,12 @@ function validate_monitor_name(name)
 end
 
 --- Устанавливает или переопределяет адрес мониторинга для клиентов.
--- @param string host Хост для мониторинга.
--- @param number port Порт для мониторинга.
--- @param string path Путь для мониторинга.
--- @param string feed (optional) Имя клиента (например, "channels", "analyze"). Если не указано, обновляет все стандартные клиенты.
--- @return boolean true, если адрес успешно установлен; `nil` и сообщение об ошибке в случае ошибки.
+--- @param host string Хост для мониторинга.
+--- @param port number Порт для мониторинга.
+--- @param path string Путь для мониторинга.
+--- @param feed string|nil [feed] Имя клиента (например, "channels", "analyze"). Если не указано, обновляет все стандартные клиенты.
+--- @return boolean success true, если адрес успешно установлен
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function set_client_monitoring(host, port, path, feed)
     local is_valid, validation_err = validate_monitoring_params(host, port, path, feed)
     if not is_valid then
@@ -244,11 +246,12 @@ function set_client_monitoring(host, port, path, feed)
 end
 
 --- Удаляет конкретный адрес мониторинга для клиента.
--- @param string host Хост для удаления.
--- @param number port Порт для удаления.
--- @param string path Путь для удаления.
--- @param string feed Имя клиента (например, "channels", "analyze").
--- @return boolean true, если адрес успешно удален; `nil` и сообщение об ошибке в случае ошибки.
+--- @param host string Хост для удаления.
+--- @param port number Порт для удаления.
+--- @param path string Путь для удаления.
+--- @param feed string Имя клиента (например, "channels", "analyze").
+--- @return boolean success true, если адрес успешно удален
+--- @return string|nil error_message Сообщение об ошибке в случае ошибки
 function remove_client_monitoring(host, port, path, feed)
     local is_valid, validation_err = validate_monitoring_params(host, port, path, feed)
     if not is_valid then
@@ -282,14 +285,16 @@ function remove_client_monitoring(host, port, path, feed)
 end
 
 --- Возвращает имя хоста сервера.
--- @return string Имя хоста.
+--- @return string hostname Имя хоста.
 function get_server_name()
     return hostname
 end
 
 --- Отправляет данные мониторинга на настроенные адреса.
--- @param string content Содержимое для отправки (JSON-строка).
--- @param string feed Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
+--- @param content string Содержимое для отправки (JSON-строка).
+--- @param feed string Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
 function send_monitor(content, feed)
     log_debug(COMPONENT_NAME, "Отправка данных монитора для фида '%s'. Содержимое: %s.", feed, content)
     if recipients and #recipients > 0 then
