@@ -56,22 +56,20 @@ end
 --- Сообщения с уровнем ниже установленного не будут выводиться.
 --- @param level_name string Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function Logger.set_log_level(level_name)
     if not level_name or type(level_name) ~= "string" then
-        local err = string_format("Invalid log level name: expected string, got %s.", type(level_name))
-        io_stderr:write(format_message("ERROR", COMPONENT_NAME, err) .. "\n")
-        return false, err
+        log_error(COMPONENT_NAME, "Invalid log level name: expected string, got %s.", type(level_name))
+        return false, nil
     end
     local level = LOG_LEVELS[level_name:upper()]
     if level then
         current_log_level = level
         io_write(format_message("INFO", COMPONENT_NAME, "Log level set to: %s", level_name:upper()) .. "\n")
-        return true
+        return true, nil
     else
-        local err = string_format("Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name)
-        io_stderr:write(format_message("ERROR", COMPONENT_NAME, err) .. "\n")
-        return false, err
+        log_error(COMPONENT_NAME, "Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name)
+        return false, nil
     end
 end
 

@@ -54,18 +54,16 @@ end
 --- @param path string Путь к файлу модуля (например, "src.utils.logger").
 --- @param [dependencies] table|nil Таблица строк, содержащих имена зависимостей этого модуля.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ModuleManager.register_module(name, path, dependencies)
     if not name or type(name) ~= "string" then
-        local err = "Попытка зарегистрировать модуль с невалидным именем."
-        log_error(COMPONENT_NAME, err)
-        return false, err
+        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
+        return false, nil
     end
     
     if not path or type(path) ~= "string" then
-        local err = string.format("Модуль '%s': путь должен быть строкой.", name)
-        log_error(COMPONENT_NAME, err)
-        return false, err
+        log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
+        return false, nil
     end
     
     if registered_modules[name] then
@@ -96,7 +94,7 @@ end
 
 --- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей.
 --- @return boolean success Статус выполнения
---- @return table|string result Список имен или сообщение об ошибке
+--- @return table|nil result Список имен или nil
 local function topological_sort()
     local load_order = {}
     local visited = {}
@@ -139,7 +137,7 @@ local function topological_sort()
     for name, _ in pairs(registered_modules) do
         if not visited[name] then
             if not visit(name) then
-                return false, "Ошибка циклической зависимости"
+                return false, nil
             end
         end
     end
@@ -149,15 +147,13 @@ end
 
 --- Загружает все зарегистрированные модули в правильном порядке, разрешая зависимости.
 --- @return boolean success Статус выполнения
---- @return table|string result Список имен загруженных модулей или сообщение об ошибке
+--- @return table|nil result Список имен загруженных модулей или nil
 function ModuleManager.load_modules()
     local success_sort, load_order = topological_sort()
     
     if not success_sort then
-        local err = load_order
-        local msg = string.format("Не удалось определить порядок загрузки: %s.", err)
-        log_error(COMPONENT_NAME, msg)
-        return false, err -- Возвращаем ошибку для отладки
+        log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
+        return false, nil
     end
     
     if Logger then log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) end
@@ -212,16 +208,14 @@ end
 
 --- Проверяет, что все зарегистрированные модули имеют удовлетворенные зависимости.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ModuleManager.validate_dependencies()
     local all_dependencies_met = true
-    local err_msg = nil
     
     for name, module_info in pairs(registered_modules) do
         for _, dep_name in ipairs(module_info.dependencies) do
             if not registered_modules[dep_name] then
-                err_msg = string.format("Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
-                log_error(COMPONENT_NAME, err_msg)
+                log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
                 all_dependencies_met = false
             end
         end
@@ -229,7 +223,7 @@ function ModuleManager.validate_dependencies()
     
     if not all_dependencies_met then
         log_error(COMPONENT_NAME, "Обнаружены незарегистрированные внутренние зависимости.")
-        return false, err_msg or "Обнаружены незарегистрированные внутренние зависимости"
+        return false, nil
     end
     
     log_debug(COMPONENT_NAME, "Все внутренние зависимости зарегистрированных модулей удовлетворены.")

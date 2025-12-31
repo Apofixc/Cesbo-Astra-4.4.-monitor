@@ -126,13 +126,12 @@ ChannelMonitor.__index = ChannelMonitor
 --- @param param_name string Имя параметра (например, "channel_rate").
 --- @param value any Значение для установки.
 --- @return boolean success Статус выполнения
---- @return any|string result Валидное значение или сообщение об ошибке
+--- @return any|nil result Валидное значение или nil
 local function set_config_param(self, param_name, value)
     local success, result = validate_monitor_param(param_name, value)
     if not success then
-        local err = result
-        log_error(COMPONENT_NAME, "Failed to validate '%s' parameter: %s", param_name, err)
-        return false, err
+        log_error(COMPONENT_NAME, "Failed to validate '%s' parameter.", param_name)
+        return false, nil
     end
     local updated_value = result
     -- Извлекаем фактическое имя параметра из "channel_param_name"
@@ -218,13 +217,12 @@ end
 --- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
 --- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
 --- @return boolean success Статус выполнения
---- @return any|string result Экземпляр монитора Astra или сообщение об ошибке
+--- @return any|nil result Экземпляр монитора Astra или nil
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
     if not comparison_method then
-        local error_msg = string.format("Указан недопустимый метод сравнения: %s.", tostring(self.config.method_comparison))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Указан недопустимый метод сравнения: %s.", tostring(self.config.method_comparison))
+        return false, nil
     end
 
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
@@ -282,9 +280,8 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then 
-        local error_msg = string.format("analyze вернул nil для канала '%s'. Не удалось запустить монитор.", self.name)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "analyze вернул nil для канала '%s'. Не удалось запустить монитор.", self.name)
+        return false, nil
     end
 
     log_info(COMPONENT_NAME, "Монитор запущен для канала: %s.", self.name)
@@ -296,34 +293,33 @@ end
 --- если они предоставлены и валидны.
 --- @param params table Таблица, содержащая новые параметры для обновления.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        local error_msg = string.format("Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params))
+        return false, nil
     end
 
-    local success, err
+    local success, result
     if params.rate ~= nil then
-        success, err = set_config_param(self, "channel_rate", params.rate)
-        if not success then return false, err end
+        success, result = set_config_param(self, "channel_rate", params.rate)
+        if not success then return false, nil end
     end
     if params.time_check ~= nil then
-        success, err = set_config_param(self, "channel_time_check", params.time_check)
-        if not success then return false, err end
+        success, result = set_config_param(self, "channel_time_check", params.time_check)
+        if not success then return false, nil end
     end
     if params.analyze ~= nil then
-        success, err = set_config_param(self, "channel_analyze", params.analyze)
-        if not success then return false, err end
+        success, result = set_config_param(self, "channel_analyze", params.analyze)
+        if not success then return false, nil end
     end
     if params.method_comparison ~= nil then
-        success, err = set_config_param(self, "channel_method_comparison", params.method_comparison)
-        if not success then return false, err end
+        success, result = set_config_param(self, "channel_method_comparison", params.method_comparison)
+        if not success then return false, nil end
     end
 
     log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", self.name)
-    return true
+    return true, nil
 end
 
 --- Отправляет текущий статус канала.
@@ -364,7 +360,7 @@ end
 function ChannelMonitor:kill()
     if self.monitor_instance then
         -- kill_input - это глобальная функция Astra, используемая для остановки экземпляра монитора
-        ModuleManager.get_global_dependency("kill_input")(self.monitor_instance)
+        kill_input(self.monitor_instance)
         self.monitor_instance = nil
     end
     -- self.input_instance = nil -- Удалено, так как не используется

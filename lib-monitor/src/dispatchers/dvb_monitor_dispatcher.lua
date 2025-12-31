@@ -50,26 +50,23 @@ end
 --- @param name string Уникальное имя монитора.
 --- @param monitor_obj DvbTunerMonitor Объект DVB-монитора.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function DvbMonitorDispatcher:add_monitor(name, monitor_obj)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     if not monitor_obj or type(monitor_obj) ~= "table" then
-        local error_msg = string.format("Неверный объект монитора для '%s': ожидалась таблица, получено: %s.", name, type(monitor_obj))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверный объект монитора для '%s': ожидалась таблица, получено: %s.", name, type(monitor_obj))
+        return false, nil
     end
     if self.monitors[name] then
-        local error_msg = string.format("Монитор с именем '%s' уже существует. Невозможно добавить дубликат.", name)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' уже существует. Невозможно добавить дубликат.", name)
+        return false, nil
     end
     if self.count >= MonitorConfig.DvbMonitorLimit then
-        local error_msg = string.format("Переполнение списка DVB-мониторов. Невозможно добавить более %s мониторов.", MonitorConfig.DvbMonitorLimit)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Переполнение списка DVB-мониторов. Невозможно добавить более %s мониторов.", MonitorConfig.DvbMonitorLimit)
+        return false, nil
     end
 
     self.monitors[name] = monitor_obj
@@ -81,59 +78,49 @@ end
 --- Создает, инициализирует и регистрирует новый DVB-тюнер монитор.
 --- @param conf table Таблица конфигурации для DVB-тюнера.
 --- @return boolean success Статус выполнения
---- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
+--- @return any|nil result Экземпляр DVB-тюнера или nil
 function DvbMonitorDispatcher:create_and_register_dvb_monitor(conf)
     if not conf or type(conf) ~= 'table' then
-        local error_msg = string.format("Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(conf))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(conf))
+        return false, nil
     end
     if not conf.name_adapter or type(conf.name_adapter) ~= 'string' then
-        local error_msg = "conf.name_adapter является обязательным и должен быть строкой."
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "conf.name_adapter является обязательным и должен быть строкой.")
+        return false, nil
     end
 
     local success_get, existing_monitor = self:get_monitor(conf.name_adapter)
     if existing_monitor then
-        local error_msg = string.format("Монитор с именем '%s' уже существует.", conf.name_adapter)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
-    end
-    if not success_get and existing_monitor then -- existing_monitor contains error message
-        local get_err = existing_monitor
-        log_error(COMPONENT_NAME, "Ошибка при проверке существующего монитора '%s': %s.", conf.name_adapter, get_err)
-        return false, get_err
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' уже существует.", conf.name_adapter)
+        return false, nil
     end
 
     local monitor = DvbTunerMonitor:new(conf)
     local success_start, instance = monitor:start()
 
     if success_start then
-        local success_add, add_err = self:add_monitor(conf.name_adapter, monitor)
+        local success_add = self:add_monitor(conf.name_adapter, monitor)
         if success_add then
             log_info(COMPONENT_NAME, "DVB-тюнер монитор '%s' запущен и успешно добавлен.", conf.name_adapter)
             return true, instance
         else
-            log_error(COMPONENT_NAME, "Не удалось добавить DVB-тюнер монитор '%s' в диспетчер: %s.", conf.name_adapter, add_err or "неизвестная ошибка")
-            return false, add_err or "Не удалось добавить монитор в диспетчер"
+            log_error(COMPONENT_NAME, "Не удалось добавить DVB-тюнер монитор '%s' в диспетчер.", conf.name_adapter)
+            return false, nil
         end
     else
-        local start_err = instance
-        local error_msg = string.format("Не удалось запустить DVB-тюнер монитор '%s'. Ошибка: %s.", conf.name_adapter, (start_err or "неизвестная ошибка"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Не удалось запустить DVB-тюнер монитор '%s'.", conf.name_adapter)
+        return false, nil
     end
 end
 
 --- Получает объект DVB-монитора по его имени.
 --- @param name string Уникальное имя монитора.
 --- @return boolean success Статус выполнения
---- @return DvbTunerMonitor|string result Объект монитора или сообщение об ошибке
+--- @return DvbTunerMonitor|nil result Объект монитора или nil
 function DvbMonitorDispatcher:get_monitor(name)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     return true, self.monitors[name]
 end
@@ -142,18 +129,16 @@ end
 --- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
 --- @param name string Уникальное имя монитора.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function DvbMonitorDispatcher:remove_monitor(name)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     local success_get, monitor_obj = self:get_monitor(name)
     if not success_get or not monitor_obj then
-        local get_err = monitor_obj
-        local error_msg = string.format("Монитор с именем '%s' не найден. Невозможно удалить. Ошибка: %s.", name, (get_err or "неизвестная ошибка"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' не найден. Невозможно удалить.", name)
+        return false, nil
     end
     if monitor_obj.kill and type(monitor_obj.kill) == "function" then
         monitor_obj:kill() -- Вызываем метод kill у самого монитора
@@ -179,24 +164,21 @@ end
 --- @param name string Уникальное имя монитора.
 --- @param params table Таблица, содержащая новые параметры для обновления.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function DvbMonitorDispatcher:update_monitor_parameters(name, params)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     if not params or type(params) ~= "table" then
-        local error_msg = string.format("Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params))
+        return false, nil
     end
 
     local success_get, monitor_obj = self:get_monitor(name)
     if not success_get or not monitor_obj then
-        local get_err = monitor_obj
-        local error_msg = string.format("DVB-монитор '%s' не найден. Невозможно обновить параметры. Ошибка: %s.", name, (get_err or "неизвестная ошибка"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "DVB-монитор '%s' не найден. Невозможно обновить параметры.", name)
+        return false, nil
     end
     if monitor_obj.update_parameters and type(monitor_obj.update_parameters) == "function" then
         local success, err = pcall(monitor_obj.update_parameters, monitor_obj, params)

@@ -46,17 +46,15 @@ end
 --- в `DvbMonitorManager`.
 --- @param conf table Таблица конфигурации для DVB-тюнера. Ожидается поле `name_adapter` (string).
 --- @return boolean success Статус выполнения
---- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
+--- @return any|nil result Экземпляр DVB-тюнера или nil
 function dvb_tuner_monitor(conf)
     if not conf or type(conf) ~= 'table' then
-        local error_msg = string.format("Предоставлена неверная конфигурация. Ожидалась таблица, получено: %s.", type(conf))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Предоставлена неверная конфигурация. Ожидалась таблица, получено: %s.", type(conf))
+        return false, nil
     end
     if not conf.name_adapter or type(conf.name_adapter) ~= 'string' then
-        local error_msg = "В конфигурации отсутствует 'name_adapter' или это не строка."
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "В конфигурации отсутствует 'name_adapter' или это не строка.")
+        return false, nil
     end
 
     log_info(COMPONENT_NAME, "Попытка создать и зарегистрировать DVB-монитор '%s'.", conf.name_adapter)
@@ -67,20 +65,18 @@ end
 --- Ищет зарегистрированный DVB-монитор по его имени адаптера.
 --- @param name_adapter string Имя адаптера, по которому осуществляется поиск.
 --- @return boolean success Статус выполнения
---- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
+--- @return any|nil result Экземпляр DVB-тюнера или nil
 function find_dvb_conf(name_adapter)
     if not name_adapter or type(name_adapter) ~= 'string' then
-        local error_msg = string.format("Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter))
+        return false, nil
     end
-    local monitor, get_err = dvb_monitor_manager:get_monitor(name_adapter)
-    if monitor then
+    local success_get, monitor = dvb_monitor_manager:get_monitor(name_adapter)
+    if success_get and monitor then
         return true, monitor.instance
     end
-    local error_msg = string.format("Конфигурация DVB для адаптера '%s' не найдена.", name_adapter)
-    log_info(COMPONENT_NAME, error_msg) -- Changed to log_info as it's not necessarily an error
-    return false, error_msg
+    log_info(COMPONENT_NAME, "Конфигурация DVB для адаптера '%s' не найдена.", name_adapter)
+    return false, nil
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
@@ -88,17 +84,15 @@ end
 --- @param name_adapter string Имя адаптера, параметры которого нужно обновить.
 --- @param params table Таблица с новыми параметрами для DVB-монитора.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function update_dvb_monitor_parameters(name_adapter, params)
     if not name_adapter or type(name_adapter) ~= 'string' then
-        local error_msg = "Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter)
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        log_error(COMPONENT_NAME, "Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter))
+        return false, nil
     end
     if not params or type(params) ~= 'table' then
-        local error_msg = "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name_adapter, type(params)
-        log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        log_error(COMPONENT_NAME, "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name_adapter, type(params))
+        return false, nil
     end
 
     log_info(COMPONENT_NAME, "Попытка обновить параметры для DVB-монитора '%s'.", name_adapter)
@@ -106,7 +100,7 @@ function update_dvb_monitor_parameters(name_adapter, params)
     if success then
         log_info(COMPONENT_NAME, "Параметры успешно обновлены для DVB-монитора: %s.", name_adapter)
     else
-        log_error(COMPONENT_NAME, "Не удалось обновить параметры для DVB-монитора: %s. Ошибка: %s.", name_adapter, err or "неизвестная ошибка")
+        log_error(COMPONENT_NAME, "Не удалось обновить параметры для DVB-монитора: %s.", name_adapter)
     end
-    return success, err
+    return success, nil
 end

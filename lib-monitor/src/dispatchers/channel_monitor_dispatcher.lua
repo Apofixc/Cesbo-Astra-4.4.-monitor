@@ -51,26 +51,23 @@ end
 --- @param name string Уникальное имя монитора.
 --- @param monitor_obj ChannelMonitor Объект монитора канала.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ChannelMonitorDispatcher:add_monitor(name, monitor_obj)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     if not monitor_obj or type(monitor_obj) ~= "table" then
-        local error_msg = string.format("Неверный объект монитора для '%s': ожидалась таблица, получено: %s.", name, type(monitor_obj))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверный объект монитора для '%s': ожидалась таблица, получено: %s.", name, type(monitor_obj))
+        return false, nil
     end
     if self.monitors[name] then
-        local error_msg = string.format("Монитор с именем '%s' уже существует. Невозможно добавить дубликат.", name)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' уже существует. Невозможно добавить дубликат.", name)
+        return false, nil
     end
     if self.count >= MonitorConfig.ChannelMonitorLimit then
-        local error_msg = string.format("Переполнение списка мониторов каналов. Невозможно добавить более %s мониторов.", MonitorConfig.ChannelMonitorLimit)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Переполнение списка мониторов каналов. Невозможно добавить более %s мониторов.", MonitorConfig.ChannelMonitorLimit)
+        return false, nil
     end
 
     self.monitors[name] = monitor_obj
@@ -85,29 +82,21 @@ end
 --- @param config table Таблица конфигурации для нового монитора.
 --- @param [channel_data] table|string|nil Таблица с данными канала или его имя (string).
 --- @return boolean success Статус выполнения
---- @return any|string result Экземпляр монитора или сообщение об ошибке
+--- @return any|nil result Экземпляр монитора или nil
 function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, channel_data)
     if not config or type(config) ~= 'table' then
-        local error_msg = string.format("Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(config))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверная таблица конфигурации. Ожидалась таблица, получено: %s.", type(config))
+        return false, nil
     end
     if not config.name or type(config.name) ~= 'string' then
-        local error_msg = "config.name является обязательным и должен быть строкой."
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "config.name является обязательным и должен быть строкой.")
+        return false, nil
     end
 
     local success_get, existing_monitor = self:get_monitor(config.name)
-    if not success_get and existing_monitor then -- existing_monitor contains error message
-        local get_err = existing_monitor
-        log_error(COMPONENT_NAME, get_err)
-        return false, get_err
-    end
     if existing_monitor then
-        local error_msg = string.format("Монитор с именем '%s' уже существует.", config.name)
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' уже существует.", config.name)
+        return false, nil
     end
 
     -- Инициализация upstream, если он не предоставлен
@@ -146,30 +135,28 @@ function ChannelMonitorDispatcher:create_and_register_channel_monitor(config, ch
     local success_start, instance = monitor:start()
 
     if success_start then
-        local success_add, add_err = self:add_monitor(monitor.name, monitor)
+        local success_add = self:add_monitor(monitor.name, monitor)
         if success_add then
             log_info(COMPONENT_NAME, "Монитор канала '%s' успешно создан и добавлен.", monitor.name)
             return true, instance
         else
-            log_error(COMPONENT_NAME, "Не удалось добавить монитор канала '%s' в диспетчер: %s.", monitor.name, add_err or "неизвестная ошибка")
-            return false, add_err or "Не удалось добавить монитор в диспетчер"
+            log_error(COMPONENT_NAME, "Не удалось добавить монитор канала '%s' в диспетчер.", monitor.name)
+            return false, nil
         end
     else
-        local err = instance
-        local error_msg = string.format("ChannelMonitor:start вернул nil для монитора '%s'. Ошибка: %s.", (config.name or "unknown"), (err or "unknown"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "ChannelMonitor:start вернул nil для монитора '%s'.", (config.name or "unknown"))
+        return false, nil
     end
 end
 
 --- Получает объект монитора канала по его имени.
 --- @param name string Уникальное имя монитора.
 --- @return boolean success Статус выполнения
---- @return ChannelMonitor|string result Объект монитора или сообщение об ошибке
+--- @return ChannelMonitor|nil result Объект монитора или nil
 function ChannelMonitorDispatcher:get_monitor(name)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     return true, self.monitors[name]
 end
@@ -178,18 +165,16 @@ end
 --- Если монитор имеет метод `kill()`, он будет вызван перед удалением.
 --- @param name string Уникальное имя монитора.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ChannelMonitorDispatcher:remove_monitor(name)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     local success_get, monitor_obj = self:get_monitor(name)
     if not success_get or not monitor_obj then
-        local get_err = monitor_obj
-        local error_msg = string.format("Монитор с именем '%s' не найден. Невозможно удалить. Ошибка: %s.", name, (get_err or "неизвестная ошибка"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор с именем '%s' не найден. Невозможно удалить.", name)
+        return false, nil
     end
     if monitor_obj.kill and type(monitor_obj.kill) == "function" then
         monitor_obj:kill() -- Вызываем метод kill у самого монитора
@@ -215,24 +200,21 @@ end
 --- @param name string Уникальное имя монитора.
 --- @param params table Таблица, содержащая новые параметры для обновления.
 --- @return boolean success Статус выполнения
---- @return string|nil result Сообщение об ошибке или nil
+--- @return nil result
 function ChannelMonitorDispatcher:update_monitor_parameters(name, params)
-    local is_name_valid, name_err = validate_monitor_name(name)
+    local is_name_valid = validate_monitor_name(name)
     if not is_name_valid then
-        return false, name_err
+        return false, nil
     end
     if not params or type(params) ~= "table" then
-        local error_msg = string.format("Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Неверные параметры для '%s': ожидалась таблица, получено: %s.", name, type(params))
+        return false, nil
     end
 
     local success_get, monitor_obj = self:get_monitor(name)
     if not success_get or not monitor_obj then
-        local get_err = monitor_obj
-        local error_msg = string.format("Монитор канала '%s' не найден. Невозможно обновить параметры. Ошибка: %s.", name, (get_err or "неизвестная ошибка"))
-        log_error(COMPONENT_NAME, error_msg)
-        return false, error_msg
+        log_error(COMPONENT_NAME, "Монитор канала '%s' не найден. Невозможно обновить параметры.", name)
+        return false, nil
     end
     if monitor_obj.update_parameters and type(monitor_obj.update_parameters) == "function" then
         local success, err = pcall(monitor_obj.update_parameters, monitor_obj, params)
