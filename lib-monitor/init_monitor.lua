@@ -59,11 +59,14 @@ ModuleManager.register_module("monitor_settings", "src.config.monitor_settings")
 ModuleManager.register_module("logger", "src.utils.logger", {"monitor_config"})
 ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_settings"})
 
-ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "monitor_settings"})
+ModuleManager.register_module("event_dispatcher", "src.utils.event_dispatcher", {"logger"})
+ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_settings", "event_dispatcher"})
+
+ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "event_dispatcher"})
 ModuleManager.register_module("dvb_storage", "src.storage.dvb_storage", {"logger"})
 ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_storage"})
 
-ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "monitor_settings"})
+ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "event_dispatcher"})
 ModuleManager.register_module("channel_storage", "src.storage.channel_storage", {"logger"})
 ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_storage", "adapter"})
 
@@ -80,6 +83,12 @@ local success_load, load_error = ModuleManager.load_modules()
 if not success_load then
     print("[ERROR] Failed to load modules: " .. tostring(load_error))
     return false
+end
+
+-- Инициализация подписчиков
+local HttpSubscriber = ModuleManager.get_module("http_subscriber")
+if HttpSubscriber then
+    HttpSubscriber.init()
 end
 
 return ModuleManager

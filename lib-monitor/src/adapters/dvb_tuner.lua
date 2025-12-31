@@ -7,13 +7,11 @@ local setmetatable = setmetatable
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
-local MonitorSettings = ModuleManager.get_module("monitor_settings")
+local EventDispatcher = ModuleManager.get_module("event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
-local http_request = ModuleManager.get_global_dependency("http_request")
-local astra_version = ModuleManager.get_global_dependency("astra.version")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
@@ -126,33 +124,11 @@ function DvbTuner.new(conf)
     return true, self
 end
 
---- Отправляет данные
-function DvbTuner:send(content, feed)
-    local monit_addresses = MonitorSettings and MonitorSettings.MONIT_ADDRESS or {}
-    local recipients = monit_addresses[feed]
-    if not recipients then return end
-
-    for _, addr in ipairs(recipients) do
-        http_request({
-            host = addr.host,
-            path = addr.path,
-            method = "POST",
-            content = content,
-            port = addr.port,
-            headers = {
-                "User-Agent: Astra v." .. (astra_version or "unknown"),
-                "Host: " .. addr.host .. ":" .. addr.port,
-                "Content-Type: application/json;charset=utf-8",
-                "Content-Length: " .. #content,
-                "Connection: close",
-            },
-            callback = function(s, r)
-                if not s or (type(r) == "table" and r.code and r.code ~= 200) then
-                    Logger.error(COMPONENT_NAME, "HTTP request failed for feed '%s': %s", feed, r and r.code or "unknown")
-                end
-            end
-        })
-    end
+--- Публикует данные через EventDispatcher
+--- @param content string JSON данные
+--- @param event_type string Тип события
+function DvbTuner:publish(content, event_type)
+    EventDispatcher.publish(event_type, content)
 end
 
 --- Запускает тюнер
@@ -183,7 +159,7 @@ function DvbTuner:on_data(data)
         self.status.ber = data.ber or -1
         self.status.unc = data.unc or -1
 
-        self:send(json_encode(self.status), "dvb")
+        self:publish(json_encode(self.status), "dvb")
     end
 end
 

@@ -8,13 +8,11 @@ local setmetatable = setmetatable
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
-local MonitorSettings = ModuleManager.get_module("monitor_settings")
+local EventDispatcher = ModuleManager.get_module("event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
-local http_request = ModuleManager.get_global_dependency("http_request")
-local astra_version = ModuleManager.get_global_dependency("astra.version")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
@@ -145,35 +143,11 @@ function ChannelMonitor.new(name, config, stream_json)
     return true, self
 end
 
---- Отправляет данные мониторинга
+--- Публикует данные мониторинга через EventDispatcher
 --- @param content string JSON данные
---- @param feed string Тип фида
-function ChannelMonitor:send(content, feed)
-    local monit_addresses = MonitorSettings and MonitorSettings.MONIT_ADDRESS or {}
-    local recipients = monit_addresses[feed]
-    if not recipients then return end
-
-    for _, addr in ipairs(recipients) do
-        http_request({
-            host = addr.host,
-            path = addr.path,
-            method = "POST",
-            content = content,
-            port = addr.port,
-            headers = {
-                "User-Agent: Astra v." .. (astra_version or "unknown"),
-                "Host: " .. addr.host .. ":" .. addr.port,
-                "Content-Type: application/json;charset=utf-8",
-                "Content-Length: " .. #content,
-                "Connection: close",
-            },
-            callback = function(s, r)
-                if not s or (type(r) == "table" and r.code and r.code ~= 200) then
-                    Logger.error(COMPONENT_NAME, "HTTP request failed for feed '%s': %s", feed, r and r.code or "unknown")
-                end
-            end
-        })
-    end
+--- @param event_type string Тип события
+function ChannelMonitor:publish(content, event_type)
+    EventDispatcher.publish(event_type, content)
 end
 
 --- Запускает мониторинг
@@ -207,9 +181,9 @@ function ChannelMonitor:on_data(data)
     if data.error then
         local content = Utils.table_copy(self.status)
         content.error = data.error
-        self:send(json_encode(content), "error")
+        self:publish(json_encode(content), "error")
     elseif data.psi then
-        self:send(json_encode(data), "psi")
+        self:publish(json_encode(data), "psi")
     elseif data.total then
         self:process_total_data(data)
     end
@@ -229,7 +203,7 @@ function ChannelMonitor:process_total_data(data)
             end
         end
         if has_errors then
-            self:send(json_encode(content), "analyze")
+            self:publish(json_encode(content), "analyze")
         end
     end
 
@@ -245,13 +219,13 @@ function ChannelMonitor:process_total_data(data)
 
     local comparison = COMPARISON_METHODS[self.config.method_comparison or 3]
     if comparison(self.status, data, self.config.rate) or self.force_timer > FORCE_SEND_INTERVAL then
-        self:update_status_and_send(data)
+        self:update_status_and_publish(data)
     end
 end
 
---- Обновляет статус и отправляет его
+--- Обновляет статус и публикует его
 --- @param data table
-function ChannelMonitor:update_status_and_send(data)
+function ChannelMonitor:update_status_and_publish(data)
     local source = self.stream_json[1] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
     self.status.stream = source.stream
     self.status.format = source.format
@@ -261,7 +235,7 @@ function ChannelMonitor:update_status_and_send(data)
     self.status.scrambled = data.total.scrambled
     self.status.bitrate = data.total.bitrate or 0
     
-    self:send(json_encode(self.status), "channels")
+    self:publish(json_encode(self.status), "channels")
 
     self.status.cc_errors = 0
     self.status.pes_errors = 0
