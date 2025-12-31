@@ -1,7 +1,7 @@
 -- 1. Стандартные Lua функции
 local pairs = pairs
 local ipairs = ipairs
-local table_insert = table_insert
+local table_insert = table.insert
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()

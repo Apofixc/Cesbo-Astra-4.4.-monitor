@@ -59,38 +59,22 @@ local function validate_config(config)
 
     local schema = MonitorConfig and MonitorConfig.ValidationSchema or {}
     
-    -- Валидация rate
-    local s_rate = schema.dvb_rate
-    if s_rate then
-        if config.rate == nil then
-            config.rate = s_rate.default
-        elseif type(config.rate) ~= s_rate.type or config.rate < s_rate.min or config.rate > s_rate.max then
-            Logger.warn(COMPONENT_NAME, "validate_config: invalid rate, using default")
-            config.rate = s_rate.default
+    local function validate_param(param_name, schema_key)
+        local s = schema[schema_key]
+        if not s then return end
+        
+        local val = config[param_name]
+        if val == nil then
+            config[param_name] = s.default
+        elseif type(val) ~= s.type or (s.min and val < s.min) or (s.max and val > s.max) then
+            Logger.warn(COMPONENT_NAME, "Parameter '%s' is invalid (value: %s). Using default: %s", param_name, tostring(val), tostring(s.default))
+            config[param_name] = s.default
         end
     end
 
-    -- Валидация time_check
-    local s_tc = schema.dvb_time_check
-    if s_tc then
-        if config.time_check == nil then
-            config.time_check = s_tc.default
-        elseif type(config.time_check) ~= s_tc.type or config.time_check < s_tc.min or config.time_check > s_tc.max then
-            Logger.warn(COMPONENT_NAME, "validate_config: invalid time_check, using default")
-            config.time_check = s_tc.default
-        end
-    end
-
-    -- Валидация method_comparison
-    local s_mc = schema.dvb_method_comparison
-    if s_mc then
-        if config.method_comparison == nil then
-            config.method_comparison = s_mc.default
-        elseif type(config.method_comparison) ~= s_mc.type or config.method_comparison < s_mc.min or config.method_comparison > s_mc.max then
-            Logger.warn(COMPONENT_NAME, "validate_config: invalid method_comparison, using default")
-            config.method_comparison = s_mc.default
-        end
-    end
+    validate_param("rate", "dvb_rate")
+    validate_param("time_check", "dvb_time_check")
+    validate_param("method_comparison", "dvb_method_comparison")
 
     return true
 end

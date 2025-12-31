@@ -23,10 +23,100 @@ local string_split = ModuleManager.get_global_dependency("string.split")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Channel"
+local MONITOR_TYPE_INPUT = "input"
+local MONITOR_TYPE_OUTPUT = "output"
+local MONITOR_TYPE_IP = "ip"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Channel
 local Channel = {}
+
+--- Обертка для логирования ошибок
+local function log_error(component, msg, ...)
+    Logger.error(component, msg, ...)
+end
+
+--- Обертка для информационного логирования
+local function log_info(component, msg, ...)
+    Logger.info(component, msg, ...)
+end
+
+--- Псевдоним для получения имени стрима
+local get_stream = Utils.get_stream_name
+
+--- Таблица обработчиков типов мониторов
+local monitor_type_handlers = {
+    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
+        local input_data = channel_data.input[1]
+        if not input_data then
+            local error_msg = string.format("Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
+            log_error(COMPONENT_NAME, error_msg)
+            return nil, nil, error_msg
+        end
+        local upstream = input_data.input.tail
+        local split_result = string_split(conf.input[1], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
+        return upstream, monitor_target, nil
+    end,
+    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
+        local upstream = channel_data.tail
+        local monitor_target = MONITOR_TYPE_OUTPUT
+        return upstream, monitor_target, nil
+    end,
+    [MONITOR_TYPE_IP] = function(conf, channel_data)
+        if not channel_data.output or #channel_data.output == 0 then
+            local error_msg = string.format("Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
+            log_error(COMPONENT_NAME, error_msg)
+            return nil, nil, error_msg
+        end
+
+        local key = 1
+        for index, output in ipairs(channel_data.output) do
+            if output.config and output.config.monitor then
+                key = index
+                break
+            end
+        end
+
+        local split_result = string_split(conf.output[key], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        
+        log_info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
+        return nil, monitor_target, nil -- upstream не используется для IP-монитора
+    end,
+}
+
+--- Таблица обработчиков форматов входных данных
+local format_handlers = {
+    dvb = function(config)
+        local cfg = {format = config.format, addr = config.addr}
+        local adap_conf = Adapter.find_dvb_conf(config.addr)
+        cfg.stream = adap_conf and adap_conf.source or "dvb"
+        return cfg
+    end,
+    udp = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = (config.localaddr or "") .. "@" .. (config.addr or "") .. ":" .. (config.port or "")
+        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        return cfg
+    end,
+    rtp = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = (config.localaddr or "") .. "@" .. (config.addr or "") .. ":" .. (config.port or "")
+        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        return cfg
+    end,
+    http = function(config)
+        local cfg = {format = config.format}
+        cfg.addr = (config.host or "") .. ":" .. (config.port or "") .. (config.path or "")
+        cfg.stream = get_stream(config.host) or "unknown_stream"
+        return cfg
+    end,
+    file = function(config)
+        local cfg = {format = config.format, addr = config.filename, stream = "file"}
+        return cfg
+    end,
+}
 
 --- Вспомогательная функция для подготовки stream_json
 local function prepare_stream_json(ch_data)
@@ -34,22 +124,12 @@ local function prepare_stream_json(ch_data)
     if not ch_data or not ch_data.input then return stream_json end
 
     for key, input in ipairs(ch_data.input) do
-        local cfg = {format = input.config.format}
-        if input.config.format == "dvb" then
-            cfg.addr = input.config.addr
-            local success_ad, adap_conf = find_dvb_conf(input.config.addr)
-            cfg.stream = success_ad and adap_conf and adap_conf.source or "dvb"      
-        elseif input.config.format == "udp" or input.config.format == "rtp" then
-            cfg.addr = (input.config.localaddr or "") .. "@" .. (input.config.addr or "") .. ":" .. (input.config.port or "")
-            cfg.stream = Utils.get_stream_name(input.config.addr)
-        elseif input.config.format == "http" then
-            cfg.addr = (input.config.host or "") .. ":" .. (input.config.port or "") .. (input.config.path or "")
-            cfg.stream = Utils.get_stream_name(input.config.host)
-        elseif input.config.format == "file" then
-            cfg.addr = input.config.filename
-            cfg.stream = "file"
+        local handler = format_handlers[input.config.format]
+        if handler then
+            stream_json[key] = handler(input.config)
+        else
+            stream_json[key] = {format = input.config.format or "Unknown", addr = "Unknown", stream = "Unknown"}
         end
-        stream_json[key] = cfg
     end
     return stream_json
 end
@@ -140,20 +220,17 @@ function make_stream(conf)
     end
 
     local monitor_name = (conf.monitor and conf.monitor.name) or conf.name
-    local monitor_type = (conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type)) or "output"
+    local monitor_type = (conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
-    local upstream, monitor_target
-    if monitor_type == "input" then
-        local input_data = channel_data.input[1]
-        upstream = input_data.input.tail
-        local parts = string_split(conf.input[1], "#")
-        monitor_target = parts[1] or conf.input[1]
-    elseif monitor_type == "output" then
-        upstream = channel_data.tail
-        monitor_target = "output"
-    else
-        upstream = channel_data.tail
-        monitor_target = "output"
+    local handler = monitor_type_handlers[monitor_type]
+    if not handler then
+        Logger.error(COMPONENT_NAME, "make_stream: unknown monitor type '%s' for stream '%s'", monitor_type, conf.name)
+        return false, nil
+    end
+
+    local upstream, monitor_target, err = handler(conf, channel_data)
+    if err then
+        return false, nil
     end
 
     local monitor_config = {
