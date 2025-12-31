@@ -31,16 +31,6 @@ local MONITOR_TYPE_IP = "ip"
 --- @class Channel
 local Channel = {}
 
---- Обертка для логирования ошибок
-local function log_error(component, msg, ...)
-    Logger.error(component, msg, ...)
-end
-
---- Обертка для информационного логирования
-local function log_info(component, msg, ...)
-    Logger.info(component, msg, ...)
-end
-
 --- Псевдоним для получения имени стрима
 local get_stream = Utils.get_stream_name
 
@@ -50,7 +40,7 @@ local monitor_type_handlers = {
         local input_data = channel_data.input[1]
         if not input_data then
             local error_msg = string.format("Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
-            log_error(COMPONENT_NAME, error_msg)
+            Logger.error(COMPONENT_NAME, error_msg)
             return nil, nil, error_msg
         end
         local upstream = input_data.input.tail
@@ -66,7 +56,7 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_IP] = function(conf, channel_data)
         if not channel_data.output or #channel_data.output == 0 then
             local error_msg = string.format("Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
-            log_error(COMPONENT_NAME, error_msg)
+            Logger.error(COMPONENT_NAME, error_msg)
             return nil, nil, error_msg
         end
 
@@ -81,7 +71,7 @@ local monitor_type_handlers = {
         local split_result = string_split(conf.output[key], "#")
         local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
         
-        log_info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
+        Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
         return nil, monitor_target, nil -- upstream не используется для IP-монитора
     end,
 }
@@ -96,19 +86,19 @@ local format_handlers = {
     end,
     udp = function(config)
         local cfg = {format = config.format}
-        cfg.addr = (config.localaddr or "") .. "@" .. (config.addr or "") .. ":" .. (config.port or "")
+        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
     end,
     rtp = function(config)
         local cfg = {format = config.format}
-        cfg.addr = (config.localaddr or "") .. "@" .. (config.addr or "") .. ":" .. (config.port or "")
+        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
     end,
     http = function(config)
         local cfg = {format = config.format}
-        cfg.addr = (config.host or "") .. ":" .. (config.port or "") .. (config.path or "")
+        cfg.addr = config.host .. ":" .. config.port .. config.path
         cfg.stream = get_stream(config.host) or "unknown_stream"
         return cfg
     end,

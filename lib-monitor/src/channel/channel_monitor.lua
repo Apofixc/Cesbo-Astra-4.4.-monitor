@@ -1,5 +1,6 @@
 -- 1. Стандартные Lua функции
 local type = type
+local pairs = pairs
 local ipairs = ipairs
 local table_insert = table.insert
 local setmetatable = setmetatable
@@ -18,11 +19,29 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local COMPONENT_NAME = "ChannelMonitor"
 local FORCE_SEND_INTERVAL = 300
 
+-- Типы потоков (Stream Types) из спецификации MPEG-TS
+local STREAM_TYPES = {
+    [0x01] = "MPEG-1 Video",
+    [0x02] = "MPEG-2 Video",
+    [0x03] = "MPEG-1 Audio",
+    [0x04] = "MPEG-2 Audio",
+    [0x06] = "Data/Teletext/Subtitles",
+    [0x0F] = "AAC Audio (ADTS)",
+    [0x10] = "MPEG-4 Video",
+    [0x11] = "AAC Audio (LATM)",
+    [0x1B] = "H.264 Video",
+    [0x24] = "H.265 Video",
+    [0x81] = "AC-3 Audio"
+}
+
 --- @class ChannelMonitor
 --- @field private name string
 --- @field private config table
 --- @field private stream_json table
 --- @field private status table
+--- @field private psi_cache table
+--- @field private pid_types table
+--- @field private analyze_stats table
 --- @field private monitor_instance any
 --- @field private force_timer number
 --- @field private check_timer number
@@ -125,6 +144,9 @@ function ChannelMonitor.new(name, config, stream_json)
         cc_errors = 0,
         pes_errors = 0
     }
+    self.psi_cache = {}
+    self.pid_types = {}
+    self.analyze_stats = {}
     return true, self
 end
 
@@ -144,10 +166,8 @@ function ChannelMonitor:start(upstream)
         return false
     end
 
-    if self.monitor_instance then return true end
-
     self.monitor_instance = analyze({
-        upstream = upstream,
+        upstream = upstream:stream(),
         name = "_" .. self.name,
         callback = function(data) self:on_data(data) end
     })
@@ -160,6 +180,16 @@ function ChannelMonitor:start(upstream)
     return true
 end
 
+function ChannelMonitor:get_cached_source()
+    -- local active_id = self.channel_data and self.channel_data.active_input_id or 1
+    -- if active_id ~= self.last_active_id then 
+    --     self.last_active_id = active_id
+    --     local input_index = math_max(1, active_id)
+    --     self.cached_source = self.stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
+    -- end
+    -- return self.cached_source
+end
+
 --- Обработка данных от analyze
 --- @param data table
 function ChannelMonitor:on_data(data)
@@ -168,27 +198,57 @@ function ChannelMonitor:on_data(data)
         content.error = data.error
         self:publish(json_encode(content), "error")
     elseif data.psi then
-        self:publish(json_encode(data), "psi")
+        self:process_psi_data(data)
     elseif data.total then
         self:process_total_data(data)
     end
+end
+
+--- Обработка PSI данных
+--- @param data table
+function ChannelMonitor:process_psi_data(data)
+    if not data then return end
+
+    local psi_type = data.psi and data.psi:upper()
+    -- Кэшируем таблицу
+    self.psi_cache[psi_type or data.psi] = data
+
+    -- Если это PMT, обновляем типы PID
+    if psi_type == "PMT" and data.streams then
+        for _, stream in ipairs(data.streams) do
+            if stream.pid then
+                self.pid_types[stream.pid] = stream.type_name or "UNKNOWN"
+            end
+        end
+    end
+
+    self:publish(json_encode(data), "psi")
 end
 
 --- Обработка суммарных данных потока
 --- @param data table
 function ChannelMonitor:process_total_data(data)
     if self.config.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
-        local content = Utils.table_copy(self.status)
-        content.analyze = {}
-        local has_errors = false
         for _, pid_data in ipairs(data.analyze) do
-            if pid_data.cc_error > 0 or pid_data.pes_error > 0 or pid_data.sc_error > 0 then
-                table_insert(content.analyze, pid_data)
-                has_errors = true
+            local pid = pid_data.pid
+            local cc = pid_data.cc_error or 0
+            local pes = pid_data.pes_error or 0
+            local sc = pid_data.sc_error or 0
+            
+            if pid and (cc > 0 or pes > 0 or sc > 0) then
+                if not self.analyze_stats[pid] then
+                    self.analyze_stats[pid] = {
+                        cc = cc,
+                        pes = pes,
+                        sc = sc
+                    }
+                else
+                    local stats = self.analyze_stats[pid]
+                    stats.cc = stats.cc + cc
+                    stats.pes = stats.pes + pes
+                    stats.sc = stats.sc + sc
+                end
             end
-        end
-        if has_errors then
-            self:publish(json_encode(content), "analyze")
         end
     end
 
@@ -219,12 +279,46 @@ function ChannelMonitor:update_status_and_publish(data)
     self.status.ready = data.on_air
     self.status.scrambled = data.total.scrambled
     self.status.bitrate = data.total.bitrate or 0
+
+    if self.config.analyze and next(self.analyze_stats) then
+        local report = {}
+        for pid, stats in pairs(self.analyze_stats) do
+            report[pid] = {
+                type = self.pid_types[pid] or "UNKNOWN",
+                cc = stats.cc,
+                pes = stats.pes,
+                sc = stats.sc
+            }
+        end
+        self.status.analyze = report
+    else
+        self.status.analyze = nil
+    end
     
     self:publish(json_encode(self.status), "channels")
 
+    -- Сброс данных
     self.status.cc_errors = 0
     self.status.pes_errors = 0
+    self.analyze_stats = {}
     self.force_timer = 0
+end
+
+--- Возвращает закэшированные PSI данные
+--- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
+--- @return table|nil
+function ChannelMonitor:get_psi(table_name)
+    if table_name then
+        return self.psi_cache[table_name]
+    end
+    return self.psi_cache
+end
+
+--- Возвращает описание назначения PID
+--- @param pid number
+--- @return string|nil
+function ChannelMonitor:get_pid_description(pid)
+    return self.pid_types[pid]
 end
 
 --- Останавливает мониторинг

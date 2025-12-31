@@ -50,8 +50,8 @@ function EventDispatcher.publish(event_type, data)
 
     local handlers = subscribers[event_type]
     if not handlers or #handlers == 0 then
-        -- Если нет подписчиков, выводим данные в терминал (для отладки)
-        print(string.format("[%s] No subscribers. Data: %s", event_type, tostring(data)))
+        -- Логируем каждое событие для отображения в консоли/чате
+        Logger.info(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
         return true
     end
 

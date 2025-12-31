@@ -38,7 +38,6 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
     local success, obj = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
-        print("[ERROR] Missing Astra dependency: " .. tostring(dep_path))
         all_astra_deps_found = false
     else
         found_astra_deps[dep_path] = obj
@@ -74,14 +73,22 @@ ModuleManager.register_module("resource_monitor", "src.system.resource_monitor",
 
 -- Валидация зависимостей
 if not ModuleManager.validate_dependencies() then 
-    print("[ERROR] Module dependency validation failed")
     return false
 end
 
 -- Загрузка модулей
 local success_load, load_error = ModuleManager.load_modules()
 if not success_load then
-    print("[ERROR] Failed to load modules: " .. tostring(load_error))
+    return false
+end
+
+-- Инициализация объектов из загруженных модулей
+local Logger = ModuleManager.get_module("logger")
+
+if not success_load then
+    if Logger then
+        Logger.error("Init", "Failed to load modules: %s", tostring(load_error))
+    end
     return false
 end
 
