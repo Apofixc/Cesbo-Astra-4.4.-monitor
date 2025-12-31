@@ -40,29 +40,29 @@ local DEFAULT_FEEDS = {"channels", "analyze", "errors", "psi", "dvb"}
 --- Возвращает имя потока по IP-адресу, используя предопределенную карту STREAM.
 --- Если IP-адрес не найден в карте, возвращает сам IP-адрес.
 --- @param ip_address string IP-адрес потока.
---- @return string|nil stream_name Имя потока или исходный IP-адрес, если имя не найдено
---- @return string|nil error_message Сообщение об ошибке, если `ip_address` невалиден
+--- @return boolean success Статус выполнения
+--- @return string|nil result Имя потока или исходный IP-адрес
 function get_stream(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
-        local error_msg = "Недопустимый ip_address: должна быть непустая строка. Получено: %s.", tostring(ip_address)
+        local error_msg = string_format("Недопустимый ip_address: должна быть непустая строка. Получено: %s.", tostring(ip_address))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
-    return STREAM[ip_address] or ip_address, nil
+    return true, STREAM[ip_address] or ip_address
 end
 
 --- Вычисляет отношение абсолютной разницы между двумя числами к их максимальному значению.
 --- Используется для определения относительного изменения.
 --- @param old number Старое значение.
 --- @param new number Новое значение.
---- @return number|nil ratio Отношение (от 0 до 1)
---- @return string|nil error_message Сообщение об ошибке, если входные данные невалидны
+--- @return boolean success Статус выполнения
+--- @return number|string result Отношение (от 0 до 1) или сообщение об ошибке
 function ratio(old, new)
     if type(old) ~= "number" or type(new) ~= "number" then
         local error_msg = string_format("Недопустимые типы: old и new должны быть числами. Получено old: %s, new: %s.", type(old), type(new))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
     
     local abs_old = math_abs(old)
@@ -70,23 +70,23 @@ function ratio(old, new)
     local max_abs = math_max(abs_old, abs_new)
 
     if max_abs == 0 then
-        return 0, nil
+        return true, 0
     elseif abs_old == 0 or abs_new == 0 then
-        return 1, nil
+        return true, 1
     end
 
-    return math_abs(old - new) / max_abs, nil
+    return true, math_abs(old - new) / max_abs
 end
 
 --- Создает поверхностную копию таблицы.
 --- @param t table Исходная таблица.
---- @return table|nil copy Копия таблицы
---- @return string|nil error_message Сообщение об ошибке, если входной аргумент невалиден
+--- @return boolean success Статус выполнения
+--- @return table|string result Копия таблицы или сообщение об ошибке
 local shallow_table_copy = function(t)
     if type(t) ~= "table" then
-        local error_msg = "Недопустимый аргумент: должна быть таблица. Получено: %s.", type(t)
+        local error_msg = string_format("Недопустимый аргумент: должна быть таблица. Получено: %s.", type(t))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     local copy = {}
@@ -94,123 +94,123 @@ local shallow_table_copy = function(t)
         copy[k] = v
     end
 
-    return copy, nil
+    return true, copy
 end
 
 --- Вспомогательная функция для валидации общих параметров мониторинга.
 --- @param host string Хост.
 --- @param port number Порт.
 --- @param path string Путь.
---- @param feed string|nil [feed] Имя клиента.
---- @return boolean success true, если все параметры валидны
---- @return string|nil error_message Сообщение об ошибке
+--- @param [feed] string|nil Имя клиента.
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 local function validate_monitoring_params(host, port, path, feed)
     if not (type(host) == "string" and host ~= "") then
-        local error_msg = "Хост должен быть непустой строкой. Получено: %s.", tostring(host)
+        local error_msg = string_format("Хост должен быть непустой строкой. Получено: %s.", tostring(host))
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     if not (type(port) == "number" and port > 0) then
-        local error_msg = "Порт должен быть положительным числом. Получено: %s.", tostring(port)
+        local error_msg = string_format("Порт должен быть положительным числом. Получено: %s.", tostring(port))
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     if not (type(path) == "string" and path ~= "") then
-        local error_msg = "Путь должен быть непустой строкой. Получено: %s.", tostring(path)
+        local error_msg = string_format("Путь должен быть непустой строкой. Получено: %s.", tostring(path))
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     if feed and not (type(feed) == "string" and feed ~= "") then
-        local error_msg = "Feed должен быть непустой строкой, если предоставлен. Получено: %s.", tostring(feed)
+        local error_msg = string_format("Feed должен быть непустой строкой, если предоставлен. Получено: %s.", tostring(feed))
         log_error(COMPONENT_NAME, "[validate_monitoring_params] %s", error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
-    return true, nil
+    return true
 end
 
 --- Валидирует параметр монитора на основе его имени, значения и типа/диапазона, используя схему.
 --- @param name string Имя параметра.
 --- @param value any Значение параметра для валидации.
---- @return any|nil valid_value Валидное значение параметра
---- @return string|nil error_message Сообщение об ошибке, если значение невалидно
+--- @return boolean success Статус выполнения
+--- @return any|string result Валидное значение параметра или сообщение об ошибке
 function validate_monitor_param(name, value)
     local schema = MonitorConfig.ValidationSchema[name]
     if not schema then
         local error_msg = string_format("Неизвестный параметр монитора в схеме: %s.", name)
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     if value == nil then
-        return schema.default, nil -- Используем значение по умолчанию из схемы
+        return true, schema.default -- Используем значение по умолчанию из схемы
     end
 
     if type(value) ~= schema.type then
         local error_msg = string_format("Недопустимый тип для '%s': ожидалось %s, получено %s.", name, schema.type, type(value))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     if schema.type == "number" then
         if schema.min ~= nil and value < schema.min then
             local error_msg = string_format("Значение для '%s' (%s) меньше минимально допустимого (%s).", name, tostring(value), tostring(schema.min))
             log_error(COMPONENT_NAME, error_msg)
-            return nil, error_msg
+            return false, error_msg
         end
         if schema.max ~= nil and value > schema.max then
             local error_msg = string_format("Значение для '%s' (%s) больше максимально допустимого (%s).", name, tostring(value), tostring(schema.max))
             log_error(COMPONENT_NAME, error_msg)
-            return nil, error_msg
+            return false, error_msg
         end
     end
 
-    return value, nil
+    return true, value
 end
 
 --- Вспомогательная функция для валидации имени монитора.
 --- Имя монитора должно быть непустой строкой, содержать только буквенно-цифровые символы,
 --- дефисы, подчеркивания и точки, а также иметь ограниченную длину.
 --- @param name string Имя монитора.
---- @return boolean success true, если имя валидно
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
-        local error_msg = "Недопустимое имя монитора: ожидалась непустая строка, получено: %s.", tostring(name)
+        local error_msg = string_format("Недопустимое имя монитора: ожидалась непустая строка, получено: %s.", tostring(name))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     -- Проверка на допустимые символы (буквы, цифры, дефисы, подчеркивания, точки)
     if not name:match("^[a-zA-Z0-9%._-]+$") then
         local error_msg = "Недопустимое имя монитора: содержит запрещенные символы. Разрешены только буквенно-цифровые символы, дефисы, подчеркивания и точки."
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     -- Проверка на максимальную длину имени
     if #name > MonitorConfig.MaxMonitorNameLength then
         local error_msg = string_format("Недопустимое имя монитора: длина (%s) превышает максимально допустимую (%s).", #name, MonitorConfig.MaxMonitorNameLength)
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
-    return true, nil
+    return true
 end
 
 --- Устанавливает или переопределяет адрес мониторинга для клиентов.
 --- @param host string Хост для мониторинга.
 --- @param port number Порт для мониторинга.
 --- @param path string Путь для мониторинга.
---- @param feed string|nil [feed] Имя клиента (например, "channels", "analyze"). Если не указано, обновляет все стандартные клиенты.
---- @return boolean success true, если адрес успешно установлен
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @param [feed] string|nil Имя клиента (например, "channels", "analyze"). Если не указано, обновляет все стандартные клиенты.
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function set_client_monitoring(host, port, path, feed)
     local is_valid, validation_err = validate_monitoring_params(host, port, path, feed)
     if not is_valid then
-        return nil, validation_err
+        return false, validation_err
     end
 
     if feed then
@@ -250,18 +250,19 @@ end
 --- @param port number Порт для удаления.
 --- @param path string Путь для удаления.
 --- @param feed string Имя клиента (например, "channels", "analyze").
---- @return boolean success true, если адрес успешно удален
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function remove_client_monitoring(host, port, path, feed)
     local is_valid, validation_err = validate_monitoring_params(host, port, path, feed)
     if not is_valid then
-        return nil, validation_err
+        return false, validation_err
     end
 
     local recipients = MONIT_ADDRESS[feed]
     if not recipients or #recipients == 0 then
-        log_info(COMPONENT_NAME, "Адреса мониторинга для клиента '%s' не найдены.", feed)
-        return nil, "Адреса мониторинга для клиента '" .. feed .. "' не найдены."
+        local err = string_format("Адреса мониторинга для клиента '%s' не найдены.", feed)
+        log_info(COMPONENT_NAME, err)
+        return false, err
     end
 
     local removed = false
@@ -278,14 +279,14 @@ function remove_client_monitoring(host, port, path, feed)
     if not removed then
         local error_msg = string_format("Адрес мониторинга для клиента '%s' с host=%s, port=%s, path=%s не найден.", feed, host, tostring(port), path)
         log_info(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
-    return true, nil
+    return true
 end
 
 --- Возвращает имя хоста сервера.
---- @return string hostname Имя хоста.
+--- @return string result Имя хоста.
 function get_server_name()
     return hostname
 end
@@ -294,9 +295,10 @@ end
 --- @param content string Содержимое для отправки (JSON-строка).
 --- @param feed string Тип фида (например, "channels", "analyze", "errors", "psi", "dvb").
 --- @return boolean success Статус выполнения
---- @return string|nil error_message Сообщение об ошибке
+--- @return string|nil result Сообщение об ошибке или nil
 function send_monitor(content, feed)
     log_debug(COMPONENT_NAME, "Отправка данных монитора для фида '%s'. Содержимое: %s.", feed, content)
+    local recipients = MONIT_ADDRESS[feed]
     if recipients and #recipients > 0 then
         local content_length = #content
         local common_headers = {
@@ -327,10 +329,11 @@ function send_monitor(content, feed)
                 end
             })
         end
-        return true, nil
+        return true
     else
-        log_info(COMPONENT_NAME, "Для фида '%s' не настроены получатели. Пропуск отправки.", feed)
-        return nil, "Для фида '" .. feed .. "' не настроены получатели"
+        local err = string_format("Для фида '%s' не настроены получатели. Пропуск отправки.", feed)
+        log_info(COMPONENT_NAME, err)
+        return false, err
     end
 end
 

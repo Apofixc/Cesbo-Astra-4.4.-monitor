@@ -52,7 +52,7 @@ end
 --- Валидирует входящий HTTP-запрос и извлекает параметры.
 --- Поддерживает параметры из query string или из JSON-тела запроса.
 --- @param request table Объект HTTP-запроса.
---- @return table params Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
+--- @return table result Таблица с параметрами запроса или пустая таблица, если запрос невалиден.
 local function validate_request(request) 
     if not request then
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -96,7 +96,7 @@ end
 --- Извлекает параметр из таблицы запроса.
 --- @param req table Таблица с параметрами запроса.
 --- @param key string Ключ параметра.
---- @return any|nil value Значение параметра или `nil`, если параметр отсутствует.
+--- @return any|nil result Значение параметра или `nil`, если параметр отсутствует.
 local function get_param(req, key)
     if not req then
         log_error(COMPONENT_NAME, "req равен nil.")
@@ -112,7 +112,7 @@ end
 
 --- Валидирует значение задержки.
 --- @param value any Значение для валидации (может быть строкой или числом).
---- @return number delay Валидное значение задержки (не менее 1) или значение по умолчанию.
+--- @return number result Валидное значение задержки (не менее 1) или значение по умолчанию.
 local function validate_delay(value) 
     local i = tonumber(value)
     if i and i >= 1 then

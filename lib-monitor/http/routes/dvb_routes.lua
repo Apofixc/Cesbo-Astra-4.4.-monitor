@@ -34,6 +34,7 @@ local send_response = http_helpers.send_response
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_adapters = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")
@@ -64,6 +65,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_adapter_data = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")
@@ -106,6 +108,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local update_dvb_monitor = function(server, client, request)
     if not check_auth(request) then
         return send_response(server, client, 401, "Несанкционированный доступ.")

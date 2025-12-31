@@ -80,23 +80,25 @@ local dvb_monitor_method_comparison = {
 --- @param self DvbTunerMonitor Объект DvbTunerMonitor.
 --- @param param_name string Имя параметра (например, "dvb_rate").
 --- @param value any Значение для установки.
---- @return boolean success true, если параметр успешно установлен
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @return boolean success Статус выполнения
+--- @return any|string result Валидное значение или сообщение об ошибке
 local function set_dvb_config_param(self, param_name, value)
-    local updated_value, err = validate_monitor_param(param_name, value)
-    if err then
+    local success, result = validate_monitor_param(param_name, value)
+    if not success then
+        local err = result
         log_error(COMPONENT_NAME, "Не удалось проверить параметр '%s': %s.", param_name, err)
-        return nil, err
+        return false, err
     end
+    local updated_value = result
     -- Извлекаем фактическое имя параметра из "dvb_param_name"
     local config_key = param_name:gsub("dvb_", "")
     self.conf[config_key] = updated_value
-    return true
+    return true, updated_value
 end
 
 --- Конструктор для DvbTunerMonitor.
 --- @param conf table Таблица конфигурации для DVB-тюнера.
---- @return DvbTunerMonitor Новый экземпляр DvbTunerMonitor.
+--- @return DvbTunerMonitor result Новый экземпляр DvbTunerMonitor.
 function DvbTunerMonitor:new(conf)
     local self = setmetatable({}, DvbTunerMonitor)
     self.conf = conf
@@ -127,14 +129,14 @@ function DvbTunerMonitor:new(conf)
 end
 
 --- Запускает мониторинг DVB-тюнера.
---- @return any|nil instance Экземпляр DVB-тюнера, если инициализация прошла успешно
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
 function DvbTunerMonitor:start()
     local comparison_method = dvb_monitor_method_comparison[self.conf.method_comparison]
     if not comparison_method then
-        local error_msg = "Указан недопустимый метод сравнения: %s.", tostring(self.conf.method_comparison)
+        local error_msg = string.format("Указан недопустимый метод сравнения: %s.", tostring(self.conf.method_comparison))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
@@ -165,41 +167,41 @@ function DvbTunerMonitor:start()
 
     if self.instance then
         log_info(COMPONENT_NAME, "Запущен монитор для адаптера: %s.", self.conf.name_adapter)
-        return self.instance, nil
+        return true, self.instance
     else
-        local error_msg = "Не удалось запустить монитор для адаптера: %s. dvb_tune вернул nil.", self.conf.name_adapter
+        local error_msg = string.format("Не удалось запустить монитор для адаптера: %s. dvb_tune вернул nil.", self.conf.name_adapter)
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
 --- @param params table Таблица с новыми параметрами.
---- @return boolean success true, если параметры успешно обновлены
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function DvbTunerMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        local error_msg = "update_parameters: params должен быть таблицей. Получено: %s.", type(params)
+        local error_msg = string.format("update_parameters: params должен быть таблицей. Получено: %s.", type(params))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     local success, err
     if params.rate ~= nil then
         success, err = set_dvb_config_param(self, "dvb_rate", params.rate)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
     if params.time_check ~= nil then
         success, err = set_dvb_config_param(self, "dvb_time_check", params.time_check)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
     if params.method_comparison ~= nil then
         success, err = set_dvb_config_param(self, "dvb_method_comparison", params.method_comparison)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
 
     log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", self.conf.name_adapter)
-    return true, nil
+    return true
 end
 
 --- Возвращает текущий кэш JSON статуса.
@@ -210,6 +212,7 @@ end
 
 --- Останавливает и очищает ресурсы, связанные с DVB-тюнер монитором.
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
+--- @return boolean success Статус выполнения
 function DvbTunerMonitor:kill()
     if self.instance then
         self.instance = nil
@@ -218,6 +221,7 @@ function DvbTunerMonitor:kill()
     self.status_signal = nil
     self.json_cache = nil
     log_info(COMPONENT_NAME, "Монитор DVB-тюнера остановлен для адаптера: %s.", self.conf.name_adapter)
+    return true
 end
 
 return DvbTunerMonitor

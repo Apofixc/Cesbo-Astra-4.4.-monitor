@@ -55,22 +55,28 @@ end
 --- Устанавливает глобальный уровень логирования для всех сообщений.
 --- Сообщения с уровнем ниже установленного не будут выводиться.
 --- @param level_name string Имя уровня логирования (например, "DEBUG", "INFO", "WARN", "ERROR", "NONE").
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function Logger.set_log_level(level_name)
     if not level_name or type(level_name) ~= "string" then
-        io_stderr(format_message("ERROR", COMPONENT_NAME, "Invalid log level name: expected string, got %s.", type(level_name)) .. "\n")
-        return
+        local err = string_format("Invalid log level name: expected string, got %s.", type(level_name))
+        io_stderr:write(format_message("ERROR", COMPONENT_NAME, err) .. "\n")
+        return false, err
     end
     local level = LOG_LEVELS[level_name:upper()]
     if level then
         current_log_level = level
         io_write(format_message("INFO", COMPONENT_NAME, "Log level set to: %s", level_name:upper()) .. "\n")
+        return true
     else
-        io_stderr(format_message("ERROR", COMPONENT_NAME, "Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name) .. "\n")
+        local err = string_format("Invalid log level: %s. Available levels: DEBUG, INFO, WARN, ERROR, NONE.", level_name)
+        io_stderr:write(format_message("ERROR", COMPONENT_NAME, err) .. "\n")
+        return false, err
     end
 end
 
 --- Возвращает текущий установленный уровень логирования.
---- @return number Числовое значение текущего уровня логирования.
+--- @return number result Числовое значение текущего уровня логирования.
 function Logger.get_log_level()
     return current_log_level
 end
@@ -81,7 +87,7 @@ end
 --- @param component string Имя компонента или модуля, откуда было вызвано логирование.
 --- @param format_str string Форматная строка для сообщения.
 --- @param ... any Переменное количество аргументов для форматной строки.
---- @return string Полностью отформатированное сообщение лога.
+--- @return string result Полностью отформатированное сообщение лога.
 local function format_message(level, component, format_str, ...)
     local timestamp = os_date("%Y-%m-%d %H:%M:%S")
     -- Безопасный вызов string_format с проверкой аргументов

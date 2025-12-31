@@ -44,21 +44,22 @@ ResourceMonitor.__index = ResourceMonitor
 --- @type ResourceMonitor|nil
 local instance = nil
 
---- @return number|nil pid
+--- @return boolean success Статус выполнения
+--- @return number|nil result PID или nil
 local function get_current_pid()
-    local file = io.open("/proc/self/stat", "r")
+    local file = io_open("/proc/self/stat", "r")
     if file then
         local data = file:read("*a")
         file:close()
         local pid = data:match("^(%d+)")
-        return tonumber(pid)
+        return true, tonumber(pid)
     end
-    return nil
+    return false, nil
 end
 
 --- Создает или возвращает единственный экземпляр ResourceMonitor.
---- @param name string|nil [name] Уникальное имя монитора (используется только при первом создании).
---- @return ResourceMonitor Единственный объект ResourceMonitor.
+--- @param [name] string|nil Уникальное имя монитора (используется только при первом создании).
+--- @return ResourceMonitor result Единственный объект ResourceMonitor.
 function ResourceMonitor:new(name)
     if not instance then
         local self = setmetatable({}, ResourceMonitor)
@@ -66,8 +67,9 @@ function ResourceMonitor:new(name)
         -- Сохраняем имя монитора (только при первом создании)
         self.name = name or "ResourceMonitor"
         
-        -- Получаем PID текущего процесса (предполагается, что os.getpid доступен)
-        self.pid = get_current_pid() or 0
+        -- Получаем PID текущего процесса
+        local success_pid, pid = get_current_pid()
+        self.pid = success_pid and pid or 0
         
         -- Инициализация состояния
         self.last_net_stats = {} -- Для отслеживания изменений сетевой статистики
@@ -112,8 +114,8 @@ function ResourceMonitor:new(name)
 end
 
 --- Возвращает единственный экземпляр ResourceMonitor, создавая его при необходимости.
---- @param name string|nil [name] Имя монитора (используется только при первом вызове).
---- @return ResourceMonitor Единственный экземпляр.
+--- @param [name] string|nil Имя монитора (используется только при первом вызове).
+--- @return ResourceMonitor result Единственный экземпляр.
 function ResourceMonitor.getInstance(name)
     return ResourceMonitor:new(name)
 end
@@ -121,42 +123,49 @@ end
 --- Вспомогательная функция для безопасного выполнения команд.
 --- @param cmd string Команда для выполнения.
 --- @param default any Значение по умолчанию при ошибке.
---- @return string Результат выполнения команды или значение по умолчанию.
+--- @return boolean success Статус выполнения
+--- @return string result Результат выполнения команды или значение по умолчанию.
 local function safe_command(cmd, default)
     local f = io_popen(cmd .. " 2>/dev/null", "r")
     if not f then
         log_error(COMPONENT_NAME, "Не удалось выполнить команду: %s.", cmd)
-        return default
+        return false, default
     end
     
     local result = f:read("*a")
     f:close()
     
-    return result and result:gsub("%s+$", "") or default
+    return true, result and result:gsub("%s+$", "") or default
 end
 
 --- Получает текущее время в миллисекундах.
---- @return number time_ms Время в мс.
+--- @return number result Время в мс.
 local function get_current_time_ms()
     return os_time() * 1000
 end
 
 --- Собирает данные о системных ресурсах.
---- @return table system_data Таблица с данными о системных ресурсах.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными о системных ресурсах.
 function ResourceMonitor:collect_system_data()
     -- Проверяем кэш
     local now = os_time()
     if self.cache.system and (now - self.cache.last_update) < self.cache_interval then
-        return self.cache.system
+        return true, self.cache.system
     end
     
+    local _, cpu = self:get_system_cpu_usage()
+    local _, memory = self:get_system_memory_usage()
+    local _, disk = self:get_disk_usage()
+    local _, network = self:get_network_usage()
+
     local data = {
         timestamp = os_date("%Y-%m-%d %H:%M:%S"),
         system = {
-            cpu = self:get_system_cpu_usage(),
-            memory = self:get_system_memory_usage(),
-            disk = self:get_disk_usage(),
-            network = self:get_network_usage()
+            cpu = cpu,
+            memory = memory,
+            disk = disk,
+            network = network
         }
     }
     
@@ -166,24 +175,28 @@ function ResourceMonitor:collect_system_data()
     self.stats.collections = self.stats.collections + 1
     
     log_debug(COMPONENT_NAME, "Собраны системные данные для '%s'.", self.name)
-    return data
+    return true, data
 end
 
 --- Собирает данные о ресурсах текущего процесса.
---- @return table process_data Таблица с данными о ресурсах процесса.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными о ресурсах процесса.
 function ResourceMonitor:collect_process_data()
     -- Проверяем кэш
     local now = os_time()
     if self.cache.process and (now - self.cache.last_update) < self.cache_interval then
-        return self.cache.process
+        return true, self.cache.process
     end
     
+    local _, cpu = self:get_process_cpu_usage()
+    local _, memory = self:get_process_memory_usage()
+
     local data = {
         timestamp = os_date("%Y-%m-%d %H:%M:%S"),
         process = {
             pid = self.pid,
-            cpu = self:get_process_cpu_usage(),
-            memory = self:get_process_memory_usage()
+            cpu = cpu,
+            memory = memory
         }
     }
     
@@ -193,22 +206,24 @@ function ResourceMonitor:collect_process_data()
     self.stats.collections = self.stats.collections + 1
     
     log_debug(COMPONENT_NAME, "Собраны данные процесса для PID '%s'.", tostring(self.pid))
-    return data
+    return true, data
 end
 
 --- Получает использование CPU системы.
---- @return table cpu_data Таблица с данными об использовании CPU системы.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными об использовании CPU системы.
 function ResourceMonitor:get_system_cpu_usage()
     local cpu_data = {usage_percent = 0, cores = 1}
     
     -- Получаем количество ядер
-    local cores = tonumber(safe_command("nproc", "1")) or 1
+    local _, nproc_res = safe_command("nproc", "1")
+    local cores = tonumber(nproc_res) or 1
     cpu_data.cores = cores
     
     -- Чтение /proc/stat
-    local stat_content = safe_command("grep '^cpu ' /proc/stat", "")
+    local _, stat_content = safe_command("grep '^cpu ' /proc/stat", "")
     if stat_content == "" then
-        return cpu_data
+        return true, cpu_data
     end
     
     local user, nice, system, idle, iowait, irq, softirq, steal = 
@@ -244,17 +259,18 @@ function ResourceMonitor:get_system_cpu_usage()
     self.last_system_cpu_total_time = current_total
     self.last_system_cpu_active_time = current_active
     
-    return cpu_data
+    return true, cpu_data
 end
 
 --- Получает использование памяти системы.
---- @return table mem_data Таблица с данными об использовании памяти системы.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными об использовании памяти системы.
 function ResourceMonitor:get_system_memory_usage()
     local mem_data = {total_mb = 0, used_mb = 0, usage_percent = 0}
     
-    local meminfo = safe_command("free -m | awk 'NR==2{print $2,$3,$4}'", "")
+    local _, meminfo = safe_command("free -m | awk 'NR==2{print $2,$3,$4}'", "")
     if meminfo == "" then
-        return mem_data
+        return true, mem_data
     end
     
     local total_str, used_str, free_str = meminfo:match("(%d+)%s+(%d+)%s+(%d+)")
@@ -268,21 +284,22 @@ function ResourceMonitor:get_system_memory_usage()
         mem_data.usage_percent = (used / total) * 100
     end
     
-    return mem_data
+    return true, mem_data
 end
 
 --- Получает использование CPU текущего процесса.
---- @return table cpu_data Таблица с данными об использовании CPU процесса.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными об использовании CPU процесса.
 function ResourceMonitor:get_process_cpu_usage()
     local cpu_data = {usage_percent = 0}
     if self.pid <= 0 then 
-        return cpu_data 
+        return true, cpu_data 
     end
 
     -- Чтение /proc/pid/stat без внешних команд
-    local f = io.open(string.format("/proc/%d/stat", self.pid), "r")
+    local f = io_open(string_format("/proc/%d/stat", self.pid), "r")
     if not f then 
-        return cpu_data 
+        return true, cpu_data 
     end
 
     local stat_content = f:read("*all")
@@ -333,21 +350,22 @@ function ResourceMonitor:get_process_cpu_usage()
     self.last_process_cpu_time = current_process_time
     self.last_system_cpu_time_at_process_check = current_system_time
     
-    return cpu_data
+    return true, cpu_data
 end
 
 --- Получает использование памяти текущего процесса.
---- @return table mem_data Таблица с данными об использовании памяти процесса.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными об использовании памяти процесса.
 function ResourceMonitor:get_process_memory_usage()
     local mem_data = {rss_mb = 0, rss_kb = 0}
     
     if self.pid <= 0 then
-        return mem_data
+        return true, mem_data
     end
     
-    local status_content = safe_command(string_format("cat /proc/%d/status 2>/dev/null", self.pid), "")
+    local _, status_content = safe_command(string_format("cat /proc/%d/status 2>/dev/null", self.pid), "")
     if status_content == "" then
-        return mem_data
+        return true, mem_data
     end
     
     -- Ищем VmRSS
@@ -363,17 +381,18 @@ function ResourceMonitor:get_process_memory_usage()
         end
     end
     
-    return mem_data
+    return true, mem_data
 end
 
 --- Получает использование диска.
---- @return table disk_data Таблица с данными об использовании диска.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными об использовании диска.
 function ResourceMonitor:get_disk_usage()
     local disk_data = {usage_percent = 0, total_gb = 0, used_gb = 0, free_gb = 0}
     
-    local df_output = safe_command("df -B1 / | awk 'NR==2{print $2,$3,$4,$5}'", "")
+    local _, df_output = safe_command("df -B1 / | awk 'NR==2{print $2,$3,$4,$5}'", "")
     if df_output == "" then
-        return disk_data
+        return true, disk_data
     end
     
     local total_bytes_str, used_bytes_str, free_bytes_str, percent_str = 
@@ -391,11 +410,12 @@ function ResourceMonitor:get_disk_usage()
         disk_data.free_gb = free_bytes / (1024^3)
     end
     
-    return disk_data
+    return true, disk_data
 end
 
 --- Получает сетевую активность.
---- @return table net_data Таблица с данными о сетевой активности.
+--- @return boolean success Статус выполнения
+--- @return table result Таблица с данными о сетевой активности.
 function ResourceMonitor:get_network_usage()
     local net_data = {
         interfaces = {},
@@ -411,10 +431,10 @@ function ResourceMonitor:get_network_usage()
         delta_time = 1
     end
     
-    local netdev_content = safe_command("cat /proc/net/dev", "")
+    local _, netdev_content = safe_command("cat /proc/net/dev", "")
     if netdev_content == "" then
         self.last_network_check_time = current_time
-        return net_data
+        return true, net_data
     end
     
     for line in netdev_content:gmatch("[^\r\n]+") do
@@ -481,20 +501,22 @@ function ResourceMonitor:get_network_usage()
     
     self.last_network_check_time = current_time
     
-    return net_data
+    return true, net_data
 end
 
 --- Сбрасывает кэш (принудительное обновление данных при следующем вызове).
+--- @return boolean success Статус выполнения
 function ResourceMonitor:clear_cache()
     self.cache.system = nil
     self.cache.process = nil
     self.cache.last_update = 0
     log_debug(COMPONENT_NAME, "Кэш очищен для '%s'", self.name)
+    return true
 end
 
 --- Устанавливает интервал кэширования.
 --- @param seconds number Интервал в секундах.
---- @return boolean success Успешность установки.
+--- @return boolean success Статус выполнения
 function ResourceMonitor:set_cache_interval(seconds)
     if type(seconds) == "number" and seconds >= 0 then
         self.cache_interval = seconds
@@ -505,7 +527,7 @@ function ResourceMonitor:set_cache_interval(seconds)
 end
 
 --- Возвращает статистику использования монитора.
---- @return table stats Статистика.
+--- @return table result Статистика.
 function ResourceMonitor:get_stats()
     return {
         name = self.name,
@@ -518,10 +540,12 @@ function ResourceMonitor:get_stats()
 end
 
 --- Сбрасывает статистику монитора.
+--- @return boolean success Статус выполнения
 function ResourceMonitor:reset_stats()
     self.stats.collections = 0
     self.stats.last_reset = os_time()
     log_debug(COMPONENT_NAME, "Статистика сброшена для '%s'", self.name)
+    return true
 end
 
 return ResourceMonitor

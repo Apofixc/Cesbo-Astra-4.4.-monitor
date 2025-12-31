@@ -29,6 +29,7 @@ local COMPONENT_NAME = "HTTPServer"
 --- Запускает HTTP-сервер мониторинга.
 --- @param addr string IP-адрес, на котором будет слушать сервер.
 --- @param port number Порт, на котором будет слушать сервер.
+--- @return boolean success Статус выполнения
 function server_start(addr, port)
     log_info(COMPONENT_NAME, "Тип system_routes: %s.", type(system_routes))
     http_server({
@@ -61,4 +62,5 @@ function server_start(addr, port)
         }
     })
     log_info(COMPONENT_NAME, "Сервер запущен на %s:%d.", addr, port)
+    return true
 end

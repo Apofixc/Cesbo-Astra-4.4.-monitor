@@ -49,6 +49,7 @@ local send_response = http_helpers and http_helpers.send_response or nil
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local astra_reload = function(server, client, request)
     if not request or not check_auth or not send_response or not validate_request or not get_param or not validate_delay then
         return nil
@@ -78,6 +79,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local kill_astra = function(server, client, request)
     if not request or not check_auth or not send_response or not validate_request or not get_param or not validate_delay then
         return nil
@@ -104,6 +106,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local health = function (server, client, request)
     if not request or not check_auth or not send_response then
         return nil
@@ -162,6 +165,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_system_resources = function (server, client, request)
     if not request or not check_auth or not send_response then
         return nil
@@ -199,6 +203,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_monitor_stats = function (server, client, request)
     if not request or not check_auth or not send_response then
         return nil
@@ -241,6 +246,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local clear_monitor_cache = function (server, client, request)
     if not request or not check_auth or not send_response then
         return nil
@@ -272,6 +278,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local set_monitor_cache_interval = function (server, client, request)
     if not request or not check_auth or not send_response or not validate_request or not get_param then
         return nil

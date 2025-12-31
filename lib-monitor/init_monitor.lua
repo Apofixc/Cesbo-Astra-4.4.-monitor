@@ -36,7 +36,7 @@ local found_astra_deps = {}
 local all_astra_deps_found = true
 
 for _, dep_path in ipairs(global_dependencies_to_check) do
-    local obj, success = ModuleManager.check_nested_dependency(dep_path)
+    local success, obj = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
         all_astra_deps_found = false
@@ -89,4 +89,24 @@ if not ModuleManager.load_modules() then
     -- Logger еще не загружен, используем print
     print("[ERROR] Не удалось загрузить модули")
     return false
+end
+
+-- Экспорт функций в глобальную область видимости для совместимости
+local success_ch, channel_module = ModuleManager.get_module("channel")
+if success_ch and channel_module then
+    _G.make_stream = channel_module.make_stream
+    _G.kill_stream = channel_module.kill_stream
+    _G.make_monitor = channel_module.make_monitor
+    _G.kill_monitor = channel_module.kill_monitor
+    _G.find_monitor = channel_module.find_monitor
+    _G.get_list_monitor = channel_module.get_list_monitor
+    _G.update_monitor_parameters = channel_module.update_monitor_parameters
+end
+
+local success_ad, adapter_module = ModuleManager.get_module("adapter")
+if success_ad and adapter_module then
+    _G.dvb_tuner_monitor = adapter_module.dvb_tuner_monitor
+    _G.find_dvb_conf = adapter_module.find_dvb_conf
+    _G.get_all_dvb_monitors = adapter_module.get_all_dvb_monitors
+    _G.update_dvb_monitor_parameters = adapter_module.update_dvb_monitor_parameters
 end

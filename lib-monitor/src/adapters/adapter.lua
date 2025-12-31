@@ -35,7 +35,7 @@ local dvb_monitor_manager = DvbMonitorDispatcher:new()
 --- Возвращает список всех активных DVB-мониторов.
 --- Эта функция запрашивает у `DvbMonitorManager` список всех зарегистрированных
 --- и активных DVB-мониторов.
---- @return table dvb_monitors Таблица со всеми объектами DVB-мониторов.
+--- @return table result Таблица со всеми объектами DVB-мониторов.
 function get_all_dvb_monitors()
     log_info(COMPONENT_NAME, "Получение всех DVB-мониторов.")
     return dvb_monitor_manager:get_all_monitors()
@@ -45,18 +45,18 @@ end
 --- Создает новый DVB-монитор на основе предоставленной конфигурации и регистрирует его
 --- в `DvbMonitorManager`.
 --- @param conf table Таблица конфигурации для DVB-тюнера. Ожидается поле `name_adapter` (string).
---- @return any|nil instance Экземпляр DVB-тюнера, если инициализация прошла успешно
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
 function dvb_tuner_monitor(conf)
     if not conf or type(conf) ~= 'table' then
-        local error_msg = "Предоставлена неверная конфигурация. Ожидалась таблица, получено: %s.", type(conf)
+        local error_msg = string.format("Предоставлена неверная конфигурация. Ожидалась таблица, получено: %s.", type(conf))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
     if not conf.name_adapter or type(conf.name_adapter) ~= 'string' then
         local error_msg = "В конфигурации отсутствует 'name_adapter' или это не строка."
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     log_info(COMPONENT_NAME, "Попытка создать и зарегистрировать DVB-монитор '%s'.", conf.name_adapter)
@@ -66,29 +66,29 @@ end
 --- Находит конфигурацию DVB-тюнера по имени адаптера.
 --- Ищет зарегистрированный DVB-монитор по его имени адаптера.
 --- @param name_adapter string Имя адаптера, по которому осуществляется поиск.
---- @return any|nil instance Экземпляр DVB-тюнера, если найден
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return any|string result Экземпляр DVB-тюнера или сообщение об ошибке
 function find_dvb_conf(name_adapter)
     if not name_adapter or type(name_adapter) ~= 'string' then
-        local error_msg = "Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter)
+        local error_msg = string.format("Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
-    local monitor = dvb_monitor_manager:get_monitor(name_adapter)
+    local monitor, get_err = dvb_monitor_manager:get_monitor(name_adapter)
     if monitor then
-        return monitor.instance, nil
+        return true, monitor.instance
     end
-    local error_msg = "Конфигурация DVB для адаптера '%s' не найдена.", name_adapter
+    local error_msg = string.format("Конфигурация DVB для адаптера '%s' не найдена.", name_adapter)
     log_info(COMPONENT_NAME, error_msg) -- Changed to log_info as it's not necessarily an error
-    return nil, error_msg
+    return false, error_msg
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
 --- Обновляет параметры существующего DVB-монитора, идентифицируемого по имени адаптера.
 --- @param name_adapter string Имя адаптера, параметры которого нужно обновить.
 --- @param params table Таблица с новыми параметрами для DVB-монитора.
---- @return boolean success true, если параметры успешно обновлены
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function update_dvb_monitor_parameters(name_adapter, params)
     if not name_adapter or type(name_adapter) ~= 'string' then
         local error_msg = "Неверный 'name_adapter': ожидалась строка, получено: %s.", type(name_adapter)

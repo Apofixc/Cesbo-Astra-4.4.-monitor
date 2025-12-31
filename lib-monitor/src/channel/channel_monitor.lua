@@ -86,11 +86,12 @@ local channel_monitor_method_comparison = {
     -- @param number rate Допустимая погрешность для сравнения битрейта.
     -- @return boolean true, если обнаружено существенное изменение; false иначе.
     [3] = function(prev, curr, rate)
+        local success_ratio, res_ratio = ratio(prev.bitrate, curr.total.bitrate)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
                prev.cc_errors > 0 or
                prev.pes_errors > 0 or
-               ratio(prev.bitrate, curr.total.bitrate) > rate
+               (success_ratio and res_ratio > rate)
     end,
 
     --- Метод 4: Сравнение по изменению доступности канала.
@@ -124,18 +125,20 @@ ChannelMonitor.__index = ChannelMonitor
 --- @param self ChannelMonitor Объект ChannelMonitor.
 --- @param param_name string Имя параметра (например, "channel_rate").
 --- @param value any Значение для установки.
---- @return boolean success true, если параметр успешно установлен
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @return boolean success Статус выполнения
+--- @return any|string result Валидное значение или сообщение об ошибке
 local function set_config_param(self, param_name, value)
-    local updated_value, err = validate_monitor_param(param_name, value)
-    if err then
+    local success, result = validate_monitor_param(param_name, value)
+    if not success then
+        local err = result
         log_error(COMPONENT_NAME, "Failed to validate '%s' parameter: %s", param_name, err)
-        return nil, err
+        return false, err
     end
+    local updated_value = result
     -- Извлекаем фактическое имя параметра из "channel_param_name"
     local config_key = param_name:gsub("channel_", "")
     self.config[config_key] = updated_value
-    return true
+    return true, updated_value
 end
 
 --- Создает новый экземпляр ChannelMonitor.
@@ -143,8 +146,8 @@ end
 --- устанавливает значения по умолчанию для отсутствующих параметров конфигурации
 --- и подготавливает внутренние состояния для мониторинга.
 --- @param config table Таблица конфигурации, содержащая параметры для монитора (например, `rate`, `time_check`, `analyze`, `method_comparison`).
---- @param channel_data table|string|nil [channel_data] Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
---- @return ChannelMonitor Новый объект ChannelMonitor.
+--- @param [channel_data] table|string|nil Таблица с данными о канале (например, `name`, `active_input_id`) или просто имя канала в виде строки.
+--- @return ChannelMonitor result Новый объект ChannelMonitor.
 function ChannelMonitor:new(config, channel_data)
     local self = setmetatable({}, ChannelMonitor)
     self.config = config
@@ -154,11 +157,9 @@ function ChannelMonitor:new(config, channel_data)
     for param_name, schema in pairs(MonitorConfig.ValidationSchema) do
         if param_name:find("channel_", 1, true) then
             local config_key = param_name:gsub("channel_", "")
-            if config[config_key] ~= nil then
-                local success, err = set_config_param(self, param_name, config[config_key])
-                if not success then
-                    log_error(COMPONENT_NAME, "Failed to set initial config parameter '%s': %s", param_name, err)
-                end
+            local success, err = set_config_param(self, param_name, config[config_key])
+            if not success then
+                log_error(COMPONENT_NAME, "Failed to set initial config parameter '%s': %s", param_name, err)
             end
         end
     end
@@ -216,14 +217,14 @@ end
 --- Инициализирует функцию `analyze` Astra с колбэком для обработки входящих данных
 --- потока (ошибки, PSI, общие данные). Обновляет внутреннее состояние монитора
 --- и отправляет статусы при обнаружении изменений согласно выбранному методу сравнения.
---- @return any|nil monitor_instance Экземпляр монитора Astra, если успешно запущен
---- @return string|nil error_message Сообщение об ошибке в случае ошибки
+--- @return boolean success Статус выполнения
+--- @return any|string result Экземпляр монитора Astra или сообщение об ошибке
 function ChannelMonitor:start()
     local comparison_method = channel_monitor_method_comparison[self.config.method_comparison]
     if not comparison_method then
-        local error_msg = "Указан недопустимый метод сравнения: %s.", tostring(self.config.method_comparison)
+        local error_msg = string.format("Указан недопустимый метод сравнения: %s.", tostring(self.config.method_comparison))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     local self_ref = self -- Сохраняем ссылку на self для использования в замыкании
@@ -281,48 +282,48 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then 
-        local error_msg = "analyze вернул nil для канала '%s'. Не удалось запустить монитор.", self.name
+        local error_msg = string.format("analyze вернул nil для канала '%s'. Не удалось запустить монитор.", self.name)
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     log_info(COMPONENT_NAME, "Монитор запущен для канала: %s.", self.name)
-    return self.monitor_instance, nil
+    return true, self.monitor_instance
 end
 
 --- Обновляет параметры конфигурации монитора канала.
 --- Проверяет и применяет новые значения для `rate`, `time_check`, `analyze` и `method_comparison`,
 --- если они предоставлены и валидны.
 --- @param params table Таблица, содержащая новые параметры для обновления.
---- @return boolean success true, если параметры успешно обновлены
---- @return string|nil error_message Сообщение об ошибке
+--- @return boolean success Статус выполнения
+--- @return string|nil result Сообщение об ошибке или nil
 function ChannelMonitor:update_parameters(params)
     if type(params) ~= 'table' then
-        local error_msg = "Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params)
+        local error_msg = string.format("Неверные параметры для update_parameters: ожидалась таблица, получено: %s.", type(params))
         log_error(COMPONENT_NAME, error_msg)
-        return nil, error_msg
+        return false, error_msg
     end
 
     local success, err
     if params.rate ~= nil then
         success, err = set_config_param(self, "channel_rate", params.rate)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
     if params.time_check ~= nil then
         success, err = set_config_param(self, "channel_time_check", params.time_check)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
     if params.analyze ~= nil then
         success, err = set_config_param(self, "channel_analyze", params.analyze)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
     if params.method_comparison ~= nil then
         success, err = set_config_param(self, "channel_method_comparison", params.method_comparison)
-        if not success then return nil, err end
+        if not success then return false, err end
     end
 
     log_info(COMPONENT_NAME, "Параметры успешно обновлены для монитора: %s.", self.name)
-    return true, nil
+    return true
 end
 
 --- Отправляет текущий статус канала.
@@ -359,6 +360,7 @@ end
 --- Останавливает и очищает ресурсы, связанные с монитором канала.
 -- Если существует `input_instance`, он будет остановлен.
 -- Сбрасывает все внутренние ссылки для освобождения памяти.
+--- @return boolean success Статус выполнения
 function ChannelMonitor:kill()
     if self.monitor_instance then
         -- kill_input - это глобальная функция Astra, используемая для остановки экземпляра монитора
@@ -373,6 +375,7 @@ function ChannelMonitor:kill()
     self.json_status_cache = nil
     self.status = nil -- Очищаем статус
     log_info(COMPONENT_NAME, "Монитор остановлен для канала: %s.", self.name)
+    return true
 end
 
 --- Возвращает PSI-data.

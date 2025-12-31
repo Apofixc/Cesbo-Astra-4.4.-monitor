@@ -52,6 +52,7 @@ local shallow_table_copy = Utils.shallow_table_copy
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local kill_stream = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -86,6 +87,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local kill_channel = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -131,6 +133,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local kill_monitor = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -167,6 +170,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local update_channel_monitor = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -223,6 +227,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_channels = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -263,6 +268,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_channel_monitors = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -298,6 +304,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_channel_monitor_data = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
@@ -340,6 +347,7 @@ end
 --- @param server table Объект HTTP-сервера.
 --- @param client table Объект клиента.
 --- @param request table Объект HTTP-запроса.
+--- @return boolean success Статус выполнения
 local get_channel_psi = function(server, client, request)
     if not request then 
         log_error(COMPONENT_NAME, "Запрос равен nil.")
