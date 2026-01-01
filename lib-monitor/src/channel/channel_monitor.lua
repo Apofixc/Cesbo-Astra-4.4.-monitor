@@ -17,6 +17,7 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
+local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
 local FORCE_SEND_INTERVAL = 300
 
 --- @class ChannelMonitor
@@ -182,7 +183,7 @@ function ChannelMonitor:get_cached_source()
     if active_id ~= self.last_active_id then
         self.last_active_id = active_id
         local input_index = active_id > 0 and active_id or 1
-        self.cached_source = self.stream_json[input_index] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+        self.cached_source = self.stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
     end
     return self.cached_source
 end
