@@ -46,7 +46,6 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field json_status_cache string|nil Кэш последнего отправленного JSON
 --- @field last_active_id number|nil ID последнего активного входа
 --- @field cached_source table|nil Кэшированные данные текущего источника
---- @field private pid_desc_cache table|nil Кэш описаний PID
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -96,7 +95,7 @@ end
 
 --- Создает новый экземпляр ChannelMonitor
 --- @param config table Конфигурация монитора
---- @param channel_data table|nil Данные канала (необязательно)
+--- @param [channel_data] table|nil Данные канала (необязательно)
 --- @return boolean success
 --- @return ChannelMonitor|nil result
 function ChannelMonitor.new(config, channel_data)
@@ -145,7 +144,6 @@ function ChannelMonitor.new(config, channel_data)
     }
     self.psi_cache = {}
     self.analyze_stats = {}
-    self.pid_desc_cache = {}
 
     return true, self
 end
@@ -238,13 +236,34 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
+    if not data or not data.psi then return end
     self.psi_cache[data.psi] = data
+
+    if data.psi == "PMT" and data.streams then
+        for _, stream in ipairs(data.streams) do
+            local pid = stream.pid
+            if pid then
+                local type_name = stream.type_name or "UNKNOWN"
+                local stats = self.analyze_stats[pid]
+                if not stats then
+                    self.analyze_stats[pid] = {
+                        type = type_name,
+                        cc = 0,
+                        pes = 0,
+                        sc = 0
+                    }
+                else
+                    stats.type = type_name
+                end
+            end
+        end
+    end
 end
 
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self.config.analyze then return end
+    if not self.config or not self.config.analyze or not data.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -257,7 +276,7 @@ function ChannelMonitor:process_analyze_data(data)
                 local stats = self.analyze_stats[pid]
                 if not stats then
                     stats = {
-                        type = self:get_pid_description(pid),
+                        type = "UNKNOWN",
                         cc = 0,
                         pes = 0,
                         sc = 0
@@ -310,7 +329,11 @@ function ChannelMonitor:update_status_and_publish(data)
         self.json_status_cache = current_json
     end
 
-    -- Сброс данных
+    -- Обновление состояния для следующего сравнения
+    self.status.ready = data.on_air
+    self.status.scrambled = data.total.scrambled
+    self.status.bitrate = data.total.bitrate or 0
+    -- Сброс счетчиков ошибок
     self.status.cc_errors = 0
     self.status.pes_errors = 0
 end
@@ -342,32 +365,6 @@ function ChannelMonitor:get_json_status_cache()
     return self.json_status_cache
 end
 
---- Возвращает описание назначения PID
---- @param pid number Идентификатор PID
---- @return string description Описание PID
-function ChannelMonitor:get_pid_description(pid)
-    self.pid_desc_cache = self.pid_desc_cache or {}
-    if self.pid_desc_cache[pid] then
-        return self.pid_desc_cache[pid]
-    end
-
-    local pmt = self.psi_cache["PMT"]
-    if not pmt and self.channel_data and self.channel_data.get_psi then
-        pmt = self.channel_data:get_psi("PMT")
-    end
-
-    if pmt and pmt.streams then
-        for _, stream in ipairs(pmt.streams) do
-            if stream.pid == pid then
-                local desc = stream.type_name or "UNKNOWN"
-                self.pid_desc_cache[pid] = desc
-                return desc
-            end
-        end
-    end
-    return "UNKNOWN"
-end
-
 --- Останавливает мониторинг и очищает ресурсы
 --- @return boolean success
 function ChannelMonitor:destroy()
@@ -381,7 +378,6 @@ function ChannelMonitor:destroy()
     -- Очистка кэшей и данных
     self.psi_cache = nil
     self.analyze_stats = nil
-    self.pid_desc_cache = nil
     self.status = nil
     self.config = nil
     self.channel_data = nil
