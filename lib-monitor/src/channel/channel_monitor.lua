@@ -144,21 +144,6 @@ function ChannelMonitor.new(config, channel_data)
     self._psi_cache = {}
     self._analyze_stats = {}
 
-    -- Предзагрузка типов PID из channel_data, если они там есть
-    if self._channel_data and self._channel_data.get_psi then
-        local pmt = self._channel_data:get_psi("PMT")
-        if pmt and pmt.streams then
-            for _, stream in ipairs(pmt.streams) do
-                if stream.pid then
-                    self._analyze_stats[stream.pid] = {
-                        type = stream.type_name or "UNKNOWN",
-                        cc = 0, pes = 0, sc = 0
-                    }
-                end
-            end
-        end
-    end
-
     return true, self
 end
 
