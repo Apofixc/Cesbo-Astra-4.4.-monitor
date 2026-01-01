@@ -162,12 +162,6 @@ function kill_monitor(name)
     -- Сохраняем конфигурацию перед удалением
     local config = monitor._config
 
-    -- Очистка специфичных для Channel ресурсов перед удалением из хранилища
-    if monitor.input_instance then
-        kill_input(monitor.input_instance)
-        monitor.input_instance = nil
-    end
-
     -- ChannelStorage.unregister сам вызовет monitor:stop()
     local success = ChannelStorage.unregister(name)
     if success then

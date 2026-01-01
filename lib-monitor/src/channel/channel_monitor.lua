@@ -13,6 +13,7 @@ local Utils = ModuleManager.get_module("utils")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
+local kill_input = ModuleManager.get_global_dependency("kill_input")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
@@ -34,6 +35,8 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @class ChannelMonitor
 --- @field name string Технический идентификатор монитора
 --- @field display_name string Отображаемое имя монитора
+--- @field input_instance any|nil Экземпляр входного потока (для IP мониторов)
+--- @field private _active boolean Флаг активности монитора
 --- @field private _config table Конфигурация монитора
 --- @field private _channel_data table|nil Данные канала (Astra)
 --- @field private _stream_json table Данные об источниках потока
@@ -146,6 +149,7 @@ function ChannelMonitor.new(config, channel_data)
         scrambled = false,
     }
     self._analyze_stats = {}
+    self._active = true
 
     return true, self
 end
@@ -170,7 +174,7 @@ function ChannelMonitor:start()
         upstream = stream_data,
         name = "_" .. self.name,
         callback = function(data)
-            if not data then return end
+            if not self._active or not data then return end
 
             if data.error then
                 self:process_error_data(data)
@@ -384,11 +388,13 @@ end
 --- @return boolean success Статус выполнения
 --- @return nil result
 function ChannelMonitor:stop()
-    if self._monitor_instance then
-        if type(self._monitor_instance) == "table" and self._monitor_instance.stop then
-            self._monitor_instance:stop()
-        end
-        self._monitor_instance = nil
+    self._active = false
+
+    self._monitor_instance = nil
+
+    if self.input_instance then
+        kill_input(self.input_instance)
+        self.input_instance = nil
     end
 
     -- Очистка кэшей и данных
