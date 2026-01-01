@@ -28,7 +28,8 @@ local global_dependencies_to_check = {
     "string.split",
     "timer",
     "utils.hostname",
-    "log"
+    "log",
+    "dvb_input_instance_list"
 }
 
 local found_astra_deps = {}

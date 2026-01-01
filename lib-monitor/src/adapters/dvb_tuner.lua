@@ -15,6 +15,7 @@ local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
+local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
@@ -231,7 +232,7 @@ function DvbTuner:stop()
     if self.instance then
         -- 1. Очистка внутреннего списка Astra (dvb_input_instance_list)
         -- Это критично для предотвращения утечек памяти и корректного переинициализации
-        local dvb_input_instance_list = _G.dvb_input_instance_list
+        local dvb_input_instance_list = dvb_input_instance_list
         if type(dvb_input_instance_list) == "table" and self.instance.__options then
             local opts = self.instance.__options
             if opts.adapter ~= nil and opts.device ~= nil then
