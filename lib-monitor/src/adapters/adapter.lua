@@ -1,4 +1,5 @@
 -- 1. Стандартные Lua функции
+local string_format = string.format
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()
@@ -44,7 +45,7 @@ function dvb_tuner_monitor(conf)
         _G[conf.name_adapter] = instance
         return true
     else
-        Logger.error(COMPONENT_NAME, string.format("dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter))
+        Logger.error(COMPONENT_NAME, string_format("dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter))
         return false
     end
 end
@@ -71,7 +72,7 @@ function update_dvb_monitor_parameters(name_adapter, params)
         local success = tuner:update_parameters(params)
         return success, (not success and "Failed to update parameters" or nil)
     end
-    local err = string.format("update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
+    local err = string_format("update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
     Logger.error(COMPONENT_NAME, err)
     return false, err
 end

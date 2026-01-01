@@ -83,12 +83,23 @@ end
 
 -- Инициализация объектов из загруженных модулей
 local Logger = ModuleManager.get_module("logger")
+local Channel = ModuleManager.get_module("channel")
+local Adapter = ModuleManager.get_module("adapter")
 
-if not success_load then
-    if Logger then
-        Logger.error("Init", "Failed to load modules: %s", tostring(load_error))
-    end
-    return false
+-- Экспорт основных функций в глобальную область видимости для обратной совместимости
+if Channel then
+    _G.make_stream = Channel.make_stream
+    _G.kill_stream = Channel.kill_stream
+    _G.make_monitor = Channel.make_monitor
+    _G.kill_monitor = Channel.kill_monitor
+end
+
+if Adapter then
+    _G.dvb_tuner_monitor = Adapter.dvb_tuner_monitor
+end
+
+if Logger then
+    Logger.info("Init", "Library lib-monitor successfully initialized")
 end
 
 

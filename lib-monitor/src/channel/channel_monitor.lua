@@ -1,5 +1,6 @@
 -- 1. Стандартные Lua функции
 local ipairs = ipairs
+local json_encode = json.encode
 local pairs = pairs
 local setmetatable = setmetatable
 local tostring = tostring
@@ -12,7 +13,6 @@ local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
-local json_encode = ModuleManager.get_global_dependency("json.encode")
 local kill_input = ModuleManager.get_global_dependency("kill_input")
 
 -- 4. Константы и конфигурации
@@ -249,7 +249,7 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    if not data or not data.psi then return end
+    if not self._active or not data or not data.psi or not self._psi_hash_cache then return end
 
     -- Хэширование PSI данных для предотвращения избыточной обработки
     local current_data_json = json_encode(data)
@@ -282,7 +282,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._config or not self._config.analyze or not data.analyze then return end
+    if not self._active or not self._config or not self._config.analyze or not data.analyze or not self._analyze_stats then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -314,6 +314,8 @@ end
 --- @param data table Суммарные данные
 --- @param comparison_method function Функция сравнения
 function ChannelMonitor:process_total_data(data, comparison_method)
+    if not self._active or not self._status then return end
+    
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
     status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
@@ -334,6 +336,8 @@ end
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
 function ChannelMonitor:update_status_and_publish(data)
+    if not self._active or not self._status then return end
+    
     local status = table_copy(self:get_status_template())
 
     status.ready = data.on_air
@@ -361,6 +365,7 @@ end
 --- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
 --- @return string|table|nil psi Данные PSI (JSON строка или таблица JSON строк) или nil
 function ChannelMonitor:get_psi(table_name)
+    if not self._psi_hash_cache then return nil end
     if table_name then
         return self._psi_hash_cache[table_name]
     end
@@ -370,7 +375,7 @@ end
 --- Возвращает статистику анализа по PID
 --- @return table stats Статистика по PID
 function ChannelMonitor:get_analyze_stats()
-    return self._analyze_stats
+    return self._analyze_stats or {}
 end
 
 --- Очищает статистику анализа

@@ -15,6 +15,7 @@ local COMPONENT_NAME = "ResourceMonitor"
 local ResourceMonitor = {}
 
 --- Заглушка для мониторинга ресурсов
+--- @return boolean success
 function ResourceMonitor.init()
     Logger.info(COMPONENT_NAME, "ResourceMonitor initialized")
     return true

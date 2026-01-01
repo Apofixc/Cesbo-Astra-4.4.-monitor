@@ -1,7 +1,10 @@
 -- 1. Стандартные Lua функции
-local type = type
 local ipairs = ipairs
+local math_max = math.max
 local setmetatable = setmetatable
+local string_format = string.format
+local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -124,8 +127,7 @@ end
 function DvbTuner:start()
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
-        local err = string.format("start: Invalid comparison method %s", tostring(self.config.method_comparison))
-        Logger.error(COMPONENT_NAME, err)
+        Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self.config.method_comparison)))
         return false, nil
     end
 
@@ -154,7 +156,7 @@ function DvbTuner:start()
             if self.stats.count > 0 then
                 local avg_ber = self.stats.ber_sum / self.stats.count
                 if avg_ber > 0 or self.stats.unc_sum > 0 then
-                    self.status.quality = math.max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
+                    self.status.quality = math_max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
                 else
                     self.status.quality = 100
                 end
@@ -229,10 +231,11 @@ function DvbTuner:stop()
     if self.instance then
         -- 1. Очистка внутреннего списка Astra (dvb_input_instance_list)
         -- Это критично для предотвращения утечек памяти и корректного переинициализации
+        local dvb_input_instance_list = _G.dvb_input_instance_list
         if type(dvb_input_instance_list) == "table" and self.instance.__options then
             local opts = self.instance.__options
             if opts.adapter ~= nil and opts.device ~= nil then
-                local instance_id = string.format("%s.%s", tostring(opts.adapter), tostring(opts.device))
+                local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
                 if dvb_input_instance_list[instance_id] then
                     dvb_input_instance_list[instance_id] = nil
                     Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", self.name_adapter, instance_id)

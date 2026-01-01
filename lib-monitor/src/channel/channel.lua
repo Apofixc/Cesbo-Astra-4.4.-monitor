@@ -11,6 +11,7 @@ local ChannelStorage = ModuleManager.get_module("channel_storage")
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Utils = ModuleManager.get_module("utils")
+local DvbStorage = ModuleManager.get_module("dvb_storage")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local find_channel = ModuleManager.get_global_dependency("find_channel")
@@ -38,8 +39,8 @@ local get_stream = Utils.get_stream_name
 local format_handlers = {
     dvb = function(config)
         local cfg = {format = config.format, addr = config.addr}
-        local adap_conf = Adapter.find_dvb_conf(config.addr)
-        cfg.stream = adap_conf and adap_conf.source or "dvb"
+        local tuner = DvbStorage.find(config.addr)
+        cfg.stream = tuner and tuner.status and tuner.status.source or "dvb"
         return cfg
     end,
     udp = function(config)

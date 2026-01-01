@@ -1,7 +1,8 @@
 -- 1. Стандартные Lua функции
-local type = type
-local tostring = tostring
+local select = select
 local string_format = string.format
+local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local MonitorConfig = ModuleManager.get_module("monitor_config")
