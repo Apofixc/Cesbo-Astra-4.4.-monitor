@@ -1,16 +1,16 @@
 -- 1. Стандартные Lua функции
-local type = type
-local tostring = tostring
-local pairs = pairs
 local ipairs = ipairs
-local table_insert = table.insert
-local math_max = math.max
 local math_abs = math.abs
+local math_max = math.max
+local pairs = pairs
+local table_insert = table.insert
+local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorSettings = ModuleManager.get_module("monitor_settings")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
+local MonitorSettings = ModuleManager.get_module("monitor_settings")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")

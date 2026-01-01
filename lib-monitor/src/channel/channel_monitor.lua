@@ -151,18 +151,19 @@ function ChannelMonitor.new(config, channel_data)
 end
 
 --- Запускает мониторинг
---- @return boolean success
+--- @return boolean success Статус выполнения
+--- @return any|nil result Экземпляр монитора или nil
 function ChannelMonitor:start()
     local comparison_method = COMPARISON_METHODS[self._config.method_comparison]
     if not comparison_method then
         log_error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self.name, tostring(self._config.method_comparison))
-        return false
+        return false, nil
     end
 
     local stream_data = self._upstream:stream()
     if not stream_data then
         log_error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", self.name)
-        return false
+        return false, nil
     end
 
     self._monitor_instance = analyze({
@@ -193,10 +194,10 @@ function ChannelMonitor:start()
 
     if not self._monitor_instance then
         log_error(COMPONENT_NAME, "[%s] start: analyze returned nil", self.name)
-        return false
+        return false, nil
     end
 
-    return true
+    return true, self._monitor_instance
 end
 
 --- Возвращает закэшированные данные об источнике
@@ -380,8 +381,9 @@ function ChannelMonitor:get_json_status_cache()
 end
 
 --- Останавливает мониторинг и очищает ресурсы
---- @return boolean success
-function ChannelMonitor:destroy()
+--- @return boolean success Статус выполнения
+--- @return nil result
+function ChannelMonitor:stop()
     if self._monitor_instance then
         if type(self._monitor_instance) == "table" and self._monitor_instance.stop then
             self._monitor_instance:stop()
@@ -408,16 +410,17 @@ function ChannelMonitor:destroy()
     self._check_timer = nil
     self._last_active_id = nil
 
-    return true
+    return true, nil
 end
 
 --- Обновляет параметры монитора
 --- @param params table Таблица новых параметров
---- @return boolean success
---- @return string|nil error_message
+--- @return boolean success Статус выполнения
+--- @return nil result
 function ChannelMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
-        return false, "params must be a table"
+        log_error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name))
+        return false, nil
     end
 
     local param_map = {
@@ -437,10 +440,11 @@ function ChannelMonitor:update_parameters(params)
     end
 
     if has_errors then
-        return false, "Some parameters failed to update"
+        log_error(COMPONENT_NAME, "[%s] update_parameters: some parameters failed to update", tostring(self.name))
+        return false, nil
     end
 
-    return true
+    return true, nil
 end
 
 return ChannelMonitor

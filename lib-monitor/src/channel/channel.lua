@@ -1,23 +1,23 @@
 -- 1. Стандартные Lua функции
-local type = type
-local tostring = tostring
 local ipairs = ipairs
 local string_lower = string.lower
+local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("logger")
-local Utils = ModuleManager.get_module("utils")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Adapter = ModuleManager.get_module("adapter")
 local ChannelMonitor = ModuleManager.get_module("channel_monitor")
 local ChannelStorage = ModuleManager.get_module("channel_storage")
-local Adapter = ModuleManager.get_module("adapter")
+local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local find_channel = ModuleManager.get_global_dependency("find_channel")
-local make_channel = ModuleManager.get_global_dependency("make_channel")
-local kill_channel = ModuleManager.get_global_dependency("kill_channel")
 local init_input = ModuleManager.get_global_dependency("init_input")
+local kill_channel = ModuleManager.get_global_dependency("kill_channel")
 local kill_input = ModuleManager.get_global_dependency("kill_input")
+local make_channel = ModuleManager.get_global_dependency("make_channel")
 local parse_url = ModuleManager.get_global_dependency("parse_url")
 local string_split = ModuleManager.get_global_dependency("string.split")
 
@@ -85,8 +85,8 @@ end
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
 --- @param channel_data table|string Данные канала или имя
---- @return boolean success
---- @return any monitor_instance или nil
+--- @return boolean success Статус выполнения
+--- @return any|nil result Экземпляр монитора или nil
 function make_monitor(config, channel_data)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
@@ -131,34 +131,50 @@ function make_monitor(config, channel_data)
     local success_new, monitor = ChannelMonitor.new(config, ch_data)
     if not success_new then
         if input_instance then kill_input(input_instance) end
+        Logger.error(COMPONENT_NAME, "make_monitor: failed to create ChannelMonitor instance for '%s'", name)
         return false, nil
     end
 
-    if monitor:start() then
+    local success_start, monitor_instance = monitor:start()
+    if success_start then
         monitor.input_instance = input_instance
         ChannelStorage.register(name, monitor)
-        return true, monitor.monitor_instance
+        Logger.info(COMPONENT_NAME, "Monitor '%s' successfully started", name)
+        return true, monitor_instance
     else
         if input_instance then kill_input(input_instance) end
-        Logger.error(COMPONENT_NAME, "make_monitor: failed to start monitor")
+        Logger.error(COMPONENT_NAME, "make_monitor: failed to start monitor for '%s'", name)
         return false, nil
     end
 end
 
 --- Останавливает монитор
 --- @param name string Имя монитора
---- @return boolean success
+--- @return boolean success Статус выполнения
+--- @return table|nil result Конфигурация монитора для восстановления или nil
 function kill_monitor(name)
     local monitor = ChannelStorage.find(name)
-    if not monitor then return false end
-
-    monitor:stop()
-    if monitor.input_instance then
-        kill_input(monitor.input_instance)
+    if not monitor then
+        Logger.debug(COMPONENT_NAME, "kill_monitor: monitor '%s' not found", tostring(name))
+        return false, nil
     end
 
-    ChannelStorage.unregister(name)
-    return true
+    -- Сохраняем конфигурацию перед удалением
+    local config = monitor._config
+
+    -- Очистка специфичных для Channel ресурсов перед удалением из хранилища
+    if monitor.input_instance then
+        kill_input(monitor.input_instance)
+        monitor.input_instance = nil
+    end
+
+    -- ChannelStorage.unregister сам вызовет monitor:stop()
+    local success = ChannelStorage.unregister(name)
+    if success then
+        Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
+        return true, config
+    end
+    return false, nil
 end
 
 --- Таблица обработчиков типов мониторов
@@ -205,12 +221,12 @@ local monitor_type_handlers = {
 
 --- Создает поток и монитор для него
 --- @param conf table Конфигурация потока
---- @return boolean success
---- @return any monitor_instance или nil
+--- @return boolean success Статус выполнения
+--- @return any|nil result Экземпляр монитора или nil
 function make_stream(conf)
     local channel_data = make_channel(conf)
     if not channel_data then
-        Logger.error(COMPONENT_NAME, "make_stream: make_channel failed")
+        Logger.error(COMPONENT_NAME, "make_stream: make_channel failed for '%s'", tostring(conf.name))
         return false, nil
     end
 
@@ -220,11 +236,13 @@ function make_stream(conf)
     local handler = monitor_type_handlers[monitor_type]
     if not handler then
         Logger.error(COMPONENT_NAME, "make_stream: unknown monitor type '%s' for stream '%s'", monitor_type, conf.name)
+        kill_channel(channel_data)
         return false, nil
     end
 
-    local upstream, monitor_target, err = handler(conf, channel_data)
-    if err then
+    local success_handler, upstream, monitor_target = handler(conf, channel_data)
+    if not success_handler then
+        kill_channel(channel_data)
         return false, nil
     end
 
@@ -240,20 +258,40 @@ function make_stream(conf)
     }
 
     local success, monitor_instance = make_monitor(monitor_config, channel_data)
-    return success, monitor_instance
+    if not success then
+        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s', killing channel", conf.name)
+        kill_channel(channel_data)
+        return false, nil
+    end
+
+    return true, monitor_instance
 end
 
 --- Останавливает поток и монитор
---- @param channel_data table
---- @return boolean success
+--- @param channel_data table Данные канала
+--- @return boolean success Статус выполнения
+--- @return table|nil result Конфигурация потока для восстановления или nil
 function kill_stream(channel_data)
-    if not channel_data or not channel_data.config then return false end
+    if not channel_data or not channel_data.config then
+        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data")
+        return false, nil
+    end
     local name = channel_data.config.name
+    local config = channel_data.config
     
-    kill_monitor(name)
-    kill_channel(channel_data)
+    local success_monitor = kill_monitor(name)
+    if not success_monitor then
+        Logger.warn(COMPONENT_NAME, "kill_stream: monitor '%s' was not active or failed to kill", name)
+    end
+
+    local success_channel = kill_channel(channel_data)
+    if not success_channel then
+        Logger.error(COMPONENT_NAME, "kill_stream: failed to kill channel '%s'", name)
+        return false, nil
+    end
     
-    return true
+    Logger.info(COMPONENT_NAME, "Stream and monitor '%s' successfully killed", name)
+    return true, config
 end
 
 --- Возвращает список мониторов
@@ -267,12 +305,16 @@ function find_monitor(name)
 end
 
 --- Обновляет параметры
+--- @param name string Имя монитора
+--- @param params table Новые параметры
+--- @return boolean success Статус выполнения
+--- @return nil result
 function update_monitor_parameters(name, params)
     local monitor = ChannelStorage.find(name)
     if monitor then
         return monitor:update_parameters(params)
     end
-    return false
+    return false, nil
 end
 
 -- Экспорт в таблицу модуля для ModuleManager
