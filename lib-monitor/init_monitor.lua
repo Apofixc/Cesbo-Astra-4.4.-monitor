@@ -61,12 +61,11 @@ ModuleManager.set_global_dependencies(found_astra_deps)
 
 -- Регистрация модулей
 ModuleManager.register_module("monitor_config", "src.config.monitor_config")
-ModuleManager.register_module("monitor_settings", "src.config.monitor_settings")
 
 ModuleManager.register_module("logger", "src.utils.logger", {"monitor_config"})
-ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_settings"})
+ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_config"})
 
-ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_settings"})
+ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_config"})
 
 ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber"})
 ModuleManager.register_module("dvb_storage", "src.storage.dvb_storage", {"logger"})

@@ -10,7 +10,6 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
-local MonitorSettings = ModuleManager.get_module("monitor_settings")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
@@ -32,7 +31,7 @@ function Utils.get_stream_name(ip_address)
         return false
     end
 
-    local stream_map = MonitorSettings and MonitorSettings.STREAM or {}
+    local stream_map = MonitorConfig and MonitorConfig.STREAM or {}
     return stream_map[ip_address] or ip_address
 end
 
