@@ -258,34 +258,30 @@ function make_stream(conf)
         return false, nil
     end
 
-    return true, monitor_instance
+    return true, channel_data
 end
 
 --- Останавливает поток и монитор
---- @param channel_data table Данные канала
+--- @param channel_data table|string Данные канала или имя
 --- @return boolean success Статус выполнения
 --- @return table|nil result Конфигурация потока для восстановления или nil
 function kill_stream(channel_data)
-    if not channel_data or not channel_data.config then
-        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data")
+    local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
+    if not ch_data or not ch_data.config then
+        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data or channel not found")
         return false, nil
     end
-    local name = channel_data.config.name
-    local config = channel_data.config
+    local name = ch_data.config.name
     
     local success_monitor = kill_monitor(name)
     if not success_monitor then
         Logger.warn(COMPONENT_NAME, "kill_stream: monitor '%s' was not active or failed to kill", name)
     end
 
-    local success_channel = kill_channel(channel_data)
-    if not success_channel then
-        Logger.error(COMPONENT_NAME, "kill_stream: failed to kill channel '%s'", name)
-        return false, nil
-    end
+    kill_channel(ch_data)
     
     Logger.info(COMPONENT_NAME, "Stream and monitor '%s' successfully killed", name)
-    return true, config
+    return true, ch_data.config
 end
 
 --- Возвращает список мониторов
