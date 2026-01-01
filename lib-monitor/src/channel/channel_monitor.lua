@@ -33,6 +33,8 @@ local FORCE_SEND_INTERVAL = 300
 --- @field check_timer number
 --- @field upstream any
 --- @field json_status_cache string|nil
+--- @field last_active_id number|nil
+--- @field cached_source table|nil
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -121,15 +123,9 @@ function ChannelMonitor.new(config, channel_data)
     self.force_timer = 0
     self.check_timer = 0
     self.json_status_cache = nil
+    self.last_active_id = nil
+    self.cached_source = nil
     self.status = {
-        type = "Channel",
-        server = Utils.get_server_name(),
-        channel = self.name,
-        display_name = self.display_name,
-        output = config.monitor,
-        ready = false,
-        scrambled = true,
-        bitrate = 0,
         cc_errors = 0,
         pes_errors = 0
     }
@@ -150,7 +146,25 @@ function ChannelMonitor:start()
     self.monitor_instance = analyze({
         upstream = self.upstream:stream(),
         name = "_" .. self.name,
-        callback = function(data) self:on_data(data, comparison_method) end
+        callback = function(data)
+            if data.error then
+                self:process_error_data(data)
+                return
+            end
+
+            if data.psi then
+                self:process_psi_data(data)
+                return
+            end
+
+            if data.analyze then
+                self:process_analyze_data(data)
+            end
+
+            if data.total then
+                self:process_total_data(data, comparison_method)
+            end
+        end
     })
 
     if not self.monitor_instance then
@@ -161,52 +175,54 @@ function ChannelMonitor:start()
     return true
 end
 
+--- Возвращает закэшированные данные об источнике
+--- @return table
 function ChannelMonitor:get_cached_source()
-    -- local active_id = self.channel_data and self.channel_data.active_input_id or 1
-    -- if active_id ~= self.last_active_id then 
-    --     self.last_active_id = active_id
-    --     local input_index = math_max(1, active_id)
-    --     self.cached_source = self.stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
-    -- end
-    -- return self.cached_source
+    local active_id = self.channel_data and self.channel_data.active_input_id or 1
+    if active_id ~= self.last_active_id then
+        self.last_active_id = active_id
+        local input_index = active_id > 0 and active_id or 1
+        self.cached_source = self.stream_json[input_index] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+    end
+    return self.cached_source
 end
 
---- Обработка данных от analyze
+--- Создает базовый шаблон статуса
+--- @return table
+function ChannelMonitor:create_status_template()
+    local source = self:get_cached_source()
+    return {
+        type = "Channel",
+        server = Utils.get_server_name(),
+        channel = self.name,
+        display_name = self.display_name,
+        output = self.config.monitor,
+        stream = source.stream,
+        format = source.format,
+        addr = source.addr
+    }
+end
+
+--- Обработка ошибок потока
 --- @param data table
---- @param comparison_method function
-function ChannelMonitor:on_data(data, comparison_method)
-    if data.error then
-        local content = Utils.table_copy(self.status)
-        content.error = data.error
-        EventDispatcher.publish("error", json_encode(content))
-        return
-    end
+function ChannelMonitor:process_error_data(data)
+    Logger.error(COMPONENT_NAME, "[%s] Stream error: %s", self.name, tostring(data.error))
 
-    if data.psi then
-        self:process_psi_data(data)
-    end
-
-    if data.analyze then
-        self:process_analyze_data(data)
-    end
-
-    if data.total then
-        self:process_total_data(data, comparison_method)
-    end
+    local content = self:create_status_template()
+    content.error = data.error
+    EventDispatcher.publish("error", json_encode(content))
 end
 
 --- Обработка PSI данных
 --- @param data table
 function ChannelMonitor:process_psi_data(data)
-    if not data.psi then return end
-
     self.psi_cache[data.psi] = data
 end
 
 --- Обработка данных анализа (статистика по PID)
 --- @param data table
 function ChannelMonitor:process_analyze_data(data)
-    if not self.config.analyze or not data.analyze then return end
+    if not self.config.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -255,31 +271,15 @@ end
 --- Обновляет статус и публикует его
 --- @param data table
 function ChannelMonitor:update_status_and_publish(data)
-    local source = self.stream_json[1] or {format = "Unknown", addr = "Unknown", stream = "Unknown"}
-    self.status.stream = source.stream
-    self.status.format = source.format
-    self.status.addr = source.addr
+    local status = self:create_status_template()
 
-    self.status.ready = data.on_air
-    self.status.scrambled = data.total.scrambled
-    self.status.bitrate = data.total.bitrate or 0
+    status.ready = data.on_air
+    status.scrambled = data.total.scrambled
+    status.bitrate = data.total.bitrate or 0
+    status.cc_errors = self.status.cc_errors
+    status.pes_errors = self.status.pes_errors
 
-    if self.config.analyze and next(self.analyze_stats) then
-        local report = {}
-        for pid, stats in pairs(self.analyze_stats) do
-            report[pid] = {
-                type = stats.type,
-                cc = stats.cc,
-                pes = stats.pes,
-                sc = stats.sc
-            }
-        end
-        self.status.analyze = report
-    else
-        self.status.analyze = nil
-    end
-    
-    local current_json = json_encode(self.status)
+    local current_json = json_encode(status)
     if current_json ~= self.json_status_cache then
         EventDispatcher.publish("channels", current_json)
         self.json_status_cache = current_json
@@ -288,7 +288,6 @@ function ChannelMonitor:update_status_and_publish(data)
     -- Сброс данных
     self.status.cc_errors = 0
     self.status.pes_errors = 0
-    self.analyze_stats = {}
 end
 
 --- Возвращает закэшированные PSI данные
@@ -299,6 +298,23 @@ function ChannelMonitor:get_psi(table_name)
         return self.psi_cache[table_name]
     end
     return self.psi_cache
+end
+
+--- Возвращает статистику анализа по PID
+--- @return table
+function ChannelMonitor:get_analyze_stats()
+    return self.analyze_stats
+end
+
+--- Очищает статистику анализа
+function ChannelMonitor:clear_analyze_stats()
+    self.analyze_stats = {}
+end
+
+--- Возвращает кэш последнего отправленного JSON статуса
+--- @return string|nil
+function ChannelMonitor:get_json_status_cache()
+    return self.json_status_cache
 end
 
 --- Возвращает описание назначения PID
