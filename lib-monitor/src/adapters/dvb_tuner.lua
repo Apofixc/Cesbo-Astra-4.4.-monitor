@@ -17,13 +17,14 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local COMPONENT_NAME = "DvbTuner"
 
 --- @class DvbTuner
---- @field name_adapter string
---- @field display_name string
---- @field config table
---- @field status table
---- @field instance any
---- @field check_timer number
---- @field json_cache string|nil
+--- @field name_adapter string Уникальное имя адаптера
+--- @field display_name string Отображаемое имя
+--- @field config table Конфигурация тюнера
+--- @field status table Текущий статус (signal, snr, ber, unc)
+--- @field instance any Экземпляр dvb_tune из Astra
+--- @field check_timer number Счетчик для интервала проверки
+--- @field json_cache string|nil Кэш последнего отправленного JSON
+--- @field stats table Накопленная статистика для расчета качества
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -60,10 +61,10 @@ local function set_config_param(self, param_name, value)
     return true
 end
 
---- Создает новый экземпляр DvbTuner
---- @param conf table
---- @return boolean success
---- @return DvbTuner|nil
+--- Создает новый экземпляр DvbTuner.
+--- @param conf table Конфигурация тюнера
+--- @return boolean success Статус выполнения
+--- @return DvbTuner|nil result Экземпляр DvbTuner или nil
 function DvbTuner.new(conf)
     if not conf or type(conf) ~= "table" then
         Logger.error(COMPONENT_NAME, "new: config is required")
@@ -87,6 +88,11 @@ function DvbTuner.new(conf)
     self.display_name = conf.display_name or self.name_adapter
     self.check_timer = 0
     self.json_cache = nil
+    self.stats = {
+        ber_sum = 0,
+        unc_sum = 0,
+        count = 0
+    }
     self.status = {
         type = "dvb",
         server = Utils.get_server_name(),
@@ -99,7 +105,8 @@ function DvbTuner.new(conf)
         signal = -1,
         snr = -1,
         ber = -1,
-        unc = -1
+        unc = -1,
+        quality = 100
     }
     return true, self
 end
@@ -111,16 +118,25 @@ function DvbTuner:publish(content, event_type)
     HttpSubscriber.publish(event_type, content)
 end
 
---- Запускает тюнер
---- @return boolean success
+--- Запускает тюнер и инициализирует callback для мониторинга.
+--- @return boolean success Статус выполнения
+--- @return any|nil result Экземпляр dvb_tune или nil
 function DvbTuner:start()
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
-        Logger.error(COMPONENT_NAME, "start: Invalid comparison method %s", tostring(self.config.method_comparison))
-        return false
+        local err = string.format("start: Invalid comparison method %s", tostring(self.config.method_comparison))
+        Logger.error(COMPONENT_NAME, err)
+        return false, nil
     end
 
-    self.config.callback = function(data) 
+    self.config.callback = function(data)
+        -- Накопление статистики для расчета качества (упрощенно)
+        if data.status and data.status > 0 then
+            self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
+            self.stats.unc_sum = self.stats.unc_sum + (data.unc or 0)
+            self.stats.count = self.stats.count + 1
+        end
+
         if self.check_timer < self.config.time_check then
             self.check_timer = self.check_timer + 1
             return
@@ -133,6 +149,20 @@ function DvbTuner:start()
             self.status.snr = data.snr or -1
             self.status.ber = data.ber or -1
             self.status.unc = data.unc or -1
+            
+            -- Расчет качества (quality) на основе ошибок
+            if self.stats.count > 0 then
+                local avg_ber = self.stats.ber_sum / self.stats.count
+                if avg_ber > 0 or self.stats.unc_sum > 0 then
+                    self.status.quality = math.max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
+                else
+                    self.status.quality = 100
+                end
+                -- Сброс статистики после отправки
+                self.stats.ber_sum = 0
+                self.stats.unc_sum = 0
+                self.stats.count = 0
+            end
 
             local current_json = json_encode(self.status)
             if current_json ~= self.json_cache then
@@ -147,7 +177,7 @@ function DvbTuner:start()
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
         return false, nil
     end
-    
+
     return true, self.instance
 end
 

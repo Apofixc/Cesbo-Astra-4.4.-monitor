@@ -17,10 +17,11 @@ local COMPONENT_NAME = "Adapter"
 --- @class Adapter
 local Adapter = {}
 
---- Инициализирует и запускает мониторинг DVB-тюнера
---- @param conf table Конфигурация
---- @return boolean success
---- @return any instance или nil
+--- Инициализирует и запускает мониторинг DVB-тюнера.
+--- Автоматически регистрирует экземпляр тюнера в глобальной области видимости (_G)
+--- под именем, указанным в conf.name_adapter.
+--- @param conf table Конфигурация тюнера
+--- @return boolean success Статус выполнения
 function dvb_tuner_monitor(conf)
     if not conf or not conf.name_adapter then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: name_adapter is required")
@@ -37,43 +38,46 @@ function dvb_tuner_monitor(conf)
         return false
     end
 
-     local success_start, instance = tuner:start()
+    local success_start, instance = tuner:start()
     if success_start then
         DvbStorage.register(conf.name_adapter, tuner)
         _G[conf.name_adapter] = instance
         return true
     else
-        Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter)
-        return false
+        Logger.error(COMPONENT_NAME, string.format("dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter))
+        return fals
     end
 end
 
---- Находит конфигурацию DVB-тюнера по имени адаптера
---- @param name_adapter string
---- @return boolean success
---- @return any instance или nil
+--- Находит экземпляр DVB-тюнера по имени адаптера.
+--- @param name_adapter string Уникальное имя адаптера
+--- @return any|nil result Экземпляр тюнера (instance) или nil
 function find_dvb_conf(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         return tuner.instance
     end
-    return
+    return nil
 end
 
---- Обновляет параметры мониторинга DVB-тюнера
---- @param name_adapter string
---- @param params table
---- @return boolean success
+--- Обновляет параметры мониторинга DVB-тюнера.
+--- @param name_adapter string Уникальное имя адаптера
+--- @param params table Новые параметры (rate, time_check, method_comparison)
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
 function update_dvb_monitor_parameters(name_adapter, params)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
-        return tuner:update_parameters(params)
+        local success = tuner:update_parameters(params)
+        return success, (not success and "Failed to update parameters" or nil)
     end
-    Logger.error(COMPONENT_NAME, "update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
-    return false
+    local err = string.format("update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
+    Logger.error(COMPONENT_NAME, err)
+    return false, err
 end
 
---- Возвращает список всех адаптеров
+--- Возвращает список всех активных мониторов тюнеров.
+--- @return table<string, DvbTuner> Список мониторов
 function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end
