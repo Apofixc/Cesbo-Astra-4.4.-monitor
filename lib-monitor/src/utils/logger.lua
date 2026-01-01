@@ -24,7 +24,9 @@ local LOG_LEVELS = {
 local Logger = {}
 
 local function get_current_level()
-    local level_name = MonitorConfig and MonitorConfig.LogLevel or "INFO"
+    -- Динамически получаем конфиг через ModuleManager, чтобы всегда иметь актуальные настройки
+    local config = ModuleManager.get_module("monitor_config")
+    local level_name = config and config.LogLevel or "INFO"
     return LOG_LEVELS[level_name] or LOG_LEVELS.INFO
 end
 

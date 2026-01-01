@@ -249,9 +249,6 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    if not self._active or not data or not data.psi or not self._psi_hash_cache then return end
-
-    -- Хэширование PSI данных для предотвращения избыточной обработки
     local current_data_json = json_encode(data)
     if self._psi_hash_cache[data.psi] == current_data_json then
         return
@@ -282,7 +279,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._active or not self._config or not self._config.analyze or not data.analyze or not self._analyze_stats then return end
+    if not self._config.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -314,8 +311,6 @@ end
 --- @param data table Суммарные данные
 --- @param comparison_method function Функция сравнения
 function ChannelMonitor:process_total_data(data, comparison_method)
-    if not self._active or not self._status then return end
-    
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
     status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
@@ -336,15 +331,23 @@ end
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
 function ChannelMonitor:update_status_and_publish(data)
-    if not self._active or not self._status then return end
+    -- Оптимизация: проверяем изменения до создания копии таблицы и json_encode
+    local on_air = data.on_air
+    local scrambled = data.total.scrambled
+    local bitrate = data.total.bitrate or 0
+    local cc = self._status.cc_errors
+    local pes = self._status.pes_errors
+
+    -- Если данные не изменились по сравнению с кэшем (и это не принудительная отправка по таймеру),
+    -- то можно пропустить публикацию. Но так как мы сюда попадаем уже после проверки comparison_method,
+    -- мы проверяем только против последнего отправленного JSON.
     
     local status = table_copy(self:get_status_template())
-
-    status.ready = data.on_air
-    status.scrambled = data.total.scrambled
-    status.bitrate = data.total.bitrate or 0
-    status.cc_errors = self._status.cc_errors
-    status.pes_errors = self._status.pes_errors
+    status.ready = on_air
+    status.scrambled = scrambled
+    status.bitrate = bitrate
+    status.cc_errors = cc
+    status.pes_errors = pes
 
     local current_json = json_encode(status)
     if current_json ~= self._json_status_cache then

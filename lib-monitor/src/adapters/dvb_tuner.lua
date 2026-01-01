@@ -54,12 +54,15 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для установки параметра конфигурации
---- @param self DvbTuner
 --- @param param_name string
 --- @param value any
-local function set_config_param(self, param_name, value)
+--- @return boolean success
+function DvbTuner:_set_config_param(param_name, value)
     local success, result = validate_monitor_param(param_name, value)
-    if not success then return false end
+    if not success then
+        Logger.error(COMPONENT_NAME, "[%s] Invalid parameter value for %s: %s", tostring(self.name_adapter), param_name, tostring(value))
+        return false
+    end
     local key = param_name:gsub("dvb_", "")
     self.config[key] = result
     return true
@@ -79,9 +82,9 @@ function DvbTuner.new(conf)
     self.config = conf
 
     -- Валидация и установка параметров по умолчанию
-    set_config_param(self, "dvb_rate", conf.rate)
-    set_config_param(self, "dvb_time_check", conf.time_check)
-    set_config_param(self, "dvb_method_comparison", conf.method_comparison)
+    self:_set_config_param("dvb_rate", conf.rate)
+    self:_set_config_param("dvb_time_check", conf.time_check)
+    self:_set_config_param("dvb_method_comparison", conf.method_comparison)
 
     if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
         Logger.error(COMPONENT_NAME, "new: name_adapter is required")
@@ -204,13 +207,13 @@ function DvbTuner:update_parameters(params)
     end
 
     if params.rate ~= nil then
-        set_config_param(self, "dvb_rate", params.rate)
+        self:_set_config_param("dvb_rate", params.rate)
     end
     if params.time_check ~= nil then
-        set_config_param(self, "dvb_time_check", params.time_check)
+        self:_set_config_param("dvb_time_check", params.time_check)
     end
     if params.method_comparison ~= nil then
-        set_config_param(self, "dvb_method_comparison", params.method_comparison)
+        self:_set_config_param("dvb_method_comparison", params.method_comparison)
     end
 
     if tuning_changed then

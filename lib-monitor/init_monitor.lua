@@ -39,6 +39,13 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
     local success, obj = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
+        -- Logger еще не инициализирован, используем стандартный print или astra.log если доступен
+        local msg = string.format("[Init] Critical dependency missing: %s", dep_path)
+        if _G.log and _G.log.error then
+            _G.log.error(msg)
+        else
+            print(msg)
+        end
         all_astra_deps_found = false
     else
         found_astra_deps[dep_path] = obj
