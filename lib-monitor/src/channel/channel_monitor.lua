@@ -20,6 +20,16 @@ local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
 local FORCE_SEND_INTERVAL = 300
 
+-- Методы сравнения
+local METHOD_ALWAYS = 1
+local METHOD_STRICT = 2
+local METHOD_RATIO = 3
+local METHOD_ON_AIR = 4
+
+-- 5. Инициализация объектов из загруженных модулей
+local ratio = Utils.ratio
+local validate_monitor_param = Utils.validate_monitor_param
+
 --- @class ChannelMonitor
 --- @field name string
 --- @field display_name string
@@ -39,27 +49,26 @@ local FORCE_SEND_INTERVAL = 300
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
-local ratio = Utils.ratio
-local validate_monitor_param = Utils.validate_monitor_param
-
 -- Методы сравнения
 local COMPARISON_METHODS = {
-    [1] = function(prev, curr, rate) return true end,
-    [2] = function(prev, curr, rate)
-        return prev.ready ~= curr.on_air or 
-               prev.scrambled ~= curr.total.scrambled or 
-               prev.cc_errors > 0 or 
-               prev.pes_errors > 0 or 
+    [METHOD_ALWAYS] = function(prev, curr, rate)
+        return true
+    end,
+    [METHOD_STRICT] = function(prev, curr, rate)
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               prev.cc_errors > 0 or
+               prev.pes_errors > 0 or
                prev.bitrate ~= curr.total.bitrate
     end,
-    [3] = function(prev, curr, rate)
-        return prev.ready ~= curr.on_air or 
-               prev.scrambled ~= curr.total.scrambled or 
-               prev.cc_errors > 0 or 
-               prev.pes_errors > 0 or 
+    [METHOD_RATIO] = function(prev, curr, rate)
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               prev.cc_errors > 0 or
+               prev.pes_errors > 0 or
                ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
-    [4] = function(prev, curr, rate)
+    [METHOD_ON_AIR] = function(prev, curr, rate)
         if prev.cc_errors > 1000 or prev.pes_errors > 1000 then
             prev.cc_errors = 0
             prev.pes_errors = 0
@@ -72,9 +81,13 @@ local COMPARISON_METHODS = {
 --- @param self ChannelMonitor
 --- @param param_name string
 --- @param value any
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
 local function set_config_param(self, param_name, value)
     local success, result = validate_monitor_param(param_name, value)
-    if not success then return false end
+    if not success then
+        return false, "Invalid parameter value for " .. param_name
+    end
     local key = param_name:gsub("channel_", "")
     self.config[key] = result
     return true
@@ -136,12 +149,14 @@ function ChannelMonitor.new(config, channel_data)
 end
 
 --- Запускает мониторинг
---- @return boolean success
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
 function ChannelMonitor:start()
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
-        Logger.error(COMPONENT_NAME, "start: Invalid comparison method %s", tostring(self.config.method_comparison))
-        return false
+        local err = "Invalid comparison method " .. tostring(self.config.method_comparison)
+        Logger.error(COMPONENT_NAME, "start: %s", err)
+        return false, err
     end
 
     self.monitor_instance = analyze({
@@ -169,15 +184,16 @@ function ChannelMonitor:start()
     })
 
     if not self.monitor_instance then
-        Logger.error(COMPONENT_NAME, "start: analyze returned nil")
-        return false
+        local err = "analyze returned nil"
+        Logger.error(COMPONENT_NAME, "start: %s", err)
+        return false, err
     end
 
     return true
 end
 
 --- Возвращает закэшированные данные об источнике
---- @return table
+--- @return table source Данные об источнике
 function ChannelMonitor:get_cached_source()
     local active_id = self.channel_data and self.channel_data.active_input_id or 1
     if active_id ~= self.last_active_id then
@@ -189,7 +205,7 @@ function ChannelMonitor:get_cached_source()
 end
 
 --- Создает базовый шаблон статуса
---- @return table
+--- @return table template Шаблон статуса
 function ChannelMonitor:create_status_template()
     local source = self:get_cached_source()
     return {
@@ -205,7 +221,7 @@ function ChannelMonitor:create_status_template()
 end
 
 --- Обработка ошибок потока
---- @param data table
+--- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
     Logger.error(COMPONENT_NAME, "[%s] Stream error: %s", self.name, tostring(data.error))
 
@@ -215,13 +231,13 @@ function ChannelMonitor:process_error_data(data)
 end
 
 --- Обработка PSI данных
---- @param data table
+--- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
     self.psi_cache[data.psi] = data
 end
 
 --- Обработка данных анализа (статистика по PID)
---- @param data table
+--- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
     if not self.config.analyze then return end
 
@@ -250,8 +266,8 @@ function ChannelMonitor:process_analyze_data(data)
 end
 
 --- Обработка суммарных данных потока
---- @param data table
---- @param comparison_method function
+--- @param data table Суммарные данные
+--- @param comparison_method function Функция сравнения
 function ChannelMonitor:process_total_data(data, comparison_method)
     self.status.cc_errors = self.status.cc_errors + (data.total.cc_errors or 0)
     self.status.pes_errors = self.status.pes_errors + (data.total.pes_errors or 0)
@@ -270,7 +286,7 @@ function ChannelMonitor:process_total_data(data, comparison_method)
 end
 
 --- Обновляет статус и публикует его
---- @param data table
+--- @param data table Данные потока
 function ChannelMonitor:update_status_and_publish(data)
     local status = self:create_status_template()
 
@@ -292,8 +308,8 @@ function ChannelMonitor:update_status_and_publish(data)
 end
 
 --- Возвращает закэшированные PSI данные
---- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
---- @return table|nil
+--- @param [table_name] string Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
+--- @return table|nil psi Данные PSI или nil
 function ChannelMonitor:get_psi(table_name)
     if table_name then
         return self.psi_cache[table_name]
@@ -302,7 +318,7 @@ function ChannelMonitor:get_psi(table_name)
 end
 
 --- Возвращает статистику анализа по PID
---- @return table
+--- @return table stats Статистика по PID
 function ChannelMonitor:get_analyze_stats()
     return self.analyze_stats
 end
@@ -313,15 +329,20 @@ function ChannelMonitor:clear_analyze_stats()
 end
 
 --- Возвращает кэш последнего отправленного JSON статуса
---- @return string|nil
+--- @return string|nil cache JSON статус
 function ChannelMonitor:get_json_status_cache()
     return self.json_status_cache
 end
 
 --- Возвращает описание назначения PID
---- @param pid number
---- @return string
+--- @param pid number Идентификатор PID
+--- @return string description Описание PID
 function ChannelMonitor:get_pid_description(pid)
+    self.pid_desc_cache = self.pid_desc_cache or {}
+    if self.pid_desc_cache[pid] then
+        return self.pid_desc_cache[pid]
+    end
+
     local pmt = self.psi_cache["PMT"]
     if not pmt and self.channel_data and self.channel_data.get_psi then
         pmt = self.channel_data:get_psi("PMT")
@@ -330,7 +351,9 @@ function ChannelMonitor:get_pid_description(pid)
     if pmt and pmt.streams then
         for _, stream in ipairs(pmt.streams) do
             if stream.pid == pid then
-                return stream.type_name or "UNKNOWN"
+                local desc = stream.type_name or "UNKNOWN"
+                self.pid_desc_cache[pid] = desc
+                return desc
             end
         end
     end
@@ -338,8 +361,12 @@ function ChannelMonitor:get_pid_description(pid)
 end
 
 --- Останавливает мониторинг и очищает ресурсы
-function ChannelMonitor:kill()
+function ChannelMonitor:destroy()
     if self.monitor_instance then
+        -- Если у analyze есть метод stop, его следует вызвать здесь
+        if type(self.monitor_instance) == "table" and self.monitor_instance.stop then
+            self.monitor_instance:stop()
+        end
         self.monitor_instance = nil
     end
     self.name = nil
@@ -351,31 +378,35 @@ function ChannelMonitor:kill()
     self.status = nil
     self.psi_cache = nil
     self.analyze_stats = nil
+    self.pid_desc_cache = nil
     self.force_timer = nil
     self.check_timer = nil
     self.json_status_cache = nil
 end
 
 --- Обновляет параметры монитора
---- @param params table
---- @return boolean success
+--- @param params table Таблица новых параметров
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
 function ChannelMonitor:update_parameters(params)
-    if not params or type(params) ~= "table" then return false end
-
-    if params.rate ~= nil then
-        set_config_param(self, "channel_rate", params.rate)
-    end
-    
-    if params.time_check ~= nil then
-        set_config_param(self, "channel_time_check", params.time_check)
+    if not params or type(params) ~= "table" then
+        return false, "params must be a table"
     end
 
-    if params.method_comparison ~= nil then
-        set_config_param(self, "channel_method_comparison", params.method_comparison)
-    end
+    local param_map = {
+        rate = "channel_rate",
+        time_check = "channel_time_check",
+        method_comparison = "channel_method_comparison",
+        analyze = "channel_analyze"
+    }
 
-    if params.analyze ~= nil then
-        set_config_param(self, "channel_analyze", params.analyze)
+    for key, config_name in pairs(param_map) do
+        if params[key] ~= nil then
+            local success, err = set_config_param(self, config_name, params[key])
+            if not success then
+                return false, err
+            end
+        end
     end
 
     return true
