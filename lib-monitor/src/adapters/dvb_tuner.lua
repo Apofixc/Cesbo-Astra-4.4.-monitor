@@ -145,10 +145,10 @@ function DvbTuner:start()
     self.instance = dvb_tune(self.config)
     if not self.instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
-        return false
+        return false, nil
     end
     
-    return true
+    return true, self.instance
 end
 
 --- Обновляет параметры

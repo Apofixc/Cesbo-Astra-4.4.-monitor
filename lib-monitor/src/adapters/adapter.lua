@@ -24,25 +24,27 @@ local Adapter = {}
 function dvb_tuner_monitor(conf)
     if not conf or not conf.name_adapter then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: name_adapter is required")
-        return false, nil
+        return false
     end
 
     if DvbStorage.find(conf.name_adapter) then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: tuner '%s' already exists", conf.name_adapter)
-        return false, nil
+        return false
     end
 
     local success_new, tuner = DvbTuner.new(conf)
     if not success_new then
-        return false, nil
+        return false
     end
 
-    if tuner:start() then
+     local success_start, instance = tuner:start()
+    if success_start then
         DvbStorage.register(conf.name_adapter, tuner)
-        return true, tuner.instance
+        _G[conf.name_adapter] = instance
+        return true
     else
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter)
-        return false, nil
+        return false
     end
 end
 
@@ -53,9 +55,9 @@ end
 function find_dvb_conf(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
-        return true, tuner.instance
+        return tuner.instance
     end
-    return false, nil
+    return
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера

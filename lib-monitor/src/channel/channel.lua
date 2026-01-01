@@ -38,7 +38,7 @@ local get_stream = Utils.get_stream_name
 local format_handlers = {
     dvb = function(config)
         local cfg = {format = config.format, addr = config.addr}
-        local adap_conf = Adapter.find_dvb_conf(config.addr)
+        local adap_conf = find_dvb_conf(config.addr)
         cfg.stream = adap_conf and adap_conf.source or "dvb"
         return cfg
     end,
