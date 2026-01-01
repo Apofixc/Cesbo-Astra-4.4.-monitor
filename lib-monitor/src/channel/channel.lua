@@ -34,48 +34,6 @@ local Channel = {}
 --- Псевдоним для получения имени стрима
 local get_stream = Utils.get_stream_name
 
---- Таблица обработчиков типов мониторов
-local monitor_type_handlers = {
-    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
-        local input_data = channel_data.input[1]
-        if not input_data then
-            local error_msg = string.format("Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
-            Logger.error(COMPONENT_NAME, error_msg)
-            return nil, nil, error_msg
-        end
-        local upstream = input_data.input.tail
-        local split_result = string_split(conf.input[1], "#")
-        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
-        return upstream, monitor_target, nil
-    end,
-    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
-        local upstream = channel_data.tail
-        local monitor_target = MONITOR_TYPE_OUTPUT
-        return upstream, monitor_target, nil
-    end,
-    [MONITOR_TYPE_IP] = function(conf, channel_data)
-        if not channel_data.output or #channel_data.output == 0 then
-            local error_msg = string.format("Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
-            Logger.error(COMPONENT_NAME, error_msg)
-            return nil, nil, error_msg
-        end
-
-        local key = 1
-        for index, output in ipairs(channel_data.output) do
-            if output.config and output.config.monitor then
-                key = index
-                break
-            end
-        end
-
-        local split_result = string_split(conf.output[key], "#")
-        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
-        
-        Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
-        return nil, monitor_target, nil -- upstream не используется для IP-монитора
-    end,
-}
-
 --- Таблица обработчиков форматов входных данных
 local format_handlers = {
     dvb = function(config)
@@ -148,11 +106,6 @@ function make_monitor(config, channel_data)
         stream_json[1] = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
     end
 
-    local success_new, monitor = ChannelMonitor.new(name, config, stream_json)
-    if not success_new then
-        return false, nil
-    end
-    
     local upstream = config.upstream
     local input_instance = nil
 
@@ -171,7 +124,17 @@ function make_monitor(config, channel_data)
         upstream = input_instance.tail
     end
 
-    if monitor:start(upstream) then
+    config.name = name
+    config.stream_json = stream_json
+    config.upstream = upstream
+
+    local success_new, monitor = ChannelMonitor.new(config, ch_data)
+    if not success_new then
+        if input_instance then kill_input(input_instance) end
+        return false, nil
+    end
+
+    if monitor:start() then
         monitor.input_instance = input_instance
         ChannelStorage.register(name, monitor)
         return true, monitor.monitor_instance
@@ -197,6 +160,48 @@ function kill_monitor(name)
     ChannelStorage.unregister(name)
     return true
 end
+
+--- Таблица обработчиков типов мониторов
+local monitor_type_handlers = {
+    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
+        local input_data = channel_data.input[1]
+        if not input_data then
+            Logger.error(COMPONENT_NAME, string.format("Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name))
+            return false, nil, nil
+        end
+
+        local upstream = input_data.input.tail
+        local split_result = string_split(conf.input[1], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
+
+        return true, upstream, monitor_target
+    end,
+    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
+        local upstream = channel_data.tail
+        local monitor_target = MONITOR_TYPE_OUTPUT
+        return true, upstream, monitor_target
+    end,
+    [MONITOR_TYPE_IP] = function(conf, channel_data)
+        if not channel_data.output or #channel_data.output == 0 then
+            Logger.error(COMPONENT_NAME, string.format("Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name))
+            return false, nil, nil
+        end
+
+        local key = 1
+        for index, output in ipairs(channel_data.output) do
+            if output.config and output.config.monitor then
+                key = index
+                break
+            end
+        end
+
+        local split_result = string_split(conf.output[key], "#")
+        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        
+        Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
+        return true, nil, monitor_target
+    end,
+}
 
 --- Создает поток и монитор для него
 --- @param conf table Конфигурация потока

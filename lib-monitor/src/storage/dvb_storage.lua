@@ -30,13 +30,17 @@ function DvbStorage.register(name, monitor_instance)
     return true
 end
 
---- Удаляет монитор из хранилища
+--- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя адаптера
 --- @return boolean success
 function DvbStorage.unregister(name)
-    if monitors[name] then
+    local monitor = monitors[name]
+    if monitor then
+        if type(monitor.stop) == "function" then
+            monitor:stop()
+        end
         monitors[name] = nil
-        Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered.", name)
+        Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered and stopped.", name)
         return true
     end
     return false

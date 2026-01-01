@@ -19,24 +19,10 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local COMPONENT_NAME = "ChannelMonitor"
 local FORCE_SEND_INTERVAL = 300
 
--- Типы потоков (Stream Types) из спецификации MPEG-TS
-local STREAM_TYPES = {
-    [0x01] = "MPEG-1 Video",
-    [0x02] = "MPEG-2 Video",
-    [0x03] = "MPEG-1 Audio",
-    [0x04] = "MPEG-2 Audio",
-    [0x06] = "Data/Teletext/Subtitles",
-    [0x0F] = "AAC Audio (ADTS)",
-    [0x10] = "MPEG-4 Video",
-    [0x11] = "AAC Audio (LATM)",
-    [0x1B] = "H.264 Video",
-    [0x24] = "H.265 Video",
-    [0x81] = "AC-3 Audio"
-}
-
 --- @class ChannelMonitor
 --- @field private name string
 --- @field private config table
+--- @field private channel_data table
 --- @field private stream_json table
 --- @field private status table
 --- @field private psi_cache table
@@ -45,6 +31,7 @@ local STREAM_TYPES = {
 --- @field private monitor_instance any
 --- @field private force_timer number
 --- @field private check_timer number
+--- @field private upstream any
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -112,14 +99,18 @@ local function validate_config(config)
 end
 
 --- Создает новый экземпляр ChannelMonitor
---- @param name string Имя монитора
---- @param config table Конфигурация
---- @param stream_json table Данные о потоках
+--- @param config table Конфигурация монитора
+--- @param channel_data table Данные канала
 --- @return boolean success
 --- @return ChannelMonitor|nil
-function ChannelMonitor.new(name, config, stream_json)
-    if not name or type(name) ~= "string" then
-        Logger.error(COMPONENT_NAME, "new: name is required")
+function ChannelMonitor.new(config, channel_data)
+    if not config or type(config) ~= "table" then
+        Logger.error(COMPONENT_NAME, "new: config is required")
+        return false, nil
+    end
+
+    if not channel_data or type(channel_data) ~= "table" then
+        Logger.error(COMPONENT_NAME, "new: channel_data is required")
         return false, nil
     end
 
@@ -127,16 +118,24 @@ function ChannelMonitor.new(name, config, stream_json)
         return false, nil
     end
 
+    local upstream = config.upstream
+    if not upstream then
+        Logger.error(COMPONENT_NAME, "new: upstream is required in config")
+        return false, nil
+    end
+
     local self = setmetatable({}, ChannelMonitor)
-    self.name = name
+    self.name = config.name or channel_data.name
     self.config = config
-    self.stream_json = stream_json or {}
+    self.channel_data = channel_data
+    self.stream_json = config.stream_json or {}
+    self.upstream = upstream
     self.force_timer = 0
     self.check_timer = 0
     self.status = {
         type = "Channel",
         server = Utils.get_server_name(),
-        channel = name,
+        channel = self.name,
         output = config.monitor,
         ready = false,
         scrambled = true,
@@ -158,16 +157,10 @@ function ChannelMonitor:publish(content, event_type)
 end
 
 --- Запускает мониторинг
---- @param upstream any Поток для анализа
 --- @return boolean success
-function ChannelMonitor:start(upstream)
-    if not upstream then
-        Logger.error(COMPONENT_NAME, "start: upstream is required")
-        return false
-    end
-
+function ChannelMonitor:start()
     self.monitor_instance = analyze({
-        upstream = upstream:stream(),
+        upstream = self.upstream:stream(),
         name = "_" .. self.name,
         callback = function(data) self:on_data(data) end
     })
@@ -321,9 +314,22 @@ function ChannelMonitor:get_pid_description(pid)
     return self.pid_types[pid]
 end
 
---- Останавливает мониторинг
+--- Останавливает мониторинг и очищает ресурсы
 function ChannelMonitor:stop()
-    self.monitor_instance = nil
+    if self.monitor_instance then
+        self.monitor_instance = nil
+    end
+    self.name = nil
+    self.config = nil
+    self.channel_data = nil
+    self.stream_json = nil
+    self.upstream = nil
+    self.status = nil
+    self.psi_cache = nil
+    self.pid_types = nil
+    self.analyze_stats = nil
+    self.force_timer = nil
+    self.check_timer = nil
 end
 
 --- Обновляет параметры монитора

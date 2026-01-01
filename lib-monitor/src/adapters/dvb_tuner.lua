@@ -168,4 +168,15 @@ function DvbTuner:update_parameters(params)
     return true
 end
 
+--- Останавливает тюнер и очищает ресурсы
+function DvbTuner:stop()
+    if self.instance then
+        self.instance = nil
+    end
+    self.name_adapter = nil
+    self.config = nil
+    self.status = nil
+    self.check_timer = nil
+end
+
 return DvbTuner
