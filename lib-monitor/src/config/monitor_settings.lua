@@ -14,14 +14,6 @@ local STREAM = {
     ["127.0.0.9"] = "WikiLink",
 }
 
-local MONIT_ADDRESS = {
-    -- ["channels"] = {{host = "127.0.0.1", port = 8081, path = "/channels"}, {host = "127.0.0.1", port = 5000, path = "/channels"}}, 
-    -- ["analyze"] = {{host = "127.0.0.1", port = 8082, path = "/analyze"}},    
-    -- ["errors"] = {{host = "127.0.0.1", port = 8083, path = "/errors"}}, 
-    -- ["dvb"] = {{host = "127.0.0.1", port = 8084, path = "/dvb"}, {host = "127.0.0.1", port = 5000, path = "/dvb"}}, 
-}
-
 return {
     STREAM = STREAM,
-    MONIT_ADDRESS = MONIT_ADDRESS
 }

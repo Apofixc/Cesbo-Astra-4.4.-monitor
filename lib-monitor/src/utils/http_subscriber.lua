@@ -1,14 +1,17 @@
 -- 1. Стандартные Lua функции
 local ipairs = ipairs
 local type = type
+local tostring = tostring
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorSettings = ModuleManager.get_module("monitor_settings")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_request = ModuleManager.get_global_dependency("http_request")
 local astra_version = ModuleManager.get_global_dependency("astra.version")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "HttpSubscriber"
@@ -17,17 +20,78 @@ local COMPONENT_NAME = "HttpSubscriber"
 --- @class HttpSubscriber
 local HttpSubscriber = {}
 
+--- @type table<string, table[]> Таблица подписчиков: { [event_type] = { {host, port, path}, ... } }
+local subscribers = {}
+
+--- Загружает список подписчиков из файла
+--- @return boolean success
+local function load_subscribers()
+    local path = MonitorConfig and MonitorConfig.SubscribersFilePath
+    if not path then return false end
+
+    local f = io.open(path, "r")
+    if not f then
+        Logger.info(COMPONENT_NAME, "Subscribers file not found, starting with empty list")
+        subscribers = {}
+        return true
+    end
+
+    local content = f:read("*a")
+    f:close()
+
+    if content and content ~= "" then
+        local ok, data = pcall(json_decode, content)
+        if ok and type(data) == "table" then
+            subscribers = data
+            Logger.info(COMPONENT_NAME, "Subscribers loaded from %s", path)
+            return true
+        else
+            Logger.error(COMPONENT_NAME, "Failed to decode subscribers from %s", path)
+        end
+    end
+
+    subscribers = {}
+    return false
+end
+
+--- Сохраняет список подписчиков в файл
+--- @return boolean success
+local function save_subscribers()
+    local path = MonitorConfig and MonitorConfig.SubscribersFilePath
+    if not path then return false end
+
+    local ok, content = pcall(json_encode, subscribers)
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Failed to encode subscribers for saving")
+        return false
+    end
+
+    local f = io.open(path, "w")
+    if not f then
+        Logger.error(COMPONENT_NAME, "Failed to open subscribers file for writing: %s", path)
+        return false
+    end
+
+    f:write(content)
+    f:close()
+    return true
+end
+
 --- Отправляет HTTP POST запрос
 --- @param addr table {host, port, path}
 --- @param content string JSON данные
 --- @param event_type string Тип события для логирования
 local function send_request(addr, content, event_type)
+    local timeout = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
+    local url = string.format("http://%s:%s%s", addr.host, addr.port, addr.path)
+
     http_request({
         host = addr.host,
         path = addr.path,
         method = "POST",
         content = content,
         port = addr.port,
+        timeout = timeout,
         headers = {
             "User-Agent: Astra v." .. (astra_version or "unknown"),
             "Host: " .. addr.host .. ":" .. addr.port,
@@ -36,11 +100,71 @@ local function send_request(addr, content, event_type)
             "Connection: close",
         },
         callback = function(s, r)
-            if not s or (type(r) == "table" and r.code and r.code ~= 200) then
-                Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s': %s", event_type, r and r.code or "unknown")
+            if not s then
+                Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s' to %s: Connection error", event_type, url)
+            elseif type(r) == "table" and r.code and r.code ~= 200 then
+                Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s' to %s: Status %s", event_type, url, tostring(r.code))
+            else
+                Logger.debug(COMPONENT_NAME, "Event '%s' successfully sent to %s", event_type, url)
             end
         end
     })
+end
+
+--- Подписывает адрес на события определенного типа
+--- @param event_type string Тип события
+--- @param addr table {host, port, path}
+--- @return boolean success
+function HttpSubscriber.subscribe(event_type, addr)
+    if not event_type or type(addr) ~= "table" or not addr.host or not addr.port or not addr.path then
+        return false
+    end
+
+    if not subscribers[event_type] then
+        subscribers[event_type] = {}
+    end
+
+    -- Проверка на дубликаты
+    for _, existing in ipairs(subscribers[event_type]) do
+        if existing.host == addr.host and existing.port == addr.port and existing.path == addr.path then
+            return true -- Уже подписан
+        end
+    end
+
+    table.insert(subscribers[event_type], {
+        host = addr.host,
+        port = addr.port,
+        path = addr.path
+    })
+
+    Logger.info(COMPONENT_NAME, "New subscriber added for '%s': %s:%s%s", event_type, addr.host, addr.port, addr.path)
+    return save_subscribers()
+end
+
+--- Отписывает адрес от событий определенного типа
+--- @param event_type string Тип события
+--- @param addr table {host, port, path}
+--- @return boolean success
+function HttpSubscriber.unsubscribe(event_type, addr)
+    if not event_type or not subscribers[event_type] or type(addr) ~= "table" then
+        return false
+    end
+
+    local found = false
+    for i, existing in ipairs(subscribers[event_type]) do
+        if existing.host == addr.host and existing.port == addr.port and existing.path == addr.path then
+            table.remove(subscribers[event_type], i)
+            found = true
+            break
+        end
+    end
+
+    if found then
+        Logger.info(COMPONENT_NAME, "Subscriber removed for '%s': %s:%s%s", event_type, addr.host, addr.port, addr.path)
+        return save_subscribers()
+    end
+
+    return true
 end
 
 --- Публикует событие через HTTP рассылку
@@ -52,11 +176,10 @@ function HttpSubscriber.publish(event_type, data)
         return false
     end
 
-    local monit_addresses = MonitorSettings and MonitorSettings.MONIT_ADDRESS or {}
-    local recipients = monit_addresses[event_type]
+    local recipients = subscribers[event_type]
     
     if not recipients or #recipients == 0 then
-        -- Если нет подписчиков, просто логируем (как это делал EventDispatcher)
+        -- Если нет подписчиков, просто логируем на уровне INFO
         Logger.info(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
         return true
     end
@@ -67,5 +190,8 @@ function HttpSubscriber.publish(event_type, data)
 
     return true
 end
+
+-- Инициализация при загрузке модуля
+load_subscribers()
 
 return HttpSubscriber

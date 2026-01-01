@@ -49,6 +49,12 @@ MonitorConfig.MinMethodComparison = 1 -- Минимальное значение
 --- @type number
 MonitorConfig.MaxMethodComparison = 4 -- Максимальное значение для метода сравнения состояния потока.
 
+--- Настройки HTTP-подписчика.
+--- @type number
+MonitorConfig.HttpTimeout = 10 -- Таймаут HTTP-запросов в секундах.
+--- @type string
+MonitorConfig.SubscribersFilePath = "/opt/astra/lib-monitor/subscribers.json" -- Путь к файлу с подписчиками.
+
 --- Схема валидации для параметров мониторов.
 --- Определяет правила валидации, значения по умолчанию и типы для каждого параметра.
 --- @type table<string, table>
