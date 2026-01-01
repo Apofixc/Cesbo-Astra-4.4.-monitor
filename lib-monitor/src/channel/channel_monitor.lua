@@ -20,19 +20,19 @@ local COMPONENT_NAME = "ChannelMonitor"
 local FORCE_SEND_INTERVAL = 300
 
 --- @class ChannelMonitor
---- @field private name string
---- @field private config table
---- @field private channel_data table
---- @field private stream_json table
---- @field private status table
---- @field private psi_cache table
---- @field private pid_types table
---- @field private analyze_stats table
---- @field private monitor_instance any
---- @field private force_timer number
---- @field private check_timer number
---- @field private upstream any
---- @field private json_status_cache string|nil
+--- @field name string
+--- @field display_name string
+--- @field config table
+--- @field channel_data table
+--- @field stream_json table
+--- @field status table
+--- @field psi_cache table
+--- @field analyze_stats table
+--- @field monitor_instance any
+--- @field force_timer number
+--- @field check_timer number
+--- @field upstream any
+--- @field json_status_cache string|nil
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -115,6 +115,7 @@ function ChannelMonitor.new(config, channel_data)
     end
 
     self.name = config.name or channel_data.name
+    self.display_name = config.display_name or self.name
     self.stream_json = config.stream_json or {}
     self.upstream = upstream
     self.force_timer = 0
@@ -124,6 +125,7 @@ function ChannelMonitor.new(config, channel_data)
         type = "Channel",
         server = Utils.get_server_name(),
         channel = self.name,
+        display_name = self.display_name,
         output = config.monitor,
         ready = false,
         scrambled = true,
@@ -132,7 +134,6 @@ function ChannelMonitor.new(config, channel_data)
         pes_errors = 0
     }
     self.psi_cache = {}
-    self.pid_types = {}
     self.analyze_stats = {}
     return true, self
 end
@@ -178,9 +179,18 @@ function ChannelMonitor:on_data(data, comparison_method)
         local content = Utils.table_copy(self.status)
         content.error = data.error
         EventDispatcher.publish("error", json_encode(content))
-    elseif data.psi then
+        return
+    end
+
+    if data.psi then
         self:process_psi_data(data)
-    elseif data.total then
+    end
+
+    if data.analyze then
+        self:process_analyze_data(data)
+    end
+
+    if data.total then
         self:process_total_data(data, comparison_method)
     end
 end
@@ -188,52 +198,44 @@ end
 --- Обработка PSI данных
 --- @param data table
 function ChannelMonitor:process_psi_data(data)
-    if not data then return end
+    if not data.psi then return end
 
-    local psi_type = data.psi and data.psi:upper()
-    -- Кэшируем таблицу
-    self.psi_cache[psi_type or data.psi] = data
+    self.psi_cache[data.psi] = data
+end
 
-    -- Если это PMT, обновляем типы PID
-    if psi_type == "PMT" and data.streams then
-        for _, stream in ipairs(data.streams) do
-            if stream.pid then
-                self.pid_types[stream.pid] = stream.type_name or "UNKNOWN"
+--- Обработка данных анализа (статистика по PID)
+--- @param data table
+function ChannelMonitor:process_analyze_data(data)
+    if not self.config.analyze or not data.analyze then return end
+
+    for _, pid_data in ipairs(data.analyze) do
+        local pid = pid_data.pid
+        local cc = pid_data.cc_error or 0
+        local pes = pid_data.pes_error or 0
+        local sc = pid_data.sc_error or 0
+
+        if pid and (cc > 0 or pes > 0 or sc > 0) then
+            if not self.analyze_stats[pid] then
+                self.analyze_stats[pid] = {
+                    type = self:get_pid_description(pid),
+                    cc = cc,
+                    pes = pes,
+                    sc = sc
+                }
+            else
+                local stats = self.analyze_stats[pid]
+                stats.cc = stats.cc + cc
+                stats.pes = stats.pes + pes
+                stats.sc = stats.sc + sc
             end
         end
     end
-
-    self:publish(json_encode(data), "psi")
 end
 
 --- Обработка суммарных данных потока
 --- @param data table
 --- @param comparison_method function
 function ChannelMonitor:process_total_data(data, comparison_method)
-    if self.config.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
-        for _, pid_data in ipairs(data.analyze) do
-            local pid = pid_data.pid
-            local cc = pid_data.cc_error or 0
-            local pes = pid_data.pes_error or 0
-            local sc = pid_data.sc_error or 0
-            
-            if pid and (cc > 0 or pes > 0 or sc > 0) then
-                if not self.analyze_stats[pid] then
-                    self.analyze_stats[pid] = {
-                        cc = cc,
-                        pes = pes,
-                        sc = sc
-                    }
-                else
-                    local stats = self.analyze_stats[pid]
-                    stats.cc = stats.cc + cc
-                    stats.pes = stats.pes + pes
-                    stats.sc = stats.sc + sc
-                end
-            end
-        end
-    end
-
     self.status.cc_errors = self.status.cc_errors + (data.total.cc_errors or 0)
     self.status.pes_errors = self.status.pes_errors + (data.total.pes_errors or 0)
 
@@ -266,7 +268,7 @@ function ChannelMonitor:update_status_and_publish(data)
         local report = {}
         for pid, stats in pairs(self.analyze_stats) do
             report[pid] = {
-                type = self.pid_types[pid] or "UNKNOWN",
+                type = stats.type,
                 cc = stats.cc,
                 pes = stats.pes,
                 sc = stats.sc
@@ -301,9 +303,21 @@ end
 
 --- Возвращает описание назначения PID
 --- @param pid number
---- @return string|nil
+--- @return string
 function ChannelMonitor:get_pid_description(pid)
-    return self.pid_types[pid]
+    local pmt = self.psi_cache["PMT"]
+    if not pmt and self.channel_data and self.channel_data.get_psi then
+        pmt = self.channel_data:get_psi("PMT")
+    end
+
+    if pmt and pmt.streams then
+        for _, stream in ipairs(pmt.streams) do
+            if stream.pid == pid then
+                return stream.type_name or "UNKNOWN"
+            end
+        end
+    end
+    return "UNKNOWN"
 end
 
 --- Останавливает мониторинг и очищает ресурсы
@@ -312,13 +326,13 @@ function ChannelMonitor:kill()
         self.monitor_instance = nil
     end
     self.name = nil
+    self.display_name = nil
     self.config = nil
     self.channel_data = nil
     self.stream_json = nil
     self.upstream = nil
     self.status = nil
     self.psi_cache = nil
-    self.pid_types = nil
     self.analyze_stats = nil
     self.force_timer = nil
     self.check_timer = nil

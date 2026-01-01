@@ -17,12 +17,13 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local COMPONENT_NAME = "DvbTuner"
 
 --- @class DvbTuner
---- @field private name_adapter string
---- @field private config table
---- @field private status table
---- @field private instance any
---- @field private check_timer number
---- @field private json_cache string|nil
+--- @field name_adapter string
+--- @field display_name string
+--- @field config table
+--- @field status table
+--- @field instance any
+--- @field check_timer number
+--- @field json_cache string|nil
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -83,6 +84,7 @@ function DvbTuner.new(conf)
     end
 
     self.name_adapter = conf.name_adapter
+    self.display_name = conf.display_name or self.name_adapter
     self.check_timer = 0
     self.json_cache = nil
     self.status = {
@@ -91,7 +93,8 @@ function DvbTuner.new(conf)
         format = conf.type or "",
         modulation = conf.modulation or "",
         source = conf.tp or conf.frequency,
-        name_adapter = conf.name_adapter,
+        name_adapter = self.name_adapter,
+        display_name = self.display_name,
         status = -1,
         signal = -1,
         snr = -1,
@@ -173,6 +176,7 @@ function DvbTuner:kill()
         self.instance = nil
     end
     self.name_adapter = nil
+    self.display_name = nil
     self.config = nil
     self.status = nil
     self.check_timer = nil

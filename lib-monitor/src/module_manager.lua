@@ -52,7 +52,7 @@ end
 --- Регистрирует модуль в ModuleManager.
 --- @param name string Имя модуля (например, "utils.logger").
 --- @param path string Путь к файлу модуля (например, "src.utils.logger").
---- @param [dependencies] table|nil Таблица строк, содержащих имена зависимостей этого модуля.
+--- @param dependencies table|nil Таблица строк, содержащих имена зависимостей этого модуля.
 --- @return boolean success Статус выполнения
 --- @return nil result
 function ModuleManager.register_module(name, path, dependencies)
@@ -89,7 +89,7 @@ function ModuleManager.register_module(name, path, dependencies)
     
     log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.", 
              name, table_concat(valid_dependencies, ", "))
-    return true
+    return true, nil
 end
 
 --- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей.
@@ -151,7 +151,7 @@ end
 function ModuleManager.load_modules()
     local success_sort, load_order = topological_sort()
     
-    if not success_sort then
+    if not success_sort or not load_order then
         log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
         return false, nil
     end
@@ -171,15 +171,13 @@ function ModuleManager.load_modules()
         local success, module_or_err = pcall(require, module_info.path)
         
         if not success then
-            local msg = string.format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
-            log_error(COMPONENT_NAME, msg)
-            return false, msg -- Возвращаем ошибку для отладки
+            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
+            return false, nil
         end
         
         if module_or_err == nil then
-            local msg = string.format("Модуль '%s' из '%s' вернул nil.", name, module_info.path)
-            log_error(COMPONENT_NAME, msg)
-            return false, msg -- Возвращаем ошибку для отладки
+            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
+            return false, nil
         end
         
         local module = module_or_err
@@ -227,7 +225,7 @@ function ModuleManager.validate_dependencies()
     end
     
     log_debug(COMPONENT_NAME, "Все внутренние зависимости зарегистрированных модулей удовлетворены.")
-    return true
+    return true, nil
 end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
@@ -247,7 +245,7 @@ function ModuleManager.check_nested_dependency(path_str)
     
     if #parts == 0 then
         log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости.")
-        return nil, false
+        return false, nil
     end
     
     local current_scope = _G

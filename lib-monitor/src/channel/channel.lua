@@ -230,6 +230,7 @@ function make_stream(conf)
 
     local monitor_config = {
         name = monitor_name,
+        display_name = conf.monitor and conf.monitor.display_name,
         upstream = upstream,
         monitor = monitor_target,
         rate = conf.monitor and conf.monitor.rate,
