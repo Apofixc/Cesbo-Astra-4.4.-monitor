@@ -14,8 +14,6 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
-local http_request = ModuleManager.get_global_dependency("http_request")
-local astra_version = ModuleManager.get_global_dependency("astra.version")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Utils"
@@ -124,45 +122,6 @@ end
 --- @return string Имя хоста
 function Utils.get_server_name()
     return HOSTNAME
-end
-
---- Отправляет данные мониторинга
---- @param content string JSON данные
---- @param feed string Тип фида
-function Utils.send_monitor(content, feed)
-    local monit_address = MonitorSettings and MonitorSettings.MONIT_ADDRESS or {}
-    local recipients = monit_address[feed]
-    
-    if not recipients or #recipients == 0 then
-        return false
-    end
-
-    local headers = {
-        "User-Agent: Astra v." .. (astra_version or "unknown"),
-        "Content-Type: application/json;charset=utf-8",
-        "Content-Length: " .. #content,
-        "Connection: close",
-    }
-
-    for _, addr in ipairs(recipients) do
-        http_request({
-            host = addr.host,
-            port = addr.port,
-            path = addr.path,
-            method = "POST",
-            content = content,
-            headers = Utils.table_copy(headers),
-            callback = function(s, r)
-                if not s then
-                    Logger.error(COMPONENT_NAME, "send_monitor: connection error to %s:%s", addr.host, tostring(addr.port))
-                elseif type(r) == "table" and r.code and r.code ~= 200 then
-                    Logger.error(COMPONENT_NAME, "send_monitor: error %s from %s:%s", tostring(r.code), addr.host, tostring(addr.port))
-                end
-            end
-        })
-    end
-
-    return true
 end
 
 return Utils

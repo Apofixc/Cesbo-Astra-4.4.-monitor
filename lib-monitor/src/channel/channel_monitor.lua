@@ -37,7 +37,6 @@ local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
 local ratio = Utils.ratio
-local send_monitor = Utils.send_monitor
 local validate_monitor_param = Utils.validate_monitor_param
 
 -- Методы сравнения
@@ -178,7 +177,7 @@ function ChannelMonitor:on_data(data, comparison_method)
     if data.error then
         local content = Utils.table_copy(self.status)
         content.error = data.error
-        send_monitor(json_encode(content), "errors")
+        EventDispatcher.publish("error", json_encode(content))
     elseif data.psi then
         self:process_psi_data(data)
     elseif data.total then
@@ -280,7 +279,7 @@ function ChannelMonitor:update_status_and_publish(data)
     
     local current_json = json_encode(self.status)
     if current_json ~= self.json_status_cache then
-        send_monitor(current_json, "channels")
+        EventDispatcher.publish("channels", current_json)
         self.json_status_cache = current_json
     end
 

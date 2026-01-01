@@ -27,7 +27,6 @@ local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
 local ratio = Utils.ratio
-local send_monitor = Utils.send_monitor
 local validate_monitor_param = Utils.validate_monitor_param
 
 local COMPARISON_METHODS = {
@@ -146,7 +145,7 @@ function DvbTuner:on_data(data, comparison_method)
 
         local current_json = json_encode(self.status)
         if current_json ~= self.json_cache then
-            send_monitor(current_json, "dvb")
+            EventDispatcher.publish("dvb", current_json)
             self.json_cache = current_json
         end
     end
