@@ -6,7 +6,7 @@ local tostring = tostring
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local EventDispatcher = ModuleManager.get_module("event_dispatcher")
+local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 
@@ -243,7 +243,7 @@ end
 function ChannelMonitor:process_error_data(data)
     local content = table_copy(self:get_status_template())
     content.error = data.error
-    EventDispatcher.publish("error", json_encode(content))
+    HttpSubscriber.publish("error", json_encode(content))
 end
 
 --- Обработка PSI данных
@@ -344,7 +344,7 @@ function ChannelMonitor:update_status_and_publish(data)
 
     local current_json = json_encode(status)
     if current_json ~= self._json_status_cache then
-        EventDispatcher.publish("channels", current_json)
+        HttpSubscriber.publish("channels", current_json)
         self._json_status_cache = current_json
     end
 

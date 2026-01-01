@@ -5,7 +5,6 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local MonitorSettings = ModuleManager.get_module("monitor_settings")
-local EventDispatcher = ModuleManager.get_module("event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -44,29 +43,28 @@ local function send_request(addr, content, event_type)
     })
 end
 
---- Обработчик событий для HTTP рассылки
---- @param event_type string
+--- Публикует событие через HTTP рассылку
+--- @param event_type string Тип события
 --- @param data string JSON данные
-local function handle_event(event_type, data)
+--- @return boolean success
+function HttpSubscriber.publish(event_type, data)
+    if not event_type or not data then
+        return false
+    end
+
     local monit_addresses = MonitorSettings and MonitorSettings.MONIT_ADDRESS or {}
     local recipients = monit_addresses[event_type]
-    if not recipients then return end
+    
+    if not recipients or #recipients == 0 then
+        -- Если нет подписчиков, просто логируем (как это делал EventDispatcher)
+        Logger.info(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
+        return true
+    end
 
     for _, addr in ipairs(recipients) do
         send_request(addr, data, event_type)
     end
-end
 
---- Инициализирует HTTP подписчика
---- @return boolean success
-function HttpSubscriber.init()
-    local events = {"channels", "analyze", "error", "psi", "dvb"}
-    for _, event in ipairs(events) do
-        EventDispatcher.subscribe(event, function(data)
-            handle_event(event, data)
-        end)
-    end
-    Logger.info(COMPONENT_NAME, "HttpSubscriber initialized and subscribed to events")
     return true
 end
 

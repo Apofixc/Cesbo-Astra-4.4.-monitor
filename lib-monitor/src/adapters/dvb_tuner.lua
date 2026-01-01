@@ -7,7 +7,7 @@ local setmetatable = setmetatable
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
-local EventDispatcher = ModuleManager.get_module("event_dispatcher")
+local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -104,11 +104,11 @@ function DvbTuner.new(conf)
     return true, self
 end
 
---- Публикует данные через EventDispatcher
+--- Публикует данные через HttpSubscriber
 --- @param content string JSON данные
 --- @param event_type string Тип события
 function DvbTuner:publish(content, event_type)
-    EventDispatcher.publish(event_type, content)
+    HttpSubscriber.publish(event_type, content)
 end
 
 --- Запускает тюнер
@@ -148,7 +148,7 @@ function DvbTuner:on_data(data, comparison_method)
 
         local current_json = json_encode(self.status)
         if current_json ~= self.json_cache then
-            EventDispatcher.publish("dvb", current_json)
+            HttpSubscriber.publish("dvb", current_json)
             self.json_cache = current_json
         end
     end
