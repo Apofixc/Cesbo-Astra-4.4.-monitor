@@ -28,6 +28,7 @@ local METHOD_ON_AIR = 4
 -- 5. Инициализация объектов из загруженных модулей
 local log_error = Logger.error
 local ratio = Utils.ratio
+local table_copy = Utils.table_copy
 local validate_monitor_param = Utils.validate_monitor_param
 
 --- @class ChannelMonitor
@@ -37,7 +38,6 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _channel_data table|nil Данные канала (Astra)
 --- @field private _stream_json table Данные об источниках потока
 --- @field private _status table Текущий статус ошибок (CC/PES)
---- @field private _psi_cache table Кэш PSI таблиц
 --- @field private _analyze_stats table Статистика анализа по PID
 --- @field private _monitor_instance any Экземпляр анализатора Astra
 --- @field private _force_timer number Таймер принудительной отправки статуса
@@ -46,6 +46,8 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _json_status_cache string|nil Кэш последнего отправленного JSON
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
+--- @field private _status_template_cache table|nil Кэш базового шаблона статуса
+--- @field private _psi_hash_cache table Кэш хэшей PSI таблиц
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -134,6 +136,8 @@ function ChannelMonitor.new(config, channel_data)
     self._json_status_cache = nil
     self._last_active_id = nil
     self._cached_source = nil
+    self._status_template_cache = nil
+    self._psi_hash_cache = {}
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -141,7 +145,6 @@ function ChannelMonitor.new(config, channel_data)
         ready = false,
         scrambled = false,
     }
-    self._psi_cache = {}
     self._analyze_stats = {}
 
     return true, self
@@ -204,15 +207,20 @@ function ChannelMonitor:get_cached_source()
         self._last_active_id = active_id
         local input_index = active_id > 0 and active_id or 1
         self._cached_source = self._stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
+        -- Сбрасываем кэш шаблона при смене источника
+        self._status_template_cache = nil
     end
     return self._cached_source
 end
 
---- Создает базовый шаблон статуса
+--- Создает или возвращает закэшированный базовый шаблон статуса
 --- @return table template Шаблон статуса
-function ChannelMonitor:create_status_template()
+function ChannelMonitor:get_status_template()
     local source = self:get_cached_source()
-    return {
+    if self._status_template_cache then
+        return self._status_template_cache
+    end
+    self._status_template_cache = {
         type = "Channel",
         server = Utils.get_server_name(),
         channel = self.name,
@@ -222,12 +230,13 @@ function ChannelMonitor:create_status_template()
         format = source.format,
         addr = source.addr
     }
+    return self._status_template_cache
 end
 
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local content = self:create_status_template()
+    local content = table_copy(self:get_status_template())
     content.error = data.error
     EventDispatcher.publish("error", json_encode(content))
 end
@@ -236,7 +245,13 @@ end
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
     if not data or not data.psi then return end
-    self._psi_cache[data.psi] = data
+
+    -- Хэширование PSI данных для предотвращения избыточной обработки
+    local current_data_json = json_encode(data)
+    if self._psi_hash_cache[data.psi] == current_data_json then
+        return
+    end
+    self._psi_hash_cache[data.psi] = current_data_json
 
     if data.psi == "PMT" and data.streams then
         for _, stream in ipairs(data.streams) do
@@ -314,7 +329,7 @@ end
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
 function ChannelMonitor:update_status_and_publish(data)
-    local status = self:create_status_template()
+    local status = table_copy(self:get_status_template())
 
     status.ready = data.on_air
     status.scrambled = data.total.scrambled
@@ -337,14 +352,14 @@ function ChannelMonitor:update_status_and_publish(data)
     self._status.pes_errors = 0
 end
 
---- Возвращает закэшированные PSI данные
+--- Возвращает закэшированные PSI данные (в формате JSON)
 --- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
---- @return table|nil psi Данные PSI или nil
+--- @return string|table|nil psi Данные PSI (JSON строка или таблица JSON строк) или nil
 function ChannelMonitor:get_psi(table_name)
     if table_name then
-        return self._psi_cache[table_name]
+        return self._psi_hash_cache[table_name]
     end
-    return self._psi_cache
+    return self._psi_hash_cache
 end
 
 --- Возвращает статистику анализа по PID
@@ -375,7 +390,7 @@ function ChannelMonitor:destroy()
     end
 
     -- Очистка кэшей и данных
-    self._psi_cache = nil
+    self._psi_hash_cache = nil
     self._analyze_stats = nil
     self._status = nil
     self._config = nil
@@ -383,6 +398,7 @@ function ChannelMonitor:destroy()
     self._stream_json = nil
     self._upstream = nil
     self._cached_source = nil
+    self._status_template_cache = nil
     self._json_status_cache = nil
 
     -- Обнуление идентификаторов
