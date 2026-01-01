@@ -72,11 +72,12 @@ local function prepare_stream_json(ch_data)
     if not ch_data or not ch_data.input then return stream_json end
 
     for key, input in ipairs(ch_data.input) do
-        local handler = format_handlers[input.config.format]
+        local format = input.config.format or "Unknown"
+        local handler = format_handlers[format]
         if handler then
             stream_json[key] = handler(input.config)
         else
-            stream_json[key] = {format = input.config.format or "Unknown", addr = "Unknown", stream = "Unknown"}
+            stream_json[key] = {format = format, addr = "Unknown", stream = "Unknown"}
         end
     end
     return stream_json
@@ -90,7 +91,7 @@ end
 function make_monitor(config, channel_data)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
-        return false, nil
+        return false, "monitor limit reached"
     end
 
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
@@ -98,7 +99,12 @@ function make_monitor(config, channel_data)
 
     if ChannelStorage.find(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
-        return false, nil
+        return false, "monitor already exists"
+    end
+
+    if not Utils.validate_monitor_name(name) then
+        Logger.error(COMPONENT_NAME, "make_monitor: Invalid monitor name '%s'", tostring(name))
+        return false, "invalid monitor name"
     end
 
     local stream_json = prepare_stream_json(ch_data)
@@ -251,11 +257,11 @@ function make_stream(conf)
         method_comparison = conf.monitor and conf.monitor.method_comparison
     }
 
-    local success, monitor_instance = make_monitor(monitor_config, channel_data)
+    local success, monitor_instance_or_err = make_monitor(monitor_config, channel_data)
     if not success then
-        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s', killing channel", conf.name)
+        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s' (%s), killing channel", conf.name, tostring(monitor_instance_or_err))
         kill_channel(channel_data)
-        return false, nil
+        return false, monitor_instance_or_err
     end
 
     return true, channel_data
@@ -268,8 +274,9 @@ end
 function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
     if not ch_data or not ch_data.config then
-        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data or channel not found")
-        return false, nil
+        local err = "invalid channel_data or channel not found"
+        Logger.error(COMPONENT_NAME, "kill_stream: %s", err)
+        return false, err
     end
     local name = ch_data.config.name
     

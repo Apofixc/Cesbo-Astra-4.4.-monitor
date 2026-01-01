@@ -31,7 +31,7 @@ MonitorConfig.LogLevel = "WARN" -- Изменено на "WARN" для умен�
 --- Настройки монитора канала.
 --- Эти параметры используются для конфигурирования поведения ChannelMonitor.
 --- @type number
-MonitorConfig.ChannelMonitorLimit = 50 -- Максимальное количество одновременно активных мониторов каналов.
+MonitorConfig.ChannelMonitorLimit = 200 -- Максимальное количество одновременно активных мониторов каналов.
 --- @type number
 MonitorConfig.DvbMonitorLimit = 20  -- Максимальное количество одновременно активных DVB-мониторов (примерное значение).
 --- @type number
