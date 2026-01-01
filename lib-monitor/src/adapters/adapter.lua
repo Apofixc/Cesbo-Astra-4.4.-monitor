@@ -45,7 +45,7 @@ function dvb_tuner_monitor(conf)
         return true
     else
         Logger.error(COMPONENT_NAME, string.format("dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter))
-        return fals
+        return false
     end
 end
 
@@ -82,10 +82,44 @@ function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end
 
+--- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости.
+--- @param name_adapter string Уникальное имя адаптера
+--- @return boolean success Статус выполнения
+function stop_dvb_monitor(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        local success = tuner:stop()
+        if success then
+            _G[name_adapter] = nil
+        end
+        return success
+    end
+    Logger.error(COMPONENT_NAME, "stop_dvb_monitor: tuner '%s' not found", name_adapter)
+    return false
+end
+
+--- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.
+--- @param name_adapter string Уникальное имя адаптера
+--- @return boolean success Статус выполнения
+function restart_dvb_monitor(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        local success, instance = tuner:restart()
+        if success then
+            _G[name_adapter] = instance
+        end
+        return success
+    end
+    Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
+    return false
+end
+
 -- Экспорт в таблицу модуля для ModuleManager
 Adapter.dvb_tuner_monitor = dvb_tuner_monitor
 Adapter.find_dvb_conf = find_dvb_conf
 Adapter.update_dvb_monitor_parameters = update_dvb_monitor_parameters
 Adapter.get_all_dvb_monitors = get_all_dvb_monitors
+Adapter.stop_dvb_monitor = stop_dvb_monitor
+Adapter.restart_dvb_monitor = restart_dvb_monitor
 
 return Adapter

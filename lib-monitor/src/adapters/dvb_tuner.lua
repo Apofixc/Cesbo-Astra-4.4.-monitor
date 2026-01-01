@@ -197,17 +197,40 @@ function DvbTuner:update_parameters(params)
     return true
 end
 
---- Останавливает тюнер и очищает ресурсы
-function DvbTuner:kill()
+--- Останавливает тюнер.
+--- @return boolean success
+function DvbTuner:stop()
     if self.instance then
+        if type(self.instance.close) == "function" then
+            self.instance:close()
+        end
         self.instance = nil
+        Logger.info(COMPONENT_NAME, "Tuner '%s' stopped", self.name_adapter)
+        return true
     end
+    return false
+end
+
+--- Перезапускает тюнер.
+--- @return boolean success Статус выполнения
+--- @return any|nil result Новый экземпляр тюнера или nil
+function DvbTuner:restart()
+    Logger.info(COMPONENT_NAME, "Restarting tuner '%s'...", self.name_adapter)
+    self:stop()
+    local success, instance = self:start()
+    return success, instance
+end
+
+--- Полностью удаляет тюнер и очищает ресурсы.
+function DvbTuner:kill()
+    self:stop()
     self.name_adapter = nil
     self.display_name = nil
     self.config = nil
     self.status = nil
     self.check_timer = nil
     self.json_cache = nil
+    self.stats = nil
 end
 
 return DvbTuner
