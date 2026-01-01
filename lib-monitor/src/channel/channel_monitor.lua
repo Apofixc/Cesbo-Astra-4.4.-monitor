@@ -32,8 +32,13 @@ local FORCE_SEND_INTERVAL = 300
 --- @field private force_timer number
 --- @field private check_timer number
 --- @field private upstream any
+--- @field private json_status_cache string|nil
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
+
+local ratio = Utils.ratio
+local send_monitor = Utils.send_monitor
+local validate_monitor_param = Utils.validate_monitor_param
 
 -- Методы сравнения
 local COMPARISON_METHODS = {
@@ -50,7 +55,7 @@ local COMPARISON_METHODS = {
                prev.scrambled ~= curr.total.scrambled or 
                prev.cc_errors > 0 or 
                prev.pes_errors > 0 or 
-               Utils.ratio(prev.bitrate, curr.total.bitrate) > rate
+               ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
     [4] = function(prev, curr, rate)
         if prev.cc_errors > 1000 or prev.pes_errors > 1000 then
@@ -61,40 +66,15 @@ local COMPARISON_METHODS = {
     end
 }
 
---- Валидирует конфигурацию монитора
---- @param config table
---- @return boolean success
-local function validate_config(config)
-    if not config or type(config) ~= "table" then
-        Logger.error(COMPONENT_NAME, "validate_config: config must be a table")
-        return false
-    end
-
-    if not config.monitor or type(config.monitor) ~= "string" then
-        Logger.error(COMPONENT_NAME, "validate_config: monitor address is required")
-        return false
-    end
-
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema or {}
-    
-    local function validate_param(param_name, schema_key)
-        local s = schema[schema_key]
-        if not s then return end
-        
-        local val = config[param_name]
-        if val == nil then
-            config[param_name] = s.default
-        elseif type(val) ~= s.type or (s.min and val < s.min) or (s.max and val > s.max) then
-            Logger.warn(COMPONENT_NAME, "Parameter '%s' is invalid (value: %s). Using default: %s", param_name, tostring(val), tostring(s.default))
-            config[param_name] = s.default
-        end
-    end
-
-    validate_param("rate", "channel_rate")
-    validate_param("time_check", "channel_time_check")
-    validate_param("method_comparison", "channel_method_comparison")
-    validate_param("analyze", "channel_analyze")
-
+--- Вспомогательная функция для установки параметра конфигурации
+--- @param self ChannelMonitor
+--- @param param_name string
+--- @param value any
+local function set_config_param(self, param_name, value)
+    local success, result = validate_monitor_param(param_name, value)
+    if not success then return false end
+    local key = param_name:gsub("channel_", "")
+    self.config[key] = result
     return true
 end
 
@@ -114,7 +94,18 @@ function ChannelMonitor.new(config, channel_data)
         return false, nil
     end
 
-    if not validate_config(config) then
+    local self = setmetatable({}, ChannelMonitor)
+    self.config = config
+    self.channel_data = channel_data
+
+    -- Валидация и установка параметров по умолчанию
+    set_config_param(self, "channel_rate", config.rate)
+    set_config_param(self, "channel_time_check", config.time_check)
+    set_config_param(self, "channel_method_comparison", config.method_comparison)
+    set_config_param(self, "channel_analyze", config.analyze)
+
+    if not config.monitor or type(config.monitor) ~= "string" then
+        Logger.error(COMPONENT_NAME, "new: monitor address is required")
         return false, nil
     end
 
@@ -124,14 +115,12 @@ function ChannelMonitor.new(config, channel_data)
         return false, nil
     end
 
-    local self = setmetatable({}, ChannelMonitor)
     self.name = config.name or channel_data.name
-    self.config = config
-    self.channel_data = channel_data
     self.stream_json = config.stream_json or {}
     self.upstream = upstream
     self.force_timer = 0
     self.check_timer = 0
+    self.json_status_cache = nil
     self.status = {
         type = "Channel",
         server = Utils.get_server_name(),
@@ -149,20 +138,19 @@ function ChannelMonitor.new(config, channel_data)
     return true, self
 end
 
---- Публикует данные мониторинга через EventDispatcher
---- @param content string JSON данные
---- @param event_type string Тип события
-function ChannelMonitor:publish(content, event_type)
-    EventDispatcher.publish(event_type, content)
-end
-
 --- Запускает мониторинг
 --- @return boolean success
 function ChannelMonitor:start()
+    local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
+    if not comparison_method then
+        Logger.error(COMPONENT_NAME, "start: Invalid comparison method %s", tostring(self.config.method_comparison))
+        return false
+    end
+
     self.monitor_instance = analyze({
         upstream = self.upstream:stream(),
         name = "_" .. self.name,
-        callback = function(data) self:on_data(data) end
+        callback = function(data) self:on_data(data, comparison_method) end
     })
 
     if not self.monitor_instance then
@@ -185,15 +173,16 @@ end
 
 --- Обработка данных от analyze
 --- @param data table
-function ChannelMonitor:on_data(data)
+--- @param comparison_method function
+function ChannelMonitor:on_data(data, comparison_method)
     if data.error then
         local content = Utils.table_copy(self.status)
         content.error = data.error
-        self:publish(json_encode(content), "error")
+        send_monitor(json_encode(content), "errors")
     elseif data.psi then
         self:process_psi_data(data)
     elseif data.total then
-        self:process_total_data(data)
+        self:process_total_data(data, comparison_method)
     end
 end
 
@@ -220,7 +209,8 @@ end
 
 --- Обработка суммарных данных потока
 --- @param data table
-function ChannelMonitor:process_total_data(data)
+--- @param comparison_method function
+function ChannelMonitor:process_total_data(data, comparison_method)
     if self.config.analyze and data.analyze and (data.total.cc_errors > 0 or data.total.pes_errors > 0) then
         for _, pid_data in ipairs(data.analyze) do
             local pid = pid_data.pid
@@ -255,9 +245,9 @@ function ChannelMonitor:process_total_data(data)
     end
     self.check_timer = 0
 
-    local comparison = COMPARISON_METHODS[self.config.method_comparison or 3]
-    if comparison(self.status, data, self.config.rate) or self.force_timer > FORCE_SEND_INTERVAL then
+    if comparison_method(self.status, data, self.config.rate) or self.force_timer > FORCE_SEND_INTERVAL then
         self:update_status_and_publish(data)
+        self.force_timer = 0
     end
 end
 
@@ -288,13 +278,16 @@ function ChannelMonitor:update_status_and_publish(data)
         self.status.analyze = nil
     end
     
-    self:publish(json_encode(self.status), "channels")
+    local current_json = json_encode(self.status)
+    if current_json ~= self.json_status_cache then
+        send_monitor(current_json, "channels")
+        self.json_status_cache = current_json
+    end
 
     -- Сброс данных
     self.status.cc_errors = 0
     self.status.pes_errors = 0
     self.analyze_stats = {}
-    self.force_timer = 0
 end
 
 --- Возвращает закэшированные PSI данные
@@ -315,7 +308,7 @@ function ChannelMonitor:get_pid_description(pid)
 end
 
 --- Останавливает мониторинг и очищает ресурсы
-function ChannelMonitor:stop()
+function ChannelMonitor:kill()
     if self.monitor_instance then
         self.monitor_instance = nil
     end
@@ -330,6 +323,7 @@ function ChannelMonitor:stop()
     self.analyze_stats = nil
     self.force_timer = nil
     self.check_timer = nil
+    self.json_status_cache = nil
 end
 
 --- Обновляет параметры монитора
@@ -338,20 +332,20 @@ end
 function ChannelMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then return false end
 
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema or {}
-    
     if params.rate ~= nil then
-        local s = schema.channel_rate
-        if type(params.rate) == "number" and params.rate >= s.min and params.rate <= s.max then
-            self.config.rate = params.rate
-        end
+        set_config_param(self, "channel_rate", params.rate)
     end
     
     if params.time_check ~= nil then
-        local s = schema.channel_time_check
-        if type(params.time_check) == "number" and params.time_check >= s.min and params.time_check <= s.max then
-            self.config.time_check = params.time_check
-        end
+        set_config_param(self, "channel_time_check", params.time_check)
+    end
+
+    if params.method_comparison ~= nil then
+        set_config_param(self, "channel_method_comparison", params.method_comparison)
+    end
+
+    if params.analyze ~= nil then
+        set_config_param(self, "channel_analyze", params.analyze)
     end
 
     return true

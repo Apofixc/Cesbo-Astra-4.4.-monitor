@@ -37,7 +37,9 @@ end
 function ChannelStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then
-        if type(monitor.stop) == "function" then
+        if type(monitor.kill) == "function" then
+            monitor:kill()
+        elseif type(monitor.stop) == "function" then
             monitor:stop()
         end
         monitors[name] = nil

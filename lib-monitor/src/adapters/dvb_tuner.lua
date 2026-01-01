@@ -22,8 +22,13 @@ local COMPONENT_NAME = "DvbTuner"
 --- @field private status table
 --- @field private instance any
 --- @field private check_timer number
+--- @field private json_cache string|nil
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
+
+local ratio = Utils.ratio
+local send_monitor = Utils.send_monitor
+local validate_monitor_param = Utils.validate_monitor_param
 
 local COMPARISON_METHODS = {
     [1] = function() return true end,
@@ -36,46 +41,22 @@ local COMPARISON_METHODS = {
     end,
     [3] = function(prev, curr, rate)
         return prev.status ~= curr.status or 
-               Utils.ratio(prev.signal, curr.signal) > rate or 
-               Utils.ratio(prev.snr, curr.snr) > rate or 
+               ratio(prev.signal, curr.signal) > rate or 
+               ratio(prev.snr, curr.snr) > rate or 
                prev.ber ~= curr.ber or 
                prev.unc ~= curr.unc
     end
 }
 
---- Валидирует конфигурацию тюнера
---- @param config table
---- @return boolean success
-local function validate_config(config)
-    if not config or type(config) ~= "table" then
-        Logger.error(COMPONENT_NAME, "validate_config: config must be a table")
-        return false
-    end
-
-    if not config.name_adapter or type(config.name_adapter) ~= "string" then
-        Logger.error(COMPONENT_NAME, "validate_config: name_adapter is required")
-        return false
-    end
-
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema or {}
-    
-    local function validate_param(param_name, schema_key)
-        local s = schema[schema_key]
-        if not s then return end
-        
-        local val = config[param_name]
-        if val == nil then
-            config[param_name] = s.default
-        elseif type(val) ~= s.type or (s.min and val < s.min) or (s.max and val > s.max) then
-            Logger.warn(COMPONENT_NAME, "Parameter '%s' is invalid (value: %s). Using default: %s", param_name, tostring(val), tostring(s.default))
-            config[param_name] = s.default
-        end
-    end
-
-    validate_param("rate", "dvb_rate")
-    validate_param("time_check", "dvb_time_check")
-    validate_param("method_comparison", "dvb_method_comparison")
-
+--- Вспомогательная функция для установки параметра конфигурации
+--- @param self DvbTuner
+--- @param param_name string
+--- @param value any
+local function set_config_param(self, param_name, value)
+    local success, result = validate_monitor_param(param_name, value)
+    if not success then return false end
+    local key = param_name:gsub("dvb_", "")
+    self.config[key] = result
     return true
 end
 
@@ -84,14 +65,27 @@ end
 --- @return boolean success
 --- @return DvbTuner|nil
 function DvbTuner.new(conf)
-    if not validate_config(conf) then
+    if not conf or type(conf) ~= "table" then
+        Logger.error(COMPONENT_NAME, "new: config is required")
         return false, nil
     end
 
     local self = setmetatable({}, DvbTuner)
-    self.name_adapter = conf.name_adapter
     self.config = conf
+
+    -- Валидация и установка параметров по умолчанию
+    set_config_param(self, "dvb_rate", conf.rate)
+    set_config_param(self, "dvb_time_check", conf.time_check)
+    set_config_param(self, "dvb_method_comparison", conf.method_comparison)
+
+    if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
+        Logger.error(COMPONENT_NAME, "new: name_adapter is required")
+        return false, nil
+    end
+
+    self.name_adapter = conf.name_adapter
     self.check_timer = 0
+    self.json_cache = nil
     self.status = {
         type = "dvb",
         server = Utils.get_server_name(),
@@ -118,7 +112,13 @@ end
 --- Запускает тюнер
 --- @return boolean success
 function DvbTuner:start()
-    self.config.callback = function(data) self:on_data(data) end
+    local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
+    if not comparison_method then
+        Logger.error(COMPONENT_NAME, "start: Invalid comparison method %s", tostring(self.config.method_comparison))
+        return false
+    end
+
+    self.config.callback = function(data) self:on_data(data, comparison_method) end
     self.instance = dvb_tune(self.config)
     if not self.instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
@@ -128,22 +128,27 @@ function DvbTuner:start()
 end
 
 --- Обработка данных
-function DvbTuner:on_data(data)
+--- @param data table
+--- @param comparison_method function
+function DvbTuner:on_data(data, comparison_method)
     if self.check_timer < self.config.time_check then
         self.check_timer = self.check_timer + 1
         return
     end
     self.check_timer = 0
 
-    local comparison = COMPARISON_METHODS[self.config.method_comparison]
-    if comparison(self.status, data, self.config.rate) then
+    if comparison_method(self.status, data, self.config.rate) then
         self.status.status = data.status or -1
         self.status.signal = data.signal or -1
         self.status.snr = data.snr or -1
         self.status.ber = data.ber or -1
         self.status.unc = data.unc or -1
 
-        self:publish(json_encode(self.status), "dvb")
+        local current_json = json_encode(self.status)
+        if current_json ~= self.json_cache then
+            send_monitor(current_json, "dvb")
+            self.json_cache = current_json
+        end
     end
 end
 
@@ -151,25 +156,20 @@ end
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then return false end
 
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema or {}
-    
     if params.rate ~= nil then
-        local s = schema.dvb_rate
-        if type(params.rate) == 'number' and params.rate >= s.min and params.rate <= s.max then
-            self.config.rate = params.rate
-        end
+        set_config_param(self, "dvb_rate", params.rate)
     end
     if params.time_check ~= nil then
-        local s = schema.dvb_time_check
-        if type(params.time_check) == 'number' and params.time_check >= s.min and params.time_check <= s.max then
-            self.config.time_check = params.time_check
-        end
+        set_config_param(self, "dvb_time_check", params.time_check)
+    end
+    if params.method_comparison ~= nil then
+        set_config_param(self, "dvb_method_comparison", params.method_comparison)
     end
     return true
 end
 
 --- Останавливает тюнер и очищает ресурсы
-function DvbTuner:stop()
+function DvbTuner:kill()
     if self.instance then
         self.instance = nil
     end
@@ -177,6 +177,7 @@ function DvbTuner:stop()
     self.config = nil
     self.status = nil
     self.check_timer = nil
+    self.json_cache = nil
 end
 
 return DvbTuner
