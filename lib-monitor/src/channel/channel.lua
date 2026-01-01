@@ -270,7 +270,7 @@ end
 --- Останавливает поток и монитор
 --- @param channel_data table|string Данные канала или имя
 --- @return boolean success Статус выполнения
---- @return table|nil result Конфигурация потока для восстановления или nil
+--- @return table|string|nil result Конфигурация потока для восстановления или nil
 function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
     if not ch_data or not ch_data.config then

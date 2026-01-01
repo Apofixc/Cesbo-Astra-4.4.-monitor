@@ -120,38 +120,35 @@ function DvbTuner:start()
         return false
     end
 
-    self.config.callback = function(data) self:on_data(data, comparison_method) end
+    self.config.callback = function(data) 
+        if self.check_timer < self.config.time_check then
+            self.check_timer = self.check_timer + 1
+            return
+        end
+        self.check_timer = 0
+
+        if comparison_method(self.status, data, self.config.rate) then
+            self.status.status = data.status or -1
+            self.status.signal = data.signal or -1
+            self.status.snr = data.snr or -1
+            self.status.ber = data.ber or -1
+            self.status.unc = data.unc or -1
+
+            local current_json = json_encode(self.status)
+            if current_json ~= self.json_cache then
+                HttpSubscriber.publish("dvb", current_json)
+                self.json_cache = current_json
+            end
+        end
+    end
+
     self.instance = dvb_tune(self.config)
     if not self.instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
         return false
     end
+    
     return true
-end
-
---- Обработка данных
---- @param data table
---- @param comparison_method function
-function DvbTuner:on_data(data, comparison_method)
-    if self.check_timer < self.config.time_check then
-        self.check_timer = self.check_timer + 1
-        return
-    end
-    self.check_timer = 0
-
-    if comparison_method(self.status, data, self.config.rate) then
-        self.status.status = data.status or -1
-        self.status.signal = data.signal or -1
-        self.status.snr = data.snr or -1
-        self.status.ber = data.ber or -1
-        self.status.unc = data.unc or -1
-
-        local current_json = json_encode(self.status)
-        if current_json ~= self.json_cache then
-            HttpSubscriber.publish("dvb", current_json)
-            self.json_cache = current_json
-        end
-    end
 end
 
 --- Обновляет параметры
