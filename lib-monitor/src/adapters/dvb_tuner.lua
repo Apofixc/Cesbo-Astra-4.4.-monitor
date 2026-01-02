@@ -76,8 +76,8 @@ end
 --- @param value any Значение
 --- @return boolean success Статус выполнения
 function DvbTuner:_set_config_param(param_name, value)
-    local success, result = validate_monitor_param(param_name, value)
-    if not success then
+    local result = validate_monitor_param(param_name, value)
+    if result == nil then
         Logger.error(COMPONENT_NAME, "[%s] Invalid parameter value for %s: %s", tostring(self.name_adapter), param_name, tostring(value))
         return false
     end
@@ -106,9 +106,9 @@ function DvbTuner.new(conf)
     self.name_adapter = conf.name_adapter
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
-    self:_set_config_param("dvb_rate", conf.rate)
-    self:_set_config_param("dvb_time_check", conf.time_check)
-    self:_set_config_param("dvb_method_comparison", conf.method_comparison)
+    if not self:_set_config_param("dvb_rate", conf.rate) then return nil end
+    if not self:_set_config_param("dvb_time_check", conf.time_check) then return nil end
+    if not self:_set_config_param("dvb_method_comparison", conf.method_comparison) then return nil end
     self.check_timer = 0
     self.json_cache = nil
     self.stats = {
@@ -154,7 +154,7 @@ function DvbTuner:start()
     end
 
     self.config.callback = function(data)
-        if not self._active or not data then return end
+        if not self or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
         if data.status and data.status > 0 then
@@ -199,11 +199,13 @@ function DvbTuner:start()
     end
 
     self._active = true
-    self.instance = dvb_tune(self.config)
-    if not self.instance then
+    local instance = dvb_tune(self.config)
+    if not instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
         return nil
     end
+
+    self.instance = instance
 
     -- Безопасное управление счетчиком каналов Astra
     if self.instance.__options then
@@ -271,6 +273,7 @@ function DvbTuner:psi_update()
     self._psi_timer = timer({
         interval = 10,
         callback = function()
+            if not self or not self.name_adapter then return end
             self._temp_analyzer = nil
             if self._psi_timer then
                 self._psi_timer:close()
@@ -321,12 +324,17 @@ function DvbTuner:destroy(force)
     if self.instance then
         local can_close = true
         
+        -- Очищаем callback в инстансе Astra, если он там есть
+        if self.instance.__options then
+            self.instance.__options.callback = nil
+        end
+
         if not force then
             if self.instance.__options and self.instance.__options.channels then
                 self.instance.__options.channels = self.instance.__options.channels - 1
                 Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
                 
-                if self.instance.__options.channels > 1 then
+                if self.instance.__options.channels >= 1 then
                     can_close = false
                     Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
                 end

@@ -156,6 +156,13 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     -- 4. Создаем и запускаем новый монитор
     local success = Adapter.dvb_tuner_monitor(new_conf)
     if not success then
+        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to start new monitor for '%s'. Rollback to old config.", name_adapter)
+        -- Попытка отката на старую конфигурацию
+        if not Adapter.dvb_tuner_monitor(tuner.config) then
+            Logger.error(COMPONENT_NAME, "restart_dvb_monitor: CRITICAL - failed to rollback to old config for '%s'", name_adapter)
+        end
+        -- В любом случае пытаемся вернуть каналы
+        for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end
         return false
     end
 
@@ -258,13 +265,10 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
             local old_conf = old_channels_map[name]
             
             -- Запускаем только если канал существовал ранее (наследуем выходы)
-            if name and old_conf then
+            if name and old_conf and item.input then
                 local final_conf = Utils.table_copy(old_conf)
-
-                if item.input and type(item.input) == "table" then
-                    final_conf.input = item.input
-                    Channel.make_stream(final_conf)
-                end
+                final_conf.input = item.input
+                Channel.make_stream(final_conf)
             end
         end
     end

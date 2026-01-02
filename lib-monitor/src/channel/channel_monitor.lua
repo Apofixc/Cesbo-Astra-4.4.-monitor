@@ -179,7 +179,7 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self._active or not data then return end
+            if not self or not self._active or not data then return end
 
             if data.error then
                 self:process_error_data(data)
