@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local string_format = string.format
 local type = type
+local table_insert = table.insert
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -187,7 +188,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     for name, _ in pairs(dependent_channels) do
         local ch_config = Channel.kill_stream(name)
         if ch_config then
-            table.insert(old_channels_configs, ch_config)
+            table_insert(old_channels_configs, ch_config)
             old_channels_map[name] = ch_config
         end
     end

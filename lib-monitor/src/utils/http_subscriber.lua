@@ -2,6 +2,9 @@
 local ipairs = ipairs
 local type = type
 local tostring = tostring
+local string_format = string.format
+local table_insert = table.insert
+local table_remove = table.remove
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -98,7 +101,7 @@ end
 --- @param event_type string Тип события для логирования
 local function send_request(addr, content, event_type)
     local timeout = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
-    local url = string.format("http://%s:%s%s", addr.host, addr.port, addr.path)
+    local url = string_format("http://%s:%s%s", addr.host, addr.port, addr.path)
 
     http_request({
         host = addr.host,
@@ -147,7 +150,7 @@ function HttpSubscriber.subscribe(event_type, addr)
         end
     end
 
-    table.insert(subscribers[event_type], {
+    table_insert(subscribers[event_type], {
         host = addr.host,
         port = addr.port,
         path = addr.path
@@ -170,7 +173,7 @@ function HttpSubscriber.unsubscribe(event_type, addr)
     local found = false
     for i, existing in ipairs(subscribers[event_type]) do
         if existing.host == addr.host and existing.port == addr.port and existing.path == addr.path then
-            table.remove(subscribers[event_type], i)
+            table_remove(subscribers[event_type], i)
             found = true
             break
         end

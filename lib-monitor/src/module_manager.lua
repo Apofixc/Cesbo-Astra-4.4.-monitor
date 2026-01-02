@@ -9,6 +9,7 @@
 local type, pairs, ipairs, tostring, pcall = type, pairs, ipairs, tostring, pcall
 local table_concat, table_insert = table.concat, table.insert
 local string_gmatch = string.gmatch
+local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
 -- Logger будет загружен позже, чтобы избежать циклической зависимости при инициализации ModuleManager
@@ -103,7 +104,7 @@ local function topological_sort()
     
     local function visit(name)
         if not registered_modules[name] then
-            local msg = string.format("Попытка загрузить незарегистрированный модуль: %s.", name)
+            local msg = string_format("Попытка загрузить незарегистрированный модуль: %s.", name)
             log_error(COMPONENT_NAME, msg)
             return false
         end
@@ -113,7 +114,7 @@ local function topological_sort()
         end
         
         if temp_visited[name] then
-            local msg = string.format("Обнаружена циклическая зависимость с участием модуля: %s.", name)
+            local msg = string_format("Обнаружена циклическая зависимость с участием модуля: %s.", name)
             log_error(COMPONENT_NAME, msg)
             return false
         end
@@ -237,7 +238,7 @@ function ModuleManager.check_nested_dependency(path_str)
     end
     
     local parts = {}
-    for part in string.gmatch(path_str, "[^.]+") do
+    for part in string_gmatch(path_str, "[^.]+") do
         table_insert(parts, part)
     end
     

@@ -76,8 +76,8 @@ end
 --- @param adapter_name string Имя адаптера (например, "0" или "0.1")
 --- @return table<string, table> Список найденных каналов (имя -> ch_data)
 function ChannelStorage.find_by_adapter(adapter_name)
+    local result = {}    
     local channel_list = ModuleManager.get_global_dependency("channel_list")
-    local result = {}
     
     if not channel_list then
         Logger.error(COMPONENT_NAME, "find_by_adapter: channel_list dependency not found")

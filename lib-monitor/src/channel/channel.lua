@@ -3,6 +3,7 @@ local ipairs = ipairs
 local string_lower = string.lower
 local tostring = tostring
 local type = type
+local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local Adapter = ModuleManager.get_module("adapter")
