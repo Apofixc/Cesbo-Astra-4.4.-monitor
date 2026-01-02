@@ -24,7 +24,7 @@ local Utils = {}
 
 --- Возвращает имя потока по IP-адресу
 --- @param ip_address string IP-адрес потока
---- @return string|nil result Имя потока или исходный IP-адрес, nil в случае ошибки
+--- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
         Logger.error(COMPONENT_NAME, "get_stream_name: Invalid ip_address")
@@ -38,7 +38,7 @@ end
 --- Вычисляет отношение абсолютной разницы между двумя числами к их максимальному значению
 --- @param old number Старое значение
 --- @param new number Новое значение
---- @return number result Отношение (от 0 до 1)
+--- @return number Отношение (от 0 до 1)
 function Utils.ratio(old, new)
     local abs_old = math_abs(old)
     local abs_new = math_abs(new)
@@ -55,7 +55,7 @@ end
 
 --- Создает поверхностную копию таблицы
 --- @param t table Исходная таблица
---- @return table result Копия таблицы
+--- @return table Копия таблицы
 function Utils.table_copy(t)
     if type(t) ~= "table" then
         return {}
@@ -73,7 +73,7 @@ end
 --- Если значение невалидно или отсутствует, возвращает значение по умолчанию из схемы.
 --- @param name string Имя параметра
 --- @param value any Значение
---- @return any result Валидированные данные или значение по умолчанию
+--- @return any Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
     local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[name]
     if not schema then
@@ -109,7 +109,7 @@ end
 
 --- Валидирует имя монитора
 --- @param name string Имя монитора
---- @return boolean success Статус валидации
+--- @return boolean Статус валидации
 function Utils.validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
         return false
@@ -127,7 +127,7 @@ function Utils.validate_monitor_name(name)
 end
 
 --- Возвращает имя хоста сервера
---- @return string result Имя хоста
+--- @return string Имя хоста
 function Utils.get_server_name()
     return HOSTNAME
 end

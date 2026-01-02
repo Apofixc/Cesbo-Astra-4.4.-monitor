@@ -28,7 +28,7 @@ local Adapter = {}
 --- Автоматически регистрирует экземпляр тюнера в глобальной области видимости (_G)
 --- под именем, указанным в conf.name_adapter.
 --- @param conf table Конфигурация тюнера
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function dvb_tuner_monitor(conf)
     if not conf or not conf.name_adapter then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: name_adapter is required")
@@ -58,7 +58,7 @@ end
 
 --- Находит экземпляр DVB-тюнера по имени адаптера.
 --- @param name_adapter string Уникальное имя адаптера
---- @return any|nil result Экземпляр тюнера (instance) или nil
+--- @return any|nil Экземпляр тюнера (instance) или nil
 local function find_dvb_conf(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -70,7 +70,7 @@ end
 --- Обновляет параметры мониторинга DVB-тюнера.
 --- @param name_adapter string Уникальное имя адаптера
 --- @param params table Новые параметры (rate, time_check, method_comparison)
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function update_dvb_monitor_parameters(name_adapter, params)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -81,7 +81,7 @@ local function update_dvb_monitor_parameters(name_adapter, params)
 end
 
 --- Возвращает список всех активных мониторов тюнеров.
---- @return table<string, DvbTuner> result Список мониторов
+--- @return table<string, DvbTuner> Список мониторов
 local function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end
@@ -89,7 +89,7 @@ end
 --- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости и хранилища.
 --- @param name_adapter string Уникальное имя адаптера
 --- @param force boolean|nil Принудительная остановка
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function stop_dvb_monitor(name_adapter, force)
     if DvbStorage.unregister(name_adapter, force) then
         _G[name_adapter] = nil
@@ -103,7 +103,7 @@ end
 --- @param name_adapter string Уникальное имя адаптера
 --- @param new_params table|nil Новые параметры тюнинга
 --- @param force boolean|nil Принудительный перезапуск
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function restart_dvb_monitor(name_adapter, new_params, force)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then
@@ -188,7 +188,7 @@ end
 
 --- Приостанавливает мониторинг тюнера
 --- @param name_adapter string Имя адаптера
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function pause_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -200,7 +200,7 @@ end
 
 --- Возобновляет мониторинг тюнера
 --- @param name_adapter string Имя адаптера
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function resume_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -218,7 +218,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @param new_tuner_params table Новые параметры тюнера
 --- @param reserve_input table|nil Список новых входов {name, pnr, ...}
---- @return table|nil old_state Снимок предыдущего состояния для возврата
+--- @return table|nil Снимок предыдущего состояния для возврата
 local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then

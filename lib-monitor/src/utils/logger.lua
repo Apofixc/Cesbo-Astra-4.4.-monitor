@@ -51,7 +51,6 @@ end
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
---- @return boolean success Статус выполнения
 function Logger.info(component, format_str, ...)
     if should_log(LOG_LEVELS.INFO) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
@@ -67,7 +66,6 @@ end
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
---- @return boolean success Статус выполнения
 function Logger.error(component, format_str, ...)
     local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
     
@@ -92,7 +90,6 @@ end
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
---- @return boolean success Статус выполнения
 function Logger.debug(component, format_str, ...)
     if should_log(LOG_LEVELS.DEBUG) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
@@ -108,7 +105,6 @@ end
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
---- @return boolean success Статус выполнения
 function Logger.warn(component, format_str, ...)
     if should_log(LOG_LEVELS.WARN) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
@@ -123,8 +119,8 @@ end
 --- Выполняет функцию в контексте отслеживания ошибок
 --- @param func function Функция для выполнения
 --- @param ... any Аргументы функции
---- @return boolean success Статус выполнения
---- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке (для HTTP-функций)
+--- @return boolean Статус выполнения
+--- @return any|string|nil Данные, nil или сообщение об ошибке (для HTTP-функций)
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
     local context_id = tostring({}) -- Уникальный ID для этого вызова

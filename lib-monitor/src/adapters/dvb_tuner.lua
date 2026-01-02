@@ -60,7 +60,6 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для очистки ресурсов PSI
---- @return boolean success Статус выполнения
 function DvbTuner:_clear_psi()
     if self._psi_timer then
         self._psi_timer:close()
@@ -70,13 +69,12 @@ function DvbTuner:_clear_psi()
         self._temp_analyzer = nil
         collectgarbage()
     end
-    return true
 end
 
 --- Вспомогательная функция для установки параметра конфигурации
 --- @param param_name string Имя параметра
 --- @param value any Значение
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbTuner:_set_config_param(param_name, value)
     local result = validate_monitor_param(param_name, value)
     if result == nil then
@@ -90,7 +88,7 @@ end
 
 --- Создает новый экземпляр DvbTuner.
 --- @param conf table Конфигурация тюнера
---- @return DvbTuner|nil result Экземпляр DvbTuner или nil
+--- @return DvbTuner|nil Экземпляр DvbTuner или nil
 function DvbTuner.new(conf)
     if not conf or type(conf) ~= "table" then
         Logger.error(COMPONENT_NAME, "new: config is required")
@@ -142,13 +140,12 @@ end
 --- Публикует данные через HttpSubscriber
 --- @param content string JSON данные
 --- @param event_type string Тип события
---- @return boolean success Статус выполнения
 function DvbTuner:publish(content, event_type)
-    return HttpSubscriber.publish(event_type, content)
+    HttpSubscriber.publish(event_type, content)
 end
 
 --- Запускает тюнер и инициализирует callback для мониторинга.
---- @return any|nil result Экземпляр dvb_tune или nil
+--- @return any|nil Экземпляр dvb_tune или nil
 function DvbTuner:start()
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
@@ -225,7 +222,7 @@ end
 
 --- Обновляет параметры мониторинга тюнера.
 --- @param params table Новые параметры (rate, time_check, method_comparison)
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then
         Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name_adapter))
@@ -246,13 +243,13 @@ function DvbTuner:update_parameters(params)
 end
 
 --- Возвращает собранные PSI данные
---- @return table psi Таблица с PSI данными
+--- @return table Таблица с PSI данными
 function DvbTuner:get_psi()
     return self._psi
 end
 
 --- Запускает сбор PSI таблиц на 10 секунд
---- @return boolean success Статус запуска процесса
+--- @return boolean Статус запуска процесса
 function DvbTuner:psi_update()
     if not self.instance or self._temp_analyzer or self._psi_timer then
         return false
@@ -290,7 +287,7 @@ function DvbTuner:psi_update()
 end
 
 --- Приостанавливает мониторинг тюнера
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbTuner:pause()
     self._active = false
     Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self.name_adapter))
@@ -298,7 +295,7 @@ function DvbTuner:pause()
 end
 
 --- Возобновляет мониторинг тюнера
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbTuner:resume()
     if not self.config then
         Logger.error(COMPONENT_NAME, "[%s] Cannot resume: tuner already destroyed", tostring(self.name_adapter))
@@ -311,7 +308,7 @@ end
 
 --- Полностью останавливает тюнер и уничтожает объект.
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbTuner:destroy(force)
     if self.instance and not force then
         if self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then

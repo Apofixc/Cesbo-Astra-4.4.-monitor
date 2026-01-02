@@ -28,7 +28,7 @@ local HttpSubscriber = {}
 local subscribers = {}
 
 --- Загружает список подписчиков из файла
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function load_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
     if not path then
@@ -64,7 +64,7 @@ local function load_subscribers()
 end
 
 --- Сохраняет список подписчиков в файл
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 local function save_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
     if not path then
@@ -99,7 +99,6 @@ end
 --- @param addr table {host, port, path}
 --- @param content string JSON данные
 --- @param event_type string Тип события для логирования
---- @return boolean success Статус выполнения (всегда true, так как запрос асинхронный)
 local function send_request(addr, content, event_type)
     local timeout = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
     local url = string_format("http://%s:%s%s", addr.host, addr.port, addr.path)
@@ -133,7 +132,7 @@ end
 --- Подписывает адрес на события определенного типа
 --- @param event_type string Тип события
 --- @param addr table {host, port, path}
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function HttpSubscriber.subscribe(event_type, addr)
     if not event_type or type(addr) ~= "table" or not addr.host or not addr.port or not addr.path then
         Logger.error(COMPONENT_NAME, "subscribe: Invalid arguments")
@@ -164,7 +163,7 @@ end
 --- Отписывает адрес от событий определенного типа
 --- @param event_type string Тип события
 --- @param addr table {host, port, path}
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function HttpSubscriber.unsubscribe(event_type, addr)
     if not event_type or not subscribers[event_type] or type(addr) ~= "table" then
         Logger.error(COMPONENT_NAME, "unsubscribe: Invalid arguments or event type not found")
@@ -191,7 +190,7 @@ end
 --- Публикует событие через HTTP рассылку
 --- @param event_type string Тип события
 --- @param data string JSON данные
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function HttpSubscriber.publish(event_type, data)
     if not event_type or not data then
         Logger.error(COMPONENT_NAME, "publish: Invalid arguments")

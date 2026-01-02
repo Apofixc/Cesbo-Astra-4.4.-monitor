@@ -21,7 +21,7 @@ local monitors = {}
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя адаптера
 --- @param monitor_instance DvbTuner Экземпляр монитора
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "DVB Monitor '%s' already registered. Overwriting.", name)
@@ -34,7 +34,7 @@ end
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя адаптера
 --- @param force boolean|nil Принудительная остановка
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function DvbStorage.unregister(name, force)
     local monitor = monitors[name]
     if monitor then
@@ -53,19 +53,19 @@ end
 
 --- Находит монитор по имени адаптера
 --- @param name string Имя адаптера
---- @return DvbTuner|nil result Экземпляр монитора или nil
+--- @return DvbTuner|nil Экземпляр монитора или nil
 function DvbStorage.find(name)
     return monitors[name]
 end
 
 --- Возвращает список всех мониторов
---- @return table<string, DvbTuner> result Таблица мониторов
+--- @return table<string, DvbTuner> Таблица мониторов
 function DvbStorage.get_all()
     return monitors
 end
 
 --- Возвращает количество активных мониторов
---- @return number result Количество мониторов
+--- @return number Количество мониторов
 function DvbStorage.count()
     local count = 0
     for _ in pairs(monitors) do

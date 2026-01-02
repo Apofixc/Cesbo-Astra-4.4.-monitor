@@ -57,7 +57,7 @@ end
 --- @param name string Имя модуля (например, "utils.logger").
 --- @param path string Путь к файлу модуля (например, "src.utils.logger").
 --- @param dependencies table|nil Таблица строк, содержащих имена зависимостей этого модуля.
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ModuleManager.register_module(name, path, dependencies)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
@@ -96,7 +96,7 @@ function ModuleManager.register_module(name, path, dependencies)
 end
 
 --- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей.
---- @return table|nil result Список имен или nil
+--- @return table|nil Список имен или nil
 local function topological_sort()
     local load_order = {}
     local visited = {}
@@ -148,7 +148,7 @@ local function topological_sort()
 end
 
 --- Загружает все зарегистрированные модули в правильном порядке, разрешая зависимости.
---- @return table|nil result Список имен загруженных модулей или nil
+--- @return table|nil Список имен загруженных модулей или nil
 function ModuleManager.load_modules()
     local load_order = topological_sort()
     
@@ -200,13 +200,13 @@ end
 
 --- Возвращает загруженный модуль по его имени.
 --- @param name string Имя модуля.
---- @return any|nil result Загруженный модуль или nil, если модуль не найден.
+--- @return any|nil Загруженный модуль или nil, если модуль не найден.
 function ModuleManager.get_module(name)
     return loaded_modules[name]
 end
 
 --- Проверяет, что все зарегистрированные модули имеют удовлетворенные зависимости.
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ModuleManager.validate_dependencies()
     local all_dependencies_met = true
     
@@ -230,7 +230,7 @@ end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
 --- @param path_str string Строка, представляющая путь к переменной/функции (например, "find_channel" или utils.version).
---- @return any|nil result Найденный объект или nil
+--- @return any|nil Найденный объект или nil
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
         log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
@@ -281,14 +281,14 @@ end
 
 --- Возвращает сохраненную ссылку на глобальную зависимость.
 --- @param name string Имя зависимости.
---- @return any|nil result Сохраненный объект или nil, если зависимость не найдена.
+--- @return any|nil Сохраненный объект или nil, если зависимость не найдена.
 function ModuleManager.get_global_dependency(name)
     return global_dependencies[name]
 end
 
 --- Удаляет сохраненную глобальную зависимость из кэша.
 --- @param name string Имя зависимости.
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ModuleManager.remove_global_dependency(name)
     if global_dependencies[name] ~= nil then
         global_dependencies[name] = nil
@@ -300,7 +300,7 @@ end
 
 --- Устанавливает глобальные зависимости.
 --- @param deps table Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости.
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
         log_error(COMPONENT_NAME, "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица).")
@@ -314,7 +314,7 @@ function ModuleManager.set_global_dependencies(deps)
 end
 
 --- Получает список всех сохраненных глобальных зависимостей.
---- @return table result Список путей к сохраненным зависимостям.
+--- @return table Список путей к сохраненным зависимостям.
 function ModuleManager.get_global_dependencies()
     local deps = {}
     for path, _ in pairs(global_dependencies) do
@@ -325,13 +325,13 @@ end
 
 --- Проверяет, загружен ли модуль
 --- @param name string Имя модуля
---- @return boolean result true если модуль загружен, иначе false
+--- @return boolean true если модуль загружен, иначе false
 function ModuleManager.is_module_loaded(name)
     return loaded_modules[name] ~= nil
 end
 
 --- Получает список всех зарегистрированных модулей
---- @return table result Список имен модулей
+--- @return table Список имен модулей
 function ModuleManager.get_registered_modules()
     local modules = {}
     for name in pairs(registered_modules) do
@@ -341,7 +341,7 @@ function ModuleManager.get_registered_modules()
 end
 
 --- Получает список всех загруженных модулей
---- @return table result Список имен загруженных модулей
+--- @return table Список имен загруженных модулей
 function ModuleManager.get_loaded_modules()
     local modules = {}
     for name in pairs(loaded_modules) do
@@ -351,7 +351,7 @@ function ModuleManager.get_loaded_modules()
 end
 
 --- Очищает все зарегистрированные и загруженные модули (для тестов)
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ModuleManager.reset()
     registered_modules = {}
     loaded_modules = {}

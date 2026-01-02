@@ -22,7 +22,7 @@ local monitors = {}
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя монитора
 --- @param monitor_instance ChannelMonitor Экземпляр монитора
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ChannelStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "Monitor '%s' already registered. Overwriting.", name)
@@ -34,7 +34,7 @@ end
 
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя монитора
---- @return boolean success Статус выполнения
+--- @return boolean Статус выполнения
 function ChannelStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then
@@ -51,19 +51,19 @@ end
 
 --- Находит монитор по имени
 --- @param name string Имя монитора
---- @return ChannelMonitor|nil result Экземпляр монитора или nil
+--- @return ChannelMonitor|nil Экземпляр монитора или nil
 function ChannelStorage.find(name)
     return monitors[name]
 end
 
 --- Возвращает список всех мониторов
---- @return table<string, ChannelMonitor> result Таблица мониторов
+--- @return table<string, ChannelMonitor> Таблица мониторов
 function ChannelStorage.get_all()
     return monitors
 end
 
 --- Возвращает количество активных мониторов
---- @return number result Количество мониторов
+--- @return number Количество мониторов
 function ChannelStorage.count()
     local count = 0
     for _ in pairs(monitors) do
