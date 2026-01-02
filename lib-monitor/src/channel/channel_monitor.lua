@@ -129,6 +129,10 @@ function ChannelMonitor.new(config, channel_data)
     self:_set_config_param("channel_time_check", config.time_check)
     self:_set_config_param("channel_method_comparison", config.method_comparison)
     self:_set_config_param("channel_analyze", config.analyze)
+    self:_set_config_param("channel_cc_limit", config.cc_limit)
+    self:_set_config_param("channel_bitrate_limit", config.bitrate_limit)
+    self:_set_config_param("channel_rate_stat", config.rate_stat)
+    self:_set_config_param("channel_join_pid", config.join_pid)
 
     self._stream_json = config.stream_json or {}
     self._upstream = config.upstream
@@ -170,6 +174,10 @@ function ChannelMonitor:start()
     self._monitor_instance = analyze({
         upstream = stream_data,
         name = "_" .. self.name,
+        cc_limit = self._config.cc_limit,
+        bitrate_limit = self._config.bitrate_limit,
+        rate_stat = self._config.rate_stat,
+        join_pid = self._config.join_pid,
         callback = function(data)
             if not self._active or not data then return end
 

@@ -109,6 +109,26 @@ MonitorConfig.ValidationSchema = {
         max = MonitorConfig.MaxMethodComparison,
         default = 3
     },
+    channel_cc_limit = {
+        type = "number",
+        min = 0,
+        max = 65535,
+        default = 0
+    },
+    channel_bitrate_limit = {
+        type = "number",
+        min = 0,
+        max = 1000000,
+        default = 0
+    },
+    channel_rate_stat = {
+        type = "boolean",
+        default = false
+    },
+    channel_join_pid = {
+        type = "boolean",
+        default = false
+    },
     dvb_time_check = {
         type = "number",
         min = MonitorConfig.MinTimeCheck,
