@@ -72,4 +72,32 @@ function ChannelStorage.count()
     return count
 end
 
+--- Находит все каналы в системе Astra, использующие указанный DVB-адаптер
+--- @param adapter_name string Имя адаптера (например, "0" или "0.1")
+--- @return table<string, table> Список найденных каналов (имя -> ch_data)
+function ChannelStorage.find_by_adapter(adapter_name)
+    local channel_list = ModuleManager.get_global_dependency("channel_list")
+    local result = {}
+    
+    if not channel_list then
+        Logger.error(COMPONENT_NAME, "find_by_adapter: channel_list dependency not found")
+        return result
+    end
+
+    for _, ch_data in pairs(channel_list) do
+        if ch_data.input then
+            for _, input in pairs(ch_data.input) do
+                if input.config and input.config.format == "dvb" and tostring(input.config.addr) == tostring(adapter_name) then
+                    local name = ch_data.config and ch_data.config.name
+                    if name then
+                        result[name] = ch_data
+                    end
+                    break
+                end
+            end
+        end
+    end
+    return result
+end
+
 return ChannelStorage
