@@ -202,7 +202,10 @@ end
 --- @param params table Новые параметры
 --- @return boolean success Статус выполнения
 function DvbTuner:update_parameters(params)
-    if not params or type(params) ~= "table" then return false end
+    if not params or type(params) ~= "table" then
+        Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name_adapter))
+        return false
+    end
 
     local tuning_params = {
         "frequency", "symbolrate", "modulation", "adapter", "device", "type",

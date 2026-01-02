@@ -320,6 +320,7 @@ local function update_monitor_parameters(name, params)
     if monitor then
         return monitor:update_parameters(params)
     end
+    Logger.error(COMPONENT_NAME, "update_monitor_parameters: monitor '%s' not found", tostring(name))
     return false
 end
 

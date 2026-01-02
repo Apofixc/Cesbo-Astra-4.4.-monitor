@@ -121,6 +121,7 @@ local function pause_dvb_monitor(name_adapter)
     if tuner then
         return tuner:pause()
     end
+    Logger.error(COMPONENT_NAME, "pause_dvb_monitor: tuner '%s' not found", tostring(name_adapter))
     return false
 end
 
@@ -132,6 +133,7 @@ local function resume_dvb_monitor(name_adapter)
     if tuner then
         return tuner:resume()
     end
+    Logger.error(COMPONENT_NAME, "resume_dvb_monitor: tuner '%s' not found", tostring(name_adapter))
     return false
 end
 
@@ -147,6 +149,7 @@ local function force_restart_dvb_tuner(name_adapter)
         end
         return success
     end
+    Logger.error(COMPONENT_NAME, "force_restart_dvb_tuner: tuner '%s' not found", tostring(name_adapter))
     return false
 end
 
@@ -235,8 +238,8 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     end
 
     Logger.info(COMPONENT_NAME, "Transponder switched successfully on adapter '%s'", name_adapter)
-    
-    return true, {
+
+    return {
         tuner_params = old_tuner_params,
         channels_configs = old_channels_configs
     }

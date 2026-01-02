@@ -27,7 +27,10 @@ local subscribers = {}
 --- @return boolean success
 local function load_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
-    if not path then return false end
+    if not path then
+        Logger.error(COMPONENT_NAME, "load_subscribers: SubscribersFilePath not configured")
+        return false
+    end
 
     local f = io.open(path, "r")
     if not f then
@@ -60,7 +63,10 @@ end
 --- @return boolean success
 local function save_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
-    if not path then return false end
+    if not path then
+        Logger.error(COMPONENT_NAME, "save_subscribers: SubscribersFilePath not configured")
+        return false
+    end
 
     local ok, content = pcall(json_encode, subscribers)
     if not ok then
@@ -119,6 +125,7 @@ end
 --- @return boolean success
 function HttpSubscriber.subscribe(event_type, addr)
     if not event_type or type(addr) ~= "table" or not addr.host or not addr.port or not addr.path then
+        Logger.error(COMPONENT_NAME, "subscribe: Invalid arguments")
         return false
     end
 
@@ -149,6 +156,7 @@ end
 --- @return boolean success
 function HttpSubscriber.unsubscribe(event_type, addr)
     if not event_type or not subscribers[event_type] or type(addr) ~= "table" then
+        Logger.error(COMPONENT_NAME, "unsubscribe: Invalid arguments or event type not found")
         return false
     end
 
@@ -175,6 +183,7 @@ end
 --- @return boolean success
 function HttpSubscriber.publish(event_type, data)
     if not event_type or not data then
+        Logger.error(COMPONENT_NAME, "publish: Invalid arguments")
         return false
     end
 
