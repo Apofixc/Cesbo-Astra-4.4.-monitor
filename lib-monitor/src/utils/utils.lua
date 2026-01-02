@@ -24,11 +24,11 @@ local Utils = {}
 
 --- Возвращает имя потока по IP-адресу
 --- @param ip_address string IP-адрес потока
---- @return string|boolean Имя потока или исходный IP-адрес, false в случае ошибки
+--- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
         Logger.error(COMPONENT_NAME, "get_stream_name: Invalid ip_address")
-        return false
+        return nil
     end
 
     local stream_map = MonitorConfig and MonitorConfig.STREAM or {}

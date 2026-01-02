@@ -70,12 +70,11 @@ end
 
 --- Создает новый экземпляр DvbTuner.
 --- @param conf table Конфигурация тюнера
---- @return boolean success Статус выполнения
 --- @return DvbTuner|nil result Экземпляр DvbTuner или nil
 function DvbTuner.new(conf)
     if not conf or type(conf) ~= "table" then
         Logger.error(COMPONENT_NAME, "new: config is required")
-        return false, nil
+        return nil
     end
 
     local self = setmetatable({}, DvbTuner)
@@ -88,7 +87,7 @@ function DvbTuner.new(conf)
 
     if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
         Logger.error(COMPONENT_NAME, "new: name_adapter is required")
-        return false, nil
+        return nil
     end
 
     self.name_adapter = conf.name_adapter
@@ -115,7 +114,7 @@ function DvbTuner.new(conf)
         unc = -1,
         quality = 100
     }
-    return true, self
+    return self
 end
 
 --- Публикует данные через HttpSubscriber
@@ -126,13 +125,12 @@ function DvbTuner:publish(content, event_type)
 end
 
 --- Запускает тюнер и инициализирует callback для мониторинга.
---- @return boolean success Статус выполнения
 --- @return any|nil result Экземпляр dvb_tune или nil
 function DvbTuner:start()
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
         Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self.config.method_comparison)))
-        return false, nil
+        return nil
     end
 
     self.config.callback = function(data)
@@ -184,7 +182,7 @@ function DvbTuner:start()
     self.instance = dvb_tune(self.config)
     if not self.instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
-        return false, nil
+        return nil
     end
 
     -- Безопасное управление счетчиком каналов Astra
@@ -197,13 +195,12 @@ function DvbTuner:start()
         Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self.name_adapter, self.instance.__options.channels)
     end
 
-    return true, self.instance
+    return self.instance
 end
 
 --- Обновляет параметры тюнера. Если изменены параметры вещания (частота и т.д.), тюнер будет перезапущен.
 --- @param params table Новые параметры
 --- @return boolean success Статус выполнения
---- @return string|nil error_message Сообщение об ошибке (если есть)
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then return false end
 
@@ -223,10 +220,9 @@ function DvbTuner:update_parameters(params)
     if tuning_changed then
         -- Проверка занятости тюнера перед сменой параметров
         if self.instance and self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
-            local err = string_format("Cannot change tuning parameters for '%s': tuner is used by %d channels. Stop channels first.", 
+            Logger.error(COMPONENT_NAME, "Cannot change tuning parameters for '%s': tuner is used by %d channels. Stop channels first.", 
                 self.name_adapter, self.instance.__options.channels - 1)
-            Logger.error(COMPONENT_NAME, err)
-            return false, err
+            return false
         end
 
         for _, param in ipairs(tuning_params) do
@@ -240,8 +236,7 @@ function DvbTuner:update_parameters(params)
         self.status.format = self.config.type or ""
         self.status.modulation = self.config.modulation or ""
         
-        local success, instance = self:restart()
-        return success
+        return self:restart() ~= nil
     end
 
     if params.rate ~= nil then
@@ -302,13 +297,11 @@ function DvbTuner:stop()
 end
 
 --- Перезапускает тюнер.
---- @return boolean success Статус выполнения
 --- @return any|nil result Новый экземпляр тюнера или nil
 function DvbTuner:restart()
     Logger.info(COMPONENT_NAME, "Restarting tuner '%s'...", self.name_adapter)
     self:stop()
-    local success, instance = self:start()
-    return success, instance
+    return self:start()
 end
 
 --- Приостанавливает мониторинг тюнера
@@ -334,11 +327,8 @@ end
 --- Принудительно останавливает тюнер, игнорируя счетчики каналов.
 --- Используется в экстренных случаях (зависание тюнера).
 --- @return boolean success
---- @return number|nil old_channels_count Сохраненное значение счетчика
 function DvbTuner:force_stop()
     if self.instance then
-        local old_channels_count = self.instance.__options and self.instance.__options.channels
-
         -- Очистка внутреннего списка Astra (dvb_input_instance_list)
         local dvb_input_instance_list = dvb_input_instance_list
         if type(dvb_input_instance_list) == "table" and self.instance.__options then
@@ -358,9 +348,9 @@ function DvbTuner:force_stop()
         
         self.instance = nil
         Logger.warn(COMPONENT_NAME, "Tuner '%s' FORCE STOPPED (Emergency Reset)", self.name_adapter)
-        return true, old_channels_count
+        return true
     end
-    return false, nil
+    return false
 end
 
 --- Принудительно перезапускает тюнер с сохранением и восстановлением счетчика каналов.
@@ -370,8 +360,8 @@ function DvbTuner:force_restart(new_params)
     Logger.info(COMPONENT_NAME, "Force restarting tuner '%s'...", self.name_adapter)
     
     -- 1. Останавливаем и запоминаем счетчик
-    local success_stop, old_channels_count = self:force_stop()
-    if not success_stop then return false end
+    local old_channels_count = self.instance and self.instance.__options and self.instance.__options.channels
+    if not self:force_stop() then return false end
 
     -- 2. Обновляем параметры, если переданы
     if new_params and type(new_params) == "table" then
@@ -382,8 +372,8 @@ function DvbTuner:force_restart(new_params)
     end
 
     -- 3. Запускаем заново
-    local success_start, instance = self:start()
-    if not success_start then
+    local instance = self:start()
+    if not instance then
         Logger.error(COMPONENT_NAME, "Failed to restart tuner '%s' after force stop", self.name_adapter)
         return false
     end

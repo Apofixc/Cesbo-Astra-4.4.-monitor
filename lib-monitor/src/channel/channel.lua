@@ -87,12 +87,11 @@ end
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
 --- @param channel_data table|string Данные канала или имя
---- @return boolean success Статус выполнения
 --- @return any|nil result Экземпляр монитора или nil
 local function make_monitor(config, channel_data)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
-        return false, "monitor limit reached"
+        return nil
     end
 
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
@@ -100,12 +99,12 @@ local function make_monitor(config, channel_data)
 
     if ChannelStorage.find(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
-        return false, "monitor already exists"
+        return nil
     end
 
     if not Utils.validate_monitor_name(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Invalid monitor name '%s'", tostring(name))
-        return false, "invalid monitor name"
+        return nil
     end
 
     local stream_json = prepare_stream_json(ch_data)
@@ -120,13 +119,13 @@ local function make_monitor(config, channel_data)
         local url_cfg = parse_url(config.monitor)
         if not url_cfg then
             Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", config.monitor)
-            return false, nil
+            return nil
         end
         url_cfg.name = name
         input_instance = init_input(url_cfg)
         if not input_instance then
             Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
-            return false, nil
+            return nil
         end
         upstream = input_instance.tail
     end
@@ -135,47 +134,45 @@ local function make_monitor(config, channel_data)
     config.stream_json = stream_json
     config.upstream = upstream
 
-    local success_new, monitor = ChannelMonitor.new(config, ch_data)
-    if not success_new then
+    local monitor = ChannelMonitor.new(config, ch_data)
+    if not monitor then
         if input_instance then kill_input(input_instance) end
         Logger.error(COMPONENT_NAME, "make_monitor: failed to create ChannelMonitor instance for '%s'", name)
-        return false, nil
+        return nil
     end
 
-    local success_start, monitor_instance = monitor:start()
-    if success_start then
+    local monitor_instance = monitor:start()
+    if monitor_instance then
         monitor.input_instance = input_instance
         ChannelStorage.register(name, monitor)
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully started", name)
-        return true, monitor_instance
+        return monitor_instance
     else
         if input_instance then kill_input(input_instance) end
         Logger.error(COMPONENT_NAME, "make_monitor: failed to start monitor for '%s'", name)
-        return false, nil
+        return nil
     end
 end
 
 --- Останавливает монитор
 --- @param name string Имя монитора
---- @return boolean success Статус выполнения
 --- @return table|nil result Конфигурация монитора для восстановления или nil
 local function kill_monitor(name)
     local monitor = ChannelStorage.find(name)
     if not monitor then
         Logger.debug(COMPONENT_NAME, "kill_monitor: monitor '%s' not found", tostring(name))
-        return false, nil
+        return nil
     end
 
     -- Сохраняем конфигурацию перед удалением
     local config = monitor._config
 
     -- ChannelStorage.unregister сам вызовет monitor:stop()
-    local success = ChannelStorage.unregister(name)
-    if success then
+    if ChannelStorage.unregister(name) then
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
-        return true, config
+        return config
     end
-    return false, nil
+    return nil
 end
 
 --- Таблица обработчиков типов мониторов
@@ -183,8 +180,8 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
         local input_data = channel_data.input[1]
         if not input_data then
-            Logger.error(COMPONENT_NAME, string.format("Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name))
-            return false, nil, nil
+            Logger.error(COMPONENT_NAME, "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
+            return nil
         end
 
         local upstream = input_data.input.tail
@@ -205,20 +202,20 @@ local monitor_type_handlers = {
                 addr = input_data.config.filename or "Unknown"
             end
             
-            monitor_target = string.format("Input: %s (%s)", fmt:upper(), addr)
+            monitor_target = string_format("Input: %s (%s)", fmt:upper(), addr)
         end
 
-        return true, upstream, monitor_target
+        return { upstream = upstream, monitor_target = monitor_target }
     end,
     [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
         local upstream = channel_data.tail
         local monitor_target = "Output: Channel"
-        return true, upstream, monitor_target
+        return { upstream = upstream, monitor_target = monitor_target }
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
         if not channel_data.output or #channel_data.output == 0 then
-            Logger.error(COMPONENT_NAME, string.format("Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name))
-            return false, nil, nil
+            Logger.error(COMPONENT_NAME, "Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
+            return nil
         end
 
         local key = 1
@@ -231,22 +228,21 @@ local monitor_type_handlers = {
 
         local split_result = string_split(conf.output[key], "#")
         local addr = type(split_result) == 'table' and split_result[1] or conf.output[key]
-        local monitor_target = string.format("Output: IP (%s)", addr)
+        local monitor_target = string_format("Output: IP (%s)", addr)
         
         Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
-        return true, nil, monitor_target
+        return { upstream = nil, monitor_target = monitor_target }
     end,
 }
 
 --- Создает поток и монитор для него
 --- @param conf table Конфигурация потока
---- @return boolean success Статус выполнения
---- @return any|nil result Экземпляр монитора или nil
+--- @return any|nil result Данные канала или nil
 local function make_stream(conf)
     local channel_data = make_channel(conf)
     if not channel_data then
         Logger.error(COMPONENT_NAME, "make_stream: make_channel failed for '%s'", tostring(conf.name))
-        return false, nil
+        return nil
     end
 
     local monitor_type = (conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
@@ -255,58 +251,54 @@ local function make_stream(conf)
     if not handler then
         Logger.error(COMPONENT_NAME, "make_stream: unknown monitor type '%s' for stream '%s'", monitor_type, conf.name)
         kill_channel(channel_data)
-        return false, nil
+        return nil
     end
 
-    local success_handler, upstream, monitor_target = handler(conf, channel_data)
-    if not success_handler then
+    local handler_result = handler(conf, channel_data)
+    if not handler_result then
         kill_channel(channel_data)
-        return false, nil
+        return nil
     end
 
     local monitor_config = {
         name = conf.name,
         display_name = conf.monitor and conf.monitor.display_name or conf.name,
-        upstream = upstream,
-        monitor = monitor_target,
+        upstream = handler_result.upstream,
+        monitor = handler_result.monitor_target,
         rate = conf.monitor and conf.monitor.rate,
         time_check = conf.monitor and conf.monitor.time_check,
         analyze = conf.monitor and conf.monitor.analyze,
         method_comparison = conf.monitor and conf.monitor.method_comparison
     }
 
-    local success, monitor_instance_or_err = make_monitor(monitor_config, channel_data)
-    if not success then
-        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s' (%s), killing channel", conf.name, tostring(monitor_instance_or_err))
+    if not make_monitor(monitor_config, channel_data) then
+        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s', killing channel", conf.name)
         kill_channel(channel_data)
-        return false, monitor_instance_or_err
+        return nil
     end
 
-    return true, channel_data
+    return channel_data
 end
 
 --- Останавливает поток и монитор
 --- @param channel_data table|string Данные канала или имя
---- @return boolean success Статус выполнения
---- @return table|string|nil result Конфигурация потока для восстановления или nil
+--- @return table|nil result Конфигурация потока для восстановления или nil
 local function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
     if not ch_data or not ch_data.config then
-        local err = "invalid channel_data or channel not found"
-        Logger.error(COMPONENT_NAME, "kill_stream: %s", err)
-        return false, err
+        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data or channel not found")
+        return nil
     end
     local name = ch_data.config.name
     
-    local success_monitor = kill_monitor(name)
-    if not success_monitor then
+    if not kill_monitor(name) then
         Logger.warn(COMPONENT_NAME, "kill_stream: monitor '%s' was not active or failed to kill", name)
     end
 
     kill_channel(ch_data)
     
     Logger.info(COMPONENT_NAME, "Stream and monitor '%s' successfully killed", name)
-    return true, ch_data.config
+    return ch_data.config
 end
 
 --- Возвращает список мониторов
@@ -323,13 +315,12 @@ end
 --- @param name string Имя монитора
 --- @param params table Новые параметры
 --- @return boolean success Статус выполнения
---- @return nil result
 local function update_monitor_parameters(name, params)
     local monitor = ChannelStorage.find(name)
     if monitor then
         return monitor:update_parameters(params)
     end
-    return false, nil
+    return false
 end
 
 --- Приостанавливает монитор

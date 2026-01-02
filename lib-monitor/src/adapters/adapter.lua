@@ -66,16 +66,13 @@ end
 --- @param name_adapter string Уникальное имя адаптера
 --- @param params table Новые параметры (rate, time_check, method_comparison)
 --- @return boolean success Статус выполнения
---- @return string|nil error_message Сообщение об ошибке
 local function update_dvb_monitor_parameters(name_adapter, params)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
-        local success = tuner:update_parameters(params)
-        return success, (not success and "Failed to update parameters" or nil)
+        return tuner:update_parameters(params)
     end
-    local err = string_format("update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
-    Logger.error(COMPONENT_NAME, err)
-    return false, err
+    Logger.error(COMPONENT_NAME, "update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
+    return false
 end
 
 --- Возвращает список всех активных мониторов тюнеров.
@@ -161,13 +158,12 @@ end
 --- @param name_adapter string Имя адаптера
 --- @param new_tuner_params table Новые параметры тюнера
 --- @param reserve_input table|nil Список новых входов {name, pnr, input}
---- @return boolean success
 --- @return table|nil old_state Снимок предыдущего состояния для возврата
 local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then
         Logger.error(COMPONENT_NAME, "switch_transponder: tuner '%s' not found", name_adapter)
-        return false, nil
+        return nil
     end
 
     local Channel = ModuleManager.get_module("channel")
@@ -175,7 +171,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
 
     if not Channel or not ChannelStorage then
         Logger.error(COMPONENT_NAME, "switch_transponder: required modules (channel or channel_storage) not loaded")
-        return false, nil
+        return nil
     end
 
     -- 1. Находим все каналы на этом адаптере
@@ -186,20 +182,19 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
 
     -- 2. Останавливаем каналы и сохраняем их полные конфиги
     for name, _ in pairs(dependent_channels) do
-        local success_kill, ch_config = Channel.kill_stream(name)
-        if success_kill then
+        local ch_config = Channel.kill_stream(name)
+        if ch_config then
             table.insert(old_channels_configs, ch_config)
             old_channels_map[name] = ch_config
         end
     end
 
     -- 3. Перенастраиваем тюнер
-    local success_tune, err = tuner:update_parameters(new_tuner_params)
-    if not success_tune then
-        Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s': %s", name_adapter, tostring(err))
+    if not tuner:update_parameters(new_tuner_params) then
+        Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s'", name_adapter)
         -- Восстановление старых каналов
         for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end
-        return false, nil
+        return nil
     end
 
     -- 4. Запускаем новые каналы из reserve_input

@@ -100,22 +100,21 @@ end
 --- Создает новый экземпляр ChannelMonitor
 --- @param config table Конфигурация монитора
 --- @param channel_data table|nil Данные канала (необязательно)
---- @return boolean success
 --- @return ChannelMonitor|nil result
 function ChannelMonitor.new(config, channel_data)
     if not config or type(config) ~= "table" then
         log_error(COMPONENT_NAME, "new: config is required and must be a table")
-        return false, nil
+        return nil
     end
 
     if not config.monitor or type(config.monitor) ~= "string" then
         log_error(COMPONENT_NAME, "new: monitor address is required in config")
-        return false, nil
+        return nil
     end
 
     if not config.upstream then
         log_error(COMPONENT_NAME, "new: upstream is required in config")
-        return false, nil
+        return nil
     end
 
     local self = setmetatable({}, ChannelMonitor)
@@ -151,23 +150,22 @@ function ChannelMonitor.new(config, channel_data)
     self._analyze_stats = {}
     self._active = true
 
-    return true, self
+    return self
 end
 
 --- Запускает мониторинг
---- @return boolean success Статус выполнения
 --- @return any|nil result Экземпляр монитора или nil
 function ChannelMonitor:start()
     local comparison_method = COMPARISON_METHODS[self._config.method_comparison]
     if not comparison_method then
         log_error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self.name, tostring(self._config.method_comparison))
-        return false, nil
+        return nil
     end
 
     local stream_data = self._upstream:stream()
     if not stream_data then
         log_error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", self.name)
-        return false, nil
+        return nil
     end
 
     self._monitor_instance = analyze({
@@ -198,10 +196,10 @@ function ChannelMonitor:start()
 
     if not self._monitor_instance then
         log_error(COMPONENT_NAME, "[%s] start: analyze returned nil", self.name)
-        return false, nil
+        return nil
     end
 
-    return true, self._monitor_instance
+    return self._monitor_instance
 end
 
 --- Возвращает закэшированные данные об источнике
@@ -418,7 +416,6 @@ end
 
 --- Останавливает мониторинг и очищает ресурсы
 --- @return boolean success Статус выполнения
---- @return nil result
 function ChannelMonitor:stop()
     self._active = false
 
@@ -448,17 +445,16 @@ function ChannelMonitor:stop()
     self._check_timer = nil
     self._last_active_id = nil
 
-    return true, nil
+    return true
 end
 
 --- Обновляет параметры монитора
 --- @param params table Таблица новых параметров
 --- @return boolean success Статус выполнения
---- @return nil result
 function ChannelMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
         log_error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name))
-        return false, nil
+        return false
     end
 
     local param_map = {
@@ -479,10 +475,10 @@ function ChannelMonitor:update_parameters(params)
 
     if has_errors then
         log_error(COMPONENT_NAME, "[%s] update_parameters: some parameters failed to update", tostring(self.name))
-        return false, nil
+        return false
     end
 
-    return true, nil
+    return true
 end
 
 return ChannelMonitor

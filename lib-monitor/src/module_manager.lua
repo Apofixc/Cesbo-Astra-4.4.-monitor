@@ -54,16 +54,15 @@ end
 --- @param path string Путь к файлу модуля (например, "src.utils.logger").
 --- @param dependencies table|nil Таблица строк, содержащих имена зависимостей этого модуля.
 --- @return boolean success Статус выполнения
---- @return nil result
 function ModuleManager.register_module(name, path, dependencies)
     if not name or type(name) ~= "string" then
         log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
-        return false, nil
+        return false
     end
     
     if not path or type(path) ~= "string" then
         log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
-        return false, nil
+        return false
     end
     
     if registered_modules[name] then
@@ -89,11 +88,10 @@ function ModuleManager.register_module(name, path, dependencies)
     
     log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.", 
              name, table_concat(valid_dependencies, ", "))
-    return true, nil
+    return true
 end
 
 --- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей.
---- @return boolean success Статус выполнения
 --- @return table|nil result Список имен или nil
 local function topological_sort()
     local load_order = {}
@@ -137,23 +135,22 @@ local function topological_sort()
     for name, _ in pairs(registered_modules) do
         if not visited[name] then
             if not visit(name) then
-                return false, nil
+                return nil
             end
         end
     end
     
-    return true, load_order
+    return load_order
 end
 
 --- Загружает все зарегистрированные модули в правильном порядке, разрешая зависимости.
---- @return boolean success Статус выполнения
 --- @return table|nil result Список имен загруженных модулей или nil
 function ModuleManager.load_modules()
-    local success_sort, load_order = topological_sort()
+    local load_order = topological_sort()
     
-    if not success_sort or not load_order then
+    if not load_order then
         log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
-        return false, nil
+        return nil
     end
     
     if Logger then log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) end
@@ -172,12 +169,12 @@ function ModuleManager.load_modules()
         
         if not success then
             log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
-            return false, nil
+            return nil
         end
         
         if module_or_err == nil then
             log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
-            return false, nil
+            return nil
         end
         
         local module = module_or_err
@@ -194,7 +191,7 @@ function ModuleManager.load_modules()
     end
     
     log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
-    return true, load_order
+    return load_order
 end
 
 --- Возвращает загруженный модуль по его имени.
@@ -206,7 +203,6 @@ end
 
 --- Проверяет, что все зарегистрированные модули имеют удовлетворенные зависимости.
 --- @return boolean success Статус выполнения
---- @return nil result
 function ModuleManager.validate_dependencies()
     local all_dependencies_met = true
     
@@ -221,21 +217,20 @@ function ModuleManager.validate_dependencies()
     
     if not all_dependencies_met then
         log_error(COMPONENT_NAME, "Обнаружены незарегистрированные внутренние зависимости.")
-        return false, nil
+        return false
     end
     
     log_debug(COMPONENT_NAME, "Все внутренние зависимости зарегистрированных модулей удовлетворены.")
-    return true, nil
+    return true
 end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
 --- @param path_str string Строка, представляющая путь к переменной/функции (например, "find_channel" или utils.version).
---- @return boolean success Статус выполнения
 --- @return any|nil result Найденный объект или nil
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
         log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
-        return false, nil
+        return nil
     end
     
     local parts = {}
@@ -245,7 +240,7 @@ function ModuleManager.check_nested_dependency(path_str)
     
     if #parts == 0 then
         log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости.")
-        return false, nil
+        return nil
     end
     
     local current_scope = _G
@@ -261,12 +256,12 @@ function ModuleManager.check_nested_dependency(path_str)
         
         if type(current_scope) ~= "table" then
             log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица).", path_str, full_path)
-            return false, nil
+            return nil
         end
         
         if current_scope[part] == nil then
             log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'.", path_str, full_path)
-            return false, nil
+            return nil
         end
         
         current_scope = current_scope[part]
@@ -277,7 +272,7 @@ function ModuleManager.check_nested_dependency(path_str)
     end
     
     log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
-    return true, found_object
+    return found_object
 end
 
 --- Возвращает сохраненную ссылку на глобальную зависимость.
