@@ -333,8 +333,11 @@ end
 --- Принудительно останавливает тюнер, игнорируя счетчики каналов.
 --- Используется в экстренных случаях (зависание тюнера).
 --- @return boolean success
+--- @return number|nil old_channels_count Сохраненное значение счетчика
 function DvbTuner:force_stop()
     if self.instance then
+        local old_channels_count = self.instance.__options and self.instance.__options.channels
+
         -- Очистка внутреннего списка Astra (dvb_input_instance_list)
         local dvb_input_instance_list = dvb_input_instance_list
         if type(dvb_input_instance_list) == "table" and self.instance.__options then
@@ -354,9 +357,43 @@ function DvbTuner:force_stop()
         
         self.instance = nil
         Logger.warn(COMPONENT_NAME, "Tuner '%s' FORCE STOPPED (Emergency Reset)", self.name_adapter)
-        return true
+        return true, old_channels_count
     end
-    return false
+    return false, nil
+end
+
+--- Принудительно перезапускает тюнер с сохранением и восстановлением счетчика каналов.
+--- @param new_params table|nil Новые параметры тюнинга
+--- @return boolean success
+function DvbTuner:force_restart(new_params)
+    Logger.info(COMPONENT_NAME, "Force restarting tuner '%s'...", self.name_adapter)
+    
+    -- 1. Останавливаем и запоминаем счетчик
+    local success_stop, old_channels_count = self:force_stop()
+    if not success_stop then return false end
+
+    -- 2. Обновляем параметры, если переданы
+    if new_params and type(new_params) == "table" then
+        for k, v in pairs(new_params) do
+            self.config[k] = v
+        end
+        self.status.source = self.config.tp or self.config.frequency
+    end
+
+    -- 3. Запускаем заново
+    local success_start, instance = self:start()
+    if not success_start then
+        Logger.error(COMPONENT_NAME, "Failed to restart tuner '%s' after force stop", self.name_adapter)
+        return false
+    end
+
+    -- 4. Восстанавливаем счетчик (вычитаем 1, так как start() уже прибавил 1 для монитора)
+    if old_channels_count and instance.__options then
+        instance.__options.channels = old_channels_count
+        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter restored to: %d", self.name_adapter, instance.__options.channels)
+    end
+
+    return true
 end
 
 --- Полностью удаляет тюнер и очищает ресурсы.

@@ -121,6 +121,26 @@ Logger.info("TEST", "Cleaning up...")
 Channel.kill_stream("NewChannel")
 Logger.info("TEST", "Counter after NewChannel kill: " .. tostring(tuner_instance.__options.channels))
 
+-- 6. Тест принудительного перезапуска (Emergency Reset)
+Logger.info("TEST", "Starting force_restart test...")
+-- Установим счетчик вручную для проверки восстановления
+tuner_instance.__options.channels = 5
+Logger.info("TEST", "Channels counter before force_restart: 5")
+
+local success_force = Adapter.force_restart_dvb_tuner("tuner_0")
+if success_force then
+    local new_instance = _G["tuner_0"]
+    Logger.info("TEST", "Force restart successful")
+    Logger.info("TEST", "Channels counter after force_restart: " .. tostring(new_instance.__options.channels))
+    if new_instance.__options.channels == 5 then
+        Logger.info("TEST", "Counter correctly restored")
+    else
+        Logger.error("TEST", "Counter restoration failed")
+    end
+else
+    Logger.error("TEST", "Force restart failed")
+end
+
 Adapter.stop_dvb_monitor("tuner_0")
 Logger.info("TEST", "Test finished")
 

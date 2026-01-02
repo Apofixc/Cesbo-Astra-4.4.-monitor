@@ -144,7 +144,11 @@ end
 local function force_restart_dvb_tuner(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
-        return tuner:force_stop() and tuner:start() ~= nil
+        local success = tuner:force_restart()
+        if success then
+            _G[name_adapter] = tuner.instance
+        end
+        return success
     end
     return false
 end
