@@ -207,7 +207,7 @@ function DvbTuner:start()
 
     self.instance = instance
 
-    -- Безопасное управление счетчиком каналов Astra
+    -- Безопасное управление счетчиком каналов Astra, чтобы при остановке каналов тюнер неявно не оставил работу
     if self.instance.__options then
         if self.instance.__options.channels == nil then
             self.instance.__options.channels = 1
@@ -308,53 +308,22 @@ end
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
 --- @return boolean Статус выполнения
 function DvbTuner:destroy(force)
-    if self.instance and not force then
-        if self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
-            Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy: tuner is used by %d other channels. Use force=true to override.", 
-                tostring(self.name_adapter), self.instance.__options.channels - 1)
-            return false
-        end
-    end
-
     self._active = false
     self:_clear_psi()
 
     if self.instance then
-        local can_close = true
-        
         -- Очищаем callback в инстансе Astra, если он там есть
         if self.instance.__options then
             self.instance.__options.callback = nil
         end
 
-        if not force then
-            if self.instance.__options and self.instance.__options.channels then
-                self.instance.__options.channels = self.instance.__options.channels - 1
-                Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
-                
-                if self.instance.__options.channels >= 1 then
-                    can_close = false
-                    Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
-                end
-            end
-        end
-
-        if can_close then
-            if type(dvb_input_instance_list) == "table" and self.instance.__options then
-                local opts = self.instance.__options
-                if opts.adapter ~= nil and opts.device ~= nil then
-                    local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
-                    if dvb_input_instance_list[instance_id] then
-                        dvb_input_instance_list[instance_id] = nil
-                        Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
-                    end
-                end
-            end
-
+        if force then
             if type(self.instance.close) == "function" then
                 self.instance:close()
             end
-            Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: %s)", tostring(self.name_adapter), tostring(force))
+            Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: true)", tostring(self.name_adapter))
+        else
+            Logger.info(COMPONENT_NAME, "Tuner '%s' monitoring stopped, physical tuner left to Astra", tostring(self.name_adapter))
         end
         
         if self.config then

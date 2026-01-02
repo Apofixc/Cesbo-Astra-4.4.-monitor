@@ -154,11 +154,11 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     end
 
     -- 4. Создаем и запускаем новый монитор
-    local success = Adapter.dvb_tuner_monitor(new_conf)
+    local success = dvb_tuner_monitor(new_conf)
     if not success then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to start new monitor for '%s'. Rollback to old config.", name_adapter)
         -- Попытка отката на старую конфигурацию
-        if not Adapter.dvb_tuner_monitor(tuner.config) then
+        if not dvb_tuner_monitor(tuner.config) then
             Logger.error(COMPONENT_NAME, "restart_dvb_monitor: CRITICAL - failed to rollback to old config for '%s'", name_adapter)
         end
         -- В любом случае пытаемся вернуть каналы
@@ -235,21 +235,33 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     end
 
     -- 1. Находим все каналы на этом адаптере
-    local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
+    -- Используем channel_list напрямую, так как ChannelStorage.find_by_adapter может не найти мониторы, если они были убиты
+    local channel_list = ModuleManager.get_global_dependency("channel_list")
     local old_channels_configs = {}
     local old_channels_map = {}
     local old_tuner_params = Utils.table_copy(tuner.config)
 
-    -- 2. Останавливаем каналы и сохраняем их полные конфиги
-    for name, _ in pairs(dependent_channels) do
-        local ch_config = Channel.kill_stream(name)
-        if ch_config then
-            table_insert(old_channels_configs, ch_config)
-            old_channels_map[name] = ch_config
+    if channel_list then
+        for _, ch_data in pairs(channel_list) do
+            if ch_data.input then
+                for _, input in pairs(ch_data.input) do
+                    if input.config and input.config.format == "dvb" and tostring(input.config.addr) == tostring(name_adapter) then
+                        local name = ch_data.config and ch_data.config.name
+                        if name then
+                            local ch_config = Channel.kill_stream(name)
+                            if ch_config then
+                                table_insert(old_channels_configs, ch_config)
+                                old_channels_map[name] = ch_config
+                            end
+                        end
+                        break
+                    end
+                end
+            end
         end
     end
 
-    -- 3. Перенастраиваем тюнер (через полный рестарт монитора)
+    -- 3. Перенастраивает тюнер (через полный рестарт монитора)
     -- Используем force = false, так как каналы уже остановлены
     if not restart_dvb_monitor(name_adapter, new_tuner_params, false) then
         Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s'", name_adapter)
@@ -259,7 +271,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     end
 
     -- 4. Запускаем новые каналы из reserve_input
-    if reserve_input and type(reserve_input) == "table" then
+    if reserve_input and type(reserve_input) == "table" and #reserve_input > 0 then
         for _, item in ipairs(reserve_input) do
             local name = item.name
             local old_conf = old_channels_map[name]
@@ -268,8 +280,21 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
             if name and old_conf and item.input then
                 local final_conf = Utils.table_copy(old_conf)
                 final_conf.input = item.input
+                -- Важно: make_stream создаст и канал и монитор
                 Channel.make_stream(final_conf)
+            else
+                -- Если канала не было, создаем новый с нуля
+                Channel.make_stream({
+                    name = name,
+                    input = item.input,
+                    monitor = { analyze = true }
+                })
             end
+        end
+    elseif #old_channels_configs > 0 then
+        -- Если reserve_input не передан, восстанавливаем старые каналы
+        for _, conf in ipairs(old_channels_configs) do
+            Channel.make_stream(conf)
         end
     end
 
