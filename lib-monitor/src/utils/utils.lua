@@ -72,30 +72,35 @@ end
 --- Валидирует параметр монитора на основе схемы
 --- @param name string Имя параметра
 --- @param value any Значение
---- @return boolean success
---- @return any|nil result
+--- @return any|nil result Данные или nil в случае ошибки
 function Utils.validate_monitor_param(name, value)
     local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[name]
     if not schema then
         Logger.error(COMPONENT_NAME, "validate_monitor_param: Unknown parameter '%s'", name)
-        return false, nil
+        return nil
     end
 
     if value == nil then
-        return true, schema.default
+        return schema.default
     end
 
     if type(value) ~= schema.type then
         Logger.error(COMPONENT_NAME, "validate_monitor_param: Invalid type for '%s'", name)
-        return false, nil
+        return nil
     end
 
     if schema.type == "number" then
-        if schema.min and value < schema.min then return false, nil end
-        if schema.max and value > schema.max then return false, nil end
+        if schema.min and value < schema.min then
+            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too small", name)
+            return nil
+        end
+        if schema.max and value > schema.max then
+            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too large", name)
+            return nil
+        end
     end
 
-    return true, value
+    return value
 end
 
 --- Валидирует имя монитора

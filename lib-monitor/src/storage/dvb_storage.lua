@@ -45,6 +45,7 @@ function DvbStorage.unregister(name)
         Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered and stopped.", name)
         return true
     end
+    Logger.error(COMPONENT_NAME, "unregister: DVB Monitor '%s' not found", name)
     return false
 end
 

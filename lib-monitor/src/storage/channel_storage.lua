@@ -22,20 +22,18 @@ local monitors = {}
 --- @param name string Имя монитора
 --- @param monitor_instance ChannelMonitor Экземпляр монитора
 --- @return boolean success Статус выполнения
---- @return nil result
 function ChannelStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "Monitor '%s' already registered. Overwriting.", name)
     end
     monitors[name] = monitor_instance
     Logger.debug(COMPONENT_NAME, "Monitor '%s' registered.", name)
-    return true, nil
+    return true
 end
 
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя монитора
 --- @return boolean success Статус выполнения
---- @return nil result
 function ChannelStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then
@@ -44,9 +42,10 @@ function ChannelStorage.unregister(name)
         end
         monitors[name] = nil
         Logger.debug(COMPONENT_NAME, "Monitor '%s' unregistered and stopped.", name)
-        return true, nil
+        return true
     end
-    return false, nil
+    Logger.error(COMPONENT_NAME, "unregister: Monitor '%s' not found", name)
+    return false
 end
 
 --- Находит монитор по имени

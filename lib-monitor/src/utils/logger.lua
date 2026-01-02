@@ -1,11 +1,16 @@
 -- 1. Стандартные Lua функции
+local ipairs = ipairs
+local pcall = pcall
 local select = select
 local string_format = string.format
+local table_insert = table.insert
+local table_remove = table.remove
 local tostring = tostring
 local type = type
+local unpack = unpack or table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
-local MonitorConfig = ModuleManager.get_module("monitor_config")
+-- local MonitorConfig = ModuleManager.get_module("monitor_config") -- Загружается динамически в get_current_level
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local log = ModuleManager.get_global_dependency("log")
@@ -18,6 +23,11 @@ local LOG_LEVELS = {
     ERROR = 4,
     NONE = 5
 }
+
+-- Внутреннее состояние для контекстного хранения ошибок
+local last_errors = {}
+local context_stack = {}
+local current_context_id = nil
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
@@ -49,13 +59,22 @@ function Logger.info(component, format_str, ...)
     end
 end
 
---- Логирует сообщение с уровнем ERROR
+--- Логирует сообщение с уровнем ERROR и сохраняет в контекст, если он активен
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.error(component, format_str, ...)
+    local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
+    
+    -- Сохранение во все активные контексты в стеке
+    if current_context_id then
+        last_errors[current_context_id] = msg
+        for _, id in ipairs(context_stack) do
+            last_errors[id] = msg
+        end
+    end
+
     if should_log(LOG_LEVELS.ERROR) then
-        local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
         if log and log.error then
             log.error(string_format("[%s] %s", component, msg))
         else
@@ -92,6 +111,47 @@ function Logger.warn(component, format_str, ...)
             print(string_format("[WARN][%s] %s", component, msg))
         end
     end
+end
+
+--- Выполняет функцию в контексте отслеживания ошибок
+--- @param func function Функция для выполнения
+--- @param ... any Аргументы функции
+--- @return any success Результат выполнения функции (первый аргумент)
+--- @return any result_or_error Остальные результаты функции или текст ошибки
+function Logger.with_error(func, ...)
+    local context_id = tostring({}) -- Уникальный ID для этого вызова
+    
+    if current_context_id then
+        table_insert(context_stack, current_context_id)
+    end
+    current_context_id = context_id
+    
+    local results = { pcall(func, ...) }
+    
+    -- Восстанавливаем контекст
+    current_context_id = table_remove(context_stack)
+    
+    local ok = results[1]
+    if not ok then
+        -- Ошибка выполнения (crash)
+        local err = results[2]
+        Logger.error("Logger", "Runtime error: %s", tostring(err))
+        last_errors[context_id] = nil
+        return nil, tostring(err)
+    end
+    
+    -- Успешное выполнение функции, проверяем результат
+    local success = results[2]
+    if success == false or success == nil then
+        -- Извлекаем ошибку, которая была сохранена для ЭТОГО контекста
+        local err = last_errors[context_id]
+        last_errors[context_id] = nil
+        return success, err
+    end
+    
+    -- Успех
+    last_errors[context_id] = nil
+    return unpack(results, 2)
 end
 
 return Logger
