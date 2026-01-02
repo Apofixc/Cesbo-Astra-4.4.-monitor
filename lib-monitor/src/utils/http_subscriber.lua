@@ -99,6 +99,7 @@ end
 --- @param addr table {host, port, path}
 --- @param content string JSON данные
 --- @param event_type string Тип события для логирования
+--- @return boolean success Статус выполнения (всегда true, так как запрос асинхронный)
 local function send_request(addr, content, event_type)
     local timeout = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
     local url = string_format("http://%s:%s%s", addr.host, addr.port, addr.path)

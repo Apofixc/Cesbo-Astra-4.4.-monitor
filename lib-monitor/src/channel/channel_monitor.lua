@@ -99,7 +99,7 @@ end
 --- Создает новый экземпляр ChannelMonitor
 --- @param config table Конфигурация монитора
 --- @param channel_data table|nil Данные канала (необязательно)
---- @return ChannelMonitor|nil result
+--- @return ChannelMonitor|nil result Экземпляр монитора или nil
 function ChannelMonitor.new(config, channel_data)
     if not config or type(config) ~= "table" then
         log_error(COMPONENT_NAME, "new: config is required and must be a table")
@@ -245,14 +245,16 @@ end
 
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
+--- @return boolean success Статус выполнения
 function ChannelMonitor:process_error_data(data)
     local content = table_copy(self:get_status_template())
     content.error = data.error
-    HttpSubscriber.publish("error", json_encode(content))
+    return HttpSubscriber.publish("error", json_encode(content))
 end
 
 --- Обработка PSI данных
 --- @param data table Данные PSI
+--- @return boolean success Статус выполнения
 function ChannelMonitor:process_psi_data(data)
     if not self._psi_hash_cache then return end
     
@@ -287,6 +289,7 @@ end
 
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
+--- @return boolean success Статус выполнения
 function ChannelMonitor:process_analyze_data(data)
     if not self._analyze_stats or not self._config.analyze then return end
 
@@ -319,6 +322,7 @@ end
 --- Обработка суммарных данных потока
 --- @param data table Суммарные данные
 --- @param comparison_method function Функция сравнения
+--- @return boolean success Статус выполнения
 function ChannelMonitor:process_total_data(data, comparison_method)
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
@@ -339,6 +343,7 @@ end
 
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
+--- @return boolean success Статус выполнения
 function ChannelMonitor:update_status_and_publish(data)
     -- Оптимизация: проверяем изменения до создания копии таблицы и json_encode
     local on_air = data.on_air
@@ -375,7 +380,7 @@ end
 
 --- Возвращает закэшированные PSI данные (в формате JSON)
 --- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
---- @return string|table|nil psi Данные PSI (JSON строка или таблица JSON строк) или nil
+--- @return string|table|nil result Данные PSI (JSON строка или таблица JSON строк) или nil
 function ChannelMonitor:get_psi(table_name)
     if not self._psi_hash_cache then return nil end
     if table_name then
@@ -385,18 +390,20 @@ function ChannelMonitor:get_psi(table_name)
 end
 
 --- Возвращает статистику анализа по PID
---- @return table stats Статистика по PID
+--- @return table result Статистика по PID
 function ChannelMonitor:get_analyze_stats()
     return self._analyze_stats or {}
 end
 
 --- Очищает статистику анализа
+--- @return boolean success Статус выполнения
 function ChannelMonitor:clear_analyze_stats()
     self._analyze_stats = {}
+    return true
 end
 
 --- Возвращает кэш последнего отправленного JSON статуса
---- @return string|nil cache JSON статус
+--- @return string|nil result JSON статус
 function ChannelMonitor:get_json_status_cache()
     return self._json_status_cache
 end

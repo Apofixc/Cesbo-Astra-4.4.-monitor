@@ -60,6 +60,7 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для очистки ресурсов PSI
+--- @return boolean success Статус выполнения
 function DvbTuner:_clear_psi()
     if self._psi_timer then
         self._psi_timer:close()
@@ -69,6 +70,7 @@ function DvbTuner:_clear_psi()
         self._temp_analyzer = nil
         collectgarbage()
     end
+    return true
 end
 
 --- Вспомогательная функция для установки параметра конфигурации
@@ -140,8 +142,9 @@ end
 --- Публикует данные через HttpSubscriber
 --- @param content string JSON данные
 --- @param event_type string Тип события
+--- @return boolean success Статус выполнения
 function DvbTuner:publish(content, event_type)
-    HttpSubscriber.publish(event_type, content)
+    return HttpSubscriber.publish(event_type, content)
 end
 
 --- Запускает тюнер и инициализирует callback для мониторинга.

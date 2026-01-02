@@ -38,7 +38,7 @@ end
 --- Вычисляет отношение абсолютной разницы между двумя числами к их максимальному значению
 --- @param old number Старое значение
 --- @param new number Новое значение
---- @return number Отношение (от 0 до 1)
+--- @return number result Отношение (от 0 до 1)
 function Utils.ratio(old, new)
     local abs_old = math_abs(old)
     local abs_new = math_abs(new)
@@ -55,7 +55,7 @@ end
 
 --- Создает поверхностную копию таблицы
 --- @param t table Исходная таблица
---- @return table Копия таблицы
+--- @return table result Копия таблицы
 function Utils.table_copy(t)
     if type(t) ~= "table" then
         return {}
@@ -127,7 +127,7 @@ function Utils.validate_monitor_name(name)
 end
 
 --- Возвращает имя хоста сервера
---- @return string Имя хоста
+--- @return string result Имя хоста
 function Utils.get_server_name()
     return HOSTNAME
 end

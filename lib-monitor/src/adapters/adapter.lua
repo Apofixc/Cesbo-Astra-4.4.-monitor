@@ -81,7 +81,7 @@ local function update_dvb_monitor_parameters(name_adapter, params)
 end
 
 --- Возвращает список всех активных мониторов тюнеров.
---- @return table<string, DvbTuner> Список мониторов
+--- @return table<string, DvbTuner> result Список мониторов
 local function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end

@@ -306,12 +306,15 @@ local function kill_stream(channel_data)
     return ch_data.config
 end
 
---- Возвращает список мониторов
+--- Возвращает список всех активных мониторов
+--- @return table<string, ChannelMonitor> result Список мониторов
 local function get_list_monitor()
     return ChannelStorage.get_all()
 end
 
---- Находит монитор
+--- Находит экземпляр монитора по его имени
+--- @param name string Имя монитора
+--- @return ChannelMonitor|nil result Экземпляр монитора или nil
 local function find_monitor(name)
     return ChannelStorage.find(name)
 end

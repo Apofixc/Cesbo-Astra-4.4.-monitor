@@ -53,19 +53,19 @@ end
 
 --- Находит монитор по имени адаптера
 --- @param name string Имя адаптера
---- @return DvbTuner|nil
+--- @return DvbTuner|nil result Экземпляр монитора или nil
 function DvbStorage.find(name)
     return monitors[name]
 end
 
 --- Возвращает список всех мониторов
---- @return table<string, DvbTuner>
+--- @return table<string, DvbTuner> result Таблица мониторов
 function DvbStorage.get_all()
     return monitors
 end
 
 --- Возвращает количество активных мониторов
---- @return number
+--- @return number result Количество мониторов
 function DvbStorage.count()
     local count = 0
     for _ in pairs(monitors) do

@@ -325,7 +325,7 @@ end
 
 --- Проверяет, загружен ли модуль
 --- @param name string Имя модуля
---- @return boolean success true если модуль загружен, иначе false
+--- @return boolean result true если модуль загружен, иначе false
 function ModuleManager.is_module_loaded(name)
     return loaded_modules[name] ~= nil
 end

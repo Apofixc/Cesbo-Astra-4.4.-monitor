@@ -51,19 +51,19 @@ end
 
 --- Находит монитор по имени
 --- @param name string Имя монитора
---- @return ChannelMonitor|nil
+--- @return ChannelMonitor|nil result Экземпляр монитора или nil
 function ChannelStorage.find(name)
     return monitors[name]
 end
 
 --- Возвращает список всех мониторов
---- @return table<string, ChannelMonitor>
+--- @return table<string, ChannelMonitor> result Таблица мониторов
 function ChannelStorage.get_all()
     return monitors
 end
 
 --- Возвращает количество активных мониторов
---- @return number
+--- @return number result Количество мониторов
 function ChannelStorage.count()
     local count = 0
     for _ in pairs(monitors) do
