@@ -386,8 +386,6 @@ end
 --- @return boolean success Статус выполнения
 function DvbTuner:force_stop()
     if self.instance then
-        -- Очистка внутреннего списка Astra (dvb_input_instance_list)
-        local dvb_input_instance_list = dvb_input_instance_list
         if type(dvb_input_instance_list) == "table" and self.instance.__options then
             local opts = self.instance.__options
             if opts.adapter ~= nil and opts.device ~= nil then

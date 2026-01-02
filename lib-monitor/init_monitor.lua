@@ -79,6 +79,7 @@ end
 -- Загрузка модулей
 local success_load, load_error = ModuleManager.load_modules()
 if not success_load then
+    print(string.format("[Init] Failed to load modules: %s", tostring(load_error)))
     return false
 end
 

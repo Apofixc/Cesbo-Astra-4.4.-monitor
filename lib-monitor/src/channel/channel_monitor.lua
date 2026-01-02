@@ -1,6 +1,5 @@
 -- 1. Стандартные Lua функции
 local ipairs = ipairs
-local json_encode = json.encode
 local pairs = pairs
 local setmetatable = setmetatable
 local tostring = tostring
@@ -14,6 +13,7 @@ local Utils = ModuleManager.get_module("utils")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
 local kill_input = ModuleManager.get_global_dependency("kill_input")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
