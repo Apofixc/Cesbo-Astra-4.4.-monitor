@@ -59,6 +59,19 @@ local COMPARISON_METHODS = {
     end
 }
 
+--- Вспомогательная функция для очистки ресурсов PSI
+function DvbTuner:_clear_psi()
+    if self._psi_timer then
+        self._psi_timer:close()
+        self._psi_timer = nil
+    end
+    if self._temp_analyzer then
+        self._temp_analyzer = nil
+
+        collectgarbage()
+    end
+end
+
 --- Вспомогательная функция для установки параметра конфигурации
 --- @param param_name string Имя параметра
 --- @param value any Значение
@@ -120,6 +133,7 @@ function DvbTuner.new(conf)
     }
     self._temp_analyzer = nil
     self._psi = {}
+    self._psi_timer = nil
 
     return self
 end
@@ -271,7 +285,7 @@ end
 --- Запускает сбор PSI таблиц на 10 секунд
 --- @return boolean success Статус запуска процесса
 function DvbTuner:psi_update()
-    if not self.instance or self._temp_analyzer then
+    if not self.instance or self._temp_analyzer or self._psi_timer then
         return false
     end
 
@@ -290,11 +304,11 @@ function DvbTuner:psi_update()
         return false
     end
 
-    timer({
+    self._psi_timer = timer({
         interval = 10,
         callback = function()
-            self._temp_analyzer = nil
-            collectgarbage()
+            self:_clear_psi()
+
             Logger.info(COMPONENT_NAME, "[%s] PSI update finished", self.name_adapter)
         end
     })
