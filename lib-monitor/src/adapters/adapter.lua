@@ -23,7 +23,7 @@ local Adapter = {}
 --- под именем, указанным в conf.name_adapter.
 --- @param conf table Конфигурация тюнера
 --- @return boolean success Статус выполнения
-function dvb_tuner_monitor(conf)
+local function dvb_tuner_monitor(conf)
     if not conf or not conf.name_adapter then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: name_adapter is required")
         return false
@@ -53,7 +53,7 @@ end
 --- Находит экземпляр DVB-тюнера по имени адаптера.
 --- @param name_adapter string Уникальное имя адаптера
 --- @return any|nil result Экземпляр тюнера (instance) или nil
-function find_dvb_conf(name_adapter)
+local function find_dvb_conf(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         return tuner.instance
@@ -66,7 +66,7 @@ end
 --- @param params table Новые параметры (rate, time_check, method_comparison)
 --- @return boolean success Статус выполнения
 --- @return string|nil error_message Сообщение об ошибке
-function update_dvb_monitor_parameters(name_adapter, params)
+local function update_dvb_monitor_parameters(name_adapter, params)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         local success = tuner:update_parameters(params)
@@ -79,14 +79,14 @@ end
 
 --- Возвращает список всех активных мониторов тюнеров.
 --- @return table<string, DvbTuner> Список мониторов
-function get_all_dvb_monitors()
+local function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end
 
 --- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости.
 --- @param name_adapter string Уникальное имя адаптера
 --- @return boolean success Статус выполнения
-function stop_dvb_monitor(name_adapter)
+local function stop_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         local success = tuner:stop()
@@ -102,7 +102,7 @@ end
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.
 --- @param name_adapter string Уникальное имя адаптера
 --- @return boolean success Статус выполнения
-function restart_dvb_monitor(name_adapter)
+local function restart_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         local success, instance = tuner:restart()
@@ -118,7 +118,7 @@ end
 --- Приостанавливает мониторинг тюнера
 --- @param name_adapter string Имя адаптера
 --- @return boolean success
-function pause_dvb_monitor(name_adapter)
+local function pause_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         return tuner:pause()
@@ -129,7 +129,7 @@ end
 --- Возобновляет мониторинг тюнера
 --- @param name_adapter string Имя адаптера
 --- @return boolean success
-function resume_dvb_monitor(name_adapter)
+local function resume_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
         return tuner:resume()

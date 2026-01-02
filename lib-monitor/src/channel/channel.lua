@@ -89,7 +89,7 @@ end
 --- @param channel_data table|string Данные канала или имя
 --- @return boolean success Статус выполнения
 --- @return any|nil result Экземпляр монитора или nil
-function make_monitor(config, channel_data)
+local function make_monitor(config, channel_data)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
         return false, "monitor limit reached"
@@ -159,7 +159,7 @@ end
 --- @param name string Имя монитора
 --- @return boolean success Статус выполнения
 --- @return table|nil result Конфигурация монитора для восстановления или nil
-function kill_monitor(name)
+local function kill_monitor(name)
     local monitor = ChannelStorage.find(name)
     if not monitor then
         Logger.debug(COMPONENT_NAME, "kill_monitor: monitor '%s' not found", tostring(name))
@@ -224,7 +224,7 @@ local monitor_type_handlers = {
 --- @param conf table Конфигурация потока
 --- @return boolean success Статус выполнения
 --- @return any|nil result Экземпляр монитора или nil
-function make_stream(conf)
+local function make_stream(conf)
     local channel_data = make_channel(conf)
     if not channel_data then
         Logger.error(COMPONENT_NAME, "make_stream: make_channel failed for '%s'", tostring(conf.name))
@@ -272,7 +272,7 @@ end
 --- @param channel_data table|string Данные канала или имя
 --- @return boolean success Статус выполнения
 --- @return table|string|nil result Конфигурация потока для восстановления или nil
-function kill_stream(channel_data)
+local function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
     if not ch_data or not ch_data.config then
         local err = "invalid channel_data or channel not found"
@@ -293,12 +293,12 @@ function kill_stream(channel_data)
 end
 
 --- Возвращает список мониторов
-function get_list_monitor()
+local function get_list_monitor()
     return ChannelStorage.get_all()
 end
 
 --- Находит монитор
-function find_monitor(name)
+local function find_monitor(name)
     return ChannelStorage.find(name)
 end
 
@@ -307,7 +307,7 @@ end
 --- @param params table Новые параметры
 --- @return boolean success Статус выполнения
 --- @return nil result
-function update_monitor_parameters(name, params)
+local function update_monitor_parameters(name, params)
     local monitor = ChannelStorage.find(name)
     if monitor then
         return monitor:update_parameters(params)
@@ -318,7 +318,7 @@ end
 --- Приостанавливает монитор
 --- @param name string Имя монитора
 --- @return boolean success
-function pause_monitor(name)
+local function pause_monitor(name)
     local monitor = ChannelStorage.find(name)
     if monitor then
         return monitor:pause()
@@ -329,7 +329,7 @@ end
 --- Возобновляет монитор
 --- @param name string Имя монитора
 --- @return boolean success
-function resume_monitor(name)
+local function resume_monitor(name)
     local monitor = ChannelStorage.find(name)
     if monitor then
         return monitor:resume()
