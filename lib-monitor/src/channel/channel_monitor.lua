@@ -402,11 +402,9 @@ function ChannelMonitor:get_json_status_cache()
 end
 
 --- Приостанавливает мониторинг
---- @return boolean Статус выполнения
 function ChannelMonitor:pause()
     self._active = false
     Logger.info(COMPONENT_NAME, "[%s] Monitoring paused", tostring(self.name))
-    return true
 end
 
 --- Возобновляет мониторинг
@@ -422,7 +420,6 @@ function ChannelMonitor:resume()
 end
 
 --- Останавливает мониторинг и очищает ресурсы
---- @return boolean Статус выполнения
 function ChannelMonitor:stop()
     self._active = false
 
@@ -451,8 +448,6 @@ function ChannelMonitor:stop()
     self._force_timer = nil
     self._check_timer = nil
     self._last_active_id = nil
-
-    return true
 end
 
 --- Обновляет параметры монитора

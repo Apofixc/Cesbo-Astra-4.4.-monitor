@@ -287,11 +287,9 @@ function DvbTuner:psi_update()
 end
 
 --- Приостанавливает мониторинг тюнера
---- @return boolean Статус выполнения
 function DvbTuner:pause()
     self._active = false
     Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self.name_adapter))
-    return true
 end
 
 --- Возобновляет мониторинг тюнера

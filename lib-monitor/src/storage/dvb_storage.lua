@@ -21,14 +21,12 @@ local monitors = {}
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя адаптера
 --- @param monitor_instance DvbTuner Экземпляр монитора
---- @return boolean Статус выполнения
 function DvbStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "DVB Monitor '%s' already registered. Overwriting.", name)
     end
     monitors[name] = monitor_instance
     Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' registered.", name)
-    return true
 end
 
 --- Удаляет монитор из хранилища и останавливает его

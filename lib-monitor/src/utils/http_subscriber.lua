@@ -190,11 +190,10 @@ end
 --- Публикует событие через HTTP рассылку
 --- @param event_type string Тип события
 --- @param data string JSON данные
---- @return boolean Статус выполнения
 function HttpSubscriber.publish(event_type, data)
     if not event_type or not data then
         Logger.error(COMPONENT_NAME, "publish: Invalid arguments")
-        return false
+        return
     end
 
     local recipients = subscribers[event_type]
@@ -202,14 +201,12 @@ function HttpSubscriber.publish(event_type, data)
     if not recipients or #recipients == 0 then
         -- Если нет подписчиков, просто логируем на уровне INFO
         Logger.info(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
-        return true
+        return
     end
 
     for _, addr in ipairs(recipients) do
         send_request(addr, data, event_type)
     end
-
-    return true
 end
 
 -- Инициализация при загрузке модуля

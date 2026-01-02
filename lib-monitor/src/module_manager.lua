@@ -351,13 +351,11 @@ function ModuleManager.get_loaded_modules()
 end
 
 --- Очищает все зарегистрированные и загруженные модули (для тестов)
---- @return boolean Статус выполнения
 function ModuleManager.reset()
     registered_modules = {}
     loaded_modules = {}
     global_dependencies = {} -- Сбрасываем только Astra-специфичные зависимости
     log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
-    return true
 end
 
 -- Регистрируем себя в глобальном пространстве
