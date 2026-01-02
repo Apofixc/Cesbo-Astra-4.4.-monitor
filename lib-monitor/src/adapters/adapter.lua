@@ -35,13 +35,13 @@ local function dvb_tuner_monitor(conf)
         return false
     end
 
-    local success_new, tuner = DvbTuner.new(conf)
-    if not success_new then
+    local tuner = DvbTuner.new(conf)
+    if not tuner then
         return false
     end
 
-    local success_start, instance = tuner:start()
-    if success_start then
+    local instance = tuner:start()
+    if instance then
         DvbStorage.register(conf.name_adapter, tuner)
         _G[conf.name_adapter] = instance
         return true

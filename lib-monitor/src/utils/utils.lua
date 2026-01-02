@@ -69,10 +69,11 @@ function Utils.table_copy(t)
     return copy
 end
 
---- Валидирует параметр монитора на основе схемы
+--- Валидирует параметр монитора на основе схемы.
+--- Если значение невалидно или отсутствует, возвращает значение по умолчанию из схемы.
 --- @param name string Имя параметра
 --- @param value any Значение
---- @return any|nil result Данные или nil в случае ошибки
+--- @return any result Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
     local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[name]
     if not schema then
@@ -85,18 +86,21 @@ function Utils.validate_monitor_param(name, value)
     end
 
     if type(value) ~= schema.type then
-        Logger.error(COMPONENT_NAME, "validate_monitor_param: Invalid type for '%s'", name)
-        return nil
+        Logger.error(COMPONENT_NAME, "validate_monitor_param: Invalid type for '%s' (expected %s, got %s). Using default.", 
+            name, schema.type, type(value))
+        return schema.default
     end
 
     if schema.type == "number" then
         if schema.min and value < schema.min then
-            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too small", name)
-            return nil
+            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too small (%s < %s). Using default.", 
+                name, tostring(value), tostring(schema.min))
+            return schema.default
         end
         if schema.max and value > schema.max then
-            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too large", name)
-            return nil
+            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too large (%s > %s). Using default.", 
+                name, tostring(value), tostring(schema.max))
+            return schema.default
         end
     end
 

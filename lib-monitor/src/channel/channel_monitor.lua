@@ -87,9 +87,8 @@ local COMPARISON_METHODS = {
 --- @param value any
 --- @return boolean success
 function ChannelMonitor:_set_config_param(param_name, value)
-    local success, result = validate_monitor_param(param_name, value)
-    if not success then
-        log_error(COMPONENT_NAME, "[%s] Invalid parameter value for %s: %s", tostring(self.name), param_name, tostring(value))
+    local result = validate_monitor_param(param_name, value)
+    if result == nil then
         return false
     end
     local key = param_name:gsub("channel_", "")
@@ -125,7 +124,7 @@ function ChannelMonitor.new(config, channel_data)
     self.name = config.name or (self._channel_data and self._channel_data.name) or config.monitor
     self.display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self.name
 
-    -- Валидация и установка параметров
+    -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     self:_set_config_param("channel_rate", config.rate)
     self:_set_config_param("channel_time_check", config.time_check)
     self:_set_config_param("channel_method_comparison", config.method_comparison)

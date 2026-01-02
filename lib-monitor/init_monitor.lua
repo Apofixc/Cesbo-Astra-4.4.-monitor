@@ -36,9 +36,9 @@ local found_astra_deps = {}
 local all_astra_deps_found = true
 
 for _, dep_path in ipairs(global_dependencies_to_check) do
-    local success, obj = ModuleManager.check_nested_dependency(dep_path)
+    local obj = ModuleManager.check_nested_dependency(dep_path)
     
-    if not success then
+    if obj == nil then
         print(string.format("[Init] Critical dependency missing: %s", dep_path))
         all_astra_deps_found = false
     else

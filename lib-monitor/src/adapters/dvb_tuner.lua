@@ -80,7 +80,7 @@ function DvbTuner.new(conf)
     local self = setmetatable({}, DvbTuner)
     self.config = conf
 
-    -- Валидация и установка параметров по умолчанию
+    -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     self:_set_config_param("dvb_rate", conf.rate)
     self:_set_config_param("dvb_time_check", conf.time_check)
     self:_set_config_param("dvb_method_comparison", conf.method_comparison)
