@@ -203,13 +203,6 @@ local function resume_dvb_monitor(name_adapter)
     return false
 end
 
---- Принудительно перезапускает тюнер (Emergency Reset)
---- @param name_adapter string Имя адаптера
---- @return boolean success Статус выполнения
-local function force_restart_dvb_tuner(name_adapter)
-    return restart_dvb_monitor(name_adapter, nil, true)
-end
-
 --- Сценарий "Переключение транспондера":
 --- 1. Находит все каналы на адаптере
 --- 2. Останавливает их и сохраняет конфигурацию (включая выходы)
@@ -293,7 +286,6 @@ Adapter.stop_dvb_monitor = stop_dvb_monitor
 Adapter.restart_dvb_monitor = restart_dvb_monitor
 Adapter.pause_dvb_monitor = pause_dvb_monitor
 Adapter.resume_dvb_monitor = resume_dvb_monitor
-Adapter.force_restart_dvb_tuner = force_restart_dvb_tuner
 Adapter.switch_transponder = switch_transponder
 
 return Adapter
