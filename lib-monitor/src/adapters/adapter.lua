@@ -7,6 +7,7 @@ local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local DvbTuner = ModuleManager.get_module("dvb_tuner")
 local DvbStorage = ModuleManager.get_module("dvb_storage")
+local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- Нет прямых зависимостей
@@ -150,15 +151,15 @@ end
 
 --- Сценарий "Переключение транспондера":
 --- 1. Находит все каналы на адаптере
---- 2. Останавливает их и сохраняет конфигурацию
+--- 2. Останавливает их и сохраняет конфигурацию (включая выходы)
 --- 3. Перенастраивает тюнер
---- 4. Запускает новые каналы (если переданы)
+--- 4. Запускает новые каналы из reserve_input, наследуя выходы
 --- @param name_adapter string Имя адаптера
 --- @param new_tuner_params table Новые параметры тюнера
---- @param new_channels_configs table|nil Список конфигураций новых каналов
+--- @param reserve_input table|nil Список новых входов {name, pnr, input}
 --- @return boolean success
 --- @return table|nil old_state Снимок предыдущего состояния для возврата
-local function switch_transponder(name_adapter, new_tuner_params, new_channels_configs)
+local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then
         Logger.error(COMPONENT_NAME, "switch_transponder: tuner '%s' not found", name_adapter)
@@ -174,41 +175,68 @@ local function switch_transponder(name_adapter, new_tuner_params, new_channels_c
     end
 
     -- 1. Находим все каналы на этом адаптере
-    local dependent_monitors = ChannelStorage.find_by_adapter(name_adapter)
+    local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
     local old_channels_configs = {}
-    local old_tuner_params = {}
-    
-    -- Сохраняем текущие параметры тюнера
-    for k, v in pairs(tuner.config) do old_tuner_params[k] = v end
+    local old_channels_map = {}
+    local old_tuner_params = Utils.table_copy(tuner.config)
 
-    -- 2. Останавливаем каналы и сохраняем их конфиги
-    for name, _ in pairs(dependent_monitors) do
+    -- 2. Останавливаем каналы и сохраняем их полные конфиги
+    for name, _ in pairs(dependent_channels) do
         local success_kill, ch_config = Channel.kill_stream(name)
         if success_kill then
             table.insert(old_channels_configs, ch_config)
+            old_channels_map[name] = ch_config
         end
     end
 
     -- 3. Перенастраиваем тюнер
-    -- Теперь, когда каналы остановлены, счетчик channels должен быть 1 (только монитор)
     local success_tune, err = tuner:update_parameters(new_tuner_params)
     if not success_tune then
         Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s': %s", name_adapter, tostring(err))
-        -- Пытаемся восстановить старые каналы
+        -- Восстановление старых каналов
         for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end
         return false, nil
     end
 
-    -- 4. Запускаем новые каналы, если они переданы
-    if new_channels_configs and type(new_channels_configs) == "table" then
-        for _, conf in ipairs(new_channels_configs) do
-            Channel.make_stream(conf)
+    -- 4. Запускаем новые каналы из reserve_input
+    if reserve_input and type(reserve_input) == "table" then
+        for _, item in ipairs(reserve_input) do
+            local name = item.name
+            if name then
+                local final_conf = {}
+                local old_conf = old_channels_map[name]
+                
+                if old_conf then
+                    -- Наследуем всё из старого конфига (выходы, мониторинг и т.д.)
+                    final_conf = Utils.table_copy(old_conf)
+                else
+                    final_conf.name = name
+                end
+
+                -- Определяем новый вход
+                if item.input then
+                    -- Если передан готовый вход (URL или таблица)
+                    final_conf.input = type(item.input) == "table" and item.input or { item.input }
+                elseif item.pnr then
+                    -- Если передан PNR, формируем DVB вход для текущего адаптера
+                    final_conf.input = {
+                        {
+                            config = {
+                                format = "dvb",
+                                addr = name_adapter,
+                                pnr = item.pnr
+                            }
+                        }
+                    }
+                end
+
+                Channel.make_stream(final_conf)
+            end
         end
     end
 
     Logger.info(COMPONENT_NAME, "Transponder switched successfully on adapter '%s'", name_adapter)
     
-    -- Возвращаем старое состояние для возможности Undo
     return true, {
         tuner_params = old_tuner_params,
         channels_configs = old_channels_configs

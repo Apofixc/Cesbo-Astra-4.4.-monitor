@@ -41,19 +41,20 @@ end
 local tuner_instance = _G["tuner_0"]
 Logger.info("TEST", "Initial channels counter: " .. tostring(tuner_instance.__options.channels))
 
--- 2. Запускаем канал на этом тюнере
+-- 2. Запускаем канал на этом тюнере с выходными данными
 local channel_conf = {
     name = "TestChannel",
     input = {
         {
             config = {
                 format = "dvb",
-                addr = "tuner_0", -- Используем имя адаптера из _G
+                addr = "tuner_0",
                 adapter = 0,
                 device = 0
             }
         }
     },
+    output = { "udp://239.0.0.1:1234" }, -- Настройка вещания
     monitor = {
         monitor_type = "output"
     }
@@ -99,17 +100,15 @@ else
     Logger.error("TEST", "find_by_adapter failed to find channels")
 end
 
--- 4. Сценарий переключения транспондера
-Logger.info("TEST", "Starting switch_transponder scenario...")
+-- 4. Сценарий переключения транспондера (Гибридный: DVB + HTTP)
+Logger.info("TEST", "Starting hybrid switch_transponder scenario...")
 local new_tuner_params = { tp = "11111:H:22222" }
-local new_channels = {
-    {
-        name = "NewChannel",
-        input = { { config = { format = "dvb", addr = "tuner_0", adapter = 0, device = 0 } } }
-    }
+local reserve_input = {
+    { name = "TestChannel", pnr = 201 }, -- Тот же канал, но новый PNR (выходы должны наследоваться)
+    { name = "BackupChannel", input = "http://server.com/backup.ts" } -- Новый канал по HTTP
 }
 
-local success_switch, old_state = Adapter.switch_transponder("tuner_0", new_tuner_params, new_channels)
+local success_switch, old_state = Adapter.switch_transponder("tuner_0", new_tuner_params, reserve_input)
 if success_switch then
     Logger.info("TEST", "Switch transponder successful")
     Logger.info("TEST", "New channels counter: " .. tostring(tuner_instance.__options.channels))
