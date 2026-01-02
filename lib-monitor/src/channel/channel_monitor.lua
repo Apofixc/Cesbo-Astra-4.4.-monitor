@@ -230,7 +230,7 @@ function ChannelMonitor:get_status_template()
         server = Utils.get_server_name(),
         channel = self.name,
         display_name = self.display_name,
-        output = self._config.monitor,
+        monitor = self._config.monitor,
         stream = source.stream,
         format = source.format,
         addr = source.addr

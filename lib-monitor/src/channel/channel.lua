@@ -188,14 +188,31 @@ local monitor_type_handlers = {
         end
 
         local upstream = input_data.input.tail
-        local split_result = string_split(conf.input[1], "#")
-        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.input[1]
+        
+        -- Формируем информативное имя монитора для входа
+        local monitor_target = "Input: Unknown"
+        if input_data.config then
+            local fmt = input_data.config.format or "Unknown"
+            local addr = "Unknown"
+            
+            if fmt == "dvb" then
+                addr = input_data.config.addr or "Unknown"
+            elseif fmt == "udp" or fmt == "rtp" then
+                addr = (input_data.config.addr or "0.0.0.0") .. ":" .. (input_data.config.port or "0")
+            elseif fmt == "http" then
+                addr = (input_data.config.host or "localhost") .. ":" .. (input_data.config.port or "80")
+            elseif fmt == "file" then
+                addr = input_data.config.filename or "Unknown"
+            end
+            
+            monitor_target = string.format("Input: %s (%s)", fmt:upper(), addr)
+        end
 
         return true, upstream, monitor_target
     end,
     [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
         local upstream = channel_data.tail
-        local monitor_target = MONITOR_TYPE_OUTPUT
+        local monitor_target = "Output: Channel"
         return true, upstream, monitor_target
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
@@ -213,7 +230,8 @@ local monitor_type_handlers = {
         end
 
         local split_result = string_split(conf.output[key], "#")
-        local monitor_target = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        local addr = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        local monitor_target = string.format("Output: IP (%s)", addr)
         
         Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
         return true, nil, monitor_target
@@ -231,7 +249,6 @@ local function make_stream(conf)
         return false, nil
     end
 
-    local monitor_name = (conf.monitor and conf.monitor.name) or conf.name
     local monitor_type = (conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
 
     local handler = monitor_type_handlers[monitor_type]
@@ -248,8 +265,8 @@ local function make_stream(conf)
     end
 
     local monitor_config = {
-        name = monitor_name,
-        display_name = conf.monitor and conf.monitor.display_name,
+        name = conf.name,
+        display_name = conf.monitor and conf.monitor.display_name or conf.name,
         upstream = upstream,
         monitor = monitor_target,
         rate = conf.monitor and conf.monitor.rate,
