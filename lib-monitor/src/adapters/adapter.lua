@@ -84,9 +84,10 @@ end
 
 --- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости и хранилища.
 --- @param name_adapter string Уникальное имя адаптера
+--- @param force boolean|nil Принудительная остановка
 --- @return boolean success Статус выполнения
-local function stop_dvb_monitor(name_adapter)
-    if DvbStorage.unregister(name_adapter) then
+local function stop_dvb_monitor(name_adapter, force)
+    if DvbStorage.unregister(name_adapter, force) then
         _G[name_adapter] = nil
         return true
     end
@@ -101,16 +102,29 @@ end
 --- @return boolean success Статус выполнения
 local function restart_dvb_monitor(name_adapter, new_params, force)
     local tuner = DvbStorage.find(name_adapter)
-    if tuner then
-        local instance = tuner:restart_adapter(new_params, force)
-        if instance then
-            _G[name_adapter] = instance
-            return true
-        end
+    if not tuner then
+        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
         return false
     end
-    Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
-    return false
+
+    -- 1. Копируем текущую конфигурацию
+    local new_conf = Utils.table_copy(tuner.config)
+
+    -- 2. Обновляем параметры, если переданы
+    if new_params and type(new_params) == "table" then
+        for k, v in pairs(new_params) do
+            new_conf[k] = v
+        end
+    end
+
+    -- 3. Полностью уничтожаем старый монитор
+    if not stop_dvb_monitor(name_adapter, force) then
+        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to stop old monitor for '%s'", name_adapter)
+        return false
+    end
+
+    -- 4. Создаем и запускаем новый монитор
+    return Adapter.dvb_tuner_monitor(new_conf)
 end
 
 --- Приостанавливает мониторинг тюнера
@@ -183,8 +197,8 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
         end
     end
 
-    -- 3. Перенастраиваем тюнер
-    if not tuner:update_parameters(new_tuner_params) then
+    -- 3. Перенастраиваем тюнер (через полный рестарт монитора)
+    if not restart_dvb_monitor(name_adapter, new_tuner_params, true) then
         Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s'", name_adapter)
         -- Восстановление старых каналов
         for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end

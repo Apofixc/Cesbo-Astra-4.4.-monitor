@@ -218,48 +218,13 @@ function DvbTuner:start()
     return self.instance
 end
 
---- Обновляет параметры тюнера. Если изменены параметры вещания (частота и т.д.), тюнер будет перезапущен.
---- @param params table Новые параметры
+--- Обновляет параметры мониторинга тюнера.
+--- @param params table Новые параметры (rate, time_check, method_comparison)
 --- @return boolean success Статус выполнения
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then
         Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name_adapter))
         return false
-    end
-
-    local tuning_params = {
-        "frequency", "symbolrate", "modulation", "adapter", "device", "type",
-        "polarization", "voltage", "lnb", "diseqc", "tp"
-    }
-
-    local tuning_changed = false
-    for _, param in ipairs(tuning_params) do
-        if params[param] ~= nil and params[param] ~= self.config[param] then
-            tuning_changed = true
-            break
-        end
-    end
-
-    if tuning_changed then
-        -- Проверка занятости тюнера перед сменой параметров
-        if self.instance and self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
-            Logger.error(COMPONENT_NAME, "Cannot change tuning parameters for '%s': tuner is used by %d channels. Stop channels first.", 
-                self.name_adapter, self.instance.__options.channels - 1)
-            return false
-        end
-
-        for _, param in ipairs(tuning_params) do
-            if params[param] ~= nil then
-                self.config[param] = params[param]
-            end
-        end
-
-        Logger.info(COMPONENT_NAME, "Tuning parameters changed for '%s'. Restarting...", self.name_adapter)
-        self.status.source = self.config.tp or self.config.frequency
-        self.status.format = self.config.type or ""
-        self.status.modulation = self.config.modulation or ""
-        
-        return self:restart_adapter() ~= nil
     end
 
     if params.rate ~= nil then
@@ -293,7 +258,7 @@ function DvbTuner:psi_update()
         name = "psi_update_" .. self.name_adapter,
         join_pid = true,
         callback = function(data)
-            if self._active and data.psi then
+            if data.psi then
                 self._psi[data.psi:lower()] = data
             end
         end
@@ -306,103 +271,16 @@ function DvbTuner:psi_update()
     self._psi_timer = timer({
         interval = 10,
         callback = function()
-            self:_clear_psi()
+            self._temp_analyzer = nil
+            if self._psi_timer then
+                self._psi_timer:close()
+                self._psi_timer = nil
+            end
             Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self.name_adapter))
         end
     })
 
     return true
-end
-
---- Останавливает тюнер и очищает внутренние списки Astra для предотвращения утечек памяти.
---- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
---- @return boolean success
-function DvbTuner:stop_adapter(force)
-    self._active = false
-    self:_clear_psi()
-
-    if self.instance then
-        local can_close = true
-        
-        if not force then
-            -- Безопасное управление счетчиком каналов Astra
-            if self.instance.__options and self.instance.__options.channels then
-                self.instance.__options.channels = self.instance.__options.channels - 1
-                Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
-                
-                if self.instance.__options.channels > 0 then
-                    can_close = false
-                    Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
-                end
-            end
-        end
-
-        if can_close then
-            -- Очистка внутреннего списка Astra (dvb_input_instance_list)
-            if type(dvb_input_instance_list) == "table" and self.instance.__options then
-                local opts = self.instance.__options
-                if opts.adapter ~= nil and opts.device ~= nil then
-                    local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
-                    if dvb_input_instance_list[instance_id] then
-                        dvb_input_instance_list[instance_id] = nil
-                        Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
-                    end
-                end
-            end
-
-            -- Закрытие самого тюнера
-            if type(self.instance.close) == "function" then
-                self.instance:close()
-            end
-            Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: %s)", tostring(self.name_adapter), tostring(force))
-        end
-        
-        -- Очистка callback для разрыва замыкания self
-        if self.config then
-            self.config.callback = nil
-        end
-        self.instance = nil
-        return true
-    end
-    return false
-end
-
---- Перезапускает тюнер.
---- @param new_params table|nil Новые параметры тюнинга
---- @param force boolean|nil Принудительный перезапуск
---- @return any|nil result Новый экземпляр тюнера или nil
-function DvbTuner:restart_adapter(new_params, force)
-    Logger.info(COMPONENT_NAME, "Restarting tuner '%s' (force: %s)...", tostring(self.name_adapter), tostring(force))
-    
-    -- 1. Останавливаем и запоминаем счетчик (если не force)
-    local old_channels_count = (not force) and self.instance and self.instance.__options and self.instance.__options.channels
-    
-    self:stop_adapter(force)
-
-    -- 2. Обновляем параметры, если переданы
-    if new_params and type(new_params) == "table" then
-        for k, v in pairs(new_params) do
-            self.config[k] = v
-        end
-        self.status.source = self.config.tp or self.config.frequency
-        self.status.format = self.config.type or ""
-        self.status.modulation = self.config.modulation or ""
-    end
-
-    -- 3. Запускаем заново
-    local instance = self:start()
-    if not instance then
-        Logger.error(COMPONENT_NAME, "Failed to restart tuner '%s'", tostring(self.name_adapter))
-        return nil
-    end
-
-    -- 4. Восстанавливаем счетчик (вычитаем 1, так как start() уже прибавил 1 для монитора)
-    if old_channels_count and instance.__options then
-        instance.__options.channels = old_channels_count
-        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter restored to: %d", tostring(self.name_adapter), instance.__options.channels)
-    end
-
-    return instance
 end
 
 --- Приостанавливает мониторинг тюнера
@@ -425,9 +303,61 @@ function DvbTuner:resume()
     return true
 end
 
---- Полностью удаляет тюнер и очищает ресурсы.
-function DvbTuner:destroy()
-    self:stop_adapter(true)
+--- Полностью останавливает тюнер и уничтожает объект.
+--- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
+--- @return boolean success Статус выполнения
+function DvbTuner:destroy(force)
+    if self.instance and not force then
+        if self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
+            Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy: tuner is used by %d other channels. Use force=true to override.", 
+                tostring(self.name_adapter), self.instance.__options.channels - 1)
+            return false
+        end
+    end
+
+    self._active = false
+    self:_clear_psi()
+
+    if self.instance then
+        local can_close = true
+        
+        if not force then
+            if self.instance.__options and self.instance.__options.channels then
+                self.instance.__options.channels = self.instance.__options.channels - 1
+                Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
+                
+                if self.instance.__options.channels > 0 then
+                    can_close = false
+                    Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
+                end
+            end
+        end
+
+        if can_close then
+            if type(dvb_input_instance_list) == "table" and self.instance.__options then
+                local opts = self.instance.__options
+                if opts.adapter ~= nil and opts.device ~= nil then
+                    local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
+                    if dvb_input_instance_list[instance_id] then
+                        dvb_input_instance_list[instance_id] = nil
+                        Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
+                    end
+                end
+            end
+
+            if type(self.instance.close) == "function" then
+                self.instance:close()
+            end
+            Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: %s)", tostring(self.name_adapter), tostring(force))
+        end
+        
+        if self.config then
+            self.config.callback = nil
+        end
+        self.instance = nil
+    end
+
+    -- Полная очистка полей объекта
     self.name_adapter = nil
     self.config = nil
     self.status = nil
@@ -435,7 +365,9 @@ function DvbTuner:destroy()
     self.json_cache = nil
     self.stats = nil
     self._psi = nil
+    
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
+    return true
 end
 
 return DvbTuner
