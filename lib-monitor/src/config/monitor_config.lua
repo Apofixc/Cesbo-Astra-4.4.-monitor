@@ -17,6 +17,20 @@
 
 -- 4. Константы и конфигурации
 --- @class MonitorConfig
+--- @field STREAM table<string, string> Карта имен потоков по их IP-адресам
+--- @field LogLevel string Настройки логирования
+--- @field ChannelMonitorLimit number Максимальное количество одновременно активных мониторов каналов
+--- @field DvbMonitorLimit number Максимальное количество одновременно активных DVB-мониторов
+--- @field MaxMonitorNameLength number Максимальная длина имени монитора
+--- @field MinRate number Минимальное допустимое значение погрешности
+--- @field MaxRate number Максимальное допустимое значение погрешности
+--- @field MinTimeCheck number Минимальный интервал между проверками
+--- @field MaxTimeCheck number Максимальный интервал между проверками
+--- @field MinMethodComparison number Минимальное значение для метода сравнения
+--- @field MaxMethodComparison number Максимальное значение для метода сравнения
+--- @field HttpTimeout number Таймаут HTTP-запросов
+--- @field SubscribersFilePath string Путь к файлу с подписчиками
+--- @field ValidationSchema table<string, table> Схема валидации для параметров мониторов
 local MonitorConfig = {}
 
 --- Карта имен потоков по их IP-адресам.

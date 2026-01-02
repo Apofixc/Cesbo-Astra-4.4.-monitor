@@ -115,7 +115,7 @@ end
 
 --- Приостанавливает мониторинг тюнера
 --- @param name_adapter string Имя адаптера
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function pause_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -127,7 +127,7 @@ end
 
 --- Возобновляет мониторинг тюнера
 --- @param name_adapter string Имя адаптера
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function resume_dvb_monitor(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
@@ -139,7 +139,7 @@ end
 
 --- Принудительно перезапускает тюнер (Emergency Reset)
 --- @param name_adapter string Имя адаптера
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function force_restart_dvb_tuner(name_adapter)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then

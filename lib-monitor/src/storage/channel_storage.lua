@@ -13,6 +13,7 @@ local COMPONENT_NAME = "ChannelStorage"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class ChannelStorage
+--- @field private monitors table<string, ChannelMonitor>
 local ChannelStorage = {}
 
 --- @type table<string, ChannelMonitor>

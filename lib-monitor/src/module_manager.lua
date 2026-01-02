@@ -25,6 +25,9 @@ local COMPONENT_NAME = "ModuleManager"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class ModuleManager
+--- @field private registered_modules table<string, table>
+--- @field private loaded_modules table<string, table>
+--- @field private global_dependencies table<string, any>
 local ModuleManager = {}
 ModuleManager.__index = ModuleManager
 

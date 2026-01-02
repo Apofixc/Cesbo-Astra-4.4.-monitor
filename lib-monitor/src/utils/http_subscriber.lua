@@ -18,13 +18,14 @@ local COMPONENT_NAME = "HttpSubscriber"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class HttpSubscriber
+--- @field private subscribers table<string, table[]> Таблица подписчиков
 local HttpSubscriber = {}
 
 --- @type table<string, table[]> Таблица подписчиков: { [event_type] = { {host, port, path}, ... } }
 local subscribers = {}
 
 --- Загружает список подписчиков из файла
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function load_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
     if not path then
@@ -60,7 +61,7 @@ local function load_subscribers()
 end
 
 --- Сохраняет список подписчиков в файл
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function save_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
     if not path then
@@ -122,7 +123,7 @@ end
 --- Подписывает адрес на события определенного типа
 --- @param event_type string Тип события
 --- @param addr table {host, port, path}
---- @return boolean success
+--- @return boolean success Статус выполнения
 function HttpSubscriber.subscribe(event_type, addr)
     if not event_type or type(addr) ~= "table" or not addr.host or not addr.port or not addr.path then
         Logger.error(COMPONENT_NAME, "subscribe: Invalid arguments")
@@ -153,7 +154,7 @@ end
 --- Отписывает адрес от событий определенного типа
 --- @param event_type string Тип события
 --- @param addr table {host, port, path}
---- @return boolean success
+--- @return boolean success Статус выполнения
 function HttpSubscriber.unsubscribe(event_type, addr)
     if not event_type or not subscribers[event_type] or type(addr) ~= "table" then
         Logger.error(COMPONENT_NAME, "unsubscribe: Invalid arguments or event type not found")
@@ -180,7 +181,7 @@ end
 --- Публикует событие через HTTP рассылку
 --- @param event_type string Тип события
 --- @param data string JSON данные
---- @return boolean success
+--- @return boolean success Статус выполнения
 function HttpSubscriber.publish(event_type, data)
     if not event_type or not data then
         Logger.error(COMPONENT_NAME, "publish: Invalid arguments")

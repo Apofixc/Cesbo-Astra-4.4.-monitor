@@ -31,6 +31,9 @@ local current_context_id = nil
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
+--- @field private last_errors table<string, string>
+--- @field private context_stack table<number, string>
+--- @field private current_context_id string|nil
 local Logger = {}
 
 local function get_current_level()
@@ -117,7 +120,7 @@ end
 --- @param func function Функция для выполнения
 --- @param ... any Аргументы функции
 --- @return boolean success Статус выполнения
---- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке
+--- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке (для HTTP-функций)
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
     local context_id = tostring({}) -- Уникальный ID для этого вызова
@@ -138,16 +141,16 @@ function Logger.with_error(func, ...)
         local err = results[2]
         Logger.error("Logger", "Runtime error: %s", tostring(err))
         last_errors[context_id] = nil
-        return nil, tostring(err)
+        return false, tostring(err)
     end
     
     -- Успешное выполнение функции, проверяем результат
     local success = results[2]
-    if success == false or success == nil then
+    if not success then
         -- Извлекаем ошибку, которая была сохранена для ЭТОГО контекста
         local err = last_errors[context_id]
         last_errors[context_id] = nil
-        return success, err
+        return false, err
     end
     
     -- Успех

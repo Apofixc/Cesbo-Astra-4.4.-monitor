@@ -12,6 +12,7 @@ local COMPONENT_NAME = "DvbStorage"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class DvbStorage
+--- @field private monitors table<string, DvbTuner>
 local DvbStorage = {}
 
 --- @type table<string, DvbTuner>
@@ -20,7 +21,7 @@ local monitors = {}
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя адаптера
 --- @param monitor_instance DvbTuner Экземпляр монитора
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "DVB Monitor '%s' already registered. Overwriting.", name)
@@ -32,7 +33,7 @@ end
 
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя адаптера
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then

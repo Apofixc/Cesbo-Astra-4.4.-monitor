@@ -24,7 +24,7 @@ local Utils = {}
 
 --- Возвращает имя потока по IP-адресу
 --- @param ip_address string IP-адрес потока
---- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
+--- @return string|nil result Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
         Logger.error(COMPONENT_NAME, "get_stream_name: Invalid ip_address")
@@ -108,8 +108,8 @@ function Utils.validate_monitor_param(name, value)
 end
 
 --- Валидирует имя монитора
---- @param name string
---- @return boolean success
+--- @param name string Имя монитора
+--- @return boolean success Статус валидации
 function Utils.validate_monitor_name(name)
     if not name or type(name) ~= "string" or name == "" then
         return false

@@ -326,7 +326,7 @@ end
 
 --- Приостанавливает монитор
 --- @param name string Имя монитора
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function pause_monitor(name)
     local monitor = ChannelStorage.find(name)
     if monitor then
@@ -337,7 +337,7 @@ end
 
 --- Возобновляет монитор
 --- @param name string Имя монитора
---- @return boolean success
+--- @return boolean success Статус выполнения
 local function resume_monitor(name)
     local monitor = ChannelStorage.find(name)
     if monitor then

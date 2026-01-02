@@ -83,9 +83,9 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для установки параметра конфигурации
---- @param param_name string
---- @param value any
---- @return boolean success
+--- @param param_name string Имя параметра
+--- @param value any Значение
+--- @return boolean success Статус выполнения
 function ChannelMonitor:_set_config_param(param_name, value)
     local result = validate_monitor_param(param_name, value)
     if result == nil then
@@ -394,7 +394,7 @@ function ChannelMonitor:get_json_status_cache()
 end
 
 --- Приостанавливает мониторинг
---- @return boolean success
+--- @return boolean success Статус выполнения
 function ChannelMonitor:pause()
     self._active = false
     Logger.info(COMPONENT_NAME, "[%s] Monitoring paused", tostring(self.name))
@@ -402,7 +402,7 @@ function ChannelMonitor:pause()
 end
 
 --- Возобновляет мониторинг
---- @return boolean success
+--- @return boolean success Статус выполнения
 function ChannelMonitor:resume()
     if self._status == nil then
         Logger.error(COMPONENT_NAME, "[%s] Cannot resume: monitor already stopped", tostring(self.name))

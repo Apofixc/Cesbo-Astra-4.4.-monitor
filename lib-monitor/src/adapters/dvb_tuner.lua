@@ -54,9 +54,9 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для установки параметра конфигурации
---- @param param_name string
---- @param value any
---- @return boolean success
+--- @param param_name string Имя параметра
+--- @param value any Значение
+--- @return boolean success Статус выполнения
 function DvbTuner:_set_config_param(param_name, value)
     local success, result = validate_monitor_param(param_name, value)
     if not success then
@@ -308,7 +308,7 @@ function DvbTuner:restart()
 end
 
 --- Приостанавливает мониторинг тюнера
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbTuner:pause()
     self._active = false
     Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self.name_adapter))
@@ -316,7 +316,7 @@ function DvbTuner:pause()
 end
 
 --- Возобновляет мониторинг тюнера
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbTuner:resume()
     if self.status == nil then
         Logger.error(COMPONENT_NAME, "[%s] Cannot resume: tuner already killed", tostring(self.name_adapter))
@@ -329,7 +329,7 @@ end
 
 --- Принудительно останавливает тюнер, игнорируя счетчики каналов.
 --- Используется в экстренных случаях (зависание тюнера).
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbTuner:force_stop()
     if self.instance then
         -- Очистка внутреннего списка Astra (dvb_input_instance_list)
@@ -358,7 +358,7 @@ end
 
 --- Принудительно перезапускает тюнер с сохранением и восстановлением счетчика каналов.
 --- @param new_params table|nil Новые параметры тюнинга
---- @return boolean success
+--- @return boolean success Статус выполнения
 function DvbTuner:force_restart(new_params)
     Logger.info(COMPONENT_NAME, "Force restarting tuner '%s'...", self.name_adapter)
     
