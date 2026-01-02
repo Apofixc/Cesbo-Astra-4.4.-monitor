@@ -326,7 +326,7 @@ function DvbTuner:destroy(force)
                 self.instance.__options.channels = self.instance.__options.channels - 1
                 Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
                 
-                if self.instance.__options.channels > 0 then
+                if self.instance.__options.channels > 1 then
                     can_close = false
                     Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
                 end

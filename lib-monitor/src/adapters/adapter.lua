@@ -1,7 +1,11 @@
 -- 1. Стандартные Lua функции
+local ipairs = ipairs
+local pairs = pairs
 local string_format = string.format
-local type = type
+local table_concat = table.concat
 local table_insert = table.insert
+local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -107,6 +111,9 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
         return false
     end
 
+    local Channel = ModuleManager.get_module("channel")
+    local ChannelStorage = ModuleManager.get_module("channel_storage")
+
     -- 1. Копируем текущую конфигурацию
     local new_conf = Utils.table_copy(tuner.config)
 
@@ -117,14 +124,59 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
         end
     end
 
+    local old_channels_count = 0
+    local old_channels_configs = {}
+
+    if force then
+        -- При force сохраняем счетчик каналов для восстановления
+        if tuner.instance and tuner.instance.__options then
+            old_channels_count = tuner.instance.__options.channels or 0
+        end
+    else
+        -- При обычном рестарте находим и останавливаем зависимые каналы
+        if Channel and ChannelStorage then
+            local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
+            for name, _ in pairs(dependent_channels) do
+                local ch_config = Channel.kill_stream(name)
+                if ch_config then
+                    table_insert(old_channels_configs, ch_config)
+                end
+            end
+        end
+    end
+
     -- 3. Полностью уничтожаем старый монитор
     if not stop_dvb_monitor(name_adapter, force) then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to stop old monitor for '%s'", name_adapter)
+        -- Пытаемся вернуть каналы, если они были остановлены
+        for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end
         return false
     end
 
     -- 4. Создаем и запускаем новый монитор
-    return Adapter.dvb_tuner_monitor(new_conf)
+    local success = Adapter.dvb_tuner_monitor(new_conf)
+    if not success then
+        return false
+    end
+
+    -- 5. Восстановление состояния
+    if force then
+        -- Восстанавливаем счетчик каналов в новом инстансе
+        local new_tuner = DvbStorage.find(name_adapter)
+        if new_tuner and new_tuner.instance and new_tuner.instance.__options then
+            new_tuner.instance.__options.channels = old_channels_count
+            Logger.debug(COMPONENT_NAME, "restart_dvb_monitor: restored channels counter to %d for '%s'", old_channels_count, name_adapter)
+        end
+    else
+        -- Запускаем каналы обратно
+        if Channel then
+            for _, conf in ipairs(old_channels_configs) do
+                Channel.make_stream(conf)
+            end
+        end
+    end
+
+    return true
 end
 
 --- Приостанавливает мониторинг тюнера
@@ -165,7 +217,7 @@ end
 --- 4. Запускает новые каналы из reserve_input, наследуя выходы
 --- @param name_adapter string Имя адаптера
 --- @param new_tuner_params table Новые параметры тюнера
---- @param reserve_input table|nil Список новых входов {name, pnr, input}
+--- @param reserve_input table|nil Список новых входов {name, pnr, ...}
 --- @return table|nil old_state Снимок предыдущего состояния для возврата
 local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local tuner = DvbStorage.find(name_adapter)
@@ -198,7 +250,8 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     end
 
     -- 3. Перенастраиваем тюнер (через полный рестарт монитора)
-    if not restart_dvb_monitor(name_adapter, new_tuner_params, true) then
+    -- Используем force = false, так как каналы уже остановлены
+    if not restart_dvb_monitor(name_adapter, new_tuner_params, false) then
         Logger.error(COMPONENT_NAME, "switch_transponder: failed to retune tuner '%s'", name_adapter)
         -- Восстановление старых каналов
         for _, conf in ipairs(old_channels_configs) do Channel.make_stream(conf) end
@@ -209,35 +262,16 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     if reserve_input and type(reserve_input) == "table" then
         for _, item in ipairs(reserve_input) do
             local name = item.name
-            if name then
-                local final_conf = {}
-                local old_conf = old_channels_map[name]
-                
-                if old_conf then
-                    -- Наследуем всё из старого конфига (выходы, мониторинг и т.д.)
-                    final_conf = Utils.table_copy(old_conf)
-                else
-                    final_conf.name = name
-                end
+            local old_conf = old_channels_map[name]
+            
+            -- Запускаем только если канал существовал ранее (наследуем выходы)
+            if name and old_conf then
+                local final_conf = Utils.table_copy(old_conf)
 
-                -- Определяем новый вход
-                if item.input then
-                    -- Если передан готовый вход (URL или таблица)
-                    final_conf.input = type(item.input) == "table" and item.input or { item.input }
-                elseif item.pnr then
-                    -- Если передан PNR, формируем DVB вход для текущего адаптера
-                    final_conf.input = {
-                        {
-                            config = {
-                                format = "dvb",
-                                addr = name_adapter,
-                                pnr = item.pnr
-                            }
-                        }
-                    }
+                if item.input and type(item.input) == "table" then
+                    final_conf.input = item.input
+                    Channel.make_stream(final_conf)
                 end
-
-                Channel.make_stream(final_conf)
             end
         end
     end
