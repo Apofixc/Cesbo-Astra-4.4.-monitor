@@ -202,7 +202,8 @@ end
 
 --- Обновляет параметры тюнера. Если изменены параметры вещания (частота и т.д.), тюнер будет перезапущен.
 --- @param params table Новые параметры
---- @return boolean success
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке (если есть)
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then return false end
 
