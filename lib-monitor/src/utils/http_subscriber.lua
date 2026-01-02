@@ -33,9 +33,9 @@ local function load_subscribers()
         return false
     end
 
-    local f = io.open(path, "r")
+    local f, err = io.open(path, "r")
     if not f then
-        Logger.info(COMPONENT_NAME, "Subscribers file not found, starting with empty list")
+        Logger.info(COMPONENT_NAME, "Subscribers file not found or not readable: %s. Starting with empty list", tostring(err))
         subscribers = {}
         return true
     end
@@ -75,14 +75,20 @@ local function save_subscribers()
         return false
     end
 
-    local f = io.open(path, "w")
+    local f, err = io.open(path, "w")
     if not f then
-        Logger.error(COMPONENT_NAME, "Failed to open subscribers file for writing: %s", path)
+        Logger.error(COMPONENT_NAME, "Failed to open subscribers file for writing: %s (%s)", path, tostring(err))
         return false
     end
 
-    f:write(content)
+    local success, write_err = f:write(content)
     f:close()
+
+    if not success then
+        Logger.error(COMPONENT_NAME, "Failed to write subscribers to file: %s", tostring(write_err))
+        return false
+    end
+
     return true
 end
 

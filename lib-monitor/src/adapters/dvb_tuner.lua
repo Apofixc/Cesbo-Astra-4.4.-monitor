@@ -343,6 +343,10 @@ function DvbTuner:stop()
             Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped", self.name_adapter)
         end
         
+        -- Очистка callback для разрыва замыкания self
+        if self.config then
+            self.config.callback = nil
+        end
         self.instance = nil
         return true
     end
