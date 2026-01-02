@@ -92,7 +92,6 @@ function DvbTuner.new(conf)
     local self = setmetatable({}, DvbTuner)
     self.config = conf
     self.name_adapter = conf.name_adapter
-    self.display_name = conf.display_name or self.name_adapter
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     self:_set_config_param("dvb_rate", conf.rate)
@@ -112,7 +111,6 @@ function DvbTuner.new(conf)
         modulation = conf.modulation or "",
         source = conf.tp or conf.frequency,
         name_adapter = self.name_adapter,
-        display_name = self.display_name,
         status = -1,
         signal = -1,
         snr = -1,
@@ -447,7 +445,6 @@ function DvbTuner:kill()
     self._active = false
     self:stop()
     self.name_adapter = nil
-    self.display_name = nil
     self.config = nil
     self.status = nil
     self.check_timer = nil
