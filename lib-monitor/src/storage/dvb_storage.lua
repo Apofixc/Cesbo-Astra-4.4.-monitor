@@ -37,11 +37,7 @@ end
 function DvbStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then
-        if type(monitor.kill) == "function" then
-            monitor:kill()
-        elseif type(monitor.stop) == "function" then
-            monitor:stop()
-        end
+        monitor:destroy()
         monitors[name] = nil
         Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered and stopped.", name)
         return true

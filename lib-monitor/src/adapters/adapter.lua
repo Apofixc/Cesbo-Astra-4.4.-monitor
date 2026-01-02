@@ -82,17 +82,13 @@ local function get_all_dvb_monitors()
     return DvbStorage.get_all()
 end
 
---- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости.
+--- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости и хранилища.
 --- @param name_adapter string Уникальное имя адаптера
 --- @return boolean success Статус выполнения
 local function stop_dvb_monitor(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
-    if tuner then
-        local success = tuner:stop()
-        if success then
-            _G[name_adapter] = nil
-        end
-        return success
+    if DvbStorage.unregister(name_adapter) then
+        _G[name_adapter] = nil
+        return true
     end
     Logger.error(COMPONENT_NAME, "stop_dvb_monitor: tuner '%s' not found", name_adapter)
     return false
@@ -100,15 +96,18 @@ end
 
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.
 --- @param name_adapter string Уникальное имя адаптера
+--- @param new_params table|nil Новые параметры тюнинга
+--- @param force boolean|nil Принудительный перезапуск
 --- @return boolean success Статус выполнения
-local function restart_dvb_monitor(name_adapter)
+local function restart_dvb_monitor(name_adapter, new_params, force)
     local tuner = DvbStorage.find(name_adapter)
     if tuner then
-        local success, instance = tuner:restart()
-        if success then
+        local instance = tuner:restart_adapter(new_params, force)
+        if instance then
             _G[name_adapter] = instance
+            return true
         end
-        return success
+        return false
     end
     Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
     return false
@@ -142,16 +141,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return boolean success Статус выполнения
 local function force_restart_dvb_tuner(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
-    if tuner then
-        local success = tuner:force_restart()
-        if success then
-            _G[name_adapter] = tuner.instance
-        end
-        return success
-    end
-    Logger.error(COMPONENT_NAME, "force_restart_dvb_tuner: tuner '%s' not found", tostring(name_adapter))
-    return false
+    return restart_dvb_monitor(name_adapter, nil, true)
 end
 
 --- Сценарий "Переключение транспондера":
