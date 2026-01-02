@@ -24,14 +24,17 @@ local timer = ModuleManager.get_global_dependency("timer")
 local COMPONENT_NAME = "DvbTuner"
 
 --- @class DvbTuner
---- @field name_adapter string Уникальное имя адаптера
---- @field display_name string Отображаемое имя
---- @field config table Конфигурация тюнера
---- @field status table Текущий статус (signal, snr, ber, unc)
---- @field instance any Экземпляр dvb_tune из Astra
---- @field check_timer number Счетчик для интервала проверки
+--- @field name_adapter string|nil Уникальное имя адаптера
+--- @field display_name string|nil Отображаемое имя
+--- @field config table|nil Конфигурация тюнера
+--- @field status table|nil Текущий статус (signal, snr, ber, unc)
+--- @field instance any|nil Экземпляр dvb_tune из Astra
+--- @field check_timer number|nil Счетчик для интервала проверки
 --- @field json_cache string|nil Кэш последнего отправленного JSON
---- @field stats table Накопленная статистика для расчета качества
+--- @field stats table|nil Накопленная статистика для расчета качества
+--- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
+--- @field _psi table|nil Таблица с PSI данными
+--- @field _active boolean|nil Статус активности мониторинга
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -80,21 +83,21 @@ function DvbTuner.new(conf)
         return nil
     end
 
-    local self = setmetatable({}, DvbTuner)
-    self.config = conf
-
-    -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
-    self:_set_config_param("dvb_rate", conf.rate)
-    self:_set_config_param("dvb_time_check", conf.time_check)
-    self:_set_config_param("dvb_method_comparison", conf.method_comparison)
-
     if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
         Logger.error(COMPONENT_NAME, "new: name_adapter is required")
         return nil
     end
 
+    ---@class DvbTuner
+    local self = setmetatable({}, DvbTuner)
+    self.config = conf
     self.name_adapter = conf.name_adapter
     self.display_name = conf.display_name or self.name_adapter
+
+    -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
+    self:_set_config_param("dvb_rate", conf.rate)
+    self:_set_config_param("dvb_time_check", conf.time_check)
+    self:_set_config_param("dvb_method_comparison", conf.method_comparison)
     self.check_timer = 0
     self.json_cache = nil
     self.stats = {
@@ -324,7 +327,6 @@ function DvbTuner:stop()
 
         if can_close then
             -- Очистка внутреннего списка Astra (dvb_input_instance_list)
-            local dvb_input_instance_list = dvb_input_instance_list
             if type(dvb_input_instance_list) == "table" and self.instance.__options then
                 local opts = self.instance.__options
                 if opts.adapter ~= nil and opts.device ~= nil then
@@ -451,6 +453,8 @@ function DvbTuner:kill()
     self.check_timer = nil
     self.json_cache = nil
     self.stats = nil
+    self._temp_analyzer = nil
+    self._psi = nil
 end
 
 return DvbTuner
