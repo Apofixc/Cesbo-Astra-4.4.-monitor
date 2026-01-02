@@ -249,6 +249,10 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
+    if not self._psi_hash_cache then return end
+    
+    -- Оптимизация: проверяем только PMT или если данные действительно изменились
+    -- Для PMT нам важно отслеживать изменения стримов
     local current_data_json = json_encode(data)
     if self._psi_hash_cache[data.psi] == current_data_json then
         return
@@ -279,7 +283,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._config.analyze then return end
+    if not self._analyze_stats or not self._config.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -390,6 +394,26 @@ end
 --- @return string|nil cache JSON статус
 function ChannelMonitor:get_json_status_cache()
     return self._json_status_cache
+end
+
+--- Приостанавливает мониторинг
+--- @return boolean success
+function ChannelMonitor:pause()
+    self._active = false
+    Logger.info(COMPONENT_NAME, "[%s] Monitoring paused", tostring(self.name))
+    return true
+end
+
+--- Возобновляет мониторинг
+--- @return boolean success
+function ChannelMonitor:resume()
+    if self._status == nil then
+        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: monitor already stopped", tostring(self.name))
+        return false
+    end
+    self._active = true
+    Logger.info(COMPONENT_NAME, "[%s] Monitoring resumed", tostring(self.name))
+    return true
 end
 
 --- Останавливает мониторинг и очищает ресурсы

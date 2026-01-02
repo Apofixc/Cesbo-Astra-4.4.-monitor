@@ -115,6 +115,28 @@ function restart_dvb_monitor(name_adapter)
     return false
 end
 
+--- Приостанавливает мониторинг тюнера
+--- @param name_adapter string Имя адаптера
+--- @return boolean success
+function pause_dvb_monitor(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        return tuner:pause()
+    end
+    return false
+end
+
+--- Возобновляет мониторинг тюнера
+--- @param name_adapter string Имя адаптера
+--- @return boolean success
+function resume_dvb_monitor(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        return tuner:resume()
+    end
+    return false
+end
+
 -- Экспорт в таблицу модуля для ModuleManager
 Adapter.dvb_tuner_monitor = dvb_tuner_monitor
 Adapter.find_dvb_conf = find_dvb_conf
@@ -122,5 +144,7 @@ Adapter.update_dvb_monitor_parameters = update_dvb_monitor_parameters
 Adapter.get_all_dvb_monitors = get_all_dvb_monitors
 Adapter.stop_dvb_monitor = stop_dvb_monitor
 Adapter.restart_dvb_monitor = restart_dvb_monitor
+Adapter.pause_dvb_monitor = pause_dvb_monitor
+Adapter.resume_dvb_monitor = resume_dvb_monitor
 
 return Adapter

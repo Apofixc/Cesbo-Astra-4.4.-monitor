@@ -39,13 +39,7 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
     local success, obj = ModuleManager.check_nested_dependency(dep_path)
     
     if not success then
-        -- Logger еще не инициализирован, используем стандартный print или astra.log если доступен
-        local msg = string.format("[Init] Critical dependency missing: %s", dep_path)
-        if _G.log and _G.log.error then
-            _G.log.error(msg)
-        else
-            print(msg)
-        end
+        print(string.format("[Init] Critical dependency missing: %s", dep_path))
         all_astra_deps_found = false
     else
         found_astra_deps[dep_path] = obj
@@ -99,10 +93,14 @@ if Channel then
     _G.kill_stream = Channel.kill_stream
     _G.make_monitor = Channel.make_monitor
     _G.kill_monitor = Channel.kill_monitor
+    _G.pause_monitor = Channel.pause_monitor
+    _G.resume_monitor = Channel.resume_monitor
 end
 
 if Adapter then
     _G.dvb_tuner_monitor = Adapter.dvb_tuner_monitor
+    _G.pause_dvb_monitor = Adapter.pause_dvb_monitor
+    _G.resume_dvb_monitor = Adapter.resume_dvb_monitor
 end
 
 if Logger then

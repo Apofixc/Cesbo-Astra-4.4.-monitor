@@ -315,6 +315,28 @@ function update_monitor_parameters(name, params)
     return false, nil
 end
 
+--- Приостанавливает монитор
+--- @param name string Имя монитора
+--- @return boolean success
+function pause_monitor(name)
+    local monitor = ChannelStorage.find(name)
+    if monitor then
+        return monitor:pause()
+    end
+    return false
+end
+
+--- Возобновляет монитор
+--- @param name string Имя монитора
+--- @return boolean success
+function resume_monitor(name)
+    local monitor = ChannelStorage.find(name)
+    if monitor then
+        return monitor:resume()
+    end
+    return false
+end
+
 -- Экспорт в таблицу модуля для ModuleManager
 Channel.make_monitor = make_monitor
 Channel.kill_monitor = kill_monitor
@@ -323,5 +345,7 @@ Channel.kill_stream = kill_stream
 Channel.get_list_monitor = get_list_monitor
 Channel.find_monitor = find_monitor
 Channel.update_monitor_parameters = update_monitor_parameters
+Channel.pause_monitor = pause_monitor
+Channel.resume_monitor = resume_monitor
 
 return Channel

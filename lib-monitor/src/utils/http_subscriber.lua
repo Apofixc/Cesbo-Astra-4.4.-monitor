@@ -39,19 +39,21 @@ local function load_subscribers()
     local content = f:read("*a")
     f:close()
 
-    if content and content ~= "" then
+    if content and content:match("%S") then
         local ok, data = pcall(json_decode, content)
         if ok and type(data) == "table" then
             subscribers = data
             Logger.info(COMPONENT_NAME, "Subscribers loaded from %s", path)
             return true
         else
-            Logger.error(COMPONENT_NAME, "Failed to decode subscribers from %s", path)
+            Logger.error(COMPONENT_NAME, "Failed to decode subscribers from %s: %s", path, tostring(data))
         end
+    else
+        Logger.info(COMPONENT_NAME, "Subscribers file is empty")
     end
 
     subscribers = {}
-    return false
+    return true -- Возвращаем true, так как это валидное состояние (пустой список)
 end
 
 --- Сохраняет список подписчиков в файл

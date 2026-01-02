@@ -136,6 +136,8 @@ function DvbTuner:start()
     end
 
     self.config.callback = function(data)
+        if not self._active or not data then return end
+        
         -- Накопление статистики для расчета качества (упрощенно)
         if data.status and data.status > 0 then
             self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
@@ -178,6 +180,7 @@ function DvbTuner:start()
         end
     end
 
+    self._active = true
     self.instance = dvb_tune(self.config)
     if not self.instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
@@ -269,8 +272,29 @@ function DvbTuner:restart()
     return success, instance
 end
 
+--- Приостанавливает мониторинг тюнера
+--- @return boolean success
+function DvbTuner:pause()
+    self._active = false
+    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self.name_adapter))
+    return true
+end
+
+--- Возобновляет мониторинг тюнера
+--- @return boolean success
+function DvbTuner:resume()
+    if self.status == nil then
+        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: tuner already killed", tostring(self.name_adapter))
+        return false
+    end
+    self._active = true
+    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring resumed", tostring(self.name_adapter))
+    return true
+end
+
 --- Полностью удаляет тюнер и очищает ресурсы.
 function DvbTuner:kill()
+    self._active = false
     self:stop()
     self.name_adapter = nil
     self.display_name = nil

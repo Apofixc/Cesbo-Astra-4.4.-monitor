@@ -41,7 +41,11 @@ end
 function Logger.info(component, format_str, ...)
     if should_log(LOG_LEVELS.INFO) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        log.info(string_format("[%s] %s", component, msg))
+        if log and log.info then
+            log.info(string_format("[%s] %s", component, msg))
+        else
+            print(string_format("[INFO][%s] %s", component, msg))
+        end
     end
 end
 
@@ -52,7 +56,11 @@ end
 function Logger.error(component, format_str, ...)
     if should_log(LOG_LEVELS.ERROR) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        log.error(string_format("[%s] %s", component, msg))
+        if log and log.error then
+            log.error(string_format("[%s] %s", component, msg))
+        else
+            print(string_format("[ERROR][%s] %s", component, msg))
+        end
     end
 end
 
@@ -63,7 +71,11 @@ end
 function Logger.debug(component, format_str, ...)
     if should_log(LOG_LEVELS.DEBUG) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        log.info(string_format("[DEBUG][%s] %s", component, msg))
+        if log and log.debug then
+            log.debug(string_format("[%s] %s", component, msg))
+        else
+            print(string_format("[DEBUG][%s] %s", component, msg))
+        end
     end
 end
 
@@ -74,7 +86,11 @@ end
 function Logger.warn(component, format_str, ...)
     if should_log(LOG_LEVELS.WARN) then
         local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        log.info(string_format("[WARN][%s] %s", component, msg))
+        if log and log.warn then
+            log.warn(string_format("[%s] %s", component, msg))
+        else
+            print(string_format("[WARN][%s] %s", component, msg))
+        end
     end
 end
 
