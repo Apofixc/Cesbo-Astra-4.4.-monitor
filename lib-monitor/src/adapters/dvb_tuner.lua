@@ -16,6 +16,9 @@ local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
+local analyze = ModuleManager.get_global_dependency("analyze")
+local collectgarbage = collectgarbage
+local timer = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
@@ -114,6 +117,9 @@ function DvbTuner.new(conf)
         unc = -1,
         quality = 100
     }
+    self._temp_analyzer = nil
+    self._psi = {}
+
     return self
 end
 
@@ -255,9 +261,53 @@ function DvbTuner:update_parameters(params)
     return true
 end
 
+--- Возвращает собранные PSI данные
+--- @return table psi Таблица с PSI данными
+function DvbTuner:get_psi()
+    return self._psi
+end
+
+--- Запускает сбор PSI таблиц на 10 секунд
+--- @return boolean success Статус запуска процесса
+function DvbTuner:psi_update()
+    if not self.instance or self._temp_analyzer then
+        return false
+    end
+
+    self._temp_analyzer = analyze({
+        upstream = self.instance:stream(),
+        name = "psi_update_" .. self.name_adapter,
+        join_pid = true,
+        callback = function(data)
+            if data.psi then
+                self._psi[data.psi:lower()] = data
+            end
+        end
+    })
+
+    if not self._temp_analyzer then
+        return false
+    end
+
+    timer({
+        interval = 10,
+        callback = function()
+            self._temp_analyzer = nil
+            collectgarbage()
+            Logger.info(COMPONENT_NAME, "[%s] PSI update finished", self.name_adapter)
+        end
+    })
+
+    return true
+end
+
 --- Останавливает тюнер и очищает внутренние списки Astra для предотвращения утечек памяти.
 --- @return boolean success
 function DvbTuner:stop()
+    if self._temp_analyzer then
+        self._temp_analyzer = nil
+        collectgarbage()
+    end
     if self.instance then
         local can_close = true
         
