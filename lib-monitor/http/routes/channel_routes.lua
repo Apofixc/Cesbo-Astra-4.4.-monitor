@@ -29,17 +29,14 @@ function ChannelRoutes.get_channels(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local channels = {}
-    -- В Astra 4.4.182 список каналов можно получить через итерацию по глобальной таблице или через хранилище
-    -- Используем наше хранилище, если оно доступно, иначе пытаемся найти активные
-    
-    -- Для примера реализуем получение через ChannelStorage
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
     for id, ch_obj in pairs(active_channels) do
-        local ch_data = ch_obj.channel_data or {}
+        local ch_data = ch_obj._channel_data or {}
         table.insert(channels, {
             id = id,
             name = ch_data.name or id,
+            display_name = ch_obj.display_name,
             output = ch_data.output or {}
         })
     end
@@ -63,12 +60,13 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     
     for _, ch_obj in pairs(active_channels) do
         total = total + 1
-        if ch_obj.ready then
+        local status = ch_obj._status or {}
+        if status.ready then
             online = online + 1
         else
             offline = offline + 1
         end
-        if ch_obj.cc_errors and ch_obj.cc_errors > 0 then
+        if status.cc_errors and status.cc_errors > 0 then
             with_errors = with_errors + 1
         end
     end
@@ -93,18 +91,19 @@ function ChannelRoutes.get_channel_info(server, client, request)
         return HttpHelpers.error(server, client, 400, "Channel ID is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.get and ChannelStorage.get(id)
-    if not ch_obj then
+    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(id)
+    if not ch_obj or not ch_obj._channel_data then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
     HttpHelpers.success(server, client, {
         channel = {
             id = id,
-            name = ch_obj.channel_data.name,
-            input = ch_obj.channel_data.input,
-            output = ch_obj.channel_data.output,
-            map = ch_obj.channel_data.map
+            name = ch_obj._channel_data.name,
+            display_name = ch_obj.display_name,
+            input = ch_obj._channel_data.input,
+            output = ch_obj._channel_data.output,
+            map = ch_obj._channel_data.map
         }
     })
 end
@@ -117,16 +116,15 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/inputs")
-    local ch_obj = ChannelStorage and ChannelStorage.get(id)
-    if not ch_obj then
+    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    if not ch_obj or not ch_obj._channel_data then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    -- Логика получения активного входа зависит от реализации ChannelMonitor
-    local active_input = ch_obj.active_input_index or 1
+    local active_input = ch_obj._last_active_id or 1
     
     HttpHelpers.success(server, client, {
-        inputs = ch_obj.channel_data.input or {},
+        inputs = ch_obj._channel_data.input or {},
         active_input = active_input
     })
 end
@@ -139,15 +137,13 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/psi")
-    local ch_obj = ChannelStorage and ChannelStorage.get(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find(id)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    -- В Astra данные PSI доступны через объект канала, если запущен анализ
-    -- Здесь должна быть логика извлечения таблиц
     HttpHelpers.success(server, client, {
-        psi = ch_obj.psi_data or {}
+        psi = ch_obj:get_psi() or {}
     })
 end
 

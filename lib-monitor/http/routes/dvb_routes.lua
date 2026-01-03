@@ -58,20 +58,22 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/data")
-    local dvb_obj = DvbStorage and DvbStorage.get(id)
+    local dvb_obj = DvbStorage and DvbStorage.find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
+    local status = dvb_obj.status or {}
     HttpHelpers.success(server, client, {
         adapter_data = {
             id = id,
-            status = dvb_obj.status or 0,
-            signal = dvb_obj.signal or 0,
-            snr = dvb_obj.snr or 0,
-            ber = dvb_obj.ber or 0,
-            unc = dvb_obj.unc or 0,
-            lock = dvb_obj.lock or false
+            status = status.status or 0,
+            signal = status.signal or 0,
+            snr = status.snr or 0,
+            ber = status.ber or 0,
+            unc = status.unc or 0,
+            quality = status.quality or 0,
+            lock = status.lock or false
         }
     })
 end
@@ -84,13 +86,13 @@ function DvbRoutes.get_adapter_psi(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
-    local dvb_obj = DvbStorage and DvbStorage.get(id)
+    local dvb_obj = DvbStorage and DvbStorage.find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
     HttpHelpers.success(server, client, {
-        psi = dvb_obj.psi_data or {}
+        psi = dvb_obj:get_psi() or {}
     })
 end
 
@@ -102,7 +104,7 @@ function DvbRoutes.tune_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/tune")
-    local dvb_obj = DvbStorage and DvbStorage.get(id)
+    local dvb_obj = DvbStorage and DvbStorage.find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
@@ -134,8 +136,8 @@ end
 function DvbRoutes.update_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/update")
-    local dvb_obj = DvbStorage and DvbStorage.get(id)
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/[a-z]+")
+    local dvb_obj = DvbStorage and DvbStorage.find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
