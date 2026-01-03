@@ -95,6 +95,12 @@ local function save_subscribers()
     return true
 end
 
+--- Возвращает список всех подписчиков
+--- @return table Таблица подписчиков
+function HttpSubscriber.get_subscribers()
+    return subscribers
+end
+
 --- Отправляет HTTP POST запрос
 --- @param addr table {host, port, path}
 --- @param content string JSON данные
