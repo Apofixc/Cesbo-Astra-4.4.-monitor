@@ -46,13 +46,23 @@ local format_handlers = {
     end,
     udp = function(config)
         local cfg = {format = config.format}
-        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
+        local localaddr = config.localaddr or ""
+        if localaddr ~= "" then
+            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
+        else
+            cfg.addr = config.addr .. ":" .. config.port
+        end
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
     end,
     rtp = function(config)
         local cfg = {format = config.format}
-        cfg.addr = config.localaddr .. "@" .. config.addr .. ":" .. config.port
+        local localaddr = config.localaddr or ""
+        if localaddr ~= "" then
+            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
+        else
+            cfg.addr = config.addr .. ":" .. config.port
+        end
         cfg.stream = get_stream(config.addr) or "unknown_stream"
         return cfg
     end,
