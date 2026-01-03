@@ -106,12 +106,7 @@ local function make_monitor(config, channel_data)
     end
 
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
-    local name = (ch_data and ch_data.config and ch_data.config.name) or (ch_data and ch_data.name) or (type(channel_data) == "string" and channel_data) or config.name
-
-    if not name then
-        Logger.error(COMPONENT_NAME, "make_monitor: name is required")
-        return nil
-    end
+    local name = (ch_data and ch_data.name) or (type(channel_data) == "string" and channel_data) or config.name
 
     if ChannelStorage.find(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
@@ -131,28 +126,19 @@ local function make_monitor(config, channel_data)
     local upstream = config.upstream
     local input_instance = nil
 
-    -- Если upstream не передан, пытаемся получить его из ch_data или создать из config.monitor
     if not upstream then
-        if ch_data and ch_data.tail then
-            upstream = ch_data.tail
-            if not config.monitor then config.monitor = "Output: Channel" end
-        elseif config.monitor then
-            local url_cfg = parse_url(config.monitor)
-            if not url_cfg then
-                Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", tostring(config.monitor))
-                return nil
-            end
-            url_cfg.name = name
-            input_instance = init_input(url_cfg)
-            if not input_instance then
-                Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
-                return nil
-            end
-            upstream = input_instance.tail
-        else
-            Logger.error(COMPONENT_NAME, "make_monitor: upstream or monitor address is required for '%s'", name)
+        local url_cfg = parse_url(config.monitor)
+        if not url_cfg then
+            Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", config.monitor)
             return nil
         end
+        url_cfg.name = name
+        input_instance = init_input(url_cfg)
+        if not input_instance then
+            Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
+            return nil
+        end
+        upstream = input_instance.tail
     end
 
     config.name = name

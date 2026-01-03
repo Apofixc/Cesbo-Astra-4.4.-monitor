@@ -423,12 +423,7 @@ end
 function ChannelMonitor:stop()
     self._active = false
 
-    if self._monitor_instance then
-        if type(self._monitor_instance.close) == "function" then
-            self._monitor_instance:close()
-        end
-        self._monitor_instance = nil
-    end
+    self._monitor_instance = nil
 
     if self.input_instance then
         kill_input(self.input_instance)
