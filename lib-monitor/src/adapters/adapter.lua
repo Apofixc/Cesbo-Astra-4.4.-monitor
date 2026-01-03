@@ -282,6 +282,13 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
                 final_conf.input = item.input
                 -- Важно: make_stream создаст и канал и монитор
                 Channel.make_stream(final_conf)
+            else
+                -- Если канала не было, создаем новый с нуля
+                Channel.make_stream({
+                    name = name,
+                    input = item.input,
+                    monitor = { analyze = true }
+                })
             end
         end
     elseif #old_channels_configs > 0 then
