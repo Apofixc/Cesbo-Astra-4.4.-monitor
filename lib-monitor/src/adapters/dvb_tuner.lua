@@ -364,6 +364,12 @@ function DvbTuner:get_name()
     return self._name
 end
 
+--- Возвращает кэш последнего отправленного JSON статуса
+--- @return string|nil JSON статус
+function DvbTuner:get_json_cache()
+    return self._json_cache
+end
+
 --- Возвращает текущее состояние монитора
 --- @return number Состояние (STATE)
 function DvbTuner:get_state()

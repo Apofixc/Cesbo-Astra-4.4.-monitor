@@ -28,10 +28,9 @@ function MonitorRoutes.get_monitors(server, client, request)
     local monitors = {}
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
-    for id, ch_obj in pairs(active_channels) do
+    for name, ch_obj in pairs(active_channels) do
         table_insert(monitors, {
-            id = id,
-            name = ch_obj.name or id,
+            name = name,
             display_name = ch_obj.display_name,
             type = ch_obj._config and ch_obj._config.monitor_type or "output"
         })
@@ -82,14 +81,20 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/data")
-    if not id then
-        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    local name = request.path:match("/api/monitors/([^/]+)/data")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
+    end
+
+    -- Оптимизация: используем кэш JSON если он доступен
+    local cache = ch_obj.get_json_cache and ch_obj:get_json_cache()
+    if cache then
+        return HttpHelpers.send_raw_json(server, client, 200, cache)
     end
 
     HttpHelpers.success(server, client, {
@@ -131,10 +136,10 @@ function MonitorRoutes.kill_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/kill")
-    if not id then return HttpHelpers.error(server, client, 400, "Monitor ID is required") end
+    local name = request.path:match("/api/monitors/([^/]+)/kill")
+    if not name then return HttpHelpers.error(server, client, 400, "Monitor name is required") end
 
-    local success, result_or_err = Logger.with_error(Channel.kill_monitor, id)
+    local success, result_or_err = Logger.with_error(Channel.kill_monitor, name)
     if success and result_or_err then
         HttpHelpers.success(server, client, { 
             message = "Monitor killed",
@@ -153,8 +158,8 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/update")
-    if not id then return HttpHelpers.error(server, client, 400, "Monitor ID required") end
+    local name = request.path:match("/api/monitors/([^/]+)/update")
+    if not name then return HttpHelpers.error(server, client, 400, "Monitor name required") end
 
     local data = request.query
     if request.content_type == "application/json" and request.content then
@@ -162,7 +167,7 @@ function MonitorRoutes.update_monitor(server, client, request)
         if ok then data = decoded end
     end
 
-    local success, err = Logger.with_error(Channel.update_monitor_parameters, id, data)
+    local success, err = Logger.with_error(Channel.update_monitor_parameters, name, data)
     if success then
         HttpHelpers.success(server, client, { message = "Monitor updated" })
     else
@@ -178,8 +183,12 @@ function MonitorRoutes.pause_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/pause")
-    local success, err = Logger.with_error(Channel.pause_monitor, id)
+    local name = request.path:match("/api/monitors/([^/]+)/pause")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
+    end
+
+    local success, err = Logger.with_error(Channel.pause_monitor, name)
     if success then
         HttpHelpers.success(server, client, { message = "Monitoring paused" })
     else
@@ -195,8 +204,12 @@ function MonitorRoutes.resume_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/resume")
-    local success, err = Logger.with_error(Channel.resume_monitor, id)
+    local name = request.path:match("/api/monitors/([^/]+)/resume")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
+    end
+
+    local success, err = Logger.with_error(Channel.resume_monitor, name)
     if success then
         HttpHelpers.success(server, client, { message = "Monitoring resumed" })
     else
@@ -212,12 +225,12 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/pids")
-    if not id then
-        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    local name = request.path:match("/api/monitors/([^/]+)/pids")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
@@ -235,12 +248,12 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/monitors/([^/]+)/pids/clear")
-    if not id then
-        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    local name = request.path:match("/api/monitors/([^/]+)/pids/clear")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end

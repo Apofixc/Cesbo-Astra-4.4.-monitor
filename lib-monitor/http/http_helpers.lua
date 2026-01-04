@@ -50,7 +50,8 @@ end
 --- @return boolean true если ключ валиден
 function HttpHelpers.check_auth(server, client, request)
     local expected_key = os_getenv("ASTRA_API_KEY") or DEFAULT_API_KEY
-    local provided_key = request.headers and request.headers["x-api-key"]
+    -- В Astra заголовки могут быть как в нижнем регистре, так и в оригинальном
+    local provided_key = request.headers and (request.headers["x-api-key"] or request.headers["X-Api-Key"])
 
     if provided_key ~= expected_key then
         HttpHelpers.send_json(server, client, 401, {
@@ -85,6 +86,27 @@ function HttpHelpers.error(server, client, code, message)
     HttpHelpers.send_json(server, client, code, {
         status = "error",
         message = message
+    })
+end
+
+--- Отправляет сырой JSON контент (из кэша)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param code number HTTP статус код
+--- @param content string JSON строка
+function HttpHelpers.send_raw_json(server, client, code, content)
+    if not content then
+        return HttpHelpers.error(server, client, 404, "Data not available in cache")
+    end
+
+    server:send(client, {
+        code = code,
+        headers = {
+            "Content-Type: application/json; charset=utf-8",
+            "Connection: close",
+            "Content-Length: " .. #content,
+        },
+        content = content,
     })
 end
 

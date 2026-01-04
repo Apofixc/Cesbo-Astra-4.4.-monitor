@@ -22,6 +22,7 @@ local Logger = ModuleManager.get_module("logger")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer = ModuleManager.get_global_dependency("timer")
 local astra_utils = ModuleManager.get_global_dependency("utils")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
@@ -38,10 +39,12 @@ local USER_HZ = 100 -- Стандарт для Linux
 --- @field private _fd_counter number Счетчик для интервала проверки дескрипторов
 --- @field private _last_fd_count number Последнее значение количества дескрипторов
 --- @field private _missing_files table|nil Кэш отсутствующих файлов для предотвращения спама в логах
+--- @field private _json_cache string|nil Кэш последнего отчета в формате JSON
 local ResourceMonitor = {
     _timer = nil,
     _pid = nil,
     _current_report = nil,
+    _json_cache = nil,
     _fd_counter = 0,
     _last_fd_count = 0,
     _last_stats = {
@@ -372,6 +375,14 @@ function ResourceMonitor.check()
 
     Logger.debug(COMPONENT_NAME, "Update: CPU: %.1f%%, RSS: %d KB, FDs: %d", 
         cpu.total, ResourceMonitor._current_report.memory.rss_kb, ResourceMonitor._current_report.system.fd_count)
+
+    -- Обновляем кэш JSON
+    if json_encode then
+        local ok, res = pcall(json_encode, { status = "ok", resources = ResourceMonitor._current_report, timestamp = os.time() })
+        if ok then
+            ResourceMonitor._json_cache = res
+        end
+    end
 end
 
 -- ===========================================================================
@@ -450,6 +461,12 @@ function ResourceMonitor.get_report(filter)
     end
 
     return report
+end
+
+--- Возвращает кэш последнего отчета в формате JSON
+--- @return string|nil
+function ResourceMonitor.get_json_cache()
+    return ResourceMonitor._json_cache
 end
 
 return ResourceMonitor

@@ -62,10 +62,16 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/data")
-    local dvb_obj = DvbStorage and DvbStorage.find(id)
+    local name = request.path:match("/api/dvb/adapters/([^/]+)/data")
+    local dvb_obj = DvbStorage and DvbStorage.find(name)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
+    end
+
+    -- Оптимизация: используем кэш JSON если он доступен
+    local cache = dvb_obj.get_json_cache and dvb_obj:get_json_cache()
+    if cache then
+        return HttpHelpers.send_raw_json(server, client, 200, cache)
     end
 
     HttpHelpers.success(server, client, {
@@ -161,6 +167,10 @@ function DvbRoutes.update_adapter_psi(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/psi/update")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
+    end
+
     local success, err = Logger.with_error(Adapter.update_dvb_psi, id)
     if success then
         HttpHelpers.success(server, client, { message = "PSI update started" })
@@ -208,6 +218,10 @@ function DvbRoutes.pause_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/pause")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
+    end
+
     local success, err = Logger.with_error(Adapter.pause_dvb_monitor, id)
     if success then
         HttpHelpers.success(server, client, { message = "Adapter monitoring paused" })
@@ -225,6 +239,10 @@ function DvbRoutes.resume_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/resume")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
+    end
+
     local success, err = Logger.with_error(Adapter.resume_dvb_monitor, id)
     if success then
         HttpHelpers.success(server, client, { message = "Adapter monitoring resumed" })
@@ -242,6 +260,10 @@ function DvbRoutes.restart_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/restart")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
+    end
+
     local data = request.query
     if request.content_type == "application/json" and request.content then
         local ok, decoded = pcall(json_decode, request.content)
@@ -266,6 +288,10 @@ function DvbRoutes.stop_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/kill")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
+    end
+
     local data = request.query
     local force = data and (data.force == "true" or data.force == true)
     

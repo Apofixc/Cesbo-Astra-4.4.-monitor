@@ -33,11 +33,11 @@ function ChannelRoutes.get_channels(server, client, request)
     local channels = {}
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
-    for id, ch_obj in pairs(active_channels) do
+    for name, ch_obj in pairs(active_channels) do
         local ch_data = ch_obj._channel_data or {}
         table.insert(channels, {
-            id = id,
-            name = ch_data.name or id,
+            name = name,
+            astra_name = ch_data.name or name,
             display_name = ch_obj.display_name,
             output = ch_data.output or {}
         })
@@ -90,20 +90,20 @@ function ChannelRoutes.get_channel_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/channels/([^/]+)")
-    if not id then
-        return HttpHelpers.error(server, client, 400, "Channel ID is required")
+    local name = request.path:match("/api/channels/([^/]+)")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
     if not ch_obj or not ch_obj._channel_data then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
     HttpHelpers.success(server, client, {
         channel = {
-            id = id,
-            name = ch_obj._channel_data.name,
+            name = name,
+            astra_name = ch_obj._channel_data.name,
             display_name = ch_obj.display_name,
             input = ch_obj._channel_data.input,
             output = ch_obj._channel_data.output,
@@ -120,12 +120,12 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/channels/([^/]+)/inputs")
-    if not id then
-        return HttpHelpers.error(server, client, 400, "Channel ID is required")
+    local name = request.path:match("/api/channels/([^/]+)/inputs")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
     if not ch_obj or not ch_obj._channel_data then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
@@ -146,8 +146,12 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/channels/([^/]+)/psi")
-    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    local name = request.path:match("/api/channels/([^/]+)/psi")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Channel name is required")
+    end
+
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
@@ -191,10 +195,10 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/channels/([^/]+)/kill")
-    if not id then return HttpHelpers.error(server, client, 400, "Channel ID is required") end
+    local name = request.path:match("/api/channels/([^/]+)/kill")
+    if not name then return HttpHelpers.error(server, client, 400, "Channel name is required") end
 
-    local ch_data = find_channel(id)
+    local ch_data = find_channel(name)
     if not ch_data then
         return HttpHelpers.error(server, client, 404, "Channel not found in Astra")
     end
@@ -256,10 +260,10 @@ function ChannelRoutes.kill_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/streams/([^/]+)/kill")
-    if not id then return HttpHelpers.error(server, client, 400, "Stream ID is required") end
+    local name = request.path:match("/api/streams/([^/]+)/kill")
+    if not name then return HttpHelpers.error(server, client, 400, "Stream name is required") end
 
-    local success, result_or_err = Logger.with_error(Channel.kill_stream, id)
+    local success, result_or_err = Logger.with_error(Channel.kill_stream, name)
     if success and result_or_err then
         HttpHelpers.success(server, client, { 
             message = "Stream and monitor killed",
