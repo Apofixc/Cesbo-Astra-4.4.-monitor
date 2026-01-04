@@ -6,6 +6,7 @@ local pairs = pairs
 local ipairs = ipairs
 local type = type
 local tonumber = tonumber
+local table_insert = table.insert
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

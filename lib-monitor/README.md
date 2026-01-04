@@ -123,6 +123,7 @@ lib-monitor/
     ```bash
     /opt/astra/astra4.4.182 /opt/tv3.lua
     ```
+*   **Структура тестов**: При создании новых тестов следует придерживаться синтаксиса существующих примеров в `test/` и использовать официальные методы Astra для конфигурации адаптеров и каналов.
 
 ## Разработка и стандарты
 
@@ -249,7 +250,7 @@ end
 
 ## API Endpoints:
 
-Все API-запросы требуют аутентификации с помощью заголовка `X-Api-Key`. Все успешные ответы возвращаются с кодом `200 OK`. Ошибки возвращаются в формате JSON с описанием причины.
+Все API-запросы требуют аутентификации с помощью заголовка `X-Api-Key`. Значение ключа устанавливается через переменную окружения `ASTRA_API_KEY` (по умолчанию "test"). Все успешные ответы возвращаются с кодом `200 OK`. Ошибки возвращаются в формате JSON с описанием причины.
 
 ### Channel Routes (`/api/channels`)
 
@@ -332,7 +333,7 @@ end
 *   **POST `/api/channels/{id}/kill`**
     *   **Описание**: Останавливает или перезагружает канал Astra.
     *   **Параметры (Query String)**: `reboot` (boolean).
-    *   **Способ реализации**: Вызывается функция `kill_channel`. Для перезапуска сохраняется конфигурация и вызывается `make_channel` (желательно с задержкой).
+    *   **Способ реализации**: Вызывается функция `kill_channel`. Для перезапуска сохраняется конфигурация и вызывается `make_channel` с задержкой через `timer`.
     *   **JSON**:
 ```json
         {
@@ -355,7 +356,8 @@ end
 
 *   **POST `/api/streams/{id}/kill`**
     *   **Описание**: Корректно останавливает и монитор, и канал.
-    *   **Способ реализации**: Вызывается функция `kill_stream`. Для перезапуска сохраняется конфигурация и вызывается `make_stream` (желательно с задержкой).
+    *   **Параметры (Query String)**: `reboot` (boolean).
+    *   **Способ реализации**: Вызывается функция `kill_stream`. Для перезапуска сохраняется конфигурация и вызывается `make_stream` с задержкой через `timer`.
     *   **JSON**:
 ```json
         {
@@ -379,12 +381,22 @@ end
 
 *   **GET `/api/dvb/adapters/monitor`**
     *   **Описание**: Получает список всех DVB-адаптеров, для которых активен монитор.
-    *   **Способ реализации**: Вызывается метод `get_all_dvb_monitors()`.
+    *   **Способ реализации**: Вызывается метод `get_all_dvb_monitors()` (через `DvbStorage`).
     *   **JSON**:
 ```json
         {
           "dvb0": "dvb0",
           "dvb1": "dvb1"
+        }
+```
+
+*   **POST `/api/dvb/adapters/scan`**
+    *   **Описание**: Запуск быстрого сканирования адаптеров.
+    *   **Способ реализации**: Зависит от возможностей ядра Astra (обычно через `dvb_tune`).
+    *   **JSON**:
+```json
+        {
+          "message": "Scan started"
         }
 ```
 
@@ -430,6 +442,16 @@ end
         }
 ```
 
+*   **POST `/api/dvb/adapters/{id}/tune`**
+    *   **Описание**: Настройка частоты (смена источника сигнала).
+    *   **Способ реализации**: Вызывается `Adapter.dvb_tuner_monitor`.
+    *   **JSON**:
+```json
+        {
+          "message": "Adapter tuning and monitoring started"
+        }
+```
+
 *   **POST `/api/dvb/adapters/{id}/switch-transponder`**
     *   **Описание**: Сценарий переключения частоты с сохранением выходов зависимых каналов.
     *   **Способ реализации**: Выполнить функцию `switch_transponder`.
@@ -438,6 +460,16 @@ end
         {
           "message": "Transponder switched successfully",
           "backup": { "tuner_params": {...}, "channels_configs": [...] }
+        }
+```
+
+*   **POST `/api/dvb/adapters/{id}/update`** (также доступен как `/api/adapters/{id}/update`)
+    *   **Описание**: Обновляет параметры монитора (rate, time_check, method_comparison).
+    *   **Способ реализации**: Выполнить функцию `update_dvb_monitor_parameters`.
+    *   **JSON**:
+```json
+        {
+          "message": "Monitor updated"
         }
 ```
 
@@ -451,13 +483,24 @@ end
         }
 ```
 
-*   **POST `/api/dvb/adapters/{id}/update`**
-    *   **Описание**: Обновляет параметры монитора (rate, time_check, method_comparison).
-    *   **Способ реализации**: Выполнить функцию `update_dvb_monitor_parameters`.
+*   **POST `/api/dvb/adapters/{id}/restart`**
+    *   **Описание**: Перезапуск мониторинга адаптера.
+    *   **Способ реализации**: Выполнить функцию `restart_dvb_monitor`.
     *   **JSON**:
 ```json
         {
-          "message": "Monitor updated"
+          "message": "Adapter restarted successfully"
+        }
+```
+
+*   **POST `/api/dvb/adapters/{id}/kill`**
+    *   **Описание**: Остановка мониторинга адаптера.
+    *   **Способ реализации**: Выполнить функцию `stop_dvb_monitor`.
+    *   **JSON**:
+```json
+        {
+          "message": "Adapter stopped successfully",
+          "config": { ... }
         }
 ```
 
@@ -471,6 +514,19 @@ end
         [
           { "name": "Discovery", "display_name": "Discovery HD", "type": "output" }
         ]
+```
+
+*   **GET `/api/monitors/status`**
+    *   **Описание**: Возвращает сводный статус по всем мониторам.
+    *   **Способ реализации**: Анализ всех объектов в `ChannelStorage`.
+    *   **JSON**:
+```json
+        {
+          "total": 10,
+          "ok": 8,
+          "error": 2,
+          "total_cc_errors": 150
+        }
 ```
 
 *   **GET `/api/monitors/{id}/data`**
@@ -527,11 +583,12 @@ end
 
 *   **POST `/api/monitors/{id}/kill`**
     *   **Описание**: Удаляет монитор (без удаления канала).
-    *   **Способ реализации**: Вызывается функция `kill_monitor`. Для перезапуска сохраняется конфигурация и вызывается `make_monitor` (желательно с задержкой).
+    *   **Параметры (Query String)**: `reboot` (boolean).
+    *   **Способ реализации**: Вызывается функция `kill_monitor`. Для перезапуска сохраняется конфигурация и вызывается `make_monitor` с задержкой через `timer`.
     *   **JSON**:
 ```json
         {
-          "message": "Monitor killed",
+          "message": "Monitor killed/rebooting",
           "config": { "name": "Discovery", "monitor": "output" }
         }
 ```
@@ -569,28 +626,27 @@ end
 
 ### System Routes (`/api/system`)
 
-*   **GET `/api/system/reload`**
-    *   **Описание**: Перезагружает Astra.
-    *   **Способ реализации**: Выполнить `astra.reload()` (желательно с задержкой).
+*   **GET `/api/env/astra`**
+    *   **Описание**: Возвращает информацию о версии Astra и аптайме.
+    *   **Способ реализации**: Данные из `ResourceMonitor` и глобальной зависимости `astra.version`.
     *   **JSON**:
 ```json
         {
-          "message": "Astra reloading"
+          "astra": {
+            "version": "4.4.182",
+            "uptime": 3600
+          }
         }
 ```
 
-*   **GET `/api/system/exit`**
-    *   **Описание**: Останавливает Astra.
-    *   **Способ реализации**: Выполнить `astra.exit()` (желательно с задержкой).
-    *   **JSON**:
-```json
-        {
-          "message": "Astra exiting"
-        }
-```
+*   **GET `/api/env/adapters`**
+    *   **Описание**: Список всех адаптеров (дублирует /api/dvb/adapters).
+    *   **Способ реализации**: Аналогично `DvbRoutes.get_adapters`.
+    *   **JSON**: Массив объектов адаптеров.
 
 *   **GET `/api/system/resources`**
     *   **Описание**: Получает данные о системных ресурсах (CPU, Memory, Network).
+    *   **Способ реализации**: Вызов `ResourceMonitor.get_stats()`.
     *   **JSON**:
 ```json
         {
@@ -602,6 +658,7 @@ end
 
 *   **GET `/api/system/health`**
     *   **Описание**: Проверяет состояние сервера мониторинга.
+    *   **Способ реализации**: Сбор данных о PID и версии.
     *   **JSON**:
 ```json
         {
@@ -609,6 +666,76 @@ end
           "pid": 12345,
           "astra_version": "4.4.182",
           "server_time": "2024-01-15 14:30:00"
+        }
+```
+
+*   **GET `/api/system/monitor-stats`**
+    *   **Описание**: Возвращает статистику работы ResourceMonitor.
+    *   **Способ реализации**: Данные из объекта `ResourceMonitor`.
+    *   **JSON**:
+```json
+        {
+          "stats": {
+            "is_running": true,
+            "pid": 12345
+          }
+        }
+```
+
+*   **POST `/api/system/reload`**
+    *   **Описание**: Перезагружает Astra.
+    *   **Способ реализации**: Выполнить `astra.reload()` с задержкой через `timer`.
+    *   **JSON**:
+```json
+        {
+          "message": "Astra reload scheduled in 1s"
+        }
+```
+
+*   **POST `/api/system/exit`**
+    *   **Описание**: Останавливает Astra.
+    *   **Способ реализации**: Выполнить `astra.exit()` с задержкой через `timer`.
+    *   **JSON**:
+```json
+        {
+          "message": "Astra exit scheduled in 1s"
+        }
+```
+
+*   **POST `/api/system/clear-cache`**
+    *   **Описание**: Очищает кэш системных метрик.
+    *   **Способ реализации**: Принудительный вызов `ResourceMonitor.check()`.
+    *   **JSON**:
+```json
+        {
+          "message": "Metrics updated"
+        }
+```
+
+### Subscriber Routes (`/api/subscribers`)
+
+*   **GET `/api/subscribers`**
+    *   **Описание**: Возвращает список всех получателей данных.
+    *   **Способ реализации**: Вызов `HttpSubscriber.get_subscribers()`.
+    *   **JSON**: Массив объектов подписчиков.
+
+*   **POST `/api/subscribers/subscribe`**
+    *   **Описание**: Добавляет нового получателя.
+    *   **Способ реализации**: Вызов `HttpSubscriber.subscribe`.
+    *   **JSON**:
+```json
+        {
+          "message": "Subscribed successfully"
+        }
+```
+
+*   **POST `/api/subscribers/unsubscribe`**
+    *   **Описание**: Удаляет получателя.
+    *   **Способ реализации**: Вызов `HttpSubscriber.unsubscribe`.
+    *   **JSON**:
+```json
+        {
+          "message": "Unsubscribed successfully"
         }
 ```
 
