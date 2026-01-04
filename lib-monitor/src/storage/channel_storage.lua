@@ -12,12 +12,13 @@ local COMPONENT_NAME = "ChannelStorage"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class ChannelStorage
---- @field private monitors table<string, ChannelMonitor>
---- @field private count_active number
+--- @field private monitors table<string, ChannelMonitor> Таблица активных мониторов
+--- @field private count_active number Количество активных мониторов
 local ChannelStorage = {}
 
 --- @type table<string, ChannelMonitor>
 local monitors = {}
+--- @type number
 local count_active = 0
 
 --- Регистрирует новый монитор в хранилище

@@ -58,6 +58,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
 --- @field private _reports table Пул таблиц для разных типов отчетов
 --- @field private _current_method function|nil Прямая ссылка на метод сравнения
+--- @field private _psi table|nil Кэш PSI данных
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -86,6 +87,7 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для установки параметра конфигурации
+--- @private
 --- @param param_name string Имя параметра
 --- @param value any Значение
 --- @return boolean Статус выполнения
@@ -461,8 +463,9 @@ function ChannelMonitor:get_json_cache()
     return self._json_cache
 end
 
---- Внутренний метод для сборки таблицы полного статуса.
---- Обновляет таблицу в пуле self._reports.channels.
+--- Внутренний метод для сборки таблицы полного статуса
+--- Обновляет таблицу в пуле self._reports.channels
+--- @private
 --- @param data table|nil Текущие данные (если есть)
 --- @return table Таблица статуса
 function ChannelMonitor:_build_status_table(data)

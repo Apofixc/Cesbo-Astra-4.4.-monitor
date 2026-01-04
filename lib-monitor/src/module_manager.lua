@@ -26,9 +26,9 @@ local COMPONENT_NAME = "ModuleManager"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class ModuleManager
---- @field private registered_modules table<string, table>
---- @field private loaded_modules table<string, table>
---- @field private global_dependencies table<string, any>
+--- @field private registered_modules table<string, table> Список зарегистрированных модулей
+--- @field private loaded_modules table<string, table> Список загруженных модулей
+--- @field private global_dependencies table<string, any> Глобальные зависимости Astra
 local ModuleManager = {}
 ModuleManager.__index = ModuleManager
 
@@ -43,6 +43,7 @@ local global_dependencies = {}
 local nested_dependency_cache = {}
 
 --- Пост-инициализация Logger после того, как ModuleManager будет доступен
+--- @private
 local function init_logger()
     if not Logger then
         local module_info = registered_modules["utils.logger"]
@@ -101,7 +102,8 @@ function ModuleManager.register_module(name, path, dependencies)
     return true
 end
 
---- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей.
+--- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей
+--- @private
 --- @return table|nil Список имен или nil
 local function topological_sort()
     local load_order = {}
@@ -287,8 +289,8 @@ function ModuleManager.remove_global_dependency(name)
     return false
 end
 
---- Устанавливает глобальные зависимости.
---- @param deps table Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости.
+--- Устанавливает глобальные зависимости
+--- @param deps table Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости
 --- @return boolean Статус выполнения
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
@@ -302,8 +304,8 @@ function ModuleManager.set_global_dependencies(deps)
     return true
 end
 
---- Получает список всех сохраненных глобальных зависимостей.
---- @return table Список путей к сохраненным зависимостям.
+--- Получает список всех сохраненных глобальных зависимостей
+--- @return table Список путей к сохраненным зависимостям
 function ModuleManager.get_global_dependencies()
     local deps = {}
     for path, _ in pairs(global_dependencies) do

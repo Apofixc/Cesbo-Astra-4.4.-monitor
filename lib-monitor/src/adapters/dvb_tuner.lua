@@ -49,6 +49,7 @@ local METHOD_RATIO = 3
 --- @field private _reports table Пул таблиц для разных типов отчетов
 --- @field private _active boolean|nil Статус активности мониторинга
 --- @field private _state number Текущее состояние (IDLE, RUNNING, STOPPED)
+--- @field private _psi_timer any|nil Таймер сбора PSI
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -74,6 +75,7 @@ local COMPARISON_METHODS = {
 }
 
 --- Вспомогательная функция для очистки ресурсов PSI
+--- @private
 function DvbTuner:_clear_psi()
     if self._psi_timer then
         if type(self._psi_timer.close) == "function" then
@@ -94,6 +96,7 @@ function DvbTuner:_clear_psi()
 end
 
 --- Вспомогательная функция для установки параметра конфигурации
+--- @private
 --- @param param_name string Имя параметра
 --- @param value any Значение
 --- @return boolean Статус выполнения
@@ -367,8 +370,9 @@ function DvbTuner:get_state()
     return self._state
 end
 
---- Внутренний метод для сборки таблицы полного статуса.
---- Обновляет таблицу в пуле self._reports.dvb.
+--- Внутренний метод для сборки таблицы полного статуса
+--- Обновляет таблицу в пуле self._reports.dvb
+--- @private
 --- @return table Таблица статуса
 function DvbTuner:_build_status_table()
     local status = self._status or {}

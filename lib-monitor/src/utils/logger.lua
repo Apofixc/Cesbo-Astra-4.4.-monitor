@@ -34,9 +34,9 @@ local cached_log_level = nil
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
---- @field private last_errors table<string, string>
---- @field private context_stack table<number, string>
---- @field private current_context_id string|nil
+--- @field private last_errors table<string, string> Хранилище последних ошибок по контекстам
+--- @field private context_stack table<number, string> Стек контекстов
+--- @field private current_context_id string|nil Текущий идентификатор контекста
 local Logger = {}
 
 --- Обновляет кэшированный уровень логирования

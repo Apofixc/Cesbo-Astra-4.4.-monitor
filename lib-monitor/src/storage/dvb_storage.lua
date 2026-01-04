@@ -13,11 +13,12 @@ local COMPONENT_NAME = "DvbStorage"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class DvbStorage
---- @field private monitors table<string, DvbTuner>
+--- @field private monitors table<string, DvbTuner> Таблица активных DVB-мониторов
 local DvbStorage = {}
 
 --- @type table<string, DvbTuner>
 local monitors = {}
+--- @type number
 local count_active = 0
 
 --- Регистрирует новый монитор в хранилище

@@ -37,6 +37,7 @@ local USER_HZ = 100 -- Стандарт для Linux
 --- @field private _current_report table|nil Последний сформированный отчет
 --- @field private _fd_counter number Счетчик для интервала проверки дескрипторов
 --- @field private _last_fd_count number Последнее значение количества дескрипторов
+--- @field private _missing_files table|nil Кэш отсутствующих файлов для предотвращения спама в логах
 local ResourceMonitor = {
     _timer = nil,
     _pid = nil,

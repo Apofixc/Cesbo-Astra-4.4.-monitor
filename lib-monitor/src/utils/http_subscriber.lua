@@ -30,6 +30,7 @@ local HttpSubscriber = {}
 local subscribers = {}
 
 --- Загружает список подписчиков из файла
+--- @private
 --- @return boolean Статус выполнения
 local function load_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
@@ -66,6 +67,7 @@ local function load_subscribers()
 end
 
 --- Сохраняет список подписчиков в файл
+--- @private
 --- @return boolean Статус выполнения
 local function save_subscribers()
     local path = MonitorConfig and MonitorConfig.SubscribersFilePath
@@ -111,6 +113,7 @@ function HttpSubscriber.get_subscribers()
 end
 
 --- Отправляет HTTP POST запрос
+--- @private
 --- @param addr table {host, port, path}
 --- @param content string JSON данные
 --- @param event_type string Тип события для логирования
