@@ -32,21 +32,22 @@ end
 --- Удаляет монитор из хранилища и останавливает его.
 --- @param name string Имя адаптера
 --- @param force boolean|nil Принудительная остановка
---- @return boolean Статус выполнения
+--- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function DvbStorage.unregister(name, force)
     local monitor = monitors[name]
     if monitor then
-        if monitor:destroy(force) then
+        local config = monitor:destroy(force)
+        if config then
             monitors[name] = nil
             Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered and stopped (force: %s).", name, tostring(force))
-            return true
+            return config
         else
             Logger.error(COMPONENT_NAME, "unregister: failed to destroy DVB Monitor '%s' (tuner busy)", name)
-            return false
+            return nil
         end
     end
     Logger.error(COMPONENT_NAME, "unregister: DVB Monitor '%s' not found", name)
-    return false
+    return nil
 end
 
 --- Находит монитор по имени адаптера

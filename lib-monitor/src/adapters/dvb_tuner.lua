@@ -387,66 +387,51 @@ function DvbTuner:resume()
 end
 
 --- Полностью останавливает тюнер и уничтожает объект.
+--- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
---- @return boolean Статус выполнения
+--- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function DvbTuner:destroy(force)
-    if self._state == STATE.STOPPED then return true end
-
-    if self.instance and not force then
-        if self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
-            Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy: tuner is used by %d other channels. Use force=true to override.", 
-                tostring(self.name_adapter), self.instance.__options.channels - 1)
-            return false
-        end
+    -- 1. Проверка: можно ли очистить ресурсы? (Защита от дурака)
+    if not self.instance or (self.instance.__options and self.instance.__options.channels > 1 and force ~= true) then
+        return nil
     end
 
+    local original_config = Utils.table_copy(self.config)
+
+    -- 2. Очистка ресурсов
     self._active = false
     self._state = STATE.STOPPED
     self:_clear_psi()
 
-    if self.instance then
-        local can_close = true
-        
-        -- Очищаем callback в инстансе Astra, если он там есть
-        if self.instance.__options then
-            self.instance.__options.callback = nil
-        end
-
-        if not force then
-            if self.instance.__options and self.instance.__options.channels then
-                self.instance.__options.channels = self.instance.__options.channels - 1
-                Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter decremented: %d", tostring(self.name_adapter), self.instance.__options.channels)
-                
-                if self.instance.__options.channels >= 1 then
-                    can_close = false
-                    Logger.info(COMPONENT_NAME, "[%s] Tuner remains active for other channels", tostring(self.name_adapter))
-                end
-            end
-        end
-
-        if can_close then
-            -- Безопасная очистка внутреннего списка Astra
-            if type(dvb_input_instance_list) == "table" and self.instance.__options then
-                local opts = self.instance.__options
-                if opts.adapter ~= nil and opts.device ~= nil then
-                    local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
-                    if dvb_input_instance_list[instance_id] then
-                        dvb_input_instance_list[instance_id] = nil
-                        Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
-                    end
-                end
-            end
-
-            if type(self.instance.close) == "function" then
-                self.instance:close()
-            end
-            Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: %s)", tostring(self.name_adapter), tostring(force))
-        end
-        
-        self.instance = nil
+    -- Очищаем callback во внутренней таблице параметров Astra
+    if self.instance.__options then
+        self.instance.__options.callback = nil
     end
 
-    -- Полная очистка полей объекта
+    -- Очищаем callback в рабочей конфигурации
+    if self._astra_conf then
+        self._astra_conf.callback = nil
+    end
+
+    -- Безопасная очистка внутреннего списка Astra
+    if type(dvb_input_instance_list) == "table" and self.instance.__options then
+        local opts = self.instance.__options
+        if opts.adapter ~= nil and opts.device ~= nil then
+            local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
+            if dvb_input_instance_list[instance_id] then
+                dvb_input_instance_list[instance_id] = nil
+                Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
+            end
+        end
+    end
+
+    -- Физическое закрытие инстанса Astra
+    if type(self.instance.close) == "function" then
+        self.instance:close()
+    end
+
+    -- 3. Полная очистка полей объекта
+    self.instance = nil
     self.name_adapter = nil
     self.config = nil
     self._astra_conf = nil
@@ -456,9 +441,9 @@ function DvbTuner:destroy(force)
     self.json_cache = nil
     self.stats = nil
     self._psi = nil
-    
+
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
-    return true
+    return original_config
 end
 
 return DvbTuner

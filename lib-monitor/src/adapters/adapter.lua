@@ -85,14 +85,15 @@ end
 --- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости и хранилища.
 --- @param name_adapter string Уникальное имя адаптера
 --- @param force boolean|nil Принудительная остановка
---- @return boolean Статус выполнения
+--- @return table|nil Оригинальная конфигурация тюнера при успехе, иначе nil
 local function stop_dvb_monitor(name_adapter, force)
-    if DvbStorage.unregister(name_adapter, force) then
+    local config = DvbStorage.unregister(name_adapter, force)
+    if config then
         _G[name_adapter] = nil
-        return true
+        return config
     end
-    Logger.error(COMPONENT_NAME, "stop_dvb_monitor: tuner '%s' not found", name_adapter)
-    return false
+    Logger.error(COMPONENT_NAME, "stop_dvb_monitor: tuner '%s' not found or busy", name_adapter)
+    return nil
 end
 
 --- Вспомогательная функция для управления зависимыми каналами.
