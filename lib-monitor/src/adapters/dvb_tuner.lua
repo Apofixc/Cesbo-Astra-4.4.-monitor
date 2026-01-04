@@ -1,7 +1,9 @@
 -- 1. Стандартные Lua функции
+local bit32 = bit32 or require("bit32")
 local collectgarbage = collectgarbage
 local ipairs = ipairs
 local math_max = math.max
+local pairs = pairs
 local require = require
 local setmetatable = setmetatable
 local string_format = string.format
@@ -20,7 +22,6 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local analyze = ModuleManager.get_global_dependency("analyze")
 local timer = ModuleManager.get_global_dependency("timer")
-local bit = require("bit32")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
@@ -77,18 +78,20 @@ local COMPARISON_METHODS = {
 local function decode_status(status)
     status = status or 0
     return {
-        has_signal  = bit.band(status, 0x01) ~= 0,
-        has_carrier = bit.band(status, 0x02) ~= 0,
-        has_viterbi = bit.band(status, 0x04) ~= 0,
-        has_sync    = bit.band(status, 0x08) ~= 0,
-        has_lock    = bit.band(status, 0x10) ~= 0
+        has_signal  = bit32.band(status, 0x01) ~= 0,
+        has_carrier = bit32.band(status, 0x02) ~= 0,
+        has_viterbi = bit32.band(status, 0x04) ~= 0,
+        has_sync    = bit32.band(status, 0x08) ~= 0,
+        has_lock    = bit32.band(status, 0x10) ~= 0
     }
 end
 
 --- Вспомогательная функция для очистки ресурсов PSI
 function DvbTuner:_clear_psi()
     if self._psi_timer then
-        self._psi_timer:close()
+        if type(self._psi_timer.close) == "function" then
+            self._psi_timer:close()
+        end
         self._psi_timer = nil
     end
     if self._temp_analyzer then
@@ -187,6 +190,22 @@ function DvbTuner:publish(content, event_type)
     HttpSubscriber.publish(event_type, content)
 end
 
+--- Сохраняет бэкап предыдущего состояния
+--- @param config table Предыдущая конфигурация
+--- @param channels table Список конфигураций каналов
+function DvbTuner:set_backup(config, channels)
+    self._backup = {
+        config = Utils.table_copy(config),
+        channels = Utils.table_copy(channels)
+    }
+end
+
+--- Возвращает бэкап предыдущего состояния
+--- @return table|nil Бэкап или nil
+function DvbTuner:get_backup()
+    return self._backup
+end
+
 --- Запускает тюнер и инициализирует callback для мониторинга.
 --- Автоматически создает рабочую копию конфигурации для Astra.
 --- @return any|nil Экземпляр dvb_tune или nil
@@ -246,7 +265,7 @@ function DvbTuner:start()
             local current_json = json_encode(status_table)
             
             if current_json ~= self.json_cache then
-                HttpSubscriber.publish("dvb", current_json)
+                self:publish(current_json, "dvb")
                 self.json_cache = current_json
             end
         end
@@ -309,22 +328,6 @@ function DvbTuner:get_psi()
     return self._psi
 end
 
---- Сохраняет бэкап предыдущего состояния
---- @param config table Предыдущая конфигурация
---- @param channels table Список конфигураций каналов
-function DvbTuner:set_backup(config, channels)
-    self._backup = {
-        config = Utils.table_copy(config),
-        channels = Utils.table_copy(channels)
-    }
-end
-
---- Возвращает бэкап предыдущего состояния
---- @return table|nil Бэкап или nil
-function DvbTuner:get_backup()
-    return self._backup
-end
-
 --- Внутренний метод для сборки таблицы полного статуса
 --- @return table Таблица статуса
 function DvbTuner:_build_status_table()
@@ -366,6 +369,7 @@ function DvbTuner:psi_update()
         name = "psi_update_" .. self.name_adapter,
         join_pid = true,
         callback = function(data)
+            if not self or not self._temp_analyzer then return end
             if data.psi then
                 self._psi[data.psi:lower()] = data
             end
@@ -437,6 +441,8 @@ function DvbTuner:destroy(force)
         self._astra_conf.callback = nil
     end
 
+    -- Безопасная очистка внутреннего списка Astra и закрытие инстанса
+    -- Мы попадаем сюда только если channels <= 1 или force == true
     if type(dvb_input_instance_list) == "table" and self.instance.__options then
         local opts = self.instance.__options
         if opts.adapter ~= nil and opts.device ~= nil then

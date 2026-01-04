@@ -274,7 +274,15 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     -- Перенастройка тюнера (force=false, каналы уже остановлены)
     -- Передаем отфильтрованный список, чтобы restart_dvb_monitor не запустил лишнего
     if not restart_dvb_monitor(name_adapter, new_tuner_params, false, filtered_saved_channels) then
-        start_dependent_channels(saved_channels)
+        -- В случае ошибки restart_dvb_monitor уже попытался запустить filtered_saved_channels.
+        -- Нам нужно запустить остальные (те, что были в reserve_map), чтобы полностью восстановить состояние.
+        local remaining_channels = {}
+        for _, conf in ipairs(saved_channels) do
+            if reserve_map[conf.name] then
+                table_insert(remaining_channels, conf)
+            end
+        end
+        start_dependent_channels(remaining_channels)
         return nil
     end
 
