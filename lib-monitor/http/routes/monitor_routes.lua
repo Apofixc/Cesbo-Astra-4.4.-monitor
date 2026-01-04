@@ -9,9 +9,10 @@ local table_insert = table.insert
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ChannelStorage = ModuleManager.get_module("channel_storage")
+local Channel = ModuleManager.get_module("channel")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- (Добавьте зависимости если нужны)
+local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "MonitorRoutes"
@@ -97,33 +98,87 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/update")
+    if not id then return HttpHelpers.error(server, client, 400, "Monitor ID required") end
+
+    local data = request.query
+    if request.content_type == "application/json" and request.content then
+        local ok, decoded = pcall(json_decode, request.content)
+        if ok then data = decoded end
+    end
+
+    local success, err = Logger.with_error(Channel.update_monitor_parameters, id, data)
+    if success then
+        HttpHelpers.success(server, client, { message = "Monitor updated" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to update monitor")
+    end
+end
+
+--- Приостановка мониторинга канала
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.pause_monitor(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/monitors/([^/]+)/pause")
+    local success, err = Logger.with_error(Channel.pause_monitor, id)
+    if success then
+        HttpHelpers.success(server, client, { message = "Monitoring paused" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to pause monitor")
+    end
+end
+
+--- Возобновление мониторинга канала
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.resume_monitor(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/monitors/([^/]+)/resume")
+    local success, err = Logger.with_error(Channel.resume_monitor, id)
+    if success then
+        HttpHelpers.success(server, client, { message = "Monitoring resumed" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to resume monitor")
+    end
+end
+
+--- Получение статистики по PID
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.get_monitor_pids(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/monitors/([^/]+)/pids")
     local ch_obj = ChannelStorage and ChannelStorage.find(id)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
+    HttpHelpers.success(server, client, {
+        pids = ch_obj:get_analyze_stats()
+    })
+end
+
+--- Очистка статистики по PID
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.clear_monitor_pids(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/monitors/([^/]+)/pids/clear")
+    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    if not ch_obj then
+        return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
-    if not data then
-        return HttpHelpers.error(server, client, 400, "Update parameters required")
-    end
-
-    -- Вызов метода обновления в объекте монитора
-    if type(ch_obj.update_parameters) == "function" then
-        local success, err = Logger.with_error(ch_obj.update_parameters, ch_obj, data)
-        if success then
-            HttpHelpers.success(server, client, { message = "Monitor updated" })
-        else
-            HttpHelpers.error(server, client, 500, err or "Failed to update monitor")
-        end
-    else
-        HttpHelpers.error(server, client, 501, "Update method not implemented for this monitor")
-    end
+    ch_obj:clear_analyze_stats()
+    HttpHelpers.success(server, client, { message = "PID stats cleared" })
 end
 
 return MonitorRoutes

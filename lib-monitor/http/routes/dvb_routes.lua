@@ -10,9 +10,11 @@ local type = type
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local DvbStorage = ModuleManager.get_module("dvb_storage")
+local Adapter = ModuleManager.get_module("adapter")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbRoutes"
@@ -126,28 +128,142 @@ end
 function DvbRoutes.update_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/[a-z]+")
-    local dvb_obj = DvbStorage and DvbStorage.find(id)
-    if not dvb_obj then
-        return HttpHelpers.error(server, client, 404, "Adapter not found")
-    end
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/update")
+    if not id then return HttpHelpers.error(server, client, 400, "Adapter ID required") end
 
     local data = request.query
     if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
         local ok, decoded = pcall(json_decode, request.content)
         if ok then data = decoded end
     end
 
-    if dvb_obj.update_parameters then
-        local success, err = Logger.with_error(dvb_obj.update_parameters, dvb_obj, data)
-        if success then
-            HttpHelpers.success(server, client, { message = "Adapter monitor updated" })
-        else
-            HttpHelpers.error(server, client, 500, err or "Failed to update adapter monitor")
-        end
+    local success, err = Logger.with_error(Adapter.update_dvb_monitor_parameters, id, data)
+    if success then
+        HttpHelpers.success(server, client, { message = "Adapter monitor updated" })
     else
-        HttpHelpers.error(server, client, 501, "Update method not implemented for this adapter")
+        HttpHelpers.error(server, client, 500, err or "Failed to update adapter monitor")
+    end
+end
+
+--- Запуск обновления PSI таблиц
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.update_adapter_psi(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/psi/update")
+    local success, err = Logger.with_error(Adapter.update_dvb_psi, id)
+    if success then
+        HttpHelpers.success(server, client, { message = "PSI update started" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to start PSI update")
+    end
+end
+
+--- Переключение транспондера
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.switch_transponder(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/switch%-transponder")
+    local data = request.query
+    if request.content_type == "application/json" and request.content then
+        local ok, decoded = pcall(json_decode, request.content)
+        if ok then data = decoded end
+    end
+
+    if not data or not data.tp then
+        return HttpHelpers.error(server, client, 400, "New tuner parameters (tp) required")
+    end
+
+    local success, result_or_err = Logger.with_error(Adapter.switch_transponder, id, data, data.reserve_input)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { 
+            message = "Transponder switched successfully",
+            backup = result_or_err
+        })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to switch transponder")
+    end
+end
+
+--- Приостановка мониторинга адаптера
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.pause_adapter(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/pause")
+    local success, err = Logger.with_error(Adapter.pause_dvb_monitor, id)
+    if success then
+        HttpHelpers.success(server, client, { message = "Adapter monitoring paused" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to pause adapter")
+    end
+end
+
+--- Возобновление мониторинга адаптера
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.resume_adapter(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/resume")
+    local success, err = Logger.with_error(Adapter.resume_dvb_monitor, id)
+    if success then
+        HttpHelpers.success(server, client, { message = "Adapter monitoring resumed" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to resume adapter")
+    end
+end
+
+--- Перезапуск мониторинга адаптера
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.restart_adapter(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/restart")
+    local data = request.query
+    if request.content_type == "application/json" and request.content then
+        local ok, decoded = pcall(json_decode, request.content)
+        if ok then data = decoded end
+    end
+
+    local force = data and (data.force == "true" or data.force == true)
+    local success, err = Logger.with_error(Adapter.restart_dvb_monitor, id, data, force)
+    if success then
+        HttpHelpers.success(server, client, { message = "Adapter restarted successfully" })
+    else
+        HttpHelpers.error(server, client, 500, err or "Failed to restart adapter")
+    end
+end
+
+--- Остановка мониторинга адаптера
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.stop_adapter(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/kill")
+    local data = request.query
+    local force = data and (data.force == "true" or data.force == true)
+    
+    local success, result_or_err = Logger.with_error(Adapter.stop_dvb_monitor, id, force)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { 
+            message = "Adapter stopped successfully",
+            config = result_or_err
+        })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to stop adapter")
     end
 end
 

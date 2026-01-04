@@ -29,34 +29,42 @@ function HttpServer.start(addr, port)
     port = port or DEFAULT_PORT
 
     local routes = {
-        -- Channels
+        -- Channels (Raw Astra Channels)
         { "/api/channels", ChannelRoutes.get_channels },
-        { "/api/channels/stats", ChannelRoutes.get_channels_stats }, -- Нужно добавить в routes
+        { "/api/channels/stats", ChannelRoutes.get_channels_stats },
+        { "/api/channels/create", ChannelRoutes.create_channel_raw },
         { "/api/channels/([^/]+)", ChannelRoutes.get_channel_info },
         { "/api/channels/([^/]+)/inputs", ChannelRoutes.get_channel_inputs },
         { "/api/channels/([^/]+)/psi", ChannelRoutes.get_channel_psi },
-        { "/api/channels/([^/]+)/kill", ChannelRoutes.kill_channel },
+        { "/api/channels/([^/]+)/kill", ChannelRoutes.kill_channel_raw },
         
-        -- Streams
-        { "/api/streams", ChannelRoutes.create_channel }, -- Используем create_channel для создания
-        { "/api/streams/([^/]+)/kill", ChannelRoutes.kill_channel },
+        -- Streams (Channels with automatic monitoring)
+        { "/api/streams", ChannelRoutes.create_stream },
+        { "/api/streams/([^/]+)/kill", ChannelRoutes.kill_stream },
 
-        -- Monitors
+        -- Monitors (Monitoring logic only)
         { "/api/monitors", MonitorRoutes.get_monitors },
         { "/api/monitors/status", MonitorRoutes.get_monitors_status },
         { "/api/monitors/([^/]+)/data", MonitorRoutes.get_monitor_data },
         { "/api/monitors/([^/]+)/update", MonitorRoutes.update_monitor },
-        { "/api/monitors/([^/]+)/kill", ChannelRoutes.kill_channel }, -- Мониторы часто привязаны к каналам
+        { "/api/monitors/([^/]+)/pause", MonitorRoutes.pause_monitor },
+        { "/api/monitors/([^/]+)/resume", MonitorRoutes.resume_monitor },
+        { "/api/monitors/([^/]+)/pids", MonitorRoutes.get_monitor_pids },
+        { "/api/monitors/([^/]+)/pids/clear", MonitorRoutes.clear_monitor_pids },
 
         -- DVB Adapters
         { "/api/dvb/adapters", DvbRoutes.get_adapters },
         { "/api/dvb/adapters/scan", DvbRoutes.scan_adapters },
         { "/api/dvb/adapters/([^/]+)/data", DvbRoutes.get_adapter_data },
         { "/api/dvb/adapters/([^/]+)/psi", DvbRoutes.get_adapter_psi },
+        { "/api/dvb/adapters/([^/]+)/psi/update", DvbRoutes.update_adapter_psi },
         { "/api/dvb/adapters/([^/]+)/tune", DvbRoutes.tune_adapter },
+        { "/api/dvb/adapters/([^/]+)/switch-transponder", DvbRoutes.switch_transponder },
         { "/api/dvb/adapters/([^/]+)/update", DvbRoutes.update_adapter },
-        { "/api/dvb/adapters/([^/]+)/restart", DvbRoutes.update_adapter },
-        { "/api/dvb/adapters/([^/]+)/kill", DvbRoutes.update_adapter },
+        { "/api/dvb/adapters/([^/]+)/pause", DvbRoutes.pause_adapter },
+        { "/api/dvb/adapters/([^/]+)/resume", DvbRoutes.resume_adapter },
+        { "/api/dvb/adapters/([^/]+)/restart", DvbRoutes.restart_adapter },
+        { "/api/dvb/adapters/([^/]+)/kill", DvbRoutes.stop_adapter },
 
         -- System & Env
         { "/api/env/astra", SystemRoutes.get_env_astra },

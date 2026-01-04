@@ -147,16 +147,15 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     })
 end
 
---- Создает новый канал
+--- Создает новый канал (Raw Astra Channel)
 --- @param server table
 --- @param client table
 --- @param request table
-function ChannelRoutes.create_channel(server, client, request)
+function ChannelRoutes.create_channel_raw(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query -- В http_server Astra POST данные могут быть в query или content
+    local data = request.query
     if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
         local ok, decoded = pcall(json_decode, request.content)
         if ok then data = decoded end
     end
@@ -173,11 +172,11 @@ function ChannelRoutes.create_channel(server, client, request)
     end
 end
 
---- Удаляет или перезапускает канал
+--- Удаляет или перезапускает канал (Raw Astra Channel)
 --- @param server table
 --- @param client table
 --- @param request table
-function ChannelRoutes.kill_channel(server, client, request)
+function ChannelRoutes.kill_channel_raw(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/kill")
@@ -185,12 +184,57 @@ function ChannelRoutes.kill_channel(server, client, request)
 
     local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
     
-    -- Логика удаления/перезапуска
     local success, err = Logger.with_error(kill_channel, { name = id, reboot = reboot })
     if success then
         HttpHelpers.success(server, client, { message = reboot and "Channel rebooting" or "Channel killed" })
     else
         HttpHelpers.error(server, client, 500, err or "Operation failed")
+    end
+end
+
+--- Создает поток с мониторингом
+--- @param server table
+--- @param client table
+--- @param request table
+function ChannelRoutes.create_stream(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local data = request.query
+    if request.content_type == "application/json" and request.content then
+        local ok, decoded = pcall(json_decode, request.content)
+        if ok then data = decoded end
+    end
+
+    if not data or not data.name or not data.input then
+        return HttpHelpers.error(server, client, 400, "Name and input are required")
+    end
+
+    local success, result_or_err = Logger.with_error(Channel.make_stream, data)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { message = "Stream and monitor created" })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to create stream")
+    end
+end
+
+--- Удаляет поток и монитор
+--- @param server table
+--- @param client table
+--- @param request table
+function ChannelRoutes.kill_stream(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/streams/([^/]+)/kill")
+    if not id then return HttpHelpers.error(server, client, 400, "Stream ID is required") end
+
+    local success, result_or_err = Logger.with_error(Channel.kill_stream, id)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { 
+            message = "Stream and monitor killed",
+            config = result_or_err
+        })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to kill stream")
     end
 end
 
