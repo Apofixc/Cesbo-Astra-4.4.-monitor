@@ -59,6 +59,20 @@ local COMPARISON_METHODS = {
     end
 }
 
+--- Декодирует битовую маску статуса DVB-адаптера
+--- @param status number Числовое значение статуса из Astra
+--- @return table Таблица с флагами {has_signal, has_carrier, has_viterbi, has_sync, has_lock}
+local function decode_status(status)
+    status = status or 0
+    return {
+        has_signal  = (status & 0x01) ~= 0,
+        has_carrier = (status & 0x02) ~= 0,
+        has_viterbi = (status & 0x04) ~= 0,
+        has_sync    = (status & 0x08) ~= 0,
+        has_lock    = (status & 0x10) ~= 0
+    }
+end
+
 --- Вспомогательная функция для очистки ресурсов PSI
 function DvbTuner:_clear_psi()
     if self._psi_timer then
@@ -124,6 +138,13 @@ function DvbTuner.new(conf)
         source = conf.tp or conf.frequency,
         name_adapter = self.name_adapter,
         status = -1,
+        status_flags = {
+            has_signal = false,
+            has_carrier = false,
+            has_viterbi = false,
+            has_sync = false,
+            has_lock = false
+        },
         signal = -1,
         snr = -1,
         ber = -1,
@@ -171,6 +192,7 @@ function DvbTuner:start()
 
         if comparison_method(self.status, data, self.config.rate) then
             self.status.status = data.status or -1
+            self.status.status_flags = decode_status(data.status)
             self.status.signal = data.signal or -1
             self.status.snr = data.snr or -1
             self.status.ber = data.ber or -1
@@ -258,12 +280,13 @@ function DvbTuner:_build_status_table()
     return {
         id = self.name_adapter,
         status = status.status or 0,
+        status_flags = status.status_flags,
         signal = status.signal or 0,
         snr = status.snr or 0,
         ber = status.ber or 0,
         unc = status.unc or 0,
         quality = status.quality or 0,
-        lock = status.status and status.status > 0 or false,
+        lock = status.status_flags and status.status_flags.has_lock or false,
         type = status.type or "dvb",
         server = status.server or Utils.get_server_name(),
         format = status.format or "",
