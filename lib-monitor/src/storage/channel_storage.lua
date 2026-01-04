@@ -84,10 +84,14 @@ function ChannelStorage.find_by_adapter(adapter_name)
         return result
     end
 
+    local target_adapter = tostring(adapter_name)
     for _, ch_data in pairs(channel_list) do
-        if ch_data.input then
-            for _, input in pairs(ch_data.input) do
-                if input.config and input.config.format == "dvb" and tostring(input.config.addr) == tostring(adapter_name) then
+        local inputs = ch_data.input
+        if inputs then
+            for i = 1, #inputs do
+                local input = inputs[i]
+                local cfg = input.config
+                if cfg and cfg.format == "dvb" and tostring(cfg.addr) == target_adapter then
                     local name = ch_data.config and ch_data.config.name
                     if name then
                         result[name] = ch_data

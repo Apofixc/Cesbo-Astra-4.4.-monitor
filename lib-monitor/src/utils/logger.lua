@@ -28,6 +28,7 @@ local LOG_LEVELS = {
 local last_errors = {}
 local context_stack = {}
 local current_context_id = nil
+local context_counter = 0
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
@@ -123,7 +124,8 @@ end
 --- @return any|string|nil Данные, nil или сообщение об ошибке (для HTTP-функций)
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
-    local context_id = tostring({}) -- Уникальный ID для этого вызова
+    context_counter = context_counter + 1
+    local context_id = tostring(context_counter) -- Уникальный ID для этого вызова
     
     if current_context_id then
         table_insert(context_stack, current_context_id)

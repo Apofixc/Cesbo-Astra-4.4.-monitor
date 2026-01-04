@@ -69,6 +69,26 @@ function Utils.table_copy(t)
     return copy
 end
 
+--- Создает глубокую копию таблицы
+--- @param t table Исходная таблица
+--- @return table Глубокая копия таблицы
+function Utils.deep_copy(t)
+    if type(t) ~= "table" then
+        return t
+    end
+
+    local copy = {}
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            copy[k] = Utils.deep_copy(v)
+        else
+            copy[k] = v
+        end
+    end
+
+    return copy
+end
+
 --- Валидирует параметр монитора на основе схемы.
 --- Если значение невалидно или отсутствует, возвращает значение по умолчанию из схемы.
 --- @param name string Имя параметра

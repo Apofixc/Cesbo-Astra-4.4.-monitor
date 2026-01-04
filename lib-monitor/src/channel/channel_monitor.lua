@@ -237,15 +237,16 @@ end
 function ChannelMonitor:process_psi_data(data)
     if not self._psi_hash_cache then return end
     
-    -- Оптимизация: проверяем только PMT или если данные действительно изменились
-    -- Для PMT нам важно отслеживать изменения стримов
-    local current_data_json = json_encode(data)
-    if self._psi_hash_cache[data.psi] == current_data_json then
+    -- Оптимизация: проверяем версию таблицы, если она есть, иначе используем JSON-хэш
+    local table_id = data.psi
+    local current_version = data.version or json_encode(data)
+    
+    if self._psi_hash_cache[table_id] == current_version then
         return
     end
-    self._psi_hash_cache[data.psi] = current_data_json
+    self._psi_hash_cache[table_id] = current_version
 
-    if data.psi == "PMT" and data.streams then
+    if table_id == "PMT" and data.streams then
         for _, stream in ipairs(data.streams) do
             local pid = stream.pid
             if pid then

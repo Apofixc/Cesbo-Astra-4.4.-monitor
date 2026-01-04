@@ -172,7 +172,12 @@ function ModuleManager.load_modules()
         local success, module_or_err = pcall(require, module_info.path)
         
         if not success then
-            log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, module_or_err)
+            local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, tostring(module_or_err))
+            if Logger then
+                log_error(COMPONENT_NAME, err_msg)
+            else
+                print(string_format("[%s][ERROR] %s", COMPONENT_NAME, err_msg))
+            end
             return nil
         end
         

@@ -196,8 +196,8 @@ end
 --- @param channels table Список конфигураций каналов
 function DvbTuner:set_backup(config, channels)
     self._backup = {
-        config = Utils.table_copy(config),
-        channels = Utils.table_copy(channels)
+        config = Utils.deep_copy(config),
+        channels = Utils.deep_copy(channels)
     }
 end
 
@@ -287,11 +287,8 @@ function DvbTuner:start()
 
     -- Безопасное управление счетчиком каналов Astra
     if self.instance.__options then
-        if self.instance.__options.channels == nil then
-            self.instance.__options.channels = 1
-        else
-            self.instance.__options.channels = self.instance.__options.channels + 1
-        end
+        local current_channels = self.instance.__options.channels or 0
+        self.instance.__options.channels = current_channels + 1
         Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self.name_adapter, self.instance.__options.channels)
     end
 
