@@ -305,9 +305,12 @@ function ChannelMonitor:process_analyze_data(data)
                     }
                     self._analyze_stats[pid] = stats
                 end
-                stats.cc = stats.cc + cc
-                stats.pes = stats.pes + pes
-                stats.sc = stats.sc + sc
+                -- Защита от переполнения (хотя double в Lua позволяет хранить огромные целые, 
+                -- ограничим разумным пределом в 1 млрд для предотвращения потери точности или визуальных проблем)
+                local MAX_COUNTER = 1000000000
+                stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
+                stats.pes = (stats.pes + pes > MAX_COUNTER) and MAX_COUNTER or (stats.pes + pes)
+                stats.sc = (stats.sc + sc > MAX_COUNTER) and MAX_COUNTER or (stats.sc + sc)
             end
         end
     end

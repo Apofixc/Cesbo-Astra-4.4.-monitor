@@ -241,8 +241,15 @@ function ResourceMonitor.check()
 
         -- Расчет I/O Speed
         if io_stats and ResourceMonitor._last_stats.read_bytes then
-            io_speed.read_bps = (io_stats.read_bytes - ResourceMonitor._last_stats.read_bytes) / delta_time
-            io_speed.write_bps = (io_stats.write_bytes - ResourceMonitor._last_stats.write_bytes) / delta_time
+            local delta_read = io_stats.read_bytes - ResourceMonitor._last_stats.read_bytes
+            local delta_write = io_stats.write_bytes - ResourceMonitor._last_stats.write_bytes
+            
+            -- Обработка сброса счетчиков (wrap-around)
+            if delta_read < 0 then delta_read = 0 end
+            if delta_write < 0 then delta_write = 0 end
+
+            io_speed.read_bps = delta_read / delta_time
+            io_speed.write_bps = delta_write / delta_time
         end
 
         -- Расчет Network Speed
@@ -250,9 +257,16 @@ function ResourceMonitor.check()
             for iface, data in pairs(net_stats) do
                 local last = ResourceMonitor._last_stats.net[iface]
                 if last then
+                    local delta_rx = data.rx_bytes - last.rx_bytes
+                    local delta_tx = data.tx_bytes - last.tx_bytes
+
+                    -- Обработка сброса счетчиков (wrap-around)
+                    if delta_rx < 0 then delta_rx = 0 end
+                    if delta_tx < 0 then delta_tx = 0 end
+
                     net_report[iface] = {
-                        rx_bps = (data.rx_bytes - last.rx_bytes) / delta_time,
-                        tx_bps = (data.tx_bytes - last.tx_bytes) / delta_time,
+                        rx_bps = delta_rx / delta_time,
+                        tx_bps = delta_tx / delta_time,
                         rx_errs = data.rx_errs,
                         tx_errs = data.tx_errs,
                         rx_drop = data.rx_drop,
@@ -271,12 +285,15 @@ function ResourceMonitor.check()
             ResourceMonitor._last_stats.write_bytes = io_stats.write_bytes
         end
         if net_stats then
+            -- Очистка старых интерфейсов для предотвращения утечки памяти
+            local new_net_cache = {}
             for iface, data in pairs(net_stats) do
-                ResourceMonitor._last_stats.net[iface] = {
+                new_net_cache[iface] = {
                     rx_bytes = data.rx_bytes,
                     tx_bytes = data.tx_bytes
                 }
             end
+            ResourceMonitor._last_stats.net = new_net_cache
         end
     end
 

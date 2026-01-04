@@ -228,9 +228,13 @@ function DvbTuner:start()
         
         -- Накопление статистики для расчета качества (упрощенно)
         if self.config.analyze and data.status and data.status > 0 then
-            self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
-            self.stats.unc_sum = self.stats.unc_sum + (data.unc or 0)
-            self.stats.count = self.stats.count + 1
+            -- Защита от переполнения при длительном отсутствии изменений (когда сброс не происходит)
+            local MAX_STATS_COUNT = 1000000
+            if self.stats.count < MAX_STATS_COUNT then
+                self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
+                self.stats.unc_sum = self.stats.unc_sum + (data.unc or 0)
+                self.stats.count = self.stats.count + 1
+            end
         end
 
         if self.check_timer < self._astra_conf.time_check then
