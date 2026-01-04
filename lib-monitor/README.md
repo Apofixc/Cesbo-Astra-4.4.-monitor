@@ -255,31 +255,25 @@ end
 ### Channel Routes (`/api/channels`)
 
 *   **GET `/api/channels`**
-    *   **Описание**: Получает список всех активных каналов в системе Astra.
+    *   **Описание**: Получает список всех каналов, настроенных в системе Astra.
     *   **Ответ**: `HTTP 200 OK`.
 ```json
-        {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "channels": [
-            {
-              "id": "Discovery",
-              "name": "Discovery",
-              "display_name": "Discovery HD",
-              "output": ["udp://239.255.1.1:1234"]
-            }
-          ]
-        }
+        [
+          {
+            "name": "Discovery",
+            "display_name": "Discovery HD",
+            "output": ["udp://239.255.1.1:1234"]
+          }
+        ]
 ```
 
 *   **GET `/api/channels/stats`**
-    *   **Описание**: Возвращает агрегированную статистику по каналам.
+    *   **Описание**: Возвращает агрегированную статистику по каналам (общее количество в Astra и детально по мониторингу).
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "total": 10,
+          "total_astra_channels": 50,
+          "total_monitored": 10,
           "online": 8,
           "offline": 2,
           "with_errors": 1
@@ -287,12 +281,27 @@ end
 ```
 
 *   **GET `/api/channels/{id}`**
-    *   **Описание**: Возвращает детальную информацию о канале (входы, выходы, карта PID).
+    *   **Описание**: Возвращает детальную информацию о канале (входы, выходы, карта PID). Ищет канал во всей системе Astra.
     *   **Ответ**: `HTTP 200 OK`.
+```json
+        {
+          "name": "Discovery",
+          "display_name": "Discovery HD",
+          "input": ["http://..."],
+          "output": ["udp://..."],
+          "map": "..."
+        }
+```
 
 *   **GET `/api/channels/{id}/inputs`**
-    *   **Описание**: Возвращает список входов канала и индекс активного входа.
+    *   **Описание**: Возвращает список входов канала из конфигурации Astra и индекс активного входа (если запущен мониторинг).
     *   **Ответ**: `HTTP 200 OK`.
+```json
+        {
+          "inputs": ["http://input1", "http://input2"],
+          "active_input": 1
+        }
+```
 
 *   **GET `/api/channels/{id}/psi`**
     *   **Описание**: Возвращает собранные PSI данные для канала.
@@ -304,8 +313,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Channel created"
         }
 ```
@@ -316,8 +323,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Channel killed/rebooting"
         }
 ```
@@ -330,8 +335,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Stream and monitor created"
         }
 ```
@@ -341,8 +344,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Stream and monitor killed",
           "config": { "name": "Discovery", "input": [...], "output": [...] }
         }
@@ -351,16 +352,12 @@ end
 ### DVB Routes (`/api/dvb`)
 
 *   **GET `/api/dvb/adapters`**
-    *   **Описание**: Получает список активных DVB-адаптеров.
+    *   **Описание**: Получает список всех DVB-адаптеров, видимых ядром Astra.
     *   **Ответ**: `HTTP 200 OK`.
 ```json
-        {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "adapters": [
-            { "id": "dvb0", "name": "dvb0", "type": "S2" }
-          ]
-        }
+        [
+          { "name": "0", "display_name": "dvb0", "type": "S2" }
+        ]
 ```
 
 *   **GET `/api/dvb/adapters/{id}/data`**
@@ -368,19 +365,14 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "adapter_data": {
-            "id": "dvb0",
-            "status": 1,
-            "signal": 75.5,
-            "snr": 24.8,
-            "ber": 0,
-            "unc": 0,
-            "quality": 100,
-            "lock": true,
-            "name_adapter": "dvb0"
-          }
+          "status": 1,
+          "signal": 75.5,
+          "snr": 24.8,
+          "ber": 0,
+          "unc": 0,
+          "quality": 100,
+          "lock": true,
+          "name_adapter": "dvb0"
         }
 ```
 
@@ -389,8 +381,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "PSI update started"
         }
 ```
@@ -400,12 +390,8 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "psi": {
-            "pmt": { "pid": 256, "streams": [...] },
-            "sdt": { "pid": 17, "services": [...] }
-          }
+          "pmt": { "pid": 256, "streams": [...] },
+          "sdt": { "pid": 17, "services": [...] }
         }
 ```
 
@@ -415,8 +401,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Transponder switched successfully",
           "backup": { "tuner_params": {...}, "channels_configs": [...] }
         }
@@ -427,8 +411,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Adapter monitoring paused/resumed"
         }
 ```
@@ -439,13 +421,9 @@ end
     *   **Описание**: Получает список всех активных мониторов каналов.
     *   **Ответ**: `HTTP 200 OK`.
 ```json
-        {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "monitors": [
-            { "id": "Discovery", "name": "Discovery", "display_name": "Discovery HD", "type": "output" }
-          ]
-        }
+        [
+          { "name": "Discovery", "display_name": "Discovery HD", "type": "output" }
+        ]
 ```
 
 *   **GET `/api/monitors/{id}/data`**
@@ -453,17 +431,12 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "monitor_data": {
-            "id": "Discovery",
-            "status": "OK",
-            "bitrate": 12500,
-            "cc_errors": 0,
-            "pes_errors": 0,
-            "scrambled": false,
-            "ready": true
-          }
+          "status": "OK",
+          "bitrate": 12500,
+          "cc_errors": 0,
+          "pes_errors": 0,
+          "scrambled": false,
+          "ready": true
         }
 ```
 
@@ -473,8 +446,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Monitor created"
         }
 ```
@@ -484,8 +455,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Monitor updated"
         }
 ```
@@ -495,8 +464,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Monitoring paused/resumed"
         }
 ```
@@ -506,10 +473,8 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "Monitor killed",
-          "config": { "name": "Discovery", "monitor": "output", ... }
+          "config": { "name": "Discovery", "monitor": "output" }
         }
 ```
 
@@ -518,12 +483,8 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "pids": {
-            "256": { "type": "VIDEO", "cc": 10, "pes": 0, "sc": 0 },
-            "257": { "type": "AUDIO", "cc": 0, "pes": 0, "sc": 0 }
-          }
+          "256": { "type": "VIDEO", "cc": 10, "pes": 0, "sc": 0 },
+          "257": { "type": "AUDIO", "cc": 0, "pes": 0, "sc": 0 }
         }
 ```
 
@@ -532,8 +493,6 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
           "message": "PID stats cleared"
         }
 ```
@@ -545,13 +504,9 @@ end
     *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "resources": {
-            "cpu": { "total": 12.5, "temp_c": 45.0 },
-            "memory": { "rss_kb": 262809, "lua_kb": 1500 },
-            "network": { "eth0": { "rx_bps": 1250000, "tx_bps": 750000 } }
-          }
+          "cpu": { "total": 12.5, "temp_c": 45.0 },
+          "memory": { "rss_kb": 262809, "lua_kb": 1500 },
+          "network": { "eth0": { "rx_bps": 1250000, "tx_bps": 750000 } }
         }
 ```
 
@@ -562,7 +517,6 @@ end
         {
           "status": "healthy",
           "pid": 12345,
-          "timestamp": 1704312345,
           "astra_version": "4.4.182",
           "server_time": "2024-01-15 14:30:00"
         }

@@ -22,10 +22,7 @@ local DEFAULT_API_KEY = "test"
 --- @param code number HTTP статус код
 --- @param data table Данные для отправки
 function HttpHelpers.send_json(server, client, code, data)
-    data = data or {}
-    data.timestamp = os_time()
-    
-    local ok, content = pcall(json_encode, data)
+    local ok, content = pcall(json_encode, data or {})
     if not ok then
         Logger.error(COMPONENT_NAME, "Failed to encode JSON response: %s", tostring(content))
         server:abort(client, 500)
@@ -68,13 +65,7 @@ end
 --- @param client table Объект клиента
 --- @param data table|nil Данные
 function HttpHelpers.success(server, client, data)
-    local response = { status = "ok" }
-    if data then
-        for k, v in pairs(data) do
-            response[k] = v
-        end
-    end
-    HttpHelpers.send_json(server, client, 200, response)
+    HttpHelpers.send_json(server, client, 200, data)
 end
 
 --- Формирует JSON ответ с ошибкой

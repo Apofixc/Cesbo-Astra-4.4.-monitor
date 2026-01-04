@@ -17,6 +17,7 @@ local ChannelStorage = ModuleManager.get_module("channel_storage")
 local find_channel = ModuleManager.get_global_dependency("find_channel")
 local make_channel = ModuleManager.get_global_dependency("make_channel")
 local kill_channel = ModuleManager.get_global_dependency("kill_channel")
+local channel_list = ModuleManager.get_global_dependency("channel_list")
 local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
@@ -31,19 +32,22 @@ function ChannelRoutes.get_channels(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local channels = {}
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
-    
-    for name, ch_obj in pairs(active_channels) do
-        local ch_data = ch_obj._channel_data or {}
-        table.insert(channels, {
-            name = name,
-            astra_name = ch_data.name or name,
-            display_name = ch_obj.display_name,
-            output = ch_data.output or {}
-        })
+    local list = channel_list or {}
+
+    for _, ch_data in pairs(list) do
+        local cfg = ch_data.config or {}
+        local name = cfg.name
+        if name then
+            local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
+            table_insert(channels, {
+                name = name,
+                display_name = ch_obj and ch_obj.display_name or name,
+                output = cfg.output or {}
+            })
+        end
     end
 
-    HttpHelpers.success(server, client, { channels = channels })
+    HttpHelpers.success(server, client, channels)
 end
 
 --- Возвращает агрегированную статистику по каналам
@@ -54,7 +58,14 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local total = 0
+    local total_astra_channels = 0
+    if channel_list then
+        for _ in pairs(channel_list) do
+            total_astra_channels = total_astra_channels + 1
+        end
+    end
+
+    local total_monitored = 0
     local online = 0
     local offline = 0
     local with_errors = 0
@@ -62,7 +73,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
-        total = total + 1
+        total_monitored = total_monitored + 1
         local status = ch_obj._status or {}
         if status.ready then
             online = online + 1
@@ -75,7 +86,8 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     end
 
     HttpHelpers.success(server, client, {
-        total = total,
+        total_astra_channels = total_astra_channels,
+        total_monitored = total_monitored,
         online = online,
         offline = offline,
         with_errors = with_errors
@@ -90,25 +102,24 @@ function ChannelRoutes.get_channel_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)")
+    local name = request.path:match("/api/channels/([^/]+)$")
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
-    if not ch_obj or not ch_obj._channel_data then
+    local ch_data = find_channel(name)
+    if not ch_data or not ch_data.config then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
+    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
+
     HttpHelpers.success(server, client, {
-        channel = {
-            name = name,
-            astra_name = ch_obj._channel_data.name,
-            display_name = ch_obj.display_name,
-            input = ch_obj._channel_data.input,
-            output = ch_obj._channel_data.output,
-            map = ch_obj._channel_data.map
-        }
+        name = name,
+        display_name = ch_obj and ch_obj.display_name or name,
+        input = ch_data.config.input,
+        output = ch_data.config.output,
+        map = ch_data.config.map
     })
 end
 
@@ -125,15 +136,16 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
-    if not ch_obj or not ch_obj._channel_data then
+    local ch_data = find_channel(name)
+    if not ch_data or not ch_data.config then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    local active_input = ch_obj._last_active_id or 1
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local active_input = ch_obj and ch_obj._last_active_id or 1
     
     HttpHelpers.success(server, client, {
-        inputs = ch_obj._channel_data.input or {},
+        inputs = ch_data.config.input or {},
         active_input = active_input
     })
 end
@@ -156,9 +168,7 @@ function ChannelRoutes.get_channel_psi(server, client, request)
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    HttpHelpers.success(server, client, {
-        psi = ch_obj:get_psi() or {}
-    })
+    HttpHelpers.success(server, client, ch_obj:get_psi() or {})
 end
 
 --- Создает новый канал (Raw Astra Channel)
@@ -206,15 +216,10 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
     
     local success, err = Logger.with_error(function()
-        if reboot then
-            -- В Astra reboot обычно делается через повторный make_channel или специфичные флаги,
-            -- но kill_channel с параметром reboot тоже может поддерживаться в зависимости от версии.
-            -- Согласно правилам, используем kill_channel(ch_data).
-            kill_channel(ch_data)
-            -- Для ребута в Astra часто нужно просто пересоздать канал, 
-            -- но здесь мы следуем базовой логике kill.
-        else
-            kill_channel(ch_data)
+        local config = ch_data.config
+        kill_channel(ch_data)
+        if reboot and config then
+            make_channel(config)
         end
         return true
     end)

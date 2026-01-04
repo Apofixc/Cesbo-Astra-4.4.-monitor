@@ -44,14 +44,12 @@ function SystemRoutes.get_resources(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    -- Оптимизация: используем кэш JSON если он доступен
-    local cache = ResourceMonitor and ResourceMonitor.get_json_cache and ResourceMonitor.get_json_cache()
-    if cache then
-        return HttpHelpers.send_raw_json(server, client, 200, cache)
+    local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+    if not ResourceMonitor then
+        return HttpHelpers.error(server, client, 500, "ResourceMonitor module not found")
     end
 
-    local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
-    HttpHelpers.success(server, client, { resources = report })
+    HttpHelpers.success(server, client, ResourceMonitor.get_stats())
 end
 
 --- Возвращает статистику работы ResourceMonitor

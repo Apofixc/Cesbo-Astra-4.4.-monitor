@@ -14,6 +14,7 @@ local Adapter = ModuleManager.get_module("adapter")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
+local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
@@ -28,17 +29,18 @@ function DvbRoutes.get_adapters(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local adapters = {}
-    local active_adapters = DvbStorage and DvbStorage.get_all and DvbStorage.get_all() or {}
+    local list = dvb_input_instance_list or {}
     
-    for id, dvb_obj in pairs(active_adapters) do
+    for id, _ in pairs(list) do
+        local dvb_obj = DvbStorage and DvbStorage.find(id)
         table_insert(adapters, {
-            id = id,
-            name = dvb_obj.name or id,
-            type = dvb_obj.type
+            name = id,
+            display_name = dvb_obj and dvb_obj.name or id,
+            type = dvb_obj and dvb_obj.type or "unknown"
         })
     end
 
-    HttpHelpers.success(server, client, { adapters = adapters })
+    HttpHelpers.success(server, client, adapters)
 end
 
 --- Запуск быстрого сканирования адаптера
@@ -74,9 +76,7 @@ function DvbRoutes.get_adapter_data(server, client, request)
         return HttpHelpers.send_raw_json(server, client, 200, cache)
     end
 
-    HttpHelpers.success(server, client, {
-        adapter_data = dvb_obj:get_full_status()
-    })
+    HttpHelpers.success(server, client, dvb_obj:get_full_status())
 end
 
 --- Возвращает таблицу PSI для адаптера
@@ -93,9 +93,7 @@ function DvbRoutes.get_adapter_psi(server, client, request)
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
-    HttpHelpers.success(server, client, {
-        psi = dvb_obj:get_psi() or {}
-    })
+    HttpHelpers.success(server, client, dvb_obj:get_psi() or {})
 end
 
 --- Настройка частоты (смена источника сигнала)

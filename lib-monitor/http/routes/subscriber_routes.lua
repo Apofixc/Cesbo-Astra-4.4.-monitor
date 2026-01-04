@@ -28,7 +28,7 @@ function SubscriberRoutes.get_subscribers(server, client, request)
         list = HttpSubscriber.get_subscribers()
     end
 
-    HttpHelpers.success(server, client, { subscribers = list })
+    HttpHelpers.success(server, client, list)
 end
 
 --- Добавляет нового получателя

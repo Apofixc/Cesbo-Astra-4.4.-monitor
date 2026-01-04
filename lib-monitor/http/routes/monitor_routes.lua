@@ -36,7 +36,7 @@ function MonitorRoutes.get_monitors(server, client, request)
         })
     end
 
-    HttpHelpers.success(server, client, { monitors = monitors })
+    HttpHelpers.success(server, client, monitors)
 end
 
 --- Возвращает сводный статус по всем мониторам
@@ -97,9 +97,7 @@ function MonitorRoutes.get_monitor_data(server, client, request)
         return HttpHelpers.send_raw_json(server, client, 200, cache)
     end
 
-    HttpHelpers.success(server, client, {
-        monitor_data = ch_obj:get_full_status()
-    })
+    HttpHelpers.success(server, client, ch_obj:get_full_status())
 end
 
 --- Создает новый монитор (без создания канала)
@@ -235,9 +233,7 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
-    HttpHelpers.success(server, client, {
-        pids = ch_obj:get_stats()
-    })
+    HttpHelpers.success(server, client, ch_obj:get_stats())
 end
 
 --- Очистка статистики по PID
