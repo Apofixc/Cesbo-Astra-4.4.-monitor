@@ -39,6 +39,9 @@ local loaded_modules = {}
 --- @type table<string, any>
 local global_dependencies = {}
 
+--- @type table<string, any>
+local nested_dependency_cache = {}
+
 --- Пост-инициализация Logger после того, как ModuleManager будет доступен
 local function init_logger()
     if not Logger then
@@ -241,44 +244,24 @@ function ModuleManager.check_nested_dependency(path_str)
         log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
         return nil
     end
-    
-    local parts = {}
-    for part in string_gmatch(path_str, "[^.]+") do
-        table_insert(parts, part)
-    end
-    
-    if #parts == 0 then
-        log_error(COMPONENT_NAME, "Пустой путь для проверки зависимости.")
-        return nil
+
+    if nested_dependency_cache[path_str] ~= nil then
+        return nested_dependency_cache[path_str]
     end
     
     local current_scope = _G
-    local full_path = ""
     local found_object = nil
     
-    for i, part in ipairs(parts) do
-        if i == 1 then
-            full_path = part
-        else
-            full_path = full_path .. "." .. part
-        end
-        
-        if type(current_scope) ~= "table" then
-            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s' (не таблица).", path_str, full_path)
+    for part in string_gmatch(path_str, "[^.]+") do
+        if type(current_scope) ~= "table" or current_scope[part] == nil then
+            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена.", path_str)
             return nil
         end
-        
-        if current_scope[part] == nil then
-            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на пути '%s'.", path_str, full_path)
-            return nil
-        end
-        
         current_scope = current_scope[part]
-        
-        if i == #parts then
-            found_object = current_scope
-        end
     end
+    
+    found_object = current_scope
+    nested_dependency_cache[path_str] = found_object
     
     log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
     return found_object
@@ -360,6 +343,7 @@ function ModuleManager.reset()
     registered_modules = {}
     loaded_modules = {}
     global_dependencies = {} -- Сбрасываем только Astra-специфичные зависимости
+    nested_dependency_cache = {}
     log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
 end
 

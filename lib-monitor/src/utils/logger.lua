@@ -30,6 +30,9 @@ local context_stack = {}
 local current_context_id = nil
 local context_counter = 0
 
+-- Кэширование уровня логирования
+local cached_log_level = nil
+
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
 --- @field private last_errors table<string, string>
@@ -37,11 +40,18 @@ local context_counter = 0
 --- @field private current_context_id string|nil
 local Logger = {}
 
-local function get_current_level()
-    -- Динамически получаем конфиг через ModuleManager, чтобы всегда иметь актуальные настройки
+--- Обновляет кэшированный уровень логирования
+function Logger.refresh_log_level()
     local config = ModuleManager.get_module("monitor_config")
     local level_name = config and config.LogLevel or "INFO"
-    return LOG_LEVELS[level_name] or LOG_LEVELS.INFO
+    cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
+end
+
+local function get_current_level()
+    if not cached_log_level then
+        Logger.refresh_log_level()
+    end
+    return cached_log_level
 end
 
 local function should_log(level)

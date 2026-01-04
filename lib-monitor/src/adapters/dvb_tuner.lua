@@ -46,6 +46,7 @@ local STATE = {
 --- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field _psi table|nil Таблица с PSI данными
 --- @field _backup table|nil Бэкап предыдущего состояния (config, channels)
+--- @field _status_table_reuse table Повторно используемая таблица статуса
 --- @field _active boolean|nil Статус активности мониторинга
 --- @field _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 local DvbTuner = {}
@@ -179,6 +180,7 @@ function DvbTuner.new(conf)
     self._psi = {}
     self._psi_timer = nil
     self._backup = nil
+    self._status_table_reuse = {}
     self._state = STATE.IDLE
 
     return self
@@ -245,33 +247,35 @@ function DvbTuner:start()
 
         -- Оптимизация: Сначала проверяем изменения в данных перед формированием JSON
         if self._current_method(self.status, data, self._astra_conf.rate) then
-            self.status.status = data.status or -1
-            self.status.status_flags = decode_status(data.status)
-            self.status.signal = data.signal or -1
-            self.status.snr = data.snr or -1
-            self.status.ber = data.ber or -1
-            self.status.unc = data.unc or -1
+            local status = self.status
+            status.status = data.status or -1
+            status.status_flags = decode_status(data.status)
+            status.signal = data.signal or -1
+            status.snr = data.snr or -1
+            status.ber = data.ber or -1
+            status.unc = data.unc or -1
             
             -- Расчет качества (quality) на основе ошибок
             if self.config.analyze and self.stats.count > 0 then
                 local avg_ber = self.stats.ber_sum / self.stats.count
                 if avg_ber > 0 or self.stats.unc_sum > 0 then
-                    self.status.quality = math_max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
+                    status.quality = math_max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
                 else
-                    self.status.quality = 100
+                    status.quality = 100
                 end
                 -- Сброс статистики после отправки
                 self.stats.ber_sum = 0
                 self.stats.unc_sum = 0
                 self.stats.count = 0
             else
-                self.status.quality = -1
+                status.quality = -1
             end
 
             -- Формируем полный статус для публикации
             local status_table = self:_build_status_table()
             local current_json = json_encode(status_table)
             
+            -- Публикуем если JSON изменился
             if current_json ~= self.json_cache then
                 self:publish(current_json, "dvb")
                 self.json_cache = current_json
@@ -347,23 +351,23 @@ end
 --- @return table Таблица статуса
 function DvbTuner:_build_status_table()
     local status = self.status or {}
-    return {
-        id = self.name_adapter,
-        status = status.status or 0,
-        status_flags = status.status_flags,
-        signal = status.signal or 0,
-        snr = status.snr or 0,
-        ber = status.ber or 0,
-        unc = status.unc or 0,
-        quality = status.quality or 0,
-        lock = status.status_flags and status.status_flags.has_lock or false,
-        type = status.type or "dvb",
-        server = status.server or Utils.get_server_name(),
-        format = status.format or "",
-        modulation = status.modulation or "",
-        source = status.source or "",
-        name_adapter = self.name_adapter
-    }
+    local t = self._status_table_reuse
+    t.id = self.name_adapter
+    t.status = status.status or 0
+    t.status_flags = status.status_flags
+    t.signal = status.signal or 0
+    t.snr = status.snr or 0
+    t.ber = status.ber or 0
+    t.unc = status.unc or 0
+    t.quality = status.quality or 0
+    t.lock = status.status_flags and status.status_flags.has_lock or false
+    t.type = status.type or "dvb"
+    t.server = status.server or Utils.get_server_name()
+    t.format = status.format or ""
+    t.modulation = status.modulation or ""
+    t.source = status.source or ""
+    t.name_adapter = self.name_adapter
+    return t
 end
 
 --- Возвращает полный текущий статус тюнера
@@ -490,6 +494,7 @@ function DvbTuner:destroy(force)
     self.stats = nil
     self._psi = nil
     self._backup = nil
+    self._status_table_reuse = nil
 
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
     collectgarbage()

@@ -89,6 +89,28 @@ function Utils.deep_copy(t)
     return copy
 end
 
+--- Выполняет поверхностное сравнение двух таблиц
+--- @param t1 table Первая таблица
+--- @param t2 table Вторая таблица
+--- @return boolean true если таблицы идентичны на первом уровне, иначе false
+function Utils.shallow_compare(t1, t2)
+    if t1 == t2 then return true end
+    if type(t1) ~= "table" or type(t2) ~= "table" then return false end
+    
+    local count1 = 0
+    for k, v in pairs(t1) do
+        if t2[k] ~= v then return false end
+        count1 = count1 + 1
+    end
+    
+    local count2 = 0
+    for _ in pairs(t2) do
+        count2 = count2 + 1
+    end
+    
+    return count1 == count2
+end
+
 --- Валидирует параметр монитора на основе схемы.
 --- Если значение невалидно или отсутствует, возвращает значение по умолчанию из схемы.
 --- @param name string Имя параметра

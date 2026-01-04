@@ -50,7 +50,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _json_status_cache string|nil Кэш последнего отправленного JSON
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
---- @field private _status_template_cache table|nil Кэш базового шаблона статуса
+--- @field private _status_table_reuse table Повторно используемая таблица статуса
 --- @field private _psi_hash_cache table Кэш хэшей PSI таблиц
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
@@ -142,7 +142,7 @@ function ChannelMonitor.new(config, channel_data)
     self._json_status_cache = nil
     self._last_active_id = nil
     self._cached_source = nil
-    self._status_template_cache = nil
+    self._status_table_reuse = {}
     self._psi_hash_cache = {}
     self._status = {
         cc_errors = 0,
@@ -252,9 +252,17 @@ end
 function ChannelMonitor:process_psi_data(data)
     if not self._psi_hash_cache then return end
     
-    -- Оптимизация: проверяем версию таблицы, если она есть, иначе используем JSON-хэш
+    -- Оптимизация: проверяем версию таблицы, если она есть.
+    -- Если версии нет, используем количество стримов как примитивный хэш для PMT
     local table_id = data.psi
-    local current_version = data.version or json_encode(data)
+    local current_version = data.version
+    if not current_version then
+        if table_id == "PMT" and data.streams then
+            current_version = #data.streams
+        else
+            current_version = true -- Просто помечаем что видели, если нет версии
+        end
+    end
     
     if self._psi_hash_cache[table_id] == current_version then
         return
@@ -331,29 +339,25 @@ function ChannelMonitor:process_total_data(data, comparison_method)
     end
     self._check_timer = 0
 
-    if comparison_method(status, data, self._config.rate) or self._force_timer > FORCE_SEND_INTERVAL then
-        self:update_status_and_publish(data)
+    local active_id = self._channel_data and self._channel_data.active_input_id or 1
+    local input_changed = active_id ~= self._last_active_id
+    local is_force = self._force_timer > FORCE_SEND_INTERVAL
+
+    if input_changed or is_force or comparison_method(status, data, self._config.rate) then
+        self:update_status_and_publish(data, is_force)
         self._force_timer = 0
     end
 end
 
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
-function ChannelMonitor:update_status_and_publish(data)
-    -- Проверяем, изменился ли активный вход
-    local active_id = self._channel_data and self._channel_data.active_input_id or 1
-    local input_changed = active_id ~= self._last_active_id
-
-    -- Если ни метрики (проверенные в comparison_method), ни вход не изменились, 
-    -- и это не принудительная отправка (force_timer), то можно пропустить.
-    -- Но так как мы уже здесь, значит либо comparison_method == true, либо force_timer сработал.
-
-    -- Оптимизация: формируем таблицу и JSON только если есть реальные изменения в данных
-    -- или если кэш пуст.
+--- @param is_force boolean|nil Принудительная отправка (игнорировать кэш JSON)
+function ChannelMonitor:update_status_and_publish(data, is_force)
     local status_table = self:_build_status_table(data)
     local current_json = json_encode(status_table)
 
-    if current_json ~= self._json_status_cache then
+    -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
+    if is_force or current_json ~= self._json_status_cache then
         HttpSubscriber.publish("channels", current_json)
         self._json_status_cache = current_json
     end
@@ -364,7 +368,7 @@ function ChannelMonitor:update_status_and_publish(data)
     self._status.bitrate = data.total.bitrate or 0
     self._status.cc_errors = 0
     self._status.pes_errors = 0
-    self._last_active_id = active_id
+    self._last_active_id = self._channel_data and self._channel_data.active_input_id or 1
 end
 
 --- Возвращает закэшированные PSI данные (в формате JSON)
@@ -416,23 +420,24 @@ function ChannelMonitor:_build_status_table(data)
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
 
-    return {
-        id = self.name,
-        name = self.name,
-        display_name = self.display_name,
-        status = ready and "OK" or "ERROR",
-        bitrate = bitrate,
-        cc_errors = cc,
-        pes_errors = pes,
-        scrambled = scrambled,
-        ready = ready,
-        monitor = self._config.monitor,
-        stream = source.stream,
-        format = source.format,
-        addr = source.addr,
-        server = Utils.get_server_name(),
-        type = "Channel"
-    }
+    local t = self._status_table_reuse
+    t.id = self.name
+    t.name = self.name
+    t.display_name = self.display_name
+    t.status = ready and "OK" or "ERROR"
+    t.bitrate = bitrate
+    t.cc_errors = cc
+    t.pes_errors = pes
+    t.scrambled = scrambled
+    t.ready = ready
+    t.monitor = self._config.monitor
+    t.stream = source.stream
+    t.format = source.format
+    t.addr = source.addr
+    t.server = Utils.get_server_name()
+    t.type = "Channel"
+    
+    return t
 end
 
 --- Возвращает полный текущий статус монитора
@@ -490,7 +495,7 @@ function ChannelMonitor:stop()
     self._stream_json = nil
     self._upstream = nil
     self._cached_source = nil
-    self._status_template_cache = nil
+    self._status_table_reuse = nil
     self._json_status_cache = nil
 
     -- Обнуление идентификаторов
