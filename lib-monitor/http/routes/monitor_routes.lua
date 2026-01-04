@@ -223,7 +223,7 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     end
 
     HttpHelpers.success(server, client, {
-        pids = ch_obj:get_analyze_stats()
+        pids = ch_obj:get_stats()
     })
 end
 
@@ -245,7 +245,7 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
-    ch_obj:clear_analyze_stats()
+    ch_obj:clear_stats()
     HttpHelpers.success(server, client, { message = "PID stats cleared" })
 end
 
