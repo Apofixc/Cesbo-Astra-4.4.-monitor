@@ -96,41 +96,44 @@ local function stop_dvb_monitor(name_adapter, force)
     return nil
 end
 
---- Вспомогательная функция для управления зависимыми каналами.
---- Находит все каналы, использующие данный адаптер, и выполняет действие (остановка или запуск).
+--- Останавливает все каналы, использующие указанный адаптер.
 --- @param name_adapter string Имя адаптера
---- @param action string Действие: "stop" или "start"
---- @param configs table|nil Список конфигураций для запуска (используется при action == "start")
---- @return table|nil Список сохраненных конфигураций при остановке
-local function manage_dependent_channels(name_adapter, action, configs)
+--- @return table Список сохраненных конфигураций каналов
+local function stop_dependent_channels(name_adapter)
     local Channel = ModuleManager.get_module("channel")
     local ChannelStorage = ModuleManager.get_module("channel_storage")
-    if not Channel or not ChannelStorage then return nil end
+    local saved_configs = {}
+    if not Channel or not ChannelStorage then return saved_configs end
 
-    if action == "stop" then
-        local saved_configs = {}
-        local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
-        for name, _ in pairs(dependent_channels) do
-            local ch_config = Channel.kill_stream(name)
-            if ch_config then
-                table_insert(saved_configs, ch_config)
-            end
-        end
-        return saved_configs
-    elseif action == "start" and configs then
-        for _, conf in ipairs(configs) do
-            Channel.make_stream(conf)
+    local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
+    for name, _ in pairs(dependent_channels) do
+        local ch_config = Channel.kill_stream(name)
+        if ch_config then
+            table_insert(saved_configs, ch_config)
         end
     end
-    return nil
+    return saved_configs
+end
+
+--- Запускает каналы на основе предоставленных конфигураций.
+--- @param configs table Список конфигураций каналов
+local function start_dependent_channels(configs)
+    if not configs or type(configs) ~= "table" then return end
+    local Channel = ModuleManager.get_module("channel")
+    if not Channel then return end
+
+    for _, conf in ipairs(configs) do
+        Channel.make_stream(conf)
+    end
 end
 
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.
 --- @param name_adapter string Уникальное имя адаптера
 --- @param new_params table|nil Новые параметры тюнинга
 --- @param force boolean|nil Принудительный перезапуск
+--- @param _pre_saved_channels table|nil Предварительно сохраненные конфигурации каналов
 --- @return boolean Статус выполнения
-local function restart_dvb_monitor(name_adapter, new_params, force)
+local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_channels)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
@@ -153,7 +156,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
             old_channels_count = tuner.instance.__options.channels or 0
         end
     else
-        saved_channels = manage_dependent_channels(name_adapter, "stop") or {}
+        saved_channels = _pre_saved_channels or stop_dependent_channels(name_adapter)
     end
 
     -- 3. Перезапуск монитора
@@ -161,9 +164,12 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
         if not stop_dvb_monitor(name_adapter, force) then return false end
         if not Adapter.dvb_tuner_monitor(conf) then return false end
         
-        if force then
-            local new_tuner = DvbStorage.find(name_adapter)
-            if new_tuner and new_tuner.instance and new_tuner.instance.__options then
+        local new_tuner = DvbStorage.find(name_adapter)
+        if new_tuner then
+            -- Сохраняем бэкап в новый объект
+            new_tuner:set_backup(old_conf, saved_channels)
+            
+            if force and new_tuner.instance and new_tuner.instance.__options then
                 new_tuner.instance.__options.channels = old_channels_count
             end
         end
@@ -173,12 +179,12 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     if not perform_restart(new_conf) then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to restart '%s'. Rolling back...", name_adapter)
         perform_restart(old_conf)
-        manage_dependent_channels(name_adapter, "start", saved_channels)
+        start_dependent_channels(saved_channels)
         return false
     end
 
     if not force then
-        manage_dependent_channels(name_adapter, "start", saved_channels)
+        start_dependent_channels(saved_channels)
     end
 
     return true
@@ -245,15 +251,19 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     if not tuner then return nil end
 
     local old_tuner_params = Utils.table_copy(tuner.config)
-    local saved_channels = manage_dependent_channels(name_adapter, "stop") or {}
+    local saved_channels = stop_dependent_channels(name_adapter)
     local old_channels_map = {}
     for _, conf in ipairs(saved_channels) do old_channels_map[conf.name] = conf end
 
     -- Перенастройка тюнера (force=false, каналы уже остановлены)
-    if not restart_dvb_monitor(name_adapter, new_tuner_params, false) then
-        manage_dependent_channels(name_adapter, "start", saved_channels)
+    if not restart_dvb_monitor(name_adapter, new_tuner_params, false, saved_channels) then
+        start_dependent_channels(saved_channels)
         return nil
     end
+
+    -- После успешного рестарта в restart_dvb_monitor уже сохранен бэкап,
+    -- но если мы переключаем транспондер с новыми входами, 
+    -- возможно стоит обновить бэкап или оставить как есть (там старые конфиги).
 
     -- Запуск новых каналов с сохранением выходов
     if reserve_input and type(reserve_input) == "table" then

@@ -42,6 +42,7 @@ local STATE = {
 --- @field _current_method function|nil Прямая ссылка на метод сравнения
 --- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field _psi table|nil Таблица с PSI данными
+--- @field _backup table|nil Бэкап предыдущего состояния (config, channels)
 --- @field _active boolean|nil Статус активности мониторинга
 --- @field _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 local DvbTuner = {}
@@ -167,6 +168,7 @@ function DvbTuner.new(conf)
     self._temp_analyzer = nil
     self._psi = {}
     self._psi_timer = nil
+    self._backup = nil
     self._state = STATE.IDLE
 
     return self
@@ -299,6 +301,22 @@ end
 --- @return table Таблица с PSI данными
 function DvbTuner:get_psi()
     return self._psi
+end
+
+--- Сохраняет бэкап предыдущего состояния
+--- @param config table Предыдущая конфигурация
+--- @param channels table Список конфигураций каналов
+function DvbTuner:set_backup(config, channels)
+    self._backup = {
+        config = Utils.table_copy(config),
+        channels = Utils.table_copy(channels)
+    }
+end
+
+--- Возвращает бэкап предыдущего состояния
+--- @return table|nil Бэкап или nil
+function DvbTuner:get_backup()
+    return self._backup
 end
 
 --- Внутренний метод для сборки таблицы полного статуса
@@ -441,6 +459,7 @@ function DvbTuner:destroy(force)
     self.json_cache = nil
     self.stats = nil
     self._psi = nil
+    self._backup = nil
 
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
     return original_config
