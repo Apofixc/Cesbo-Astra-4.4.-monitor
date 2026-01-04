@@ -83,10 +83,6 @@ local COMPARISON_METHODS = {
                ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
     [METHOD_ON_AIR] = function(prev, curr, rate)
-        if prev.cc_errors > 1000 or prev.pes_errors > 1000 then
-            prev.cc_errors = 0
-            prev.pes_errors = 0
-        end
         return prev.ready ~= curr.on_air
     end
 }
@@ -365,6 +361,10 @@ function ChannelMonitor:process_total_data(data)
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
     status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
+
+    -- Защита от переполнения счетчиков в режиме METHOD_ON_AIR или при долгом отсутствии изменений
+    if status.cc_errors > 1000000 then status.cc_errors = 1000000 end
+    if status.pes_errors > 1000000 then status.pes_errors = 1000000 end
 
     self._force_timer = self._force_timer + 1
     if self._check_timer < (self._config.time_check or 0) then

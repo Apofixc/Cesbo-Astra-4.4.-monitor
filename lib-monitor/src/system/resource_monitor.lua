@@ -190,11 +190,14 @@ local function parse_load_avg()
     return { tonumber(l1), tonumber(l5), tonumber(l15) }
 end
 
---- Считает количество открытых файловых дескрипторов
+--- Считает количество открытых файловых дескрипторов.
+--- Использует io.popen для получения списка файлов в /proc/self/fd.
 --- @return number
 local function get_fd_count()
     local count = 0
-    local p = io.popen("ls /proc/self/fd | wc -l")
+    -- В Astra/Linux это самый надежный способ без внешних зависимостей, 
+    -- но мы вызываем его редко (раз в 10 секунд) для экономии ресурсов.
+    local p = io.popen("ls -1 /proc/self/fd 2>/dev/null | wc -l")
     if p then
         local res = p:read("*all")
         p:close()
@@ -292,6 +295,10 @@ function ResourceMonitor.check()
                     rx_bytes = data.rx_bytes,
                     tx_bytes = data.tx_bytes
                 }
+            end
+            -- Явно очищаем старую таблицу для помощи GC
+            for k in pairs(ResourceMonitor._last_stats.net) do
+                ResourceMonitor._last_stats.net[k] = nil
             end
             ResourceMonitor._last_stats.net = new_net_cache
         end

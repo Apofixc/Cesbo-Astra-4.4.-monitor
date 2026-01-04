@@ -1,9 +1,7 @@
 -- 1. Стандартные Lua функции
 local collectgarbage = collectgarbage
-local ipairs = ipairs
 local math_max = math.max
 local pairs = pairs
-local require = require
 local setmetatable = setmetatable
 local string_format = string.format
 local tostring = tostring
