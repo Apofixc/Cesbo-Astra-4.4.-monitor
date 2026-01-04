@@ -134,14 +134,14 @@ function ChannelMonitor.new(config, channel_data)
     self.display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self.name
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
-    self:_set_config_param("channel_rate", config.rate)
-    self:_set_config_param("channel_time_check", config.time_check)
-    self:_set_config_param("channel_method_comparison", config.method_comparison)
-    self:_set_config_param("channel_analyze", config.analyze)
-    self:_set_config_param("channel_cc_limit", config.cc_limit)
-    self:_set_config_param("channel_bitrate_limit", config.bitrate_limit)
-    self:_set_config_param("channel_rate_stat", config.rate_stat)
-    self:_set_config_param("channel_join_pid", config.join_pid)
+    if not self:_set_config_param("channel_rate", config.rate) then return nil end
+    if not self:_set_config_param("channel_time_check", config.time_check) then return nil end
+    if not self:_set_config_param("channel_method_comparison", config.method_comparison) then return nil end
+    if not self:_set_config_param("channel_analyze", config.analyze) then return nil end
+    if not self:_set_config_param("channel_cc_limit", config.cc_limit) then return nil end
+    if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit) then return nil end
+    if not self:_set_config_param("channel_rate_stat", config.rate_stat) then return nil end
+    if not self:_set_config_param("channel_join_pid", config.join_pid) then return nil end
 
     self._stream_json = config.stream_json or {}
     self._upstream = config.upstream
