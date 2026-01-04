@@ -25,6 +25,7 @@ local timer = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
 local UPDATE_INTERVAL = 1 -- секунда для точного расчета CPU
+local FD_UPDATE_INTERVAL = 10 -- дескрипторы проверяем реже (дорого)
 local USER_HZ = 100 -- Стандарт для Linux
 
 -- 5. Инициализация объекта
@@ -33,10 +34,14 @@ local USER_HZ = 100 -- Стандарт для Linux
 --- @field private _pid number|nil Кэшированный PID процесса
 --- @field private _last_stats table Данные предыдущего замера для расчета дельт
 --- @field private _current_report table|nil Последний сформированный отчет
+--- @field private _fd_counter number Счетчик для интервала проверки дескрипторов
+--- @field private _last_fd_count number Последнее значение количества дескрипторов
 local ResourceMonitor = {
     _timer = nil,
     _pid = nil,
     _current_report = nil,
+    _fd_counter = 0,
+    _last_fd_count = 0,
     _last_stats = {
         utime = 0,
         stime = 0,
@@ -239,37 +244,48 @@ function ResourceMonitor.check()
             io_speed.read_bps = (io_stats.read_bytes - ResourceMonitor._last_stats.read_bytes) / delta_time
             io_speed.write_bps = (io_stats.write_bytes - ResourceMonitor._last_stats.write_bytes) / delta_time
         end
-    end
 
-    -- Расчет Network Speed и обновление состояния сети
-    if net_stats then
-        for iface, data in pairs(net_stats) do
-            local last = ResourceMonitor._last_stats.net[iface]
-            if delta_time > 0 and last then
-                net_report[iface] = {
-                    rx_bps = (data.rx_bytes - last.rx_bytes) / delta_time,
-                    tx_bps = (data.tx_bytes - last.tx_bytes) / delta_time,
-                    rx_errs = data.rx_errs,
-                    tx_errs = data.tx_errs,
-                    rx_drop = data.rx_drop,
-                    tx_drop = data.tx_drop
+        -- Расчет Network Speed
+        if net_stats then
+            for iface, data in pairs(net_stats) do
+                local last = ResourceMonitor._last_stats.net[iface]
+                if last then
+                    net_report[iface] = {
+                        rx_bps = (data.rx_bytes - last.rx_bytes) / delta_time,
+                        tx_bps = (data.tx_bytes - last.tx_bytes) / delta_time,
+                        rx_errs = data.rx_errs,
+                        tx_errs = data.tx_errs,
+                        rx_drop = data.rx_drop,
+                        tx_drop = data.tx_drop
+                    }
+                end
+            end
+        end
+
+        -- Обновляем состояние для следующего замера только если delta_time > 0
+        ResourceMonitor._last_stats.utime = stat.utime
+        ResourceMonitor._last_stats.stime = stat.stime
+        ResourceMonitor._last_stats.time = current_time
+        if io_stats then
+            ResourceMonitor._last_stats.read_bytes = io_stats.read_bytes
+            ResourceMonitor._last_stats.write_bytes = io_stats.write_bytes
+        end
+        if net_stats then
+            for iface, data in pairs(net_stats) do
+                ResourceMonitor._last_stats.net[iface] = {
+                    rx_bytes = data.rx_bytes,
+                    tx_bytes = data.tx_bytes
                 }
             end
-            -- Сохраняем состояние сети всегда
-            ResourceMonitor._last_stats.net[iface] = {
-                rx_bytes = data.rx_bytes,
-                tx_bytes = data.tx_bytes
-            }
         end
     end
 
-    -- Обновляем общее состояние для следующего замера
-    ResourceMonitor._last_stats.utime = stat.utime
-    ResourceMonitor._last_stats.stime = stat.stime
-    ResourceMonitor._last_stats.time = current_time
-    if io_stats then
-        ResourceMonitor._last_stats.read_bytes = io_stats.read_bytes
-        ResourceMonitor._last_stats.write_bytes = io_stats.write_bytes
+    -- Обновление счетчика дескрипторов (реже)
+    if ResourceMonitor._fd_counter <= 0 then
+        ResourceMonitor._last_fd_count = get_fd_count()
+        ResourceMonitor._fd_counter = FD_UPDATE_INTERVAL
+    else
+        ResourceMonitor._fd_counter = ResourceMonitor._fd_counter - 1
     end
 
     -- Формируем итоговый отчет
@@ -295,7 +311,7 @@ function ResourceMonitor.check()
         network = net_report,
         system = {
             load_avg = load_avg,
-            fd_count = get_fd_count()
+            fd_count = ResourceMonitor._last_fd_count
         }
     }
 

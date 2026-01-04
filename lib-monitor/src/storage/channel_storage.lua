@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local pairs = pairs
 local table_insert = table.insert
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -14,10 +15,12 @@ local COMPONENT_NAME = "ChannelStorage"
 -- 5. Инициализация объектов из загруженных модулей
 --- @class ChannelStorage
 --- @field private monitors table<string, ChannelMonitor>
+--- @field private count_active number
 local ChannelStorage = {}
 
 --- @type table<string, ChannelMonitor>
 local monitors = {}
+local count_active = 0
 
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя монитора
@@ -25,6 +28,8 @@ local monitors = {}
 function ChannelStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "Monitor '%s' already registered. Overwriting.", name)
+    else
+        count_active = count_active + 1
     end
     monitors[name] = monitor_instance
     Logger.debug(COMPONENT_NAME, "Monitor '%s' registered.", name)
@@ -40,6 +45,7 @@ function ChannelStorage.unregister(name)
             monitor:stop()
         end
         monitors[name] = nil
+        count_active = count_active - 1
         Logger.debug(COMPONENT_NAME, "Monitor '%s' unregistered and stopped.", name)
         return true
     end
@@ -63,11 +69,7 @@ end
 --- Возвращает количество активных мониторов
 --- @return number Количество мониторов
 function ChannelStorage.count()
-    local count = 0
-    for _ in pairs(monitors) do
-        count = count + 1
-    end
-    return count
+    return count_active
 end
 
 --- Находит все каналы в системе Astra, использующие указанный DVB-адаптер

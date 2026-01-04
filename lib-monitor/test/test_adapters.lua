@@ -252,12 +252,12 @@ inst.__options.channels = inst.__options.channels + 1
 
 -- Пытаемся удалить первый монитор без force
 local success_stop = Adapter.stop_dvb_monitor("tuner_shared")
-assert_test(success_stop == false, "Should not stop shared tuner without force")
+assert_test(success_stop == nil, "Should not stop shared tuner without force")
 assert_test(DvbStorage.find("tuner_shared") ~= nil, "Tuner should remain in storage")
 
 -- Удаляем с force
-assert_test(Adapter.stop_dvb_monitor("tuner_shared", true), "Should stop with force")
+assert_test(Adapter.stop_dvb_monitor("tuner_shared", true) ~= nil, "Should stop with force")
 assert_test(DvbStorage.find("tuner_shared") == nil, "Tuner should be removed")
-print("Test 4: PASSED")
+print("Test 5: PASSED")
 
 print("--- All Adapter Tests PASSED ---")

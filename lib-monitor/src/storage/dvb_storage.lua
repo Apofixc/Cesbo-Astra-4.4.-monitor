@@ -1,5 +1,6 @@
 -- 1. Стандартные Lua функции
 local pairs = pairs
+local tostring = tostring
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -17,6 +18,7 @@ local DvbStorage = {}
 
 --- @type table<string, DvbTuner>
 local monitors = {}
+local count_active = 0
 
 --- Регистрирует новый монитор в хранилище
 --- @param name string Имя адаптера
@@ -24,6 +26,8 @@ local monitors = {}
 function DvbStorage.register(name, monitor_instance)
     if monitors[name] then
         Logger.warn(COMPONENT_NAME, "DVB Monitor '%s' already registered. Overwriting.", name)
+    else
+        count_active = count_active + 1
     end
     monitors[name] = monitor_instance
     Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' registered.", name)
@@ -39,6 +43,7 @@ function DvbStorage.unregister(name, force)
         local config = monitor:destroy(force)
         if config then
             monitors[name] = nil
+            count_active = count_active - 1
             Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' unregistered and stopped (force: %s).", name, tostring(force))
             return config
         else
@@ -66,11 +71,7 @@ end
 --- Возвращает количество активных мониторов
 --- @return number Количество мониторов
 function DvbStorage.count()
-    local count = 0
-    for _ in pairs(monitors) do
-        count = count + 1
-    end
-    return count
+    return count_active
 end
 
 return DvbStorage
