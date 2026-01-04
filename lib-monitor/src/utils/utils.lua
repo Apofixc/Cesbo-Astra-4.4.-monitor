@@ -95,18 +95,15 @@ function Utils.shallow_compare(t1, t2)
     if t1 == t2 then return true end
     if type(t1) ~= "table" or type(t2) ~= "table" then return false end
     
-    local count1 = 0
     for k, v in pairs(t1) do
         if t2[k] ~= v then return false end
-        count1 = count1 + 1
     end
     
-    local count2 = 0
-    for _ in pairs(t2) do
-        count2 = count2 + 1
+    for k in pairs(t2) do
+        if t1[k] == nil then return false end
     end
     
-    return count1 == count2
+    return true
 end
 
 --- Валидирует параметр монитора на основе схемы.

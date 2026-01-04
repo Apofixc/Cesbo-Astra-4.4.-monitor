@@ -45,8 +45,11 @@ local nested_dependency_cache = {}
 --- Пост-инициализация Logger после того, как ModuleManager будет доступен
 local function init_logger()
     if not Logger then
+        local module_info = registered_modules["utils.logger"]
+        if not module_info then return end
+        
         -- Использовать require вместо ModuleManager.get_module для избежания рекурсии
-        local success, logger_module = pcall(require, "src.utils.logger")
+        local success, logger_module = pcall(require, module_info.path)
         if success and logger_module then
             Logger = logger_module
             log_info = Logger.info

@@ -290,14 +290,18 @@ function ResourceMonitor.check()
                     if delta_rx < 0 then delta_rx = 0 end
                     if delta_tx < 0 then delta_tx = 0 end
 
-                    net_report[iface] = {
-                        rx_bps = delta_rx / delta_time,
-                        tx_bps = delta_tx / delta_time,
-                        rx_errs = data.rx_errs,
-                        tx_errs = data.tx_errs,
-                        rx_drop = data.rx_drop,
-                        tx_drop = data.tx_drop
-                    }
+                    local iface_report = net_report[iface]
+                    if not iface_report then
+                        iface_report = {}
+                        net_report[iface] = iface_report
+                    end
+                    
+                    iface_report.rx_bps = delta_rx / delta_time
+                    iface_report.tx_bps = delta_tx / delta_time
+                    iface_report.rx_errs = data.rx_errs
+                    iface_report.tx_errs = data.tx_errs
+                    iface_report.rx_drop = data.rx_drop
+                    iface_report.tx_drop = data.tx_drop
                 end
             end
         end
@@ -311,19 +315,22 @@ function ResourceMonitor.check()
             ResourceMonitor._last_stats.write_bytes = io_stats.write_bytes
         end
         if net_stats then
-            -- Очистка старых интерфейсов для предотвращения утечки памяти
-            local new_net_cache = {}
+            -- Обновляем кэш интерфейсов без пересоздания таблиц где возможно
+            local net_cache = ResourceMonitor._last_stats.net
+            -- Удаляем интерфейсы, которых больше нет
+            for iface in pairs(net_cache) do
+                if not net_stats[iface] then net_cache[iface] = nil end
+            end
+            -- Обновляем существующие или добавляем новые
             for iface, data in pairs(net_stats) do
-                new_net_cache[iface] = {
-                    rx_bytes = data.rx_bytes,
-                    tx_bytes = data.tx_bytes
-                }
+                local cache_item = net_cache[iface]
+                if not cache_item then
+                    cache_item = {}
+                    net_cache[iface] = cache_item
+                end
+                cache_item.rx_bytes = data.rx_bytes
+                cache_item.tx_bytes = data.tx_bytes
             end
-            -- Явно очищаем старую таблицу для помощи GC
-            for k in pairs(ResourceMonitor._last_stats.net) do
-                ResourceMonitor._last_stats.net[k] = nil
-            end
-            ResourceMonitor._last_stats.net = new_net_cache
         end
     end
 
