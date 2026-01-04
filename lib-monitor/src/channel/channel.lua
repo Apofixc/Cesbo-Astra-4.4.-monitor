@@ -272,17 +272,8 @@ end
 --- @param name string Имя монитора
 --- @return table|nil Конфигурация монитора для восстановления или nil
 local function kill_monitor(name)
-    local monitor = ChannelStorage.find(name)
-    if not monitor then
-        Logger.debug(COMPONENT_NAME, "kill_monitor: monitor '%s' not found", tostring(name))
-        return nil
-    end
-
-    -- Сохраняем конфигурацию перед удалением
-    local config = monitor._config
-
-    -- ChannelStorage.unregister сам вызовет monitor:stop()
-    if ChannelStorage.unregister(name) then
+    local config = ChannelStorage.unregister(name)
+    if config then
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
         return config
     end

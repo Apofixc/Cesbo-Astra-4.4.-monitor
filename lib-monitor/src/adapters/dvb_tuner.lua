@@ -434,7 +434,10 @@ end
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function DvbTuner:destroy(force)
-    -- 1. Проверка: можно ли очистить ресурсы?
+    if self._state ~= STATE.RUNNING then
+        return nil
+    end
+
     local channels = 0
     if self.instance and self.instance.__options then
         channels = self.instance.__options.channels or 0

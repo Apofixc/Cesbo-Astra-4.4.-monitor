@@ -37,20 +37,20 @@ end
 
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя монитора
---- @return boolean Статус выполнения
+--- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function ChannelStorage.unregister(name)
     local monitor = monitors[name]
     if monitor then
-        if type(monitor.stop) == "function" then
-            monitor:stop()
+        local config = monitor:destroy()
+        if config then
+            monitors[name] = nil
+            count_active = count_active - 1
+            Logger.debug(COMPONENT_NAME, "Monitor '%s' unregistered and stopped.", name)
+            return config
         end
-        monitors[name] = nil
-        count_active = count_active - 1
-        Logger.debug(COMPONENT_NAME, "Monitor '%s' unregistered and stopped.", name)
-        return true
     end
     Logger.error(COMPONENT_NAME, "unregister: Monitor '%s' not found", name)
-    return false
+    return nil
 end
 
 --- Находит монитор по имени

@@ -20,6 +20,12 @@ local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream = "Unknown" }
 local FORCE_SEND_INTERVAL = 300
 
+local STATE = {
+    IDLE = 1,
+    RUNNING = 2,
+    STOPPED = 3,
+}
+
 -- Методы сравнения
 local METHOD_ALWAYS = 1
 local METHOD_STRICT = 2
@@ -37,6 +43,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field display_name string Отображаемое имя монитора
 --- @field input_instance any|nil Экземпляр входного потока (для IP мониторов)
 --- @field private _active boolean Флаг активности монитора
+--- @field private _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 --- @field private _config table Конфигурация монитора
 --- @field private _channel_data table|nil Данные канала (Astra)
 --- @field private _stream_json table Данные об источниках потока
@@ -52,6 +59,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
 --- @field private _status_table_reuse table Повторно используемая таблица статуса
 --- @field private _psi_hash_cache table Кэш хэшей PSI таблиц
+--- @field private _current_method function|nil Прямая ссылка на метод сравнения
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
 
@@ -154,15 +162,28 @@ function ChannelMonitor.new(config, channel_data)
     self._analyze_stats = {}
     self._rate_stat = nil
     self._active = true
+    self._state = STATE.IDLE
+    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
     return self
+end
+
+--- Публикует данные через HttpSubscriber
+--- @param content string JSON данные
+--- @param event_type string Тип события
+function ChannelMonitor:publish(content, event_type)
+    HttpSubscriber.publish(event_type, content)
 end
 
 --- Запускает мониторинг
 --- @return any|nil Экземпляр монитора или nil
 function ChannelMonitor:start()
-    local comparison_method = COMPARISON_METHODS[self._config.method_comparison]
-    if not comparison_method then
+    if self._state == STATE.RUNNING then
+        Logger.warn(COMPONENT_NAME, "[%s] Monitor already running", tostring(self.name))
+        return self._monitor_instance
+    end
+
+    if not self._current_method then
         log_error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self.name, tostring(self._config.method_comparison))
         return nil
     end
@@ -181,7 +202,7 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self or not self._active or not data then return end
+            if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
 
             if data.error then
                 self:process_error_data(data)
@@ -203,7 +224,7 @@ function ChannelMonitor:start()
             end
 
             if data.total then
-                self:process_total_data(data, comparison_method)
+                self:process_total_data(data)
             end
         end
     })
@@ -212,6 +233,9 @@ function ChannelMonitor:start()
         log_error(COMPONENT_NAME, "[%s] start: analyze returned nil", self.name)
         return nil
     end
+
+    self._state = STATE.RUNNING
+    self._active = true
 
     return self._monitor_instance
 end
@@ -236,7 +260,7 @@ end
 function ChannelMonitor:process_error_data(data)
     local content = self:_build_status_table()
     content.error = data.error
-    HttpSubscriber.publish("error", json_encode(content))
+    self:publish(json_encode(content), "error")
 end
 
 --- Обработка статистики битрейта
@@ -244,7 +268,7 @@ end
 function ChannelMonitor:process_rate_stat_data(data)
     local content = self:_build_status_table()
     content.rate_stat = data
-    HttpSubscriber.publish("rate_stat", json_encode(content))
+    self:publish(json_encode(content), "rate_stat")
 end
 
 --- Обработка PSI данных
@@ -326,8 +350,7 @@ end
 
 --- Обработка суммарных данных потока
 --- @param data table Суммарные данные
---- @param comparison_method function Функция сравнения
-function ChannelMonitor:process_total_data(data, comparison_method)
+function ChannelMonitor:process_total_data(data)
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
     status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
@@ -343,7 +366,7 @@ function ChannelMonitor:process_total_data(data, comparison_method)
     local input_changed = active_id ~= self._last_active_id
     local is_force = self._force_timer > FORCE_SEND_INTERVAL
 
-    if input_changed or is_force or comparison_method(status, data, self._config.rate) then
+    if input_changed or is_force or self._current_method(status, data, self._config.rate) then
         self:update_status_and_publish(data, is_force)
         self._force_timer = 0
     end
@@ -358,7 +381,7 @@ function ChannelMonitor:update_status_and_publish(data, is_force)
 
     -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
     if is_force or current_json ~= self._json_status_cache then
-        HttpSubscriber.publish("channels", current_json)
+        self:publish(current_json, "channels")
         self._json_status_cache = current_json
     end
 
@@ -464,9 +487,18 @@ function ChannelMonitor:resume()
     return true
 end
 
---- Останавливает мониторинг и очищает ресурсы
-function ChannelMonitor:stop()
+--- Останавливает мониторинг и уничтожает объект.
+--- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
+--- @return table|nil Оригинальная конфигурация при успехе, иначе nil
+function ChannelMonitor:destroy()
+    if self._state ~= STATE.RUNNING then
+        return nil
+    end
+
+    local original_config = self._config and Utils.table_copy(self._config) or nil
+
     self._active = false
+    self._state = STATE.STOPPED
 
     if self._monitor_instance then
         -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
@@ -497,6 +529,7 @@ function ChannelMonitor:stop()
     self._cached_source = nil
     self._status_table_reuse = nil
     self._json_status_cache = nil
+    self._current_method = nil
 
     -- Обнуление идентификаторов
     self.name = nil
@@ -505,7 +538,9 @@ function ChannelMonitor:stop()
     self._check_timer = nil
     self._last_active_id = nil
 
+    Logger.debug(COMPONENT_NAME, "Monitor object destroyed")
     collectgarbage()
+    return original_config
 end
 
 --- Обновляет параметры монитора
@@ -531,6 +566,11 @@ function ChannelMonitor:update_parameters(params)
                 has_errors = true
             end
         end
+    end
+
+    -- Обновляем прямую ссылку на метод для callback
+    if params.method_comparison ~= nil then
+        self._current_method = COMPARISON_METHODS[self._config.method_comparison]
     end
 
     -- Обновление параметров в работающем экземпляре анализатора Astra
