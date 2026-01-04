@@ -98,7 +98,7 @@ end
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
 --- @param channel_data table|string Данные канала или имя
---- @return any|nil Экземпляр монитора или nil
+--- @return ChannelMonitor|nil Экземпляр монитора или nil
 local function make_monitor(config, channel_data)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
