@@ -36,6 +36,66 @@ local Channel = {}
 --- Псевдоним для получения имени стрима
 local get_stream = Utils.get_stream_name
 
+--- Таблица обработчиков типов мониторов
+local monitor_type_handlers = {
+    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
+        local input_data = channel_data.input[1]
+        if not input_data then
+            Logger.error(COMPONENT_NAME, "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
+            return nil
+        end
+
+        local upstream = input_data.input.tail
+        
+        -- Формируем информативное имя монитора для входа
+        local monitor_target = "Input: Unknown"
+        if input_data.config then
+            local fmt = input_data.config.format or "Unknown"
+            local addr = "Unknown"
+            
+            if fmt == "dvb" then
+                addr = input_data.config.addr or "Unknown"
+            elseif fmt == "udp" or fmt == "rtp" then
+                addr = (input_data.config.addr or "0.0.0.0") .. ":" .. (input_data.config.port or "0")
+            elseif fmt == "http" then
+                addr = (input_data.config.host or "localhost") .. ":" .. (input_data.config.port or "80")
+            elseif fmt == "file" then
+                addr = input_data.config.filename or "Unknown"
+            end
+            
+            monitor_target = string_format("Input: %s (%s)", fmt:upper(), addr)
+        end
+
+        return { upstream = upstream, monitor_target = monitor_target }
+    end,
+    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
+        local upstream = channel_data.tail
+        local monitor_target = "Output: Channel"
+        return { upstream = upstream, monitor_target = monitor_target }
+    end,
+    [MONITOR_TYPE_IP] = function(conf, channel_data)
+        if not channel_data.output or #channel_data.output == 0 then
+            Logger.error(COMPONENT_NAME, "Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
+            return nil
+        end
+
+        local key = 1
+        for index, output in ipairs(channel_data.output) do
+            if output.config and output.config.monitor then
+                key = index
+                break
+            end
+        end
+
+        local split_result = string_split(conf.output[key], "#")
+        local addr = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        local monitor_target = string_format("Output: IP (%s)", addr)
+        
+        Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
+        return { upstream = nil, monitor_target = monitor_target }
+    end,
+}
+
 --- Таблица обработчиков форматов входных данных
 local format_handlers = {
     dvb = function(config)
@@ -127,18 +187,36 @@ local function make_monitor(config, channel_data)
     local input_instance = nil
 
     if not upstream then
-        local url_cfg = parse_url(config.monitor)
-        if not url_cfg then
-            Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", config.monitor)
-            return nil
+        local existing_channel = find_channel(name)
+        if existing_channel then
+            local monitor_type = (config.monitor_type and string_lower(config.monitor_type)) or MONITOR_TYPE_OUTPUT
+            local handler = monitor_type_handlers[monitor_type]
+            if handler then
+                local handler_result = handler(config, existing_channel)
+                if handler_result then
+                    upstream = handler_result.upstream
+                    if not config.monitor then
+                        config.monitor = handler_result.monitor_target
+                    end
+                end
+            end
         end
-        url_cfg.name = name
-        input_instance = init_input(url_cfg)
-        if not input_instance then
-            Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
-            return nil
+
+        -- Если upstream все еще не задан (канал не найден или хендлер не сработал)
+        if not upstream then
+            local url_cfg = parse_url(config.monitor)
+            if not url_cfg then
+                Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", config.monitor)
+                return nil
+            end
+            url_cfg.name = name
+            input_instance = init_input(url_cfg)
+            if not input_instance then
+                Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
+                return nil
+            end
+            upstream = input_instance.tail
         end
-        upstream = input_instance.tail
     end
 
     config.name = name
@@ -185,66 +263,6 @@ local function kill_monitor(name)
     end
     return nil
 end
-
---- Таблица обработчиков типов мониторов
-local monitor_type_handlers = {
-    [MONITOR_TYPE_INPUT] = function(conf, channel_data)
-        local input_data = channel_data.input[1]
-        if not input_data then
-            Logger.error(COMPONENT_NAME, "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
-            return nil
-        end
-
-        local upstream = input_data.input.tail
-        
-        -- Формируем информативное имя монитора для входа
-        local monitor_target = "Input: Unknown"
-        if input_data.config then
-            local fmt = input_data.config.format or "Unknown"
-            local addr = "Unknown"
-            
-            if fmt == "dvb" then
-                addr = input_data.config.addr or "Unknown"
-            elseif fmt == "udp" or fmt == "rtp" then
-                addr = (input_data.config.addr or "0.0.0.0") .. ":" .. (input_data.config.port or "0")
-            elseif fmt == "http" then
-                addr = (input_data.config.host or "localhost") .. ":" .. (input_data.config.port or "80")
-            elseif fmt == "file" then
-                addr = input_data.config.filename or "Unknown"
-            end
-            
-            monitor_target = string_format("Input: %s (%s)", fmt:upper(), addr)
-        end
-
-        return { upstream = upstream, monitor_target = monitor_target }
-    end,
-    [MONITOR_TYPE_OUTPUT] = function(conf, channel_data)
-        local upstream = channel_data.tail
-        local monitor_target = "Output: Channel"
-        return { upstream = upstream, monitor_target = monitor_target }
-    end,
-    [MONITOR_TYPE_IP] = function(conf, channel_data)
-        if not channel_data.output or #channel_data.output == 0 then
-            Logger.error(COMPONENT_NAME, "Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
-            return nil
-        end
-
-        local key = 1
-        for index, output in ipairs(channel_data.output) do
-            if output.config and output.config.monitor then
-                key = index
-                break
-            end
-        end
-
-        local split_result = string_split(conf.output[key], "#")
-        local addr = type(split_result) == 'table' and split_result[1] or conf.output[key]
-        local monitor_target = string_format("Output: IP (%s)", addr)
-        
-        Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
-        return { upstream = nil, monitor_target = monitor_target }
-    end,
-}
 
 --- Создает поток и монитор для него
 --- @param conf table Конфигурация потока
