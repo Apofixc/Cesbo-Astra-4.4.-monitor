@@ -45,10 +45,12 @@ function HttpServer.start(addr, port)
         -- Monitors (Monitoring logic only)
         { "/api/monitors", MonitorRoutes.get_monitors },
         { "/api/monitors/status", MonitorRoutes.get_monitors_status },
+        { "/api/monitors/create", MonitorRoutes.create_monitor },
         { "/api/monitors/([^/]+)/data", MonitorRoutes.get_monitor_data },
         { "/api/monitors/([^/]+)/update", MonitorRoutes.update_monitor },
         { "/api/monitors/([^/]+)/pause", MonitorRoutes.pause_monitor },
         { "/api/monitors/([^/]+)/resume", MonitorRoutes.resume_monitor },
+        { "/api/monitors/([^/]+)/kill", MonitorRoutes.kill_monitor },
         { "/api/monitors/([^/]+)/pids", MonitorRoutes.get_monitor_pids },
         { "/api/monitors/([^/]+)/pids/clear", MonitorRoutes.clear_monitor_pids },
 

@@ -90,6 +90,52 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     })
 end
 
+--- Создает новый монитор (без создания канала)
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.create_monitor(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local data = request.query
+    if request.content_type == "application/json" and request.content then
+        local ok, decoded = pcall(json_decode, request.content)
+        if ok then data = decoded end
+    end
+
+    if not data or not data.monitor or not data.name then
+        return HttpHelpers.error(server, client, 400, "Name and monitor address are required")
+    end
+
+    local success, result_or_err = Logger.with_error(Channel.make_monitor, data, data.channel_data or data.name)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { message = "Monitor created" })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to create monitor")
+    end
+end
+
+--- Удаляет монитор (без удаления канала)
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.kill_monitor(server, client, request)
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local id = request.path:match("/api/monitors/([^/]+)/kill")
+    if not id then return HttpHelpers.error(server, client, 400, "Monitor ID is required") end
+
+    local success, result_or_err = Logger.with_error(Channel.kill_monitor, id)
+    if success and result_or_err then
+        HttpHelpers.success(server, client, { 
+            message = "Monitor killed",
+            config = result_or_err
+        })
+    else
+        HttpHelpers.error(server, client, 500, result_or_err or "Failed to kill monitor")
+    end
+end
+
 --- Обновляет параметры монитора
 --- @param server table
 --- @param client table
