@@ -250,7 +250,6 @@ function ModuleManager.check_nested_dependency(path_str)
     end
     
     local current_scope = _G
-    local found_object = nil
     
     for part in string_gmatch(path_str, "[^.]+") do
         if type(current_scope) ~= "table" or current_scope[part] == nil then
@@ -260,11 +259,10 @@ function ModuleManager.check_nested_dependency(path_str)
         current_scope = current_scope[part]
     end
     
-    found_object = current_scope
-    nested_dependency_cache[path_str] = found_object
+    nested_dependency_cache[path_str] = current_scope
     
     log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
-    return found_object
+    return current_scope
 end
 
 --- Возвращает сохраненную ссылку на глобальную зависимость.

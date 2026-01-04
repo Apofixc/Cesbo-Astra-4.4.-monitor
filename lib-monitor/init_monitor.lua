@@ -27,6 +27,7 @@ local global_dependencies_to_check = {
     "parse_url",
     "string.split",
     "timer",
+    "utils",
     "utils.hostname",
     "log",
     "dvb_input_instance_list"

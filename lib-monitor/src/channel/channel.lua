@@ -84,8 +84,14 @@ local monitor_type_handlers = {
             end
         end
 
-        local split_result = string_split(conf.output[key], "#")
-        local addr = type(split_result) == "table" and split_result[1] or conf.output[key]
+        local output_url = conf.output and conf.output[key]
+        if not output_url then
+            Logger.error(COMPONENT_NAME, "Отсутствует URL вывода для ключа %d в потоке '%s'.", key, conf.name)
+            return nil
+        end
+
+        local split_result = string_split(output_url, "#")
+        local addr = type(split_result) == "table" and split_result[1] or output_url
         local monitor_target = string_format("Output: IP (%s)", addr)
 
         Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)

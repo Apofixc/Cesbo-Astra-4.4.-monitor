@@ -78,6 +78,13 @@ local function save_subscribers()
         return false
     end
 
+    -- Проверка существования директории (базовая)
+    local dir = path:match("(.+)/[^/]+$")
+    if dir then
+        local p = io.popen(string_format("mkdir -p %s 2>/dev/null", dir))
+        if p then p:close() end
+    end
+
     local f, err = io.open(path, "w")
     if not f then
         Logger.error(COMPONENT_NAME, "Failed to open subscribers file for writing: %s (%s)", path, tostring(err))

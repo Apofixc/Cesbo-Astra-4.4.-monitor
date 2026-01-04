@@ -281,17 +281,18 @@ end
 function ChannelMonitor:process_psi_data(data)
     if not self._psi_hash_cache then return end
     
-    -- Оптимизация: проверяем версию таблицы, если она есть.
-    -- Если версии нет, используем количество стримов как примитивный хэш для PMT
     local table_id = data.psi
     if not table_id then return end
 
+    -- Улучшенное хэширование: используем версию таблицы или комбинированный хэш
     local current_version = data.version
     if not current_version then
         if table_id == "PMT" and data.streams then
-            current_version = #data.streams
+            -- Для PMT комбинируем количество стримов и PID первого стрима для большей точности
+            local first_pid = data.streams[1] and data.streams[1].pid or 0
+            current_version = string_format("%d_%d", #data.streams, first_pid)
         else
-            current_version = true -- Просто помечаем что видели, если нет версии
+            current_version = true
         end
     end
     

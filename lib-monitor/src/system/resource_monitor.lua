@@ -21,6 +21,7 @@ local Logger = ModuleManager.get_module("logger")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer = ModuleManager.get_global_dependency("timer")
+local astra_utils = ModuleManager.get_global_dependency("utils")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
@@ -61,7 +62,15 @@ local ResourceMonitor = {
 --- @return string|nil Содержимое файла
 local function read_file(path)
     local f = io.open(path, "r")
-    if not f then return nil end
+    if not f then
+        -- Логируем только один раз для каждого пути, чтобы не спамить
+        if not ResourceMonitor._missing_files then ResourceMonitor._missing_files = {} end
+        if not ResourceMonitor._missing_files[path] then
+            Logger.warn(COMPONENT_NAME, "File not found or not readable: %s", path)
+            ResourceMonitor._missing_files[path] = true
+        end
+        return nil
+    end
     local content = f:read("*all")
     f:close()
     return content
@@ -199,10 +208,14 @@ end
 --- Использует чтение директории /proc/self/fd.
 --- @return number
 local function get_fd_count()
+    -- Оптимизация: используем встроенную функцию Astra если доступна
+    if astra_utils and astra_utils.fd_count then
+        return astra_utils.fd_count()
+    end
+
     local count = 0
-    -- Оптимизация: используем чтение директории через ls, но реже (уже управляется FD_UPDATE_INTERVAL)
     -- В Astra/Lua нет встроенного lfs.dir, поэтому io.popen остается самым простым способом,
-    -- но мы минимизируем его влияние.
+    -- но мы минимизируем его влияние через FD_UPDATE_INTERVAL.
     local p = io.popen("ls -1 /proc/self/fd 2>/dev/null")
     if p then
         for _ in p:lines() do
