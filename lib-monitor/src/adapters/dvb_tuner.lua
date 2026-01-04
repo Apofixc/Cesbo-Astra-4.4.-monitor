@@ -23,6 +23,12 @@ local timer = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
 
+local STATE = {
+    IDLE = 1,
+    RUNNING = 2,
+    STOPPED = 3,
+}
+
 --- @class DvbTuner
 --- @field name_adapter string|nil Уникальное имя адаптера
 --- @field display_name string|nil Отображаемое имя
@@ -35,6 +41,7 @@ local COMPONENT_NAME = "DvbTuner"
 --- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field _psi table|nil Таблица с PSI данными
 --- @field _active boolean|nil Статус активности мониторинга
+--- @field _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -64,12 +71,14 @@ local COMPARISON_METHODS = {
 --- @return table Таблица с флагами {has_signal, has_carrier, has_viterbi, has_sync, has_lock}
 local function decode_status(status)
     status = status or 0
+    -- Используем bit32 для совместимости с Lua 5.2 (Astra)
+    local bit = require("bit32")
     return {
-        has_signal  = (status & 0x01) ~= 0,
-        has_carrier = (status & 0x02) ~= 0,
-        has_viterbi = (status & 0x04) ~= 0,
-        has_sync    = (status & 0x08) ~= 0,
-        has_lock    = (status & 0x10) ~= 0
+        has_signal  = bit.band(status, 0x01) ~= 0,
+        has_carrier = bit.band(status, 0x02) ~= 0,
+        has_viterbi = bit.band(status, 0x04) ~= 0,
+        has_sync    = bit.band(status, 0x08) ~= 0,
+        has_lock    = bit.band(status, 0x10) ~= 0
     }
 end
 
@@ -154,6 +163,7 @@ function DvbTuner.new(conf)
     self._temp_analyzer = nil
     self._psi = {}
     self._psi_timer = nil
+    self._state = STATE.IDLE
 
     return self
 end
@@ -166,16 +176,24 @@ function DvbTuner:publish(content, event_type)
 end
 
 --- Запускает тюнер и инициализирует callback для мониторинга.
+--- Автоматически создает локальную копию конфигурации для Astra.
 --- @return any|nil Экземпляр dvb_tune или nil
 function DvbTuner:start()
+    if self._state == STATE.RUNNING then
+        Logger.warn(COMPONENT_NAME, "[%s] Tuner already running", tostring(self.name_adapter))
+        return self.instance
+    end
+
     local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
     if not comparison_method then
         Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self.config.method_comparison)))
         return nil
     end
 
-    self.config.callback = function(data)
-        if not self or not self._active or not data then return end
+    -- Создаем локальную копию конфига для Astra, чтобы не загрязнять self.config колбэками
+    local astra_conf = Utils.table_copy(self.config)
+    astra_conf.callback = function(data)
+        if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
         if data.status and data.status > 0 then
@@ -224,13 +242,14 @@ function DvbTuner:start()
     end
 
     self._active = true
-    local instance = dvb_tune(self.config)
+    local instance = dvb_tune(astra_conf)
     if not instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
         return nil
     end
 
     self.instance = instance
+    self._state = STATE.RUNNING
 
     -- Безопасное управление счетчиком каналов Astra
     if self.instance.__options then
@@ -362,6 +381,8 @@ end
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
 --- @return boolean Статус выполнения
 function DvbTuner:destroy(force)
+    if self._state == STATE.STOPPED then return true end
+
     if self.instance and not force then
         if self.instance.__options and self.instance.__options.channels and self.instance.__options.channels > 1 then
             Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy: tuner is used by %d other channels. Use force=true to override.", 
@@ -371,6 +392,7 @@ function DvbTuner:destroy(force)
     end
 
     self._active = false
+    self._state = STATE.STOPPED
     self:_clear_psi()
 
     if self.instance then
@@ -394,6 +416,7 @@ function DvbTuner:destroy(force)
         end
 
         if can_close then
+            -- Безопасная очистка внутреннего списка Astra
             if type(dvb_input_instance_list) == "table" and self.instance.__options then
                 local opts = self.instance.__options
                 if opts.adapter ~= nil and opts.device ~= nil then
@@ -411,9 +434,6 @@ function DvbTuner:destroy(force)
             Logger.info(COMPONENT_NAME, "Tuner '%s' physically stopped (force: %s)", tostring(self.name_adapter), tostring(force))
         end
         
-        if self.config then
-            self.config.callback = nil
-        end
         self.instance = nil
     end
 
