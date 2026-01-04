@@ -57,7 +57,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _json_cache string|nil Кэш последнего отправленного JSON
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
---- @field private _status_table_reuse table Повторно используемая таблица статуса
+--- @field private _reports table Пул таблиц для разных типов отчетов
 --- @field private _psi_hash_cache table Кэш хэшей PSI таблиц
 --- @field private _current_method function|nil Прямая ссылка на метод сравнения
 local ChannelMonitor = {}
@@ -149,7 +149,19 @@ function ChannelMonitor.new(config, channel_data)
     self._check_timer = 0
     self._last_active_id = nil
     self._cached_source = nil
-    self._status_table_reuse = {}
+    
+    -- Инициализация пула таблиц отчетов
+    self._reports = {
+        channels = {},
+        error = {},
+        rate_stat = {}
+    }
+    for _, report in pairs(self._reports) do
+        Utils.init_report(report, "Channel", self._name)
+        report.display_name = self._display_name
+        report.monitor = self._config.monitor
+    end
+
     self._psi_hash_cache = {}
     self._status = {
         cc_errors = 0,
@@ -257,17 +269,17 @@ end
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local content = self:_build_status_table()
-    content.error = data.error
-    self:publish(json_encode(content), "error")
+    local r = self._reports.error
+    r.error = data.error
+    self:publish(json_encode(r), "error")
 end
 
 --- Обработка статистики битрейта
 --- @param data table Данные статистики
 function ChannelMonitor:process_rate_stat_data(data)
-    local content = self:_build_status_table()
-    content.rate_stat = data
-    self:publish(json_encode(content), "rate_stat")
+    local r = self._reports.rate_stat
+    r.rate_stat = data
+    self:publish(json_encode(r), "rate_stat")
 end
 
 --- Обработка PSI данных
@@ -375,8 +387,9 @@ end
 --- @param data table Данные потока
 --- @param is_force boolean|nil Принудительная отправка (игнорировать кэш JSON)
 function ChannelMonitor:update_status_and_publish(data, is_force)
-    local status_table = self:_build_status_table(data)
-    local current_json = json_encode(status_table)
+    self:_build_status_table(data)
+    local r = self._reports.channels
+    local current_json = json_encode(r)
 
     -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
     if is_force or current_json ~= self._json_cache then
@@ -464,7 +477,8 @@ function ChannelMonitor:get_json_cache()
     return self._json_cache
 end
 
---- Внутренний метод для сборки таблицы полного статуса
+--- Внутренний метод для сборки таблицы полного статуса.
+--- Обновляет таблицу в пуле self._reports.channels.
 --- @param data table|nil Текущие данные (если есть)
 --- @return table Таблица статуса
 function ChannelMonitor:_build_status_table(data)
@@ -478,21 +492,16 @@ function ChannelMonitor:_build_status_table(data)
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
 
-    local t = self._status_table_reuse
-    t.name = self._name
-    t.display_name = self._display_name
-    t.status = ready and "OK" or "ERROR"
+    local t = self._reports.channels
+    t.status = ready
     t.bitrate = bitrate
     t.cc_errors = cc
     t.pes_errors = pes
     t.scrambled = scrambled
     t.ready = ready
-    t.monitor = self._config.monitor
     t.stream = source.stream
     t.format = source.format
     t.addr = source.addr
-    t.server = Utils.get_server_name()
-    t.type = "Channel"
     
     return t
 end
@@ -562,7 +571,7 @@ function ChannelMonitor:destroy(force)
     self._stream_json = nil
     self._upstream = nil
     self._cached_source = nil
-    self._status_table_reuse = nil
+    self._reports = nil
     self._json_cache = nil
     self._current_method = nil
 

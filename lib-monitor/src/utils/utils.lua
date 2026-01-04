@@ -174,4 +174,16 @@ function Utils.get_server_name()
     return HOSTNAME
 end
 
+--- Инициализирует таблицу отчета базовыми статичными полями.
+--- Используется для реализации пула таблиц и предотвращения лишних аллокаций.
+--- @param t table Таблица для инициализации
+--- @param type_name string Тип объекта (Channel, Dvb, System)
+--- @param name string Техническое имя объекта
+function Utils.init_report(t, type_name, name)
+    if type(t) ~= "table" then return end
+    t.type = type_name
+    t.name = name
+    t.server = HOSTNAME
+end
+
 return Utils

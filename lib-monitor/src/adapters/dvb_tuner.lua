@@ -49,7 +49,7 @@ local METHOD_RATIO = 3
 --- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field private _psi table|nil Таблица с PSI данными
 --- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
---- @field private _status_table_reuse table Повторно используемая таблица статуса
+--- @field private _reports table Пул таблиц для разных типов отчетов
 --- @field private _active boolean|nil Статус активности мониторинга
 --- @field private _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 local DvbTuner = {}
@@ -162,7 +162,19 @@ function DvbTuner.new(conf)
     self._psi = {}
     self._psi_timer = nil
     self._backup = nil
-    self._status_table_reuse = {}
+    
+    -- Инициализация пула таблиц отчетов
+    self._reports = {
+        dvb = {}
+    }
+    for _, report in pairs(self._reports) do
+        Utils.init_report(report, "dvb", self._name)
+        report.name_adapter = self._name
+        report.format = conf.type or ""
+        report.modulation = conf.modulation or ""
+        report.source = conf.tp or conf.frequency
+    end
+
     self._state = STATE.IDLE
 
     return self
@@ -253,8 +265,9 @@ function DvbTuner:start()
             end
 
             -- Формируем полный статус для публикации
-            local status_table = self:_build_status_table()
-            local current_json = json_encode(status_table)
+            self:_build_status_table()
+            local r = self._reports.dvb
+            local current_json = json_encode(r)
             
             -- Публикуем если JSON изменился
             if current_json ~= self._json_cache then
@@ -352,24 +365,18 @@ function DvbTuner:get_state()
     return self._state
 end
 
---- Внутренний метод для сборки таблицы полного статуса
+--- Внутренний метод для сборки таблицы полного статуса.
+--- Обновляет таблицу в пуле self._reports.dvb.
 --- @return table Таблица статуса
 function DvbTuner:_build_status_table()
     local status = self._status or {}
-    local t = self._status_table_reuse
+    local t = self._reports.dvb
     t.status = status.status or 0
     t.signal = status.signal or 0
     t.snr = status.snr or 0
     t.ber = status.ber or 0
     t.unc = status.unc or 0
     t.quality = status.quality or 0
-    t.type = status.type or "dvb"
-    t.server = status.server or Utils.get_server_name()
-    t.format = status.format or ""
-    t.modulation = status.modulation or ""
-    t.source = status.source or ""
-    t.name_adapter = self._name
-    t.name = self._name
     return t
 end
 
@@ -500,7 +507,7 @@ function DvbTuner:destroy(force)
     self._stats = nil
     self._psi = nil
     self._backup = nil
-    self._status_table_reuse = nil
+    self._reports = nil
 
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
     collectgarbage()
