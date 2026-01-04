@@ -70,6 +70,7 @@ function SystemRoutes.get_health(server, client, request)
 
     HttpHelpers.success(server, client, {
         status = "healthy",
+        pid = ResourceMonitor and ResourceMonitor._pid,
         astra_version = astra_version or "unknown",
         server_time = os_date("%Y-%m-%d %H:%M:%S")
     })
