@@ -144,6 +144,7 @@ function DvbTuner.new(conf)
     if not self:_set_config_param("dvb_rate", conf.rate) then return nil end
     if not self:_set_config_param("dvb_time_check", conf.time_check) then return nil end
     if not self:_set_config_param("dvb_method_comparison", conf.method_comparison) then return nil end
+    if not self:_set_config_param("dvb_analyze", conf.analyze) then return nil end
     
     self._current_method = COMPARISON_METHODS[self.config.method_comparison]
     self.check_timer = 0
@@ -172,7 +173,7 @@ function DvbTuner.new(conf)
         snr = -1,
         ber = -1,
         unc = -1,
-        quality = 100
+        quality = -1
     }
     self._temp_analyzer = nil
     self._psi = {}
@@ -226,7 +227,7 @@ function DvbTuner:start()
         if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
-        if data.status and data.status > 0 then
+        if self.config.analyze and data.status and data.status > 0 then
             self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
             self.stats.unc_sum = self.stats.unc_sum + (data.unc or 0)
             self.stats.count = self.stats.count + 1
@@ -247,7 +248,7 @@ function DvbTuner:start()
             self.status.unc = data.unc or -1
             
             -- Расчет качества (quality) на основе ошибок
-            if self.stats.count > 0 then
+            if self.config.analyze and self.stats.count > 0 then
                 local avg_ber = self.stats.ber_sum / self.stats.count
                 if avg_ber > 0 or self.stats.unc_sum > 0 then
                     self.status.quality = math_max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
@@ -258,6 +259,8 @@ function DvbTuner:start()
                 self.stats.ber_sum = 0
                 self.stats.unc_sum = 0
                 self.stats.count = 0
+            else
+                self.status.quality = -1
             end
 
             -- Формируем полный статус для публикации
@@ -317,6 +320,16 @@ function DvbTuner:update_parameters(params)
         if self._astra_conf then self._astra_conf.method_comparison = self.config.method_comparison end
         -- Обновляем прямую ссылку на метод для callback
         self._current_method = COMPARISON_METHODS[self.config.method_comparison]
+    end
+    if params.analyze ~= nil then
+        self:_set_config_param("dvb_analyze", params.analyze)
+        if self._astra_conf then self._astra_conf.analyze = self.config.analyze end
+        -- Если анализ выключен, сбрасываем накопленную статистику
+        if not self.config.analyze then
+            self.stats.ber_sum = 0
+            self.stats.unc_sum = 0
+            self.stats.count = 0
+        end
     end
 
     return true
@@ -473,6 +486,7 @@ function DvbTuner:destroy(force)
     self._backup = nil
 
     Logger.debug(COMPONENT_NAME, "Tuner object destroyed")
+    collectgarbage()
     return original_config
 end
 

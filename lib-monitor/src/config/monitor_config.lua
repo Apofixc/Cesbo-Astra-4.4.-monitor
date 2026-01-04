@@ -146,6 +146,10 @@ MonitorConfig.ValidationSchema = {
         min = 1,
         max = 3,
         default = 3
+    },
+    dvb_analyze = {
+        type = "boolean",
+        default = true
     }
 }
 
