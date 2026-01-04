@@ -33,9 +33,6 @@ local MONITOR_TYPE_IP = "ip"
 --- @class Channel
 local Channel = {}
 
---- Псевдоним для получения имени стрима
-local get_stream = Utils.get_stream_name
-
 --- Таблица обработчиков типов мониторов
 local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
@@ -88,11 +85,11 @@ local monitor_type_handlers = {
         end
 
         local split_result = string_split(conf.output[key], "#")
-        local addr = type(split_result) == 'table' and split_result[1] or conf.output[key]
+        local addr = type(split_result) == "table" and split_result[1] or conf.output[key]
         local monitor_target = string_format("Output: IP (%s)", addr)
-        
+
         Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
-        
+
         -- Для IP-монитора upstream должен быть получен из channel_data.output[key].tail
         local upstream = channel_data.output[key] and channel_data.output[key].tail
         return { upstream = upstream, monitor_target = monitor_target }
@@ -102,38 +99,38 @@ local monitor_type_handlers = {
 --- Таблица обработчиков форматов входных данных
 local format_handlers = {
     dvb = function(config)
-        local cfg = {format = config.format, addr = config.addr}
+        local cfg = { format = config.format, addr = config.addr }
         local tuner = DvbStorage.find(config.addr)
         local status = tuner and tuner:get_full_status()
         cfg.stream = status and status.source or "dvb"
         return cfg
     end,
     udp = function(config)
-        local cfg = {format = config.format}
+        local cfg = { format = config.format }
         local localaddr = config.localaddr or ""
         if localaddr ~= "" then
             cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
         else
             cfg.addr = config.addr .. ":" .. config.port
         end
-        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
         return cfg
     end,
     rtp = function(config)
-        local cfg = {format = config.format}
+        local cfg = { format = config.format }
         local localaddr = config.localaddr or ""
         if localaddr ~= "" then
             cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
         else
             cfg.addr = config.addr .. ":" .. config.port
         end
-        cfg.stream = get_stream(config.addr) or "unknown_stream"
+        cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
         return cfg
     end,
     http = function(config)
-        local cfg = {format = config.format}
+        local cfg = { format = config.format }
         cfg.addr = config.host .. ":" .. config.port .. config.path
-        cfg.stream = get_stream(config.host) or "unknown_stream"
+        cfg.stream = Utils.get_stream_name(config.host) or "unknown_stream"
         return cfg
     end,
     file = function(config)

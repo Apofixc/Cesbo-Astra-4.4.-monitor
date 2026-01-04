@@ -102,7 +102,9 @@ local function stop_dependent_channels(name_adapter)
     local Channel = ModuleManager.get_module("channel")
     local ChannelStorage = ModuleManager.get_module("channel_storage")
     local saved_configs = {}
-    if not Channel or not ChannelStorage then return saved_configs end
+    if not Channel or not ChannelStorage then
+        return saved_configs
+    end
 
     local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
     for name, _ in pairs(dependent_channels) do
@@ -117,9 +119,13 @@ end
 --- Запускает каналы на основе предоставленных конфигураций.
 --- @param configs table Список конфигураций каналов
 local function start_dependent_channels(configs)
-    if not configs or type(configs) ~= "table" then return end
+    if not configs or type(configs) ~= "table" then
+        return
+    end
     local Channel = ModuleManager.get_module("channel")
-    if not Channel then return end
+    if not Channel then
+        return
+    end
 
     for _, conf in ipairs(configs) do
         Channel.make_stream(conf)

@@ -86,18 +86,23 @@ local function parse_proc_stat()
     local rest = string_match(content, "^%d+%s+%b()%s+(.+)$")
     if not rest then return nil end
 
-    local parts = {}
+    -- Оптимизация: извлекаем только нужные поля по индексам без создания полной таблицы всех частей
+    local i = 0
+    local utime, stime, threads, rss_pages
     for part in string_gmatch(rest, "%S+") do
-        parts[#parts + 1] = part
+        i = i + 1
+        if i == 12 then utime = tonumber(part)
+        elseif i == 13 then stime = tonumber(part)
+        elseif i == 18 then threads = tonumber(part)
+        elseif i == 22 then rss_pages = tonumber(part)
+        elseif i > 22 then break end
     end
 
-    -- В rest индексы смещаются на 2 (так как pid и comm мы уже извлекли)
-    -- 14-я колонка в stat становится 12-й в rest
     return {
-        utime = tonumber(parts[12]),
-        stime = tonumber(parts[13]),
-        threads = tonumber(parts[18]),
-        rss_pages = tonumber(parts[22])
+        utime = utime,
+        stime = stime,
+        threads = threads,
+        rss_pages = rss_pages
     }
 end
 
@@ -191,12 +196,14 @@ local function parse_load_avg()
 end
 
 --- Считает количество открытых файловых дескрипторов.
---- Использует ls для получения списка файлов в /proc/self/fd.
+--- Использует чтение директории /proc/self/fd.
 --- @return number
 local function get_fd_count()
     local count = 0
-    -- Оптимизация: используем ls напрямую без wc, считаем строки в Lua
-    local p = io.popen("ls /proc/self/fd 2>/dev/null")
+    -- Оптимизация: используем чтение директории через ls, но реже (уже управляется FD_UPDATE_INTERVAL)
+    -- В Astra/Lua нет встроенного lfs.dir, поэтому io.popen остается самым простым способом,
+    -- но мы минимизируем его влияние.
+    local p = io.popen("ls -1 /proc/self/fd 2>/dev/null")
     if p then
         for _ in p:lines() do
             count = count + 1

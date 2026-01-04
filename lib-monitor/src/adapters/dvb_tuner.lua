@@ -286,7 +286,7 @@ function DvbTuner:start()
     self._active = true
 
     -- Безопасное управление счетчиком каналов Astra
-    if self._instance.__options then
+    if self._instance and self._instance.__options then
         local current_channels = self._instance.__options.channels or 0
         self._instance.__options.channels = current_channels + 1
         Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self._name, self._instance.__options.channels)
@@ -465,14 +465,14 @@ function DvbTuner:destroy(force)
 
     if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
-        if self._instance.__options then
-            self._instance.__options.callback = nil
+        local opts = self._instance.__options
+        if opts then
+            opts.callback = nil
         end
 
         -- Безопасная очистка внутреннего списка Astra и закрытие инстанса
         -- Мы попадаем сюда только если channels <= 1 или force == true
-        if type(dvb_input_instance_list) == "table" and self._instance.__options then
-            local opts = self._instance.__options
+        if type(dvb_input_instance_list) == "table" and opts then
             local adapter = opts.adapter
             local device = opts.device or "0"
             if adapter ~= nil then

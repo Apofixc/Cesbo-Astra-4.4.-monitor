@@ -284,6 +284,8 @@ function ChannelMonitor:process_psi_data(data)
     -- Оптимизация: проверяем версию таблицы, если она есть.
     -- Если версии нет, используем количество стримов как примитивный хэш для PMT
     local table_id = data.psi
+    if not table_id then return end
+
     local current_version = data.version
     if not current_version then
         if table_id == "PMT" and data.streams then
