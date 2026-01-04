@@ -72,6 +72,17 @@ ModuleManager.register_module("channel", "src.channel.channel", {"logger", "util
 
 ModuleManager.register_module("resource_monitor", "src.system.resource_monitor", {"logger"})
 
+-- Регистрация HTTP модулей
+ModuleManager.register_module("http_helpers", "http.http_helpers", {"logger"})
+ModuleManager.register_module("channel_routes", "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_storage"})
+ModuleManager.register_module("dvb_routes", "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_storage"})
+ModuleManager.register_module("monitor_routes", "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
+ModuleManager.register_module("system_routes", "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
+ModuleManager.register_module("subscriber_routes", "http.routes.subscriber_routes", {"logger", "http_helpers"})
+ModuleManager.register_module("http_server", "http.http_server", {
+    "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes"
+})
+
 -- Валидация зависимостей
 if not ModuleManager.validate_dependencies() then 
     return false

@@ -22,6 +22,7 @@ local COMPONENT_NAME = "MonitorRoutes"
 --- @param client table
 --- @param request table
 function MonitorRoutes.get_monitors(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local monitors = {}
@@ -44,6 +45,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.get_monitors_status(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local total = 0
@@ -77,6 +79,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.get_monitor_data(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/data")
@@ -95,6 +98,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.create_monitor(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = request.query
@@ -120,6 +124,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.kill_monitor(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/kill")
@@ -141,6 +146,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.update_monitor(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/update")
@@ -165,6 +171,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.pause_monitor(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/pause")
@@ -181,6 +188,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.resume_monitor(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/resume")
@@ -197,6 +205,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.get_monitor_pids(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/pids")
@@ -215,6 +224,7 @@ end
 --- @param client table
 --- @param request table
 function MonitorRoutes.clear_monitor_pids(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/pids/clear")

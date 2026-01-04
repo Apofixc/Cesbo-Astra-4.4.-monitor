@@ -24,6 +24,7 @@ local COMPONENT_NAME = "SystemRoutes"
 --- @param client table
 --- @param request table
 function SystemRoutes.get_env_astra(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
@@ -40,6 +41,7 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.get_resources(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
@@ -51,6 +53,7 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.get_monitor_stats(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     HttpHelpers.success(server, client, {
@@ -66,6 +69,7 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.get_health(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     HttpHelpers.success(server, client, {
@@ -81,6 +85,7 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.reload(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local delay = request.query and tonumber(request.query.delay) or 1
@@ -107,6 +112,7 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.exit(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local delay = request.query and tonumber(request.query.delay) or 1
@@ -132,13 +138,15 @@ end
 --- @param client table
 --- @param request table
 function SystemRoutes.clear_cache(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    if ResourceMonitor and ResourceMonitor.clear_cache then
-        ResourceMonitor.clear_cache()
-        HttpHelpers.success(server, client, { message = "Cache cleared" })
+    -- В ResourceMonitor нет метода clear_cache, но есть check() для принудительного обновления
+    if ResourceMonitor and ResourceMonitor.check then
+        ResourceMonitor.check()
+        HttpHelpers.success(server, client, { message = "Metrics updated" })
     else
-        HttpHelpers.error(server, client, 501, "Clear cache not implemented")
+        HttpHelpers.error(server, client, 501, "Resource monitor not available")
     end
 end
 

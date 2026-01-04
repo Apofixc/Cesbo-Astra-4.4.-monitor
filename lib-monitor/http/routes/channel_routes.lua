@@ -26,6 +26,7 @@ local COMPONENT_NAME = "ChannelRoutes"
 --- @param client table
 --- @param request table
 function ChannelRoutes.get_channels(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local channels = {}
@@ -49,6 +50,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.get_channels_stats(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local total = 0
@@ -84,6 +86,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.get_channel_info(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)")
@@ -113,6 +116,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.get_channel_inputs(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/inputs")
@@ -134,6 +138,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.get_channel_psi(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/psi")
@@ -152,6 +157,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.create_channel_raw(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = request.query
@@ -177,6 +183,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.kill_channel_raw(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/channels/([^/]+)/kill")
@@ -197,6 +204,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.create_stream(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = request.query
@@ -222,6 +230,7 @@ end
 --- @param client table
 --- @param request table
 function ChannelRoutes.kill_stream(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/streams/([^/]+)/kill")

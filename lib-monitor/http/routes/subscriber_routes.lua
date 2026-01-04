@@ -20,6 +20,7 @@ local COMPONENT_NAME = "SubscriberRoutes"
 --- @param client table
 --- @param request table
 function SubscriberRoutes.get_subscribers(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local list = {}
@@ -35,6 +36,7 @@ end
 --- @param client table
 --- @param request table
 function SubscriberRoutes.subscribe(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = request.query
@@ -67,6 +69,7 @@ end
 --- @param client table
 --- @param request table
 function SubscriberRoutes.unsubscribe(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = request.query

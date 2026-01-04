@@ -24,6 +24,7 @@ local COMPONENT_NAME = "DvbRoutes"
 --- @param client table
 --- @param request table
 function DvbRoutes.get_adapters(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local adapters = {}
@@ -45,11 +46,12 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.scan_adapters(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     -- Логика сканирования зависит от возможностей Astra
     -- Обычно это вызов dvb_tune с последующим анализом
-    HttpHelpers.success(server, client, { message = "Scan started" })
+    HttpHelpers.error(server, client, 501, "Scan not implemented in this version")
 end
 
 --- Возвращает состояние тюнера (Signal, SNR, BER, Lock)
@@ -57,6 +59,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.get_adapter_data(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/data")
@@ -75,6 +78,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.get_adapter_psi(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
@@ -93,6 +97,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.tune_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/tune")
@@ -113,9 +118,9 @@ function DvbRoutes.tune_adapter(server, client, request)
     end
 
     -- Вызов функции настройки Astra
-    local success, err = Logger.with_error(dvb_tune, data)
+    local success, err = Logger.with_error(Adapter.dvb_tuner_monitor, data)
     if success then
-        HttpHelpers.success(server, client, { message = "Adapter tuning started" })
+        HttpHelpers.success(server, client, { message = "Adapter tuning and monitoring started" })
     else
         HttpHelpers.error(server, client, 500, err or "Failed to tune adapter")
     end
@@ -126,6 +131,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.update_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/update")
@@ -150,6 +156,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.update_adapter_psi(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/psi/update")
@@ -166,6 +173,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.switch_transponder(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/switch%-transponder")
@@ -195,6 +203,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.pause_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/pause")
@@ -211,6 +220,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.resume_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/resume")
@@ -227,6 +237,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.restart_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/restart")
@@ -250,6 +261,7 @@ end
 --- @param client table
 --- @param request table
 function DvbRoutes.stop_adapter(server, client, request)
+    if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/kill")
