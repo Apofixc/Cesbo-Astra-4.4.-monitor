@@ -35,7 +35,6 @@ local METHOD_ON_AIR = 4
 -- 5. Инициализация объектов из загруженных модулей
 local log_error = Logger.error
 local ratio = Utils.ratio
-local table_copy = Utils.table_copy
 local validate_monitor_param = Utils.validate_monitor_param
 
 --- @class ChannelMonitor
@@ -58,7 +57,6 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
 --- @field private _reports table Пул таблиц для разных типов отчетов
---- @field private _psi_hash_cache table Кэш хэшей PSI таблиц
 --- @field private _current_method function|nil Прямая ссылка на метод сравнения
 local ChannelMonitor = {}
 ChannelMonitor.__index = ChannelMonitor
@@ -285,7 +283,6 @@ function ChannelMonitor:process_psi_data(data)
     -- Сохраняем сами данные
     self._psi[table_id] = data
 
-
     if table_id == "PMT" and data.streams then
         for _, stream in ipairs(data.streams) do
             local pid = stream.pid
@@ -324,18 +321,19 @@ function ChannelMonitor:process_analyze_data(data)
                 if not stats then
                     stats = {
                         type = "UNKNOWN",
-                        cc = 0,
-                        pes = 0,
-                        sc = 0
+                        cc = cc,
+                        pes = pes,
+                        sc = sc
                     }
                     self._stats[pid] = stats
+                else
+                    -- Защита от переполнения (хотя double в Lua позволяет хранить огромные целые, 
+                    -- ограничим разумным пределом в 1 млрд для предотвращения потери точности или визуальных проблем)
+                    local MAX_COUNTER = 1000000000
+                    stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
+                    stats.pes = (stats.pes + pes > MAX_COUNTER) and MAX_COUNTER or (stats.pes + pes)
+                    stats.sc = (stats.sc + sc > MAX_COUNTER) and MAX_COUNTER or (stats.sc + sc)
                 end
-                -- Защита от переполнения (хотя double в Lua позволяет хранить огромные целые, 
-                -- ограничим разумным пределом в 1 млрд для предотвращения потери точности или визуальных проблем)
-                local MAX_COUNTER = 1000000000
-                stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
-                stats.pes = (stats.pes + pes > MAX_COUNTER) and MAX_COUNTER or (stats.pes + pes)
-                stats.sc = (stats.sc + sc > MAX_COUNTER) and MAX_COUNTER or (stats.sc + sc)
             end
         end
     end
