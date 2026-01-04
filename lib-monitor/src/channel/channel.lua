@@ -139,34 +139,60 @@ local format_handlers = {
 }
 
 --- Вспомогательная функция для подготовки stream_json
-local function prepare_stream_json(ch_data)
+--- @param ch_data table|nil Данные канала
+--- @param monitor_url string|nil URL монитора для режима fallback
+local function prepare_stream_json(ch_data, monitor_url)
     local stream_json = {}
-    if not ch_data or not ch_data.input then return stream_json end
-
-    for key, input in ipairs(ch_data.input) do
-        local format = input.config.format or "Unknown"
-        local handler = format_handlers[format]
-        if handler then
-            stream_json[key] = handler(input.config)
-        else
-            stream_json[key] = {format = format, addr = "Unknown", stream = "Unknown"}
+    
+    -- Если есть данные канала, формируем из них
+    if ch_data and ch_data.input then
+        for key, input in ipairs(ch_data.input) do
+            local format = input.config.format or "Unknown"
+            local handler = format_handlers[format]
+            if handler then
+                stream_json[key] = handler(input.config)
+            else
+                stream_json[key] = {format = format, addr = "Unknown", stream = "Unknown"}
+            end
         end
     end
+
+    -- Если данных канала нет, но есть URL монитора (режим analyze.lua)
+    if #stream_json == 0 and monitor_url then
+        local url_cfg = parse_url(monitor_url)
+        if url_cfg then
+            local format = url_cfg.format or "Unknown"
+            local handler = format_handlers[format]
+            if handler then
+                stream_json[1] = handler(url_cfg)
+            else
+                stream_json[1] = {format = format, addr = monitor_url, stream = "analyze"}
+            end
+        end
+    end
+
+    -- Заглушка, если ничего не удалось определить
+    if #stream_json == 0 then
+        stream_json[1] = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
+    end
+
     return stream_json
 end
 
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
---- @param channel_data table|string Данные канала или имя
 --- @return ChannelMonitor|nil Экземпляр монитора или nil
-local function make_monitor(config, channel_data)
+local function make_monitor(config)
     if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
         return nil
     end
 
-    local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
-    local name = (ch_data and ch_data.name) or (type(channel_data) == "string" and channel_data) or config.name
+    local name = config.name
+    if not name then
+        Logger.error(COMPONENT_NAME, "make_monitor: monitor name is required")
+        return nil
+    end
 
     if ChannelStorage.find(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
@@ -178,35 +204,34 @@ local function make_monitor(config, channel_data)
         return nil
     end
 
-    local stream_json = prepare_stream_json(ch_data)
-    if #stream_json == 0 then
-        stream_json[1] = {format = "Unknown", addr = "Unknown", stream = "Unknown"}
-    end
+    local ch_data = find_channel(name)
+    local stream_json = prepare_stream_json(ch_data, config.monitor)
 
     local upstream = config.upstream
     local input_instance = nil
 
     if not upstream then
-        local existing_channel = find_channel(name)
-        if existing_channel then
+        local is_handled = false
+        if ch_data then
             local monitor_type = (config.monitor_type and string_lower(config.monitor_type)) or MONITOR_TYPE_OUTPUT
             local handler = monitor_type_handlers[monitor_type]
             if handler then
-                local handler_result = handler(config, existing_channel)
+                local handler_result = handler(config, ch_data)
                 if handler_result then
                     upstream = handler_result.upstream
                     if not config.monitor then
                         config.monitor = handler_result.monitor_target
                     end
+                    is_handled = true
                 end
             end
         end
 
-        -- Если upstream все еще не задан (канал не найден или хендлер не сработал)
-        if not upstream then
+        -- Если upstream не задан и не был обработан хендлером (канал не найден или хендлер не сработал)
+        if not is_handled and not upstream then
             local url_cfg = parse_url(config.monitor)
             if not url_cfg then
-                Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", config.monitor)
+                Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", tostring(config.monitor))
                 return nil
             end
             url_cfg.name = name
@@ -304,7 +329,7 @@ local function make_stream(conf)
         join_pid = conf.monitor and conf.monitor.join_pid
     }
 
-    if not make_monitor(monitor_config, channel_data) then
+    if not make_monitor(monitor_config) then
         Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s', killing channel", conf.name)
         kill_channel(channel_data)
         return nil
