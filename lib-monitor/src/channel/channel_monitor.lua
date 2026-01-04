@@ -255,8 +255,6 @@ function ChannelMonitor:get_cached_source()
         self._last_active_id = active_id
         local input_index = active_id > 0 and active_id or 1
         self._cached_source = self._stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
-        -- Сбрасываем кэш шаблона при смене источника
-        self._status_template_cache = nil
     end
     return self._cached_source
 end

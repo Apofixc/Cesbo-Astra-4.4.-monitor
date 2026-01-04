@@ -473,8 +473,10 @@ function DvbTuner:destroy(force)
         -- Мы попадаем сюда только если channels <= 1 или force == true
         if type(dvb_input_instance_list) == "table" and self._instance.__options then
             local opts = self._instance.__options
-            if opts.adapter ~= nil and opts.device ~= nil then
-                local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
+            local adapter = opts.adapter
+            local device = opts.device or "0"
+            if adapter ~= nil then
+                local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
                 if dvb_input_instance_list[instance_id] then
                     dvb_input_instance_list[instance_id] = nil
                     Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self._name), instance_id)

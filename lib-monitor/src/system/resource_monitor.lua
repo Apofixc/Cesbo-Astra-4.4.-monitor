@@ -191,17 +191,17 @@ local function parse_load_avg()
 end
 
 --- Считает количество открытых файловых дескрипторов.
---- Использует io.popen для получения списка файлов в /proc/self/fd.
+--- Использует ls для получения списка файлов в /proc/self/fd.
 --- @return number
 local function get_fd_count()
     local count = 0
-    -- В Astra/Linux это самый надежный способ без внешних зависимостей, 
-    -- но мы вызываем его редко (раз в 10 секунд) для экономии ресурсов.
-    local p = io.popen("ls -1 /proc/self/fd 2>/dev/null | wc -l")
+    -- Оптимизация: используем ls напрямую без wc, считаем строки в Lua
+    local p = io.popen("ls /proc/self/fd 2>/dev/null")
     if p then
-        local res = p:read("*all")
+        for _ in p:lines() do
+            count = count + 1
+        end
         p:close()
-        count = tonumber(string_match(res, "%d+")) or 0
     end
     return count
 end

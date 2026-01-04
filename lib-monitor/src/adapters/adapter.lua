@@ -169,8 +169,9 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
             -- Сохраняем бэкап в новый объект
             new_tuner:set_backup(old_conf, saved_channels)
             
-            if force and new_tuner.instance and new_tuner.instance.__options then
-                new_tuner.instance.__options.channels = old_channels_count
+            local instance = new_tuner:get_instance()
+            if force and instance and instance.__options then
+                instance.__options.channels = old_channels_count
             end
         end
         return true

@@ -92,7 +92,10 @@ local monitor_type_handlers = {
         local monitor_target = string_format("Output: IP (%s)", addr)
         
         Logger.info(COMPONENT_NAME, "Используется ключ вывода %d для IP-монитора в потоке '%s'.", key, conf.name)
-        return { upstream = nil, monitor_target = monitor_target }
+        
+        -- Для IP-монитора upstream должен быть получен из channel_data.output[key].tail
+        local upstream = channel_data.output[key] and channel_data.output[key].tail
+        return { upstream = upstream, monitor_target = monitor_target }
     end,
 }
 
