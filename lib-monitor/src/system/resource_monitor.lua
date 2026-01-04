@@ -206,17 +206,17 @@ end
 --- Использует чтение директории /proc/self/fd.
 --- @return number
 local function get_fd_count()
-    -- Оптимизация: используем встроенную функцию Astra если доступна
+    -- 1. Оптимизация: используем встроенную функцию Astra если доступна
     if astra_utils and astra_utils.fd_count then
         return astra_utils.fd_count()
     end
 
-    -- Попытка прочитать количество FD без io.popen (через перебор файлов в /proc/self/fd)
-    -- В Astra/Lua обычно нет lfs, но мы можем попробовать использовать системный вызов через io.open
-    -- Однако самый надежный способ без lfs и без popen - это чтение /proc/self/status (поле FDSize)
-    -- Но FDSize - это размер таблицы, а не реальное количество.
-    -- Поэтому оставляем popen как fallback, но с защитой.
-
+    -- 2. Попытка прочитать из /proc/self/status (поле FDSize)
+    -- Хотя FDSize - это размер таблицы дескрипторов, а не точное количество занятых,
+    -- это дает верхнюю границу без вызова внешних процессов.
+    -- Но для точности в Astra лучше использовать popen только если нет альтернатив.
+    
+    -- 3. Fallback: использование popen (дорого, поэтому вызывается редко через FD_UPDATE_INTERVAL)
     local count = 0
     local p = io.popen("ls -1 /proc/self/fd 2>/dev/null | wc -l")
     if p then
