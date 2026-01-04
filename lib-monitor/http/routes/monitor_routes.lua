@@ -83,6 +83,10 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/data")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    end
+
     local ch_obj = ChannelStorage and ChannelStorage.find(id)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
@@ -209,6 +213,10 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/pids")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    end
+
     local ch_obj = ChannelStorage and ChannelStorage.find(id)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
@@ -228,6 +236,10 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/pids/clear")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Monitor ID is required")
+    end
+
     local ch_obj = ChannelStorage and ChannelStorage.find(id)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")

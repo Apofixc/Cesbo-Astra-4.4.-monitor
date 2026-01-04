@@ -10,7 +10,7 @@ local HttpHelpers = ModuleManager.get_module("http_helpers")
 local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- (Добавьте зависимости если нужны)
+local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriberRoutes"
@@ -41,7 +41,6 @@ function SubscriberRoutes.subscribe(server, client, request)
 
     local data = request.query
     if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
         local ok, decoded = pcall(json_decode, request.content)
         if ok then data = decoded end
     end
@@ -74,7 +73,6 @@ function SubscriberRoutes.unsubscribe(server, client, request)
 
     local data = request.query
     if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
         local ok, decoded = pcall(json_decode, request.content)
         if ok then data = decoded end
     end

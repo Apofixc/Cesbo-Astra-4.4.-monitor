@@ -101,14 +101,12 @@ function DvbRoutes.tune_adapter(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/tune")
-    local dvb_obj = DvbStorage and DvbStorage.find(id)
-    if not dvb_obj then
-        return HttpHelpers.error(server, client, 404, "Adapter not found")
+    if not id then
+        return HttpHelpers.error(server, client, 400, "Adapter ID is required")
     end
 
     local data = request.query
     if request.content_type == "application/json" and request.content then
-        local json_decode = ModuleManager.get_global_dependency("json.decode")
         local ok, decoded = pcall(json_decode, request.content)
         if ok then data = decoded end
     end
@@ -116,6 +114,9 @@ function DvbRoutes.tune_adapter(server, client, request)
     if not data or not data.tp then
         return HttpHelpers.error(server, client, 400, "Tuning parameters (tp) required")
     end
+
+    -- Убеждаемся, что имя адаптера соответствует ID из пути
+    data.name_adapter = id
 
     -- Вызов функции настройки Astra
     local success, err = Logger.with_error(Adapter.dvb_tuner_monitor, data)
