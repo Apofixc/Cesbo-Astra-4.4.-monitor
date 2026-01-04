@@ -95,23 +95,21 @@ local function parse_proc_stat()
     local rest = string_match(content, "^%d+%s+%b()%s+(.+)$")
     if not rest then return nil end
 
-    -- Оптимизация: извлекаем только нужные поля по индексам
-    local utime, stime, threads, rss_pages
-    local i = 1
-    for part in string_gmatch(rest, "%S+") do
-        if i == 12 then utime = tonumber(part)
-        elseif i == 13 then stime = tonumber(part)
-        elseif i == 18 then threads = tonumber(part)
-        elseif i == 22 then rss_pages = tonumber(part)
-        elseif i > 22 then break end
-        i = i + 1
-    end
+    -- Оптимизация: извлекаем нужные поля одним паттерном
+    -- Поля после имени процесса:
+    -- 1:state, 2:ppid, 3:pgrp, 4:session, 5:tty_nr, 6:tpgid, 7:flags, 8:minflt, 9:cminflt, 10:majflt, 11:cmajflt,
+    -- 12:utime, 13:stime, 14:cutime, 15:cstime, 16:priority, 17:nice, 18:num_threads, 19:itrealvalue, 20:starttime,
+    -- 21:vsize, 22:rss
+    local utime, stime, threads, rss_pages = string_match(rest, 
+        "^%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+%S+%s+(%d+)%s+(%d+)%s+%S+%s+%S+%s+%S+%s+%S+%s+(%d+)%s+%S+%s+%S+%s+%S+%s+(%d+)")
+
+    if not utime then return nil end
 
     return {
-        utime = utime,
-        stime = stime,
-        threads = threads,
-        rss_pages = rss_pages
+        utime = tonumber(utime),
+        stime = tonumber(stime),
+        threads = tonumber(threads),
+        rss_pages = tonumber(rss_pages)
     }
 end
 
