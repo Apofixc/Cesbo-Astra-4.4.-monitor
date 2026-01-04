@@ -42,6 +42,7 @@ local validate_monitor_param = Utils.validate_monitor_param
 --- @field private _stream_json table Данные об источниках потока
 --- @field private _status table Текущий статус ошибок (CC/PES)
 --- @field private _analyze_stats table Статистика анализа по PID
+--- @field private _rate_stat table|nil Статистика битрейта (если включено rate_stat)
 --- @field private _monitor_instance any Экземпляр анализатора Astra
 --- @field private _force_timer number Таймер принудительной отправки статуса
 --- @field private _check_timer number Таймер интервала проверки
@@ -151,6 +152,7 @@ function ChannelMonitor.new(config, channel_data)
         scrambled = false,
     }
     self._analyze_stats = {}
+    self._rate_stat = nil
     self._active = true
 
     return self
@@ -195,6 +197,11 @@ function ChannelMonitor:start()
                 self:process_analyze_data(data)
             end
 
+            if data.rate_stat then
+                self._rate_stat = data.rate_stat
+                self:process_rate_stat_data(data.rate_stat)
+            end
+
             if data.total then
                 self:process_total_data(data, comparison_method)
             end
@@ -230,6 +237,14 @@ function ChannelMonitor:process_error_data(data)
     local content = self:_build_status_table()
     content.error = data.error
     HttpSubscriber.publish("error", json_encode(content))
+end
+
+--- Обработка статистики битрейта
+--- @param data table Данные статистики
+function ChannelMonitor:process_rate_stat_data(data)
+    local content = self:_build_status_table()
+    content.rate_stat = data
+    HttpSubscriber.publish("rate_stat", json_encode(content))
 end
 
 --- Обработка PSI данных
@@ -366,9 +381,16 @@ function ChannelMonitor:get_analyze_stats()
     return self._analyze_stats or {}
 end
 
+--- Возвращает статистику битрейта (rate_stat)
+--- @return table|nil Статистика битрейта
+function ChannelMonitor:get_rate_stat()
+    return self._rate_stat
+end
+
 --- Очищает статистику анализа
 function ChannelMonitor:clear_analyze_stats()
     self._analyze_stats = {}
+    self._rate_stat = nil
 end
 
 --- Возвращает кэш последнего отправленного JSON статуса
@@ -501,6 +523,15 @@ function ChannelMonitor:update_parameters(params)
                 has_errors = true
             end
         end
+    end
+
+    -- Обновление параметров в работающем экземпляре анализатора Astra
+    if self._monitor_instance and self._monitor_instance.__options then
+        local opts = self._monitor_instance.__options
+        if params.cc_limit ~= nil then opts.cc_limit = self._config.cc_limit end
+        if params.bitrate_limit ~= nil then opts.bitrate_limit = self._config.bitrate_limit end
+        if params.rate_stat ~= nil then opts.rate_stat = self._config.rate_stat end
+        if params.join_pid ~= nil then opts.join_pid = self._config.join_pid end
     end
 
     if has_errors then
