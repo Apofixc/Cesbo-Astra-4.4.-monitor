@@ -147,7 +147,6 @@ function ChannelMonitor.new(config, channel_data)
     self._upstream = config.upstream
     self._force_timer = 0
     self._check_timer = 0
-    self._json_status_cache = nil
     self._last_active_id = nil
     self._cached_source = nil
     self._status_table_reuse = {}
@@ -480,7 +479,6 @@ function ChannelMonitor:_build_status_table(data)
     local pes = status.pes_errors or 0
 
     local t = self._status_table_reuse
-    t.id = self._name
     t.name = self._name
     t.display_name = self._display_name
     t.status = ready and "OK" or "ERROR"

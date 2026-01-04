@@ -1,5 +1,4 @@
 -- 1. Стандартные Lua функции
-local bit32 = bit32 or require("bit32")
 local collectgarbage = collectgarbage
 local ipairs = ipairs
 local math_max = math.max
@@ -32,6 +31,11 @@ local STATE = {
     STOPPED = 3,
 }
 
+-- Методы сравнения
+local METHOD_ALWAYS = 1
+local METHOD_STRICT = 2
+local METHOD_RATIO = 3
+
 --- @class DvbTuner
 --- @field private _name string|nil Уникальное имя адаптера
 --- @field private _config table|nil Оригинальная конфигурация тюнера (Read-Only)
@@ -55,15 +59,15 @@ local ratio = Utils.ratio
 local validate_monitor_param = Utils.validate_monitor_param
 
 local COMPARISON_METHODS = {
-    [1] = function() return true end,
-    [2] = function(prev, curr)
+    [METHOD_ALWAYS] = function() return true end,
+    [METHOD_STRICT] = function(prev, curr)
         return (prev.status or -1) ~= (curr.status or -1) or 
                (prev.signal or -1) ~= (curr.signal or -1) or 
                (prev.snr or -1) ~= (curr.snr or -1) or 
                (prev.ber or -1) ~= (curr.ber or -1) or 
                (prev.unc or -1) ~= (curr.unc or -1)
     end,
-    [3] = function(prev, curr, rate)
+    [METHOD_RATIO] = function(prev, curr, rate)
         return (prev.status or -1) ~= (curr.status or -1) or 
                ratio(prev.signal or 0, curr.signal or 0) > rate or 
                ratio(prev.snr or 0, curr.snr or 0) > rate or 
@@ -71,20 +75,6 @@ local COMPARISON_METHODS = {
                (prev.unc or -1) ~= (curr.unc or -1)
     end
 }
-
---- Декодирует битовую маску статуса DVB-адаптера
---- @param status number Числовое значение статуса из Astra
---- @return table Таблица с флагами {has_signal, has_carrier, has_viterbi, has_sync, has_lock}
-local function decode_status(status)
-    status = status or 0
-    return {
-        has_signal  = bit32.band(status, 0x01) ~= 0,
-        has_carrier = bit32.band(status, 0x02) ~= 0,
-        has_viterbi = bit32.band(status, 0x04) ~= 0,
-        has_sync    = bit32.band(status, 0x08) ~= 0,
-        has_lock    = bit32.band(status, 0x10) ~= 0
-    }
-end
 
 --- Вспомогательная функция для очистки ресурсов PSI
 function DvbTuner:_clear_psi()
@@ -162,13 +152,6 @@ function DvbTuner.new(conf)
         source = conf.tp or conf.frequency,
         name_adapter = self._name,
         status = -1,
-        status_flags = {
-            has_signal = false,
-            has_carrier = false,
-            has_viterbi = false,
-            has_sync = false,
-            has_lock = false
-        },
         signal = -1,
         snr = -1,
         ber = -1,
@@ -248,7 +231,6 @@ function DvbTuner:start()
         if self._current_method(self._status, data, self._astra_conf.rate) then
             local status = self._status
             status.status = data.status or -1
-            status.status_flags = decode_status(data.status)
             status.signal = data.signal or -1
             status.snr = data.snr or -1
             status.ber = data.ber or -1
@@ -375,15 +357,12 @@ end
 function DvbTuner:_build_status_table()
     local status = self._status or {}
     local t = self._status_table_reuse
-    t.id = self._name
     t.status = status.status or 0
-    t.status_flags = status.status_flags
     t.signal = status.signal or 0
     t.snr = status.snr or 0
     t.ber = status.ber or 0
     t.unc = status.unc or 0
     t.quality = status.quality or 0
-    t.lock = status.status_flags and status.status_flags.has_lock or false
     t.type = status.type or "dvb"
     t.server = status.server or Utils.get_server_name()
     t.format = status.format or ""
