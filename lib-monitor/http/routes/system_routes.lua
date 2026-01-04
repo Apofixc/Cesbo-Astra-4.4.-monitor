@@ -26,11 +26,11 @@ local COMPONENT_NAME = "SystemRoutes"
 function SystemRoutes.get_env_astra(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
+    local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
     HttpHelpers.success(server, client, {
         astra = {
             version = astra_version or "unknown",
-            -- В Astra аптайм можно получить через системные вызовы или ResourceMonitor
-            uptime = ResourceMonitor and ResourceMonitor.get_process_uptime and ResourceMonitor.get_process_uptime() or 0
+            uptime = report.timestamp and (os_time() - report.timestamp) or 0
         }
     })
 end
@@ -42,8 +42,8 @@ end
 function SystemRoutes.get_resources(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local resources = ResourceMonitor and ResourceMonitor.get_resources and ResourceMonitor.get_resources() or {}
-    HttpHelpers.success(server, client, { resources = resources })
+    local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
+    HttpHelpers.success(server, client, { resources = report })
 end
 
 --- Возвращает статистику работы ResourceMonitor
@@ -53,8 +53,12 @@ end
 function SystemRoutes.get_monitor_stats(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local stats = ResourceMonitor and ResourceMonitor.get_stats and ResourceMonitor.get_stats() or {}
-    HttpHelpers.success(server, client, { stats = stats })
+    HttpHelpers.success(server, client, {
+        stats = {
+            is_running = ResourceMonitor and ResourceMonitor.is_running and ResourceMonitor.is_running() or false,
+            pid = ResourceMonitor and ResourceMonitor._pid
+        }
+    })
 end
 
 --- Проверяет состояние сервера

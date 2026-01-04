@@ -5,12 +5,15 @@
 ## Основные возможности:
 
 *   **Мониторинг DVB-тюнеров**: Инициализация, запуск, динамическая перенастройка (TP), получение детальных метрик (Signal, SNR, BER, UNC) и расчет интегрального показателя качества (Quality). Автоматическое управление счетчиком каналов Astra для совместного использования адаптеров.
-*   **Мониторинг каналов**: Поддержка мониторов типа `input` (вход), `output` (выход канала) и `ip` (прямой мониторинг UDP/RTP). Отслеживание битрейта, CC/PES ошибок и статуса шифрования.
-*   **Системный мониторинг**: Сбор метрик процесса Astra (CPU, RAM, потоки, дескрипторы) и ОС (I/O диска, сетевая активность по интерфейсам, Load Average, температура CPU).
-*   **HTTP REST API**: Более 30 эндпоинтов для управления всеми аспектами системы в реальном времени с единообразным форматом JSON-ответов.
-*   **Push-уведомления (Webhooks)**: Автоматическая рассылка JSON-статусов на удаленные серверы при изменении состояния объектов.
-*   **Интеллектуальная фильтрация**: 4 метода сравнения состояния для минимизации сетевого трафика и записи только значимых изменений.
-*   **Гибкая архитектура**: Модульная структура на базе `ModuleManager` с автоматическим разрешением зависимостей и валидацией параметров.
+*   **Мониторинг каналов**: Создание, обновление, поиск и удаление мониторов для потоков каналов. Поддержка различных типов мониторов: `input` (вход), `output` (выход канала) и `ip` (прямой мониторинг UDP/RTP).
+*   **Управление адресами мониторинга**: Система подписок (Webhooks) для автоматической отправки данных мониторинга клиентам при изменении состояния объектов через систему подписок.
+*   **Отправка данных мониторинга**: Функция для рассылки собранных данных на настроенные адреса при изменении состояния.
+*   **Валидация параметров**: Встроенные функции для строгой валидации имен и параметров мониторов на основе схем.
+*   **Получение имени сервера**: Возможность получить имя хоста, на котором запущен монитор.
+*   **Гибкая конфигурация**: Поддержка различных типов мониторов и настраиваемых параметров, таких как погрешность битрейта, интервалы проверки и методы сравнения.
+*   **Интеграция с Astra**: Использует глобальные функции Astra для управления каналами, потоками и анализаторами.
+*   **Логирование**: Интегрированная система логирования с поддержкой контекстного вывода ошибок в HTTP-ответы.
+*   **HTTP API**: Полноценный REST API для управления всеми аспектами системы в реальном времени.
 
 ## Структура проекта:
 
@@ -20,81 +23,145 @@ lib-monitor/
 ├── README.md               # Данная документация.
 ├── subscribers.json        # Постоянное хранилище активных HTTP-подписок.
 ├── http/                   # Слой HTTP-сервера.
-│   ├── http_server.lua     # Ядро сервера (маршрутизация).
+│   ├── http_server.lua     # Ядро сервера (маршрутизация запросов).
 │   ├── http_helpers.lua    # Утилиты (Auth, JSON-ответы, валидация заголовков).
-│   └── routes/             # Обработчики API (channel, dvb, monitor, subscriber, system).
+│   └── routes/             # Обработчики API:
+│       ├── channel_routes.lua    # Управление каналами и PSI.
+│       ├── dvb_routes.lua        # Мониторинг DVB-адаптеров.
+│       ├── monitor_routes.lua    # Общее управление мониторами.
+│       ├── subscriber_routes.lua # Управление Push-подписками.
+│       └── system_routes.lua     # Системная информация и управление Astra.
 ├── src/                    # Исходный код бизнес-логики.
-│   ├── module_manager.lua  # Управление жизненным циклом модулей.
-│   ├── adapters/           # Работа с DVB (adapter.lua, dvb_tuner.lua).
-│   ├── channel/            # Мониторинг потоков (channel.lua, channel_monitor.lua).
-│   ├── storage/            # Репозитории активных объектов (channel_storage, dvb_storage).
-│   ├── system/             # Сбор метрик (resource_monitor.lua).
-│   ├── config/             # Конфигурация и схемы валидации (monitor_config.lua).
-│   └── utils/              # Логгер, HTTP-клиент для Push, общие утилиты.
+│   ├── module_manager.lua  # Управление жизненным циклом модулей и зависимостями.
+│   ├── adapters/           # Работа с DVB оборудованием.
+│   │   ├── adapter.lua     # Высокоуровневый интерфейс управления тюнерами.
+│   │   └── dvb_tuner.lua   # Класс мониторинга конкретного DVB-адаптера.
+│   ├── channel/            # Мониторинг потоков.
+│   │   ├── channel.lua     # Управление жизненным циклом каналов и стримов.
+│   │   └── channel_monitor.lua # Логика анализа состояния потока.
+│   ├── storage/            # Репозитории активных объектов (Storage).
+│   │   ├── channel_storage.lua # Реестр активных мониторов каналов.
+│   │   └── dvb_storage.lua     # Реестр активных DVB-мониторов.
+│   ├── system/             # Сбор метрик.
+│   │   └── resource_monitor.lua # Менеджер сбора метрик CPU, RAM, I/O.
+│   ├── config/             # Конфигурация.
+│   │   └── monitor_config.lua # Глобальные настройки мониторинга и схемы валидации.
+│   └── utils/              # Вспомогательные утилиты.
+│       ├── logger.lua      # Модуль логирования.
+│       ├── utils.lua       # Общие функции, расчет ratio и валидаторы.
+│       └── http_subscriber.lua # Реализация механизма Push-уведомлений.
 └── test/                   # Набор интеграционных и стресс-тестов.
 ```
 
-## Установка и запуск:
+*   `init_monitor.lua`: Точка входа для инициализации и загрузки всех необходимых компонентов библиотеки.
+*   `src/adapters/`: Содержит модули, отвечающие за взаимодействие с различными аппаратными и программными адаптерами.
+    *   `adapter.lua`: Предоставляет интерфейс для управления DVB-тюнерами.
+    *   `dvb_tuner.lua`: Класс для мониторинга DVB-тюнеров.
+*   `src/system/`: Содержит модули, отвечающие за мониторинг системных ресурсов.
+    *   `resource_monitor.lua`: Менеджер для мониторинга системных ресурсов.
+*   `src/channel/`: Включает модули для управления жизненным циклом каналов и их мониторингом.
+    *   `channel.lua`: Основные операции с каналами.
+    *   `channel_monitor.lua`: Логика мониторинга каналов.
+*   `src/config/`: Хранит файлы конфигурации, определяющие параметры работы мониторов.
+    *   `monitor_config.lua`: Конфигурация мониторов и схемы валидации.
+*   `src/storage/`: Содержит менеджеры (Repository), которые координируют работу различных типов мониторов.
+    *   `channel_storage.lua`: Менеджер для мониторов каналов.
+    *   `dvb_storage.lua`: Менеджер для DVB-мониторов.
+*   `http/`: Модули для создания и управления HTTP-сервером.
+    *   `http_helpers.lua`: Вспомогательные функции для HTTP.
+    *   `http_server.lua`: Реализация HTTP-сервера.
+    *   `routes/`: Определения маршрутов HTTP API.
+        *   `channel_routes.lua`: Маршруты для управления каналами.
+        *   `dvb_routes.lua`: Маршруты для управления DVB-тюнерами.
+        *   `monitor_routes.lua`: Маршруты для общего управления мониторами.
+        *   `subscriber_routes.lua`: Маршруты для управления подписками.
+        *   `system_routes.lua`: Маршруты для системной информации.
+*   `src/utils/`: Вспомогательные утилиты.
+    *   `logger.lua`: Модуль логирования.
+    *   `utils.lua`: Общие вспомогательные функции.
+    *   `http_subscriber.lua`: Модуль для работы с HTTP-подписками (Webhooks).
 
-1.  Разместите папку `lib-monitor` в директории скриптов Astra.
-2.  Инициализируйте библиотеку в вашем скрипте:
-    ```lua
-    require("lib-monitor.init_monitor")
-    ```
-3.  Запустите HTTP API сервер:
-    ```lua
-    local ModuleManager = require("lib-monitor.src.module_manager")
-    local server = ModuleManager.get_module("http_server")
-    server.start("0.0.0.0", 8080)
-    ```
-4.  Настройте ключ доступа через переменную окружения `ASTRA_API_KEY` (по умолчанию "test").
+## Документация Astra:
 
-## Использование (Global API):
+Для получения подробной информации о функциях Astra, используемых в этой библиотеке, обратитесь к официальной документации: [https://cdn.cesbo.com/astra/4.4.182-free](https://cdn.cesbo.com/astra/4.4.182-free)
 
-Библиотека экспортирует основные функции в глобальную область видимости Astra:
+## Установка:
 
-### Каналы и Стримы
-*   `make_stream(conf)`: Создает канал Astra и привязывает к нему монитор.
-*   `kill_stream(name)`: Останавливает канал и корректно завершает работу монитора.
-*   `make_monitor(config, channel_data)`: Создает монитор для уже существующего объекта канала.
-*   `kill_monitor(name)`: Удаляет монитор, не трогая сам канал.
-*   `pause_monitor(name)` / `resume_monitor(name)`: Временная остановка анализа без удаления объекта.
+Для использования `lib-monitor` необходимо скопировать содержимое репозитория в директорию `lib-monitor` вашего проекта Astra. Убедитесь, что все зависимости Lua установлены и доступны. Подключение в скрипте: `require("lib-monitor.init_monitor")`.
 
-### DVB-адаптеры
-*   `dvb_tuner_monitor(conf)`: Запускает мониторинг физического адаптера.
-*   `pause_dvb_monitor(name)` / `resume_dvb_monitor(name)`: Управление активностью опроса тюнера.
+## Использование:
 
-## Методы сравнения (Optimization):
+Библиотека предназначена для использования в проектах, требующих детального мониторинга DVB-тюнеров и потоков каналов. Ниже приведены основные функции, доступные для использования конечными пользователями:
 
-Параметр `method_comparison` определяет, когда библиотека должна отправить уведомление (Push) или обновить кэш:
+### Функции для инициализации и управления сервером:
 
-1.  **Always (1)**: Отправка данных при каждом получении данных от ядра Astra.
-2.  **Strict (2)**: Отправка при любом изменении статуса (On-Air), битрейта или появлении хотя бы одной ошибки CC/PES.
-3.  **Ratio (3)**: (Рекомендуемый) Отправка при изменении статуса или если отклонение битрейта превысило порог `rate` (по умолчанию 3.5%).
-4.  **On-Air (4)**: Отправка только при критическом изменении (появился или пропал сигнал).
+*   `server_start(addr, port)`: Запускает HTTP-сервер мониторинга на указанном адресе и порту.
 
-## HTTP API Endpoints:
+### Функции для DVB-мониторинга:
 
-Все успешные ответы имеют статус `HTTP 200 OK` и содержат поля `"status": "ok"` (или `"healthy"` для health-check) и `"timestamp": <unix_time>`. Ошибки возвращают соответствующий код (400, 401, 404, 500) и поле `"message"`.
+*   `dvb_tuner_monitor(conf)`: Инициализация и запуск мониторинга DVB-тюнера. Параметр `conf` должен содержать конфигурацию тюнера.
+*   `update_dvb_monitor_parameters(name_adapter, params)`: Обновление параметров существующего монитора DVB-тюнера по его имени.
+*   `pause_dvb_monitor(name_adapter)`: Приостановка мониторинга тюнера.
+*   `resume_dvb_monitor(name_adapter)`: Возобновление мониторинга тюнера.
 
-### 1. Каналы (`/api/channels`)
+### Функции для мониторинга каналов:
+
+*   `make_monitor(config, channel_data)`: Создание и регистрация нового монитора канала. `config` определяет тип и параметры монитора, `channel_data` - данные о канале.
+*   `make_stream(conf)`: Создание и запуск потока с мониторингом. `conf` содержит параметры потока.
+*   `update_monitor_parameters(name, params)`: Обновление параметров существующего монитора канала по его имени.
+*   `kill_monitor(name)`: Остановка и удаление монитора.
+*   `kill_stream(name)`: Остановка потока и связанного с ним монитора.
+*   `pause_monitor(name)`: Приостановка монитора.
+*   `resume_monitor(name)`: Возобновление монитора.
+
+### Функции для управления данными мониторинга (подписки):
+
+*   `ModuleManager.get_module("http_subscriber").subscribe(event_type, addr)`: Программное добавление подписки.
+*   `ModuleManager.get_module("http_subscriber").unsubscribe(event_type, addr)`: Программное удаление подписки.
+
+### Инициализация HTTP-сервера:
+
+Для запуска HTTP-сервера мониторинга используйте функцию:
+
+*   `server_start(addr, port)`: Запускает HTTP-сервер по указанному IP-адресу (`addr`) и порту (`port`).
+
+## Методы получения данных мониторинга:
+
+Библиотека `lib-monitor` поддерживает два основных метода получения данных мониторинга:
+
+*   **Pull-метод (через HTTP API)**: Клиент отправляет HTTP GET-запросы к соответствующим API-эндпоинтам (например, `/api/monitors/{id}/data` или `/api/system/resources`) для получения актуальных данных. Этот метод подходит для периодического запроса информации по требованию.
+
+*   **Push-метод (через подписку)**: Клиент может подписаться на получение данных мониторинга через API `/api/subscribers/subscribe`. В этом случае библиотека будет автоматически отправлять данные на настроенный адрес при их обновлении.
+
+Все остальные операции по управлению мониторингом DVB-тюнеров, каналов и системными ресурсами осуществляются через HTTP API-эндпоинты, описанные в следующем разделе.
+
+## API Endpoints:
+
+Все API-запросы требуют аутентификации с помощью заголовка `X-Api-Key`. Значение ключа устанавливается через переменную окружения `ASTRA_API_KEY` (по умолчанию "test"). Все успешные ответы содержат `"status": "ok"` (или `"healthy"` для health-check) и `"timestamp"`.
+
+### Channel Routes (`/api/channels`)
 
 *   **GET `/api/channels`**
-    *   **Описание**: Список всех активных каналов.
-    *   **Ответ**:
+    *   **Описание**: Получает список всех активных каналов.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "channels": [
-            { "id": "Discovery", "name": "Discovery Channel", "output": ["udp://239.255.1.1:1234"] }
+            {
+              "id": "Discovery",
+              "name": "Discovery",
+              "display_name": "Discovery HD",
+              "output": ["udp://239.255.1.1:1234"]
+            }
           ]
         }
 ```
 
 *   **GET `/api/channels/stats`**
-    *   **Описание**: Агрегированная статистика по всем каналам.
-    *   **Ответ**:
+    *   **Описание**: Возвращает агрегированную статистику по каналам.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -107,15 +174,16 @@ lib-monitor/
 ```
 
 *   **GET `/api/channels/{id}`**
-    *   **Описание**: Полная конфигурация конкретного канала.
-    *   **Ответ**:
+    *   **Описание**: Возвращает детальную информацию о канале.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "channel": {
             "id": "Discovery",
-            "name": "Discovery Channel",
+            "name": "Discovery",
+            "display_name": "Discovery HD",
             "input": ["http://..."],
             "output": ["udp://..."],
             "map": "..."
@@ -124,8 +192,8 @@ lib-monitor/
 ```
 
 *   **GET `/api/channels/{id}/inputs`**
-    *   **Описание**: Список входов канала и индекс текущего активного входа.
-    *   **Ответ**:
+    *   **Описание**: Возвращает список входов канала и индекс активного входа.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -136,32 +204,78 @@ lib-monitor/
 ```
 
 *   **GET `/api/channels/{id}/psi`**
-    *   **Описание**: Таблицы PSI/SI (PMT, SDT) для канала.
-    *   **Ответ**:
+    *   **Описание**: Получает данные PSI канала.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "psi": {
-            "pmt": { "pid": 256, "streams": [...] },
-            "sdt": { "pid": 17, "services": [...] }
+            "pmt": {
+              "pid": 256,
+              "table_id": 2,
+              "section_length": 45,
+              "program_number": 1001,
+              "version_number": 5,
+              "current_next_indicator": 1,
+              "section_number": 0,
+              "last_section_number": 0,
+              "pcr_pid": 256,
+              "program_info_length": 0,
+              "streams": [
+                {
+                  "stream_type": 27,
+                  "elementary_pid": 256,
+                  "es_info_length": 0
+                },
+                {
+                  "stream_type": 3,
+                  "elementary_pid": 257,
+                  "es_info_length": 0
+                }
+              ]
+            },
+            "sdt": {
+              "pid": 17,
+              "table_id": 66,
+              "section_length": 78,
+              "transport_stream_id": 1001,
+              "version_number": 3,
+              "current_next_indicator": 1,
+              "section_number": 0,
+              "last_section_number": 0,
+              "original_network_id": 1,
+              "services": [
+                {
+                  "service_id": 1001,
+                  "eit_schedule_flag": 1,
+                  "eit_present_following_flag": 1,
+                  "running_status": 4,
+                  "free_ca_mode": 0,
+                  "descriptors_loop_length": 32
+                }
+              ]
+            }
           }
         }
 ```
 
-*   **POST `/api/channels/create`** (также доступен как **POST `/api/streams`**)
-    *   **Описание**: Создание нового канала (принимает стандартный конфиг Astra).
+*   **POST `/api/channels/create`** (также **POST `/api/streams`**)
+    *   **Описание**: Создает новый канал.
+    *   **Параметры (JSON)**: Стандартная конфигурация канала Astra.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Channel created"}`.
 
-*   **POST `/api/channels/{id}/kill`** (также доступен как **POST `/api/streams/{id}/kill`** или **POST `/api/monitors/{id}/kill`**)
-    *   **Описание**: Остановка канала. Параметр `?reboot=true` выполнит перезапуск.
-    *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Channel killed"}`.
+*   **POST `/api/channels/{id}/kill`** (также **POST `/api/streams/{id}/kill`**)
+    *   **Описание**: Останавливает или перезагружает канал.
+    *   **Параметры (Query String)**:
+        *   `reboot` (boolean, опционально): `true` для перезагрузки.
+    *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Channel killed/rebooting"}`.
 
-### 2. DVB-адаптеры (`/api/dvb`)
+### DVB Routes (`/api/dvb`)
 
-*   **GET `/api/dvb/adapters`** (также доступен как **GET `/api/env/adapters`**)
-    *   **Описание**: Список активных DVB-мониторов.
-    *   **Ответ**:
+*   **GET `/api/dvb/adapters`** (также **GET `/api/env/adapters`**)
+    *   **Описание**: Получает список DVB-адаптеров.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -173,8 +287,8 @@ lib-monitor/
 ```
 
 *   **GET `/api/dvb/adapters/{id}/data`**
-    *   **Описание**: Метрики тюнера.
-    *   **Ответ**:
+    *   **Описание**: Получает данные DVB-адаптера.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -186,45 +300,64 @@ lib-monitor/
             "snr": 24.8,
             "ber": 0,
             "unc": 0,
-            "lock": true
+            "quality": 100,
+            "lock": true,
+            "type": "dvb",
+            "server": "astra-1",
+            "format": "S2",
+            "modulation": "QPSK",
+            "source": "11044:V:43200",
+            "name_adapter": "dvb0"
           }
         }
 ```
 
 *   **GET `/api/dvb/adapters/{id}/psi`**
-    *   **Описание**: Сбор таблиц PSI напрямую с частоты адаптера.
-    *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "psi": {...}}`.
+    *   **Описание**: Получает данные PSI напрямую с адаптера.
+    *   **Ответ**: `HTTP 200 OK`.
+```json
+        {
+          "status": "ok",
+          "timestamp": 1704312345,
+          "psi": {
+            "pmt": { "pid": 256, "streams": [...] },
+            "sdt": { "pid": 17, "services": [...] }
+          }
+        }
+```
 
 *   **POST `/api/dvb/adapters/{id}/tune`**
-    *   **Описание**: Перенастройка адаптера на новую частоту (параметр `tp`).
+    *   **Описание**: Настройка частоты адаптера.
+    *   **Параметры (JSON/Query)**: `tp` (string, обязательно).
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Adapter tuning started"}`.
 
-*   **POST `/api/dvb/adapters/{id}/update`** (также доступен как **POST `/api/dvb/adapters/{id}/restart`** или **POST `/api/dvb/adapters/{id}/kill`**)
-    *   **Описание**: Обновление параметров мониторинга адаптера (rate, time_check).
+*   **POST `/api/dvb/adapters/{id}/update`** (также **POST `/api/dvb/adapters/{id}/restart`** или **POST `/api/dvb/adapters/{id}/kill`**)
+    *   **Описание**: Обновляет параметры мониторинга адаптера.
+    *   **Параметры (JSON/Query)**: `rate`, `time_check`.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Adapter monitor updated"}`.
 
 *   **POST `/api/dvb/adapters/scan`**
-    *   **Описание**: Запуск процесса сканирования.
+    *   **Описание**: Запуск сканирования.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Scan started"}`.
 
-### 3. Общие Мониторы (`/api/monitors`)
+### Monitor Routes (`/api/monitors`)
 
 *   **GET `/api/monitors`**
-    *   **Описание**: Список всех активных мониторов (Channel + DVB).
-    *   **Ответ**:
+    *   **Описание**: Получает список активных мониторов.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "monitors": [
-            { "id": "Discovery", "name": "Discovery", "type": "output" }
+            { "id": "Discovery", "name": "Discovery", "display_name": "Discovery HD", "type": "output" }
           ]
         }
 ```
 
 *   **GET `/api/monitors/status`**
-    *   **Описание**: Сводка по всей системе мониторинга.
-    *   **Ответ**:
+    *   **Описание**: Возвращает сводный статус по всем мониторам.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -237,33 +370,44 @@ lib-monitor/
 ```
 
 *   **GET `/api/monitors/{id}/data`**
-    *   **Описание**: Текущие метрики конкретного монитора.
-    *   **Ответ**:
+    *   **Описание**: Получает данные монитора канала.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "monitor_data": {
             "id": "Discovery",
+            "name": "Discovery",
+            "display_name": "Discovery HD",
             "status": "OK",
             "bitrate": 12500,
             "cc_errors": 0,
             "pes_errors": 0,
             "scrambled": false,
-            "ready": true
+            "ready": true,
+            "monitor": "Output: Channel",
+            "stream": "http://...",
+            "format": "http",
+            "addr": "example.com:80"
           }
         }
 ```
 
 *   **POST `/api/monitors/{id}/update`**
-    *   **Описание**: Динамическое изменение `rate`, `time_check`, `method_comparison`, `analyze`.
+    *   **Описание**: Обновляет параметры монитора канала.
+    *   **Параметры (JSON/Query)**:
+        *   `analyze` (boolean, опционально): Включить/отключить расширенную информацию об ошибках потока.
+        *   `time_check` (number, опционально): Новый интервал проверки данных (от 0 до 300).
+        *   `rate` (number, опционально): Новое значение погрешности сравнения битрейта (от 0.001 до 0.3).
+        *   `method_comparison` (number, опционально): Новый метод сравнения состояния потока (от 1 до 4).
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Monitor updated"}`.
 
-### 4. Подписки (Push/Webhooks) (`/api/subscribers`)
+### Subscriber Routes (`/api/subscribers`)
 
 *   **GET `/api/subscribers`**
-    *   **Описание**: Список всех активных Webhooks.
-    *   **Ответ**:
+    *   **Описание**: Возвращает список всех получателей данных.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
@@ -277,121 +421,114 @@ lib-monitor/
 ```
 
 *   **POST `/api/subscribers/subscribe`**
-    *   **Описание**: Регистрация нового получателя.
-    *   **Параметры (JSON/Query)**: `host`, `port`, `path`, `event_type` (`channels`, `dvb`, `error`).
+    *   **Описание**: Добавляет нового получателя.
+    *   **Параметры (JSON/Query)**: `event_type` (channels, dvb, error), `host`, `port`, `path`.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Subscribed successfully"}`.
 
 *   **POST `/api/subscribers/unsubscribe`**
-    *   **Описание**: Удаление подписки.
+    *   **Описание**: Удаляет получателя.
+    *   **Параметры (JSON/Query)**: `event_type`, `host`, `port`, `path`.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Unsubscribed successfully"}`.
 
-### 5. Система (`/api/system`)
+### System Routes (`/api/system`)
 
 *   **GET `/api/env/astra`**
-    *   **Описание**: Информация о версии Astra и аптайме процесса.
-    *   **Ответ**:
-```json
-        {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "astra": {
-            "version": "4.4.182",
-            "uptime": 3600
-          }
-        }
-```
+    *   **Описание**: Информация о версии Astra и аптайме.
+    *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "astra": {"version": "4.4.182", "uptime": 3600}}`.
 
 *   **GET `/api/system/resources`**
-    *   **Описание**: Детальные метрики системы.
-    *   **Ответ**:
+    *   **Описание**: Получает данные о системных ресурсах.
+    *   **Ответ**: `HTTP 200 OK`.
 ```json
         {
           "status": "ok",
           "timestamp": 1704312345,
           "resources": {
-            "cpu": { "total": 12.5, "user": 8.0, "sys": 4.5, "temp_c": 45.0, "threads": 15 },
-            "memory": { "rss_kb": 262809, "vms_kb": 512000, "lua_kb": 1500 },
+            "type": "sys",
+            "pid": 12345,
+            "cpu": { "total": 12.5, "user": 8.0, "sys": 4.5, "temp_c": 45.0, "threads": 15, "ctxt_switches": 1200 },
+            "memory": { "rss_kb": 262809, "vms_kb": 512000, "lua_kb": 1500, "shared_kb": 10240 },
             "io": { "read_bps": 1024, "write_bps": 512 },
-            "network": { "eth0": { "rx_bps": 1250000, "tx_bps": 750000 } },
+            "network": { "eth0": { "rx_bps": 1250000, "tx_bps": 750000, "rx_errs": 0, "rx_drop": 0 } },
             "system": { "load_avg": [0.5, 0.8, 1.2], "fd_count": 120 }
           }
         }
 ```
 
 *   **GET `/api/system/health`**
-    *   **Описание**: Проверка работоспособности сервера.
-    *   **Ответ**:
-```json
-        {
-          "status": "healthy",
-          "timestamp": 1704312345,
-          "astra_version": "4.4.182",
-          "server_time": "2024-01-15 14:30:00"
-        }
-```
+    *   **Описание**: Проверяет состояние сервера.
+    *   **Ответ**: `{"status": "healthy", "timestamp": 1704312345, "astra_version": "4.4.182", "server_time": "2024-01-15 14:30:00"}`.
 
 *   **GET `/api/system/monitor-stats`**
-    *   **Описание**: Статистика работы `ResourceMonitor`.
-    *   **Ответ**:
-```json
-        {
-          "status": "ok",
-          "timestamp": 1704312345,
-          "stats": {
-            "collections": 1500,
-            "cache_hits": 1350
-          }
-        }
-```
+    *   **Описание**: Получает статистику работы ResourceMonitor.
+    *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "stats": { "is_running": true, "pid": 12345 }}`.
 
 *   **POST `/api/system/reload`**
-    *   **Описание**: Мягкая перезагрузка Astra.
+    *   **Описание**: Перезагружает Astra.
+    *   **Параметры (Query String)**: `delay` (number, опционально).
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Astra reload scheduled..."}`.
 
 *   **POST `/api/system/exit`**
-    *   **Описание**: Завершение процесса Astra.
+    *   **Описание**: Останавливает Astra.
+    *   **Параметры (Query String)**: `delay` (number, опционально).
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Astra exit scheduled..."}`.
 
 *   **POST `/api/system/clear-cache`**
-    *   **Описание**: Очистка кэша системных метрик.
+    *   **Описание**: Очищает кэш ResourceMonitor.
     *   **Ответ**: `{"status": "ok", "timestamp": 1704312345, "message": "Cache cleared"}`.
 
-## Конфигурация (`monitor_config.lua`):
+## Методы сравнения состояния:
 
-*   `ChannelMonitorLimit`: Лимит активных мониторов (по умолчанию 200).
-*   `LogLevel`: Уровень логирования (`DEBUG`, `INFO`, `WARN`, `ERROR`).
-*   `HttpTimeout`: Таймаут для Push-уведомлений (10 сек).
-*   `ValidationSchema`: Строгие правила валидации для всех входящих параметров API.
+Библиотека использует параметр `method_comparison` для оптимизации отправки данных:
+1.  **Always (1)**: Отправка данных при каждом обновлении от Astra.
+2.  **Strict (2)**: Отправка при любом изменении статуса, битрейта или появлении ошибок CC/PES.
+3.  **Ratio (3)**: Отправка при изменении статуса или если отклонение битрейта превысило порог `rate` (по умолчанию 0.035 или 3.5%).
+4.  **On-Air (4)**: Отправка только при изменении флага наличия сигнала (On-Air).
+
+## Пример использования:
+
+```lua
+-- Инициализация библиотеки
+require("lib-monitor.init_monitor")
+
+-- Запуск API сервера
+server_start("0.0.0.0", 8080)
+
+-- Создание стрима с мониторингом
+make_stream({
+    name = "Discovery",
+    input = {"http://example.com/stream.ts"},
+    output = {"udp://239.255.1.1:1234"},
+    monitor = {
+        monitor_type = "output",
+        method_comparison = 3,
+        rate = 0.05
+    }
+})
+
+-- Пример мониторинга DVB адаптера
+dvb_tuner_monitor({
+    name_adapter = "dvb0",
+    type = "S2",
+    adapter = 0,
+    tp = "11044:V:43200"
+})
+```
 
 ---
 **Примечание**: Для полноценной работы библиотека требует наличия следующих глобальных функций и переменных:
 *   **Astra (глобальные функции и переменные, напрямую используемые `lib-monitor`)**:
-    *   `astra.version`: Переменная, содержащая версию Astra.
-    *   `astra.reload()`: Функция для перезагрузки Astra.
-    *   `astra.exit()`: Функция для завершения работы.
-    *   `utils.hostname()`: Функция для получения имени хоста.
-    *   `log.info()`, `log.error()`, `log.debug()`: Функции для вывода сообщений в лог.
-    *   `http_request()`: Функция для выполнения HTTP-запросов.
-    *   `find_channel()`: Функция для поиска канала по имени.
-    *   `make_channel()`: Функция для создания нового канала.
-    *   `kill_channel()`: Функция для остановки и удаления канала.
-    *   `parse_url()`: Функция для парсинга URL-адресов.
-    *   `init_input()`: Функция для инициализации входного модуля.
-    *   `http_server()`: Функция для запуска HTTP-сервера.
-    *   `string.split()`: Функция для разделения строки на подстроки.
-    *   `dvb_tune()`: Функция для настройки DVB-тюнера.
-    *   `analyze()`: Функция для анализа потока.
-    *   `kill_input()`: Функция для остановки входного потока.
-    *   `timer()`: Функция для создания таймеров.
-    *   `dvb_input_instance_list`: Глобальный список инстансов DVB.
+    *   `astra.version`, `astra.reload()`, `astra.exit()`.
+    *   `utils.hostname()`, `log.info()`, `log.error()`, `log.debug()`.
+    *   `http_request()`, `http_server()`, `timer()`.
+    *   `find_channel()`, `make_channel()`, `kill_channel()`.
+    *   `parse_url()`, `init_input()`, `kill_input()`, `analyze()`, `dvb_tune()`.
+    *   `string.split()`, `dvb_input_instance_list`, `channel_list`.
 *   **Стандартные Lua функции и переменные (напрямую используемые `lib-monitor`)**:
     *   `type()`, `tostring()`, `tonumber()`, `pcall()`, `setmetatable()`, `collectgarbage()`.
     *   `string.format()`, `string.match()`, `string.lower()`, `string.gsub()`, `string.gmatch()`.
-    *   `math.max()`, `math.abs()`.
-    *   `ipairs()`, `pairs()`.
+    *   `math.max()`, `math.abs()`, `ipairs()`, `pairs()`.
     *   `table.insert()`, `table.remove()`, `table.concat()`.
-    *   `os.time()`, `os.date()`, `os.getenv()`.
-    *   `io.popen()`, `io.open()`.
+    *   `os.time()`, `os.date()`, `os.getenv()`, `io.popen()`, `io.open()`.
 *   **Внешние библиотеки Lua**:
-    *   `socket.core`: Для сетевых операций.
-    *   `json.decode()`, `json.encode()`: Для работы с JSON.
+    *   `socket.core`, `json.decode()`, `json.encode()`.

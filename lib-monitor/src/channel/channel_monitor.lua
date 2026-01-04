@@ -401,6 +401,28 @@ function ChannelMonitor:get_json_status_cache()
     return self._json_status_cache
 end
 
+--- Возвращает полный текущий статус монитора
+--- @return table Статус монитора
+function ChannelMonitor:get_full_status()
+    local source = self:get_cached_source()
+    local status = self._status or {}
+    return {
+        id = self.name,
+        name = self.name,
+        display_name = self.display_name,
+        status = status.ready and "OK" or "ERROR",
+        bitrate = status.bitrate or 0,
+        cc_errors = status.cc_errors or 0,
+        pes_errors = status.pes_errors or 0,
+        scrambled = status.scrambled or false,
+        ready = status.ready or false,
+        monitor = self._config.monitor,
+        stream = source.stream,
+        format = source.format,
+        addr = source.addr
+    }
+end
+
 --- Приостанавливает мониторинг
 function ChannelMonitor:pause()
     self._active = false

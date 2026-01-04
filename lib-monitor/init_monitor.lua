@@ -87,6 +87,7 @@ end
 local Logger = ModuleManager.get_module("logger")
 local Channel = ModuleManager.get_module("channel")
 local Adapter = ModuleManager.get_module("adapter")
+local HttpServer = ModuleManager.get_module("http_server")
 
 -- Экспорт основных функций в глобальную область видимости для обратной совместимости
 if Channel then
@@ -96,12 +97,18 @@ if Channel then
     _G.kill_monitor = Channel.kill_monitor
     _G.pause_monitor = Channel.pause_monitor
     _G.resume_monitor = Channel.resume_monitor
+    _G.update_monitor_parameters = Channel.update_monitor_parameters
 end
 
 if Adapter then
     _G.dvb_tuner_monitor = Adapter.dvb_tuner_monitor
     _G.pause_dvb_monitor = Adapter.pause_dvb_monitor
     _G.resume_dvb_monitor = Adapter.resume_dvb_monitor
+    _G.update_dvb_monitor_parameters = Adapter.update_dvb_monitor_parameters
+end
+
+if HttpServer then
+    _G.server_start = HttpServer.start
 end
 
 if Logger then

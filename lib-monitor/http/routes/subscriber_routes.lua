@@ -22,8 +22,6 @@ local COMPONENT_NAME = "SubscriberRoutes"
 function SubscriberRoutes.get_subscribers(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    -- В http_subscriber.lua таблица subscribers локальная, 
-    -- нужно добавить метод для её получения или экспортировать её
     local list = {}
     if HttpSubscriber and HttpSubscriber.get_subscribers then
         list = HttpSubscriber.get_subscribers()

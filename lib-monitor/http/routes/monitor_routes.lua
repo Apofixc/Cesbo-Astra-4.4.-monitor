@@ -27,13 +27,12 @@ function MonitorRoutes.get_monitors(server, client, request)
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
     for id, ch_obj in pairs(active_channels) do
-        if ch_obj.monitor then
-            table_insert(monitors, {
-                id = id,
-                name = ch_obj.monitor.name or id,
-                type = ch_obj.monitor.monitor_type
-            })
-        end
+        table_insert(monitors, {
+            id = id,
+            name = ch_obj.name or id,
+            display_name = ch_obj.display_name,
+            type = ch_obj._config and ch_obj._config.monitor_type or "output"
+        })
     end
 
     HttpHelpers.success(server, client, { monitors = monitors })
@@ -54,15 +53,14 @@ function MonitorRoutes.get_monitors_status(server, client, request)
     local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
-        if ch_obj.monitor then
-            total = total + 1
-            if ch_obj.last_status == "OK" then
-                ok_count = ok_count + 1
-            else
-                error_count = error_count + 1
-            end
-            total_cc_errors = total_cc_errors + (ch_obj.cc_errors or 0)
+        total = total + 1
+        local status = ch_obj._status or {}
+        if status.ready then
+            ok_count = ok_count + 1
+        else
+            error_count = error_count + 1
         end
+        total_cc_errors = total_cc_errors + (status.cc_errors or 0)
     end
 
     HttpHelpers.success(server, client, {
@@ -81,21 +79,13 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/data")
-    local ch_obj = ChannelStorage and ChannelStorage.get(id)
-    if not ch_obj or not ch_obj.monitor then
+    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
     HttpHelpers.success(server, client, {
-        monitor_data = {
-            id = id,
-            status = ch_obj.last_status or "UNKNOWN",
-            bitrate = ch_obj.bitrate or 0,
-            cc_errors = ch_obj.cc_errors or 0,
-            pes_errors = ch_obj.pes_errors or 0,
-            scrambled = ch_obj.scrambled or false,
-            ready = ch_obj.ready or false
-        }
+        monitor_data = ch_obj:get_full_status()
     })
 end
 
@@ -107,8 +97,8 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/monitors/([^/]+)/update")
-    local ch_obj = ChannelStorage and ChannelStorage.get(id)
-    if not ch_obj or not ch_obj.monitor then
+    local ch_obj = ChannelStorage and ChannelStorage.find(id)
+    if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 

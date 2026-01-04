@@ -63,18 +63,8 @@ function DvbRoutes.get_adapter_data(server, client, request)
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
-    local status = dvb_obj.status or {}
     HttpHelpers.success(server, client, {
-        adapter_data = {
-            id = id,
-            status = status.status or 0,
-            signal = status.signal or 0,
-            snr = status.snr or 0,
-            ber = status.ber or 0,
-            unc = status.unc or 0,
-            quality = status.quality or 0,
-            lock = status.lock or false
-        }
+        adapter_data = dvb_obj:get_full_status()
     })
 end
 

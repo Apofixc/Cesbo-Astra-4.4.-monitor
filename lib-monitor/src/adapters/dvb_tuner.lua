@@ -248,6 +248,28 @@ function DvbTuner:get_psi()
     return self._psi
 end
 
+--- Возвращает полный текущий статус тюнера
+--- @return table Статус тюнера
+function DvbTuner:get_full_status()
+    local status = self.status or {}
+    return {
+        id = self.name_adapter,
+        status = status.status or 0,
+        signal = status.signal or 0,
+        snr = status.snr or 0,
+        ber = status.ber or 0,
+        unc = status.unc or 0,
+        quality = status.quality or 0,
+        lock = status.lock or false,
+        type = status.type,
+        server = status.server,
+        format = status.format,
+        modulation = status.modulation,
+        source = status.source,
+        name_adapter = status.name_adapter
+    }
+end
+
 --- Запускает сбор PSI таблиц на 10 секунд
 --- @return boolean Статус запуска процесса
 function DvbTuner:psi_update()
