@@ -206,7 +206,7 @@ function HttpSubscriber.publish(event_type, data)
     
     if not recipients or #recipients == 0 then
         -- Если нет подписчиков, просто логируем на уровне INFO
-        Logger.info(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
+        Logger.debug(COMPONENT_NAME, "[%s] %s", event_type, tostring(data))
         return
     end
 
