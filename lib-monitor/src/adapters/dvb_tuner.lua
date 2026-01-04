@@ -32,12 +32,14 @@ local STATE = {
 --- @class DvbTuner
 --- @field name_adapter string|nil Уникальное имя адаптера
 --- @field display_name string|nil Отображаемое имя
---- @field config table|nil Конфигурация тюнера
+--- @field config table|nil Оригинальная конфигурация тюнера (Read-Only)
 --- @field status table|nil Текущий статус (signal, snr, ber, unc)
 --- @field instance any|nil Экземпляр dvb_tune из Astra
 --- @field check_timer number|nil Счетчик для интервала проверки
 --- @field json_cache string|nil Кэш последнего отправленного JSON
 --- @field stats table|nil Накопленная статистика для расчета качества
+--- @field _astra_conf table|nil Рабочая конфигурация для Astra
+--- @field _current_method function|nil Прямая ссылка на метод сравнения
 --- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field _psi table|nil Таблица с PSI данными
 --- @field _active boolean|nil Статус активности мониторинга
@@ -132,6 +134,8 @@ function DvbTuner.new(conf)
     if not self:_set_config_param("dvb_rate", conf.rate) then return nil end
     if not self:_set_config_param("dvb_time_check", conf.time_check) then return nil end
     if not self:_set_config_param("dvb_method_comparison", conf.method_comparison) then return nil end
+    
+    self._current_method = COMPARISON_METHODS[self.config.method_comparison]
     self.check_timer = 0
     self.json_cache = nil
     self.stats = {
@@ -176,7 +180,7 @@ function DvbTuner:publish(content, event_type)
 end
 
 --- Запускает тюнер и инициализирует callback для мониторинга.
---- Автоматически создает локальную копию конфигурации для Astra.
+--- Автоматически создает рабочую копию конфигурации для Astra.
 --- @return any|nil Экземпляр dvb_tune или nil
 function DvbTuner:start()
     if self._state == STATE.RUNNING then
@@ -184,15 +188,14 @@ function DvbTuner:start()
         return self.instance
     end
 
-    local comparison_method = COMPARISON_METHODS[self.config.method_comparison]
-    if not comparison_method then
+    if not self._current_method then
         Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self.config.method_comparison)))
         return nil
     end
 
-    -- Создаем локальную копию конфига для Astra, чтобы не загрязнять self.config колбэками
-    local astra_conf = Utils.table_copy(self.config)
-    astra_conf.callback = function(data)
+    -- Создаем рабочую копию конфига для Astra
+    self._astra_conf = Utils.table_copy(self.config)
+    self._astra_conf.callback = function(data)
         if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
@@ -202,13 +205,13 @@ function DvbTuner:start()
             self.stats.count = self.stats.count + 1
         end
 
-        if self.check_timer < self.config.time_check then
+        if self.check_timer < self._astra_conf.time_check then
             self.check_timer = self.check_timer + 1
             return
         end
         self.check_timer = 0
 
-        if comparison_method(self.status, data, self.config.rate) then
+        if self._current_method(self.status, data, self._astra_conf.rate) then
             self.status.status = data.status or -1
             self.status.status_flags = decode_status(data.status)
             self.status.signal = data.signal or -1
@@ -242,7 +245,7 @@ function DvbTuner:start()
     end
 
     self._active = true
-    local instance = dvb_tune(astra_conf)
+    local instance = dvb_tune(self._astra_conf)
     if not instance then
         Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
         return nil
@@ -273,14 +276,20 @@ function DvbTuner:update_parameters(params)
         return false
     end
 
+    -- Обновляем self.config (оригинал) и self._astra_conf (живой конфиг)
     if params.rate ~= nil then
         self:_set_config_param("dvb_rate", params.rate)
+        if self._astra_conf then self._astra_conf.rate = self.config.rate end
     end
     if params.time_check ~= nil then
         self:_set_config_param("dvb_time_check", params.time_check)
+        if self._astra_conf then self._astra_conf.time_check = self.config.time_check end
     end
     if params.method_comparison ~= nil then
         self:_set_config_param("dvb_method_comparison", params.method_comparison)
+        if self._astra_conf then self._astra_conf.method_comparison = self.config.method_comparison end
+        -- Обновляем прямую ссылку на метод для callback
+        self._current_method = COMPARISON_METHODS[self.config.method_comparison]
     end
 
     return true
@@ -440,6 +449,8 @@ function DvbTuner:destroy(force)
     -- Полная очистка полей объекта
     self.name_adapter = nil
     self.config = nil
+    self._astra_conf = nil
+    self._current_method = nil
     self.status = nil
     self.check_timer = nil
     self.json_cache = nil

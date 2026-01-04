@@ -29,7 +29,7 @@ function DvbStorage.register(name, monitor_instance)
     Logger.debug(COMPONENT_NAME, "DVB Monitor '%s' registered.", name)
 end
 
---- Удаляет монитор из хранилища и останавливает его
+--- Удаляет монитор из хранилища и останавливает его.
 --- @param name string Имя адаптера
 --- @param force boolean|nil Принудительная остановка
 --- @return boolean Статус выполнения

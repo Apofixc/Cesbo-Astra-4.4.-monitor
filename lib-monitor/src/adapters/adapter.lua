@@ -56,15 +56,11 @@ local function dvb_tuner_monitor(conf)
     end
 end
 
---- Находит экземпляр DVB-тюнера по имени адаптера.
+--- Находит объект DVB-тюнера по имени адаптера.
 --- @param name_adapter string Уникальное имя адаптера
---- @return any|nil Экземпляр тюнера (instance) или nil
-local function find_dvb_conf(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
-    if tuner then
-        return tuner.instance
-    end
-    return nil
+--- @return DvbTuner|nil Объект тюнера или nil
+local function find_dvb_monitor(name_adapter)
+    return DvbStorage.find(name_adapter)
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
@@ -103,7 +99,7 @@ end
 --- Находит все каналы, использующие данный адаптер, и выполняет действие (остановка или запуск).
 --- @param name_adapter string Имя адаптера
 --- @param action string Действие: "stop" или "start"
---- @param [configs] table Список конфигураций для запуска (используется при action == "start")
+--- @param configs table|nil Список конфигураций для запуска (используется при action == "start")
 --- @return table|nil Список сохраненных конфигураций при остановке
 local function manage_dependent_channels(name_adapter, action, configs)
     local Channel = ModuleManager.get_module("channel")
@@ -211,6 +207,30 @@ local function resume_dvb_monitor(name_adapter)
     return false
 end
 
+--- Запускает обновление PSI таблиц для адаптера
+--- @param name_adapter string Имя адаптера
+--- @return boolean Статус запуска
+local function update_dvb_psi(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        return tuner:psi_update()
+    end
+    Logger.error(COMPONENT_NAME, "update_dvb_psi: tuner '%s' not found", tostring(name_adapter))
+    return false
+end
+
+--- Возвращает собранные PSI данные адаптера
+--- @param name_adapter string Имя адаптера
+--- @return table|nil Таблица PSI или nil
+local function get_dvb_psi(name_adapter)
+    local tuner = DvbStorage.find(name_adapter)
+    if tuner then
+        return tuner:get_psi()
+    end
+    Logger.error(COMPONENT_NAME, "get_dvb_psi: tuner '%s' not found", tostring(name_adapter))
+    return nil
+end
+
 --- Сценарий "Переключение транспондера":
 --- 1. Останавливает каналы
 --- 2. Перенастраивает тюнер
@@ -253,13 +273,15 @@ end
 
 -- Экспорт в таблицу модуля для ModuleManager
 Adapter.dvb_tuner_monitor = dvb_tuner_monitor
-Adapter.find_dvb_conf = find_dvb_conf
+Adapter.find_dvb_monitor = find_dvb_monitor
 Adapter.update_dvb_monitor_parameters = update_dvb_monitor_parameters
 Adapter.get_all_dvb_monitors = get_all_dvb_monitors
 Adapter.stop_dvb_monitor = stop_dvb_monitor
 Adapter.restart_dvb_monitor = restart_dvb_monitor
 Adapter.pause_dvb_monitor = pause_dvb_monitor
 Adapter.resume_dvb_monitor = resume_dvb_monitor
+Adapter.update_dvb_psi = update_dvb_psi
+Adapter.get_dvb_psi = get_dvb_psi
 Adapter.switch_transponder = switch_transponder
 
 return Adapter
