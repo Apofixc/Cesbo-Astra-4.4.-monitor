@@ -246,6 +246,8 @@ function ResourceMonitor.check()
     -- Кэшируем PID при первом нахождении
     if not ResourceMonitor._pid then
         ResourceMonitor._pid = get_self_pid()
+        -- Если PID найден, можно считать, что /proc/self/stat доступен
+        -- и не логировать отсутствие файлов для него в будущем
     end
 
     local current_time = os.time()

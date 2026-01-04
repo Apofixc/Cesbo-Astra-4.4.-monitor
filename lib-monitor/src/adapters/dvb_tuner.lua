@@ -129,6 +129,7 @@ function DvbTuner.new(conf)
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     if not self:_set_config_param("dvb_rate", conf.rate) then return nil end
+    -- time_check используется как счетчик входящих событий (callback-ов)
     if not self:_set_config_param("dvb_time_check", conf.time_check) then return nil end
     if not self:_set_config_param("dvb_method_comparison", conf.method_comparison) then return nil end
     if not self:_set_config_param("dvb_analyze", conf.analyze) then return nil end

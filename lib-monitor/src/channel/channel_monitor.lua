@@ -129,6 +129,7 @@ function ChannelMonitor.new(config, channel_data)
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     if not self:_set_config_param("channel_rate", config.rate) then return nil end
+    -- time_check используется как счетчик входящих событий (callback-ов)
     if not self:_set_config_param("channel_time_check", config.time_check) then return nil end
     if not self:_set_config_param("channel_method_comparison", config.method_comparison) then return nil end
     if not self:_set_config_param("channel_analyze", config.analyze) then return nil end

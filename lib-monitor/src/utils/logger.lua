@@ -6,7 +6,6 @@ local string_format = string.format
 local table_insert = table.insert
 local table_remove = table.remove
 local tostring = tostring
-local type = type
 local unpack = unpack or table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
