@@ -37,11 +37,12 @@ end
 
 --- Удаляет монитор из хранилища и останавливает его
 --- @param name string Имя монитора
+--- @param force boolean|nil Принудительная остановка
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
-function ChannelStorage.unregister(name)
+function ChannelStorage.unregister(name, force)
     local monitor = monitors[name]
     if monitor then
-        local config = monitor:destroy()
+        local config = monitor:destroy(force)
         if config then
             monitors[name] = nil
             count_active = count_active - 1

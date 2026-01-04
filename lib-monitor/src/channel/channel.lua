@@ -101,7 +101,8 @@ local format_handlers = {
     dvb = function(config)
         local cfg = {format = config.format, addr = config.addr}
         local tuner = DvbStorage.find(config.addr)
-        cfg.stream = tuner and tuner.status and tuner.status.source or "dvb"
+        local status = tuner and tuner:get_full_status()
+        cfg.stream = status and status.source or "dvb"
         return cfg
     end,
     udp = function(config)
@@ -257,7 +258,7 @@ local function make_monitor(config)
 
     local monitor_instance = monitor:start()
     if monitor_instance then
-        monitor.input_instance = input_instance
+        monitor:set_input_instance(input_instance)
         ChannelStorage.register(name, monitor)
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully started", name)
         return monitor_instance
@@ -270,12 +271,13 @@ end
 
 --- Останавливает монитор
 --- @param name string Имя монитора
+--- @param force boolean|nil Принудительная остановка
 --- @return table|nil Конфигурация монитора для восстановления или nil
-local function kill_monitor(name)
-    local config = ChannelStorage.unregister(name)
+local function kill_monitor(name, force)
+    local config = ChannelStorage.unregister(name, force)
     if config then
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
-        return config
+        return type(config) == "table" and config or nil
     end
     return nil
 end

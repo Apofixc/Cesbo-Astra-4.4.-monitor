@@ -33,22 +33,21 @@ local STATE = {
 }
 
 --- @class DvbTuner
---- @field name_adapter string|nil Уникальное имя адаптера
---- @field display_name string|nil Отображаемое имя
---- @field config table|nil Оригинальная конфигурация тюнера (Read-Only)
---- @field status table|nil Текущий статус (signal, snr, ber, unc)
---- @field instance any|nil Экземпляр dvb_tune из Astra
---- @field check_timer number|nil Счетчик для интервала проверки
---- @field json_cache string|nil Кэш последнего отправленного JSON
---- @field stats table|nil Накопленная статистика для расчета качества
---- @field _astra_conf table|nil Рабочая конфигурация для Astra
---- @field _current_method function|nil Прямая ссылка на метод сравнения
---- @field _temp_analyzer any|nil Временный экземпляр анализатора для PSI
---- @field _psi table|nil Таблица с PSI данными
---- @field _backup table|nil Бэкап предыдущего состояния (config, channels)
---- @field _status_table_reuse table Повторно используемая таблица статуса
---- @field _active boolean|nil Статус активности мониторинга
---- @field _state number Текущее состояние (IDLE, RUNNING, STOPPED)
+--- @field private _name string|nil Уникальное имя адаптера
+--- @field private _config table|nil Оригинальная конфигурация тюнера (Read-Only)
+--- @field private _status table|nil Текущий статус (signal, snr, ber, unc)
+--- @field private _instance any|nil Экземпляр dvb_tune из Astra
+--- @field private _check_timer number|nil Счетчик для интервала проверки
+--- @field private _json_cache string|nil Кэш последнего отправленного JSON
+--- @field private _stats table|nil Накопленная статистика для расчета качества
+--- @field private _astra_conf table|nil Рабочая конфигурация для Astra
+--- @field private _current_method function|nil Прямая ссылка на метод сравнения
+--- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
+--- @field private _psi table|nil Таблица с PSI данными
+--- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
+--- @field private _status_table_reuse table Повторно используемая таблица статуса
+--- @field private _active boolean|nil Статус активности мониторинга
+--- @field private _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 local DvbTuner = {}
 DvbTuner.__index = DvbTuner
 
@@ -114,11 +113,11 @@ end
 function DvbTuner:_set_config_param(param_name, value)
     local result = validate_monitor_param(param_name, value)
     if result == nil then
-        Logger.error(COMPONENT_NAME, "[%s] Invalid parameter value for %s: %s", tostring(self.name_adapter), param_name, tostring(value))
+        Logger.error(COMPONENT_NAME, "[%s] Invalid parameter value for %s: %s", tostring(self._name), param_name, tostring(value))
         return false
     end
     local key = param_name:gsub("dvb_", "")
-    self.config[key] = result
+    self._config[key] = result
     return true
 end
 
@@ -138,8 +137,8 @@ function DvbTuner.new(conf)
 
     ---@class DvbTuner
     local self = setmetatable({}, DvbTuner)
-    self.config = conf
-    self.name_adapter = conf.name_adapter
+    self._config = conf
+    self._name = conf.name_adapter
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     if not self:_set_config_param("dvb_rate", conf.rate) then return nil end
@@ -147,21 +146,21 @@ function DvbTuner.new(conf)
     if not self:_set_config_param("dvb_method_comparison", conf.method_comparison) then return nil end
     if not self:_set_config_param("dvb_analyze", conf.analyze) then return nil end
     
-    self._current_method = COMPARISON_METHODS[self.config.method_comparison]
-    self.check_timer = 0
-    self.json_cache = nil
-    self.stats = {
+    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
+    self._check_timer = 0
+    self._json_cache = nil
+    self._stats = {
         ber_sum = 0,
         unc_sum = 0,
         count = 0
     }
-    self.status = {
+    self._status = {
         type = "dvb",
         server = Utils.get_server_name(),
         format = conf.type or "",
         modulation = conf.modulation or "",
         source = conf.tp or conf.frequency,
-        name_adapter = self.name_adapter,
+        name_adapter = self._name,
         status = -1,
         status_flags = {
             has_signal = false,
@@ -214,40 +213,40 @@ end
 --- @return any|nil Экземпляр dvb_tune или nil
 function DvbTuner:start()
     if self._state == STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Tuner already running", tostring(self.name_adapter))
-        return self.instance
+        Logger.warn(COMPONENT_NAME, "[%s] Tuner already running", tostring(self._name))
+        return self._instance
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self.config.method_comparison)))
+        Logger.error(COMPONENT_NAME, string_format("start: Invalid comparison method %s", tostring(self._config.method_comparison)))
         return nil
     end
 
     -- Создаем рабочую копию конфига для Astra
-    self._astra_conf = Utils.table_copy(self.config)
+    self._astra_conf = Utils.table_copy(self._config)
     self._astra_conf.callback = function(data)
         if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
-        if self.config.analyze and data.status and data.status > 0 then
+        if self._config.analyze and data.status and data.status > 0 then
             -- Защита от переполнения при длительном отсутствии изменений (когда сброс не происходит)
             local MAX_STATS_COUNT = 1000000
-            if self.stats.count < MAX_STATS_COUNT then
-                self.stats.ber_sum = self.stats.ber_sum + (data.ber or 0)
-                self.stats.unc_sum = self.stats.unc_sum + (data.unc or 0)
-                self.stats.count = self.stats.count + 1
+            if self._stats.count < MAX_STATS_COUNT then
+                self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)
+                self._stats.unc_sum = self._stats.unc_sum + (data.unc or 0)
+                self._stats.count = self._stats.count + 1
             end
         end
 
-        if self.check_timer < self._astra_conf.time_check then
-            self.check_timer = self.check_timer + 1
+        if self._check_timer < self._astra_conf.time_check then
+            self._check_timer = self._check_timer + 1
             return
         end
-        self.check_timer = 0
+        self._check_timer = 0
 
         -- Оптимизация: Сначала проверяем изменения в данных перед формированием JSON
-        if self._current_method(self.status, data, self._astra_conf.rate) then
-            local status = self.status
+        if self._current_method(self._status, data, self._astra_conf.rate) then
+            local status = self._status
             status.status = data.status or -1
             status.status_flags = decode_status(data.status)
             status.signal = data.signal or -1
@@ -256,17 +255,17 @@ function DvbTuner:start()
             status.unc = data.unc or -1
             
             -- Расчет качества (quality) на основе ошибок
-            if self.config.analyze and self.stats.count > 0 then
-                local avg_ber = self.stats.ber_sum / self.stats.count
-                if avg_ber > 0 or self.stats.unc_sum > 0 then
-                    status.quality = math_max(0, 100 - (avg_ber / 1000) - (self.stats.unc_sum * 10))
+            if self._config.analyze and self._stats.count > 0 then
+                local avg_ber = self._stats.ber_sum / self._stats.count
+                if avg_ber > 0 or self._stats.unc_sum > 0 then
+                    status.quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
                 else
                     status.quality = 100
                 end
                 -- Сброс статистики после отправки
-                self.stats.ber_sum = 0
-                self.stats.unc_sum = 0
-                self.stats.count = 0
+                self._stats.ber_sum = 0
+                self._stats.unc_sum = 0
+                self._stats.count = 0
             else
                 status.quality = -1
             end
@@ -276,9 +275,9 @@ function DvbTuner:start()
             local current_json = json_encode(status_table)
             
             -- Публикуем если JSON изменился
-            if current_json ~= self.json_cache then
+            if current_json ~= self._json_cache then
                 self:publish(current_json, "dvb")
-                self.json_cache = current_json
+                self._json_cache = current_json
             end
         end
     end
@@ -289,18 +288,18 @@ function DvbTuner:start()
         return nil
     end
 
-    self.instance = instance
+    self._instance = instance
     self._state = STATE.RUNNING
     self._active = true
 
     -- Безопасное управление счетчиком каналов Astra
-    if self.instance.__options then
-        local current_channels = self.instance.__options.channels or 0
-        self.instance.__options.channels = current_channels + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self.name_adapter, self.instance.__options.channels)
+    if self._instance.__options then
+        local current_channels = self._instance.__options.channels or 0
+        self._instance.__options.channels = current_channels + 1
+        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self._name, self._instance.__options.channels)
     end
 
-    return self.instance
+    return self._instance
 end
 
 --- Обновляет параметры мониторинга тюнера.
@@ -308,33 +307,33 @@ end
 --- @return boolean Статус выполнения
 function DvbTuner:update_parameters(params)
     if not params or type(params) ~= "table" then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name_adapter))
+        Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self._name))
         return false
     end
 
-    -- Обновляем self.config (оригинал) и self._astra_conf (живой конфиг)
+    -- Обновляем self._config (оригинал) и self._astra_conf (живой конфиг)
     if params.rate ~= nil then
         self:_set_config_param("dvb_rate", params.rate)
-        if self._astra_conf then self._astra_conf.rate = self.config.rate end
+        if self._astra_conf then self._astra_conf.rate = self._config.rate end
     end
     if params.time_check ~= nil then
         self:_set_config_param("dvb_time_check", params.time_check)
-        if self._astra_conf then self._astra_conf.time_check = self.config.time_check end
+        if self._astra_conf then self._astra_conf.time_check = self._config.time_check end
     end
     if params.method_comparison ~= nil then
         self:_set_config_param("dvb_method_comparison", params.method_comparison)
-        if self._astra_conf then self._astra_conf.method_comparison = self.config.method_comparison end
+        if self._astra_conf then self._astra_conf.method_comparison = self._config.method_comparison end
         -- Обновляем прямую ссылку на метод для callback
-        self._current_method = COMPARISON_METHODS[self.config.method_comparison]
+        self._current_method = COMPARISON_METHODS[self._config.method_comparison]
     end
     if params.analyze ~= nil then
         self:_set_config_param("dvb_analyze", params.analyze)
-        if self._astra_conf then self._astra_conf.analyze = self.config.analyze end
+        if self._astra_conf then self._astra_conf.analyze = self._config.analyze end
         -- Если анализ выключен, сбрасываем накопленную статистику
-        if not self.config.analyze then
-            self.stats.ber_sum = 0
-            self.stats.unc_sum = 0
-            self.stats.count = 0
+        if not self._config.analyze then
+            self._stats.ber_sum = 0
+            self._stats.unc_sum = 0
+            self._stats.count = 0
         end
     end
 
@@ -347,12 +346,36 @@ function DvbTuner:get_psi()
     return self._psi
 end
 
+--- Возвращает оригинальную конфигурацию тюнера
+--- @return table Конфигурация
+function DvbTuner:get_config()
+    return self._config
+end
+
+--- Возвращает экземпляр dvb_tune из Astra
+--- @return any|nil Экземпляр Astra
+function DvbTuner:get_instance()
+    return self._instance
+end
+
+--- Возвращает уникальное имя адаптера
+--- @return string|nil Имя адаптера
+function DvbTuner:get_name()
+    return self._name
+end
+
+--- Возвращает текущее состояние монитора
+--- @return number Состояние (STATE)
+function DvbTuner:get_state()
+    return self._state
+end
+
 --- Внутренний метод для сборки таблицы полного статуса
 --- @return table Таблица статуса
 function DvbTuner:_build_status_table()
-    local status = self.status or {}
+    local status = self._status or {}
     local t = self._status_table_reuse
-    t.id = self.name_adapter
+    t.id = self._name
     t.status = status.status or 0
     t.status_flags = status.status_flags
     t.signal = status.signal or 0
@@ -366,7 +389,8 @@ function DvbTuner:_build_status_table()
     t.format = status.format or ""
     t.modulation = status.modulation or ""
     t.source = status.source or ""
-    t.name_adapter = self.name_adapter
+    t.name_adapter = self._name
+    t.name = self._name
     return t
 end
 
@@ -379,13 +403,13 @@ end
 --- Запускает сбор PSI таблиц на 10 секунд
 --- @return boolean Статус запуска процесса
 function DvbTuner:psi_update()
-    if not self.instance or self._temp_analyzer or self._psi_timer then
+    if not self._instance or self._temp_analyzer or self._psi_timer then
         return false
     end
 
     self._temp_analyzer = analyze({
-        upstream = self.instance:stream(),
-        name = "psi_update_" .. self.name_adapter,
+        upstream = self._instance:stream(),
+        name = "psi_update_" .. self._name,
         join_pid = true,
         callback = function(data)
             if not self or not self._temp_analyzer then return end
@@ -402,9 +426,9 @@ function DvbTuner:psi_update()
     self._psi_timer = timer({
         interval = 10,
         callback = function()
-            if not self or not self.name_adapter then return end
+            if not self or not self._name then return end
             self:_clear_psi()
-            Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self.name_adapter))
+            Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self._name))
         end
     })
 
@@ -414,18 +438,18 @@ end
 --- Приостанавливает мониторинг тюнера
 function DvbTuner:pause()
     self._active = false
-    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self.name_adapter))
+    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring paused", tostring(self._name))
 end
 
 --- Возобновляет мониторинг тюнера
 --- @return boolean Статус выполнения
 function DvbTuner:resume()
-    if not self.config then
-        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: tuner already destroyed", tostring(self.name_adapter))
+    if not self._config then
+        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: tuner already destroyed", tostring(self._name))
         return false
     end
     self._active = true
-    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring resumed", tostring(self.name_adapter))
+    Logger.info(COMPONENT_NAME, "[%s] Tuner monitoring resumed", tostring(self._name))
     return true
 end
 
@@ -439,46 +463,46 @@ function DvbTuner:destroy(force)
     end
 
     local channels = 0
-    if self.instance and self.instance.__options then
-        channels = self.instance.__options.channels or 0
+    if self._instance and self._instance.__options then
+        channels = self._instance.__options.channels or 0
     end
 
     if channels > 1 and force ~= true then
-        Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy tuner: busy (channels: %d)", tostring(self.name_adapter), channels)
+        Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy tuner: busy (channels: %d)", tostring(self._name), channels)
         return nil
     end
 
-    local original_config = self.config and Utils.table_copy(self.config) or nil
+    local original_config = self._config and Utils.table_copy(self._config) or nil
 
     -- 2. Очистка ресурсов
     self._active = false
     self._state = STATE.STOPPED
     self:_clear_psi()
 
-    if self.instance then
+    if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
-        if self.instance.__options then
-            self.instance.__options.callback = nil
+        if self._instance.__options then
+            self._instance.__options.callback = nil
         end
 
         -- Безопасная очистка внутреннего списка Astra и закрытие инстанса
         -- Мы попадаем сюда только если channels <= 1 или force == true
-        if type(dvb_input_instance_list) == "table" and self.instance.__options then
-            local opts = self.instance.__options
+        if type(dvb_input_instance_list) == "table" and self._instance.__options then
+            local opts = self._instance.__options
             if opts.adapter ~= nil and opts.device ~= nil then
                 local instance_id = string_format("%s.%s", tostring(opts.adapter), tostring(opts.device))
                 if dvb_input_instance_list[instance_id] then
                     dvb_input_instance_list[instance_id] = nil
-                    Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self.name_adapter), instance_id)
+                    Logger.debug(COMPONENT_NAME, "Removed tuner '%s' from Astra internal list (id: %s)", tostring(self._name), instance_id)
                 end
             end
         end
 
         -- Физическое закрытие инстанса Astra
-        if type(self.instance.close) == "function" then
-            self.instance:close()
+        if type(self._instance.close) == "function" then
+            self._instance:close()
         end
-        self.instance = nil
+        self._instance = nil
     end
 
     -- Очищаем callback в рабочей конфигурации
@@ -488,13 +512,13 @@ function DvbTuner:destroy(force)
     end
 
     -- 3. Полная очистка полей объекта
-    self.name_adapter = nil
-    self.config = nil
+    self._name = nil
+    self._config = nil
     self._current_method = nil
-    self.status = nil
-    self.check_timer = nil
-    self.json_cache = nil
-    self.stats = nil
+    self._status = nil
+    self._check_timer = nil
+    self._json_cache = nil
+    self._stats = nil
     self._psi = nil
     self._backup = nil
     self._status_table_reuse = nil

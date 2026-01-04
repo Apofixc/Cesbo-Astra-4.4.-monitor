@@ -141,7 +141,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
     end
 
     -- 1. Подготовка конфигурации
-    local old_conf = Utils.table_copy(tuner.config)
+    local old_conf = Utils.table_copy(tuner:get_config())
     local new_conf = Utils.table_copy(old_conf)
     if new_params and type(new_params) == "table" then
         for k, v in pairs(new_params) do new_conf[k] = v end
@@ -152,8 +152,9 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
     local saved_channels = {}
 
     if force then
-        if tuner.instance and tuner.instance.__options then
-            old_channels_count = tuner.instance.__options.channels or 0
+        local instance = tuner:get_instance()
+        if instance and instance.__options then
+            old_channels_count = instance.__options.channels or 0
         end
     else
         saved_channels = _pre_saved_channels or stop_dependent_channels(name_adapter)
@@ -250,7 +251,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local tuner = DvbStorage.find(name_adapter)
     if not tuner then return nil end
 
-    local old_tuner_params = Utils.table_copy(tuner.config)
+    local old_tuner_params = Utils.table_copy(tuner:get_config())
     local saved_channels = stop_dependent_channels(name_adapter)
     
     -- Создаем карту новых входов для быстрой проверки

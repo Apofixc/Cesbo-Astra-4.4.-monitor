@@ -39,22 +39,22 @@ local table_copy = Utils.table_copy
 local validate_monitor_param = Utils.validate_monitor_param
 
 --- @class ChannelMonitor
---- @field name string Технический идентификатор монитора
---- @field display_name string Отображаемое имя монитора
---- @field input_instance any|nil Экземпляр входного потока (для IP мониторов)
+--- @field private _name string Технический идентификатор монитора
+--- @field private _display_name string Отображаемое имя монитора
+--- @field private _input_instance any|nil Экземпляр входного потока (для IP мониторов)
 --- @field private _active boolean Флаг активности монитора
 --- @field private _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 --- @field private _config table Конфигурация монитора
 --- @field private _channel_data table|nil Данные канала (Astra)
 --- @field private _stream_json table Данные об источниках потока
 --- @field private _status table Текущий статус ошибок (CC/PES)
---- @field private _analyze_stats table Статистика анализа по PID
+--- @field private _stats table Статистика анализа по PID
 --- @field private _rate_stat table|nil Статистика битрейта (если включено rate_stat)
---- @field private _monitor_instance any Экземпляр анализатора Astra
+--- @field private _instance any Экземпляр анализатора Astra
 --- @field private _force_timer number Таймер принудительной отправки статуса
 --- @field private _check_timer number Таймер интервала проверки
 --- @field private _upstream any Объект апстрима
---- @field private _json_status_cache string|nil Кэш последнего отправленного JSON
+--- @field private _json_cache string|nil Кэш последнего отправленного JSON
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
 --- @field private _status_table_reuse table Повторно используемая таблица статуса
@@ -130,8 +130,8 @@ function ChannelMonitor.new(config, channel_data)
     self._channel_data = type(channel_data) == "table" and channel_data or nil
 
     -- Инициализация имен с учетом возможного отсутствия channel_data
-    self.name = config.name or (self._channel_data and self._channel_data.name) or config.monitor
-    self.display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self.name
+    self._name = config.name or (self._channel_data and self._channel_data.name) or config.monitor
+    self._display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self._name
 
     -- Валидация и установка параметров (валидатор сам вернет default при необходимости)
     if not self:_set_config_param("channel_rate", config.rate) then return nil end
@@ -159,7 +159,7 @@ function ChannelMonitor.new(config, channel_data)
         ready = false,
         scrambled = false,
     }
-    self._analyze_stats = {}
+    self._stats = {}
     self._rate_stat = nil
     self._active = true
     self._state = STATE.IDLE
@@ -179,24 +179,24 @@ end
 --- @return any|nil Экземпляр монитора или nil
 function ChannelMonitor:start()
     if self._state == STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Monitor already running", tostring(self.name))
-        return self._monitor_instance
+        Logger.warn(COMPONENT_NAME, "[%s] Monitor already running", tostring(self._name))
+        return self._instance
     end
 
     if not self._current_method then
-        log_error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self.name, tostring(self._config.method_comparison))
+        log_error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self._name, tostring(self._config.method_comparison))
         return nil
     end
 
     local stream_data = self._upstream:stream()
     if not stream_data then
-        log_error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", self.name)
+        log_error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", self._name)
         return nil
     end
 
-    self._monitor_instance = analyze({
+    self._instance = analyze({
         upstream = stream_data,
-        name = "_" .. self.name,
+        name = "_" .. self._name,
         cc_limit = self._config.cc_limit,
         bitrate_limit = self._config.bitrate_limit,
         rate_stat = self._config.rate_stat,
@@ -229,15 +229,15 @@ function ChannelMonitor:start()
         end
     })
 
-    if not self._monitor_instance then
-        log_error(COMPONENT_NAME, "[%s] start: analyze returned nil", self.name)
+    if not self._instance then
+        log_error(COMPONENT_NAME, "[%s] start: analyze returned nil", self._name)
         return nil
     end
 
     self._state = STATE.RUNNING
     self._active = true
 
-    return self._monitor_instance
+    return self._instance
 end
 
 --- Возвращает закэшированные данные об источнике
@@ -298,9 +298,9 @@ function ChannelMonitor:process_psi_data(data)
             local pid = stream.pid
             if pid then
                 local type_name = stream.type_name or "UNKNOWN"
-                local stats = self._analyze_stats[pid]
+                local stats = self._stats[pid]
                 if not stats then
-                    self._analyze_stats[pid] = {
+                    self._stats[pid] = {
                         type = type_name,
                         cc = 0,
                         pes = 0,
@@ -317,7 +317,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._analyze_stats or not self._config.analyze then return end
+    if not self._stats or not self._config.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -327,7 +327,7 @@ function ChannelMonitor:process_analyze_data(data)
             local sc = pid_data.sc_error or 0
 
             if cc > 0 or pes > 0 or sc > 0 then
-                local stats = self._analyze_stats[pid]
+                local stats = self._stats[pid]
                 if not stats then
                     stats = {
                         type = "UNKNOWN",
@@ -335,7 +335,7 @@ function ChannelMonitor:process_analyze_data(data)
                         pes = 0,
                         sc = 0
                     }
-                    self._analyze_stats[pid] = stats
+                    self._stats[pid] = stats
                 end
                 -- Защита от переполнения (хотя double в Lua позволяет хранить огромные целые, 
                 -- ограничим разумным пределом в 1 млрд для предотвращения потери точности или визуальных проблем)
@@ -380,9 +380,9 @@ function ChannelMonitor:update_status_and_publish(data, is_force)
     local current_json = json_encode(status_table)
 
     -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
-    if is_force or current_json ~= self._json_status_cache then
+    if is_force or current_json ~= self._json_cache then
         self:publish(current_json, "channels")
-        self._json_status_cache = current_json
+        self._json_cache = current_json
     end
 
     -- Обновление состояния для следующего сравнения
@@ -405,10 +405,46 @@ function ChannelMonitor:get_psi(table_name)
     return self._psi_hash_cache
 end
 
+--- Возвращает оригинальную конфигурацию монитора
+--- @return table Конфигурация
+function ChannelMonitor:get_config()
+    return self._config
+end
+
+--- Возвращает технический идентификатор монитора
+--- @return string Имя монитора
+function ChannelMonitor:get_name()
+    return self._name
+end
+
+--- Возвращает экземпляр анализатора Astra
+--- @return any|nil Экземпляр Astra
+function ChannelMonitor:get_instance()
+    return self._instance
+end
+
+--- Устанавливает экземпляр входного потока
+--- @param instance any Экземпляр входа
+function ChannelMonitor:set_input_instance(instance)
+    self._input_instance = instance
+end
+
+--- Возвращает экземпляр входного потока
+--- @return any|nil Экземпляр входа
+function ChannelMonitor:get_input_instance()
+    return self._input_instance
+end
+
+--- Возвращает текущее состояние монитора
+--- @return number Состояние (STATE)
+function ChannelMonitor:get_state()
+    return self._state
+end
+
 --- Возвращает статистику анализа по PID
 --- @return table Статистика по PID
-function ChannelMonitor:get_analyze_stats()
-    return self._analyze_stats or {}
+function ChannelMonitor:get_stats()
+    return self._stats or {}
 end
 
 --- Возвращает статистику битрейта (rate_stat)
@@ -418,15 +454,15 @@ function ChannelMonitor:get_rate_stat()
 end
 
 --- Очищает статистику анализа
-function ChannelMonitor:clear_analyze_stats()
-    self._analyze_stats = {}
+function ChannelMonitor:clear_stats()
+    self._stats = {}
     self._rate_stat = nil
 end
 
 --- Возвращает кэш последнего отправленного JSON статуса
 --- @return string|nil JSON статус
-function ChannelMonitor:get_json_status_cache()
-    return self._json_status_cache
+function ChannelMonitor:get_json_cache()
+    return self._json_cache
 end
 
 --- Внутренний метод для сборки таблицы полного статуса
@@ -444,9 +480,9 @@ function ChannelMonitor:_build_status_table(data)
     local pes = status.pes_errors or 0
 
     local t = self._status_table_reuse
-    t.id = self.name
-    t.name = self.name
-    t.display_name = self.display_name
+    t.id = self._name
+    t.name = self._name
+    t.display_name = self._display_name
     t.status = ready and "OK" or "ERROR"
     t.bitrate = bitrate
     t.cc_errors = cc
@@ -472,25 +508,26 @@ end
 --- Приостанавливает мониторинг
 function ChannelMonitor:pause()
     self._active = false
-    Logger.info(COMPONENT_NAME, "[%s] Monitoring paused", tostring(self.name))
+    Logger.info(COMPONENT_NAME, "[%s] Monitoring paused", tostring(self._name))
 end
 
 --- Возобновляет мониторинг
 --- @return boolean Статус выполнения
 function ChannelMonitor:resume()
     if self._status == nil then
-        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: monitor already stopped", tostring(self.name))
+        Logger.error(COMPONENT_NAME, "[%s] Cannot resume: monitor already stopped", tostring(self._name))
         return false
     end
     self._active = true
-    Logger.info(COMPONENT_NAME, "[%s] Monitoring resumed", tostring(self.name))
+    Logger.info(COMPONENT_NAME, "[%s] Monitoring resumed", tostring(self._name))
     return true
 end
 
 --- Останавливает мониторинг и уничтожает объект.
 --- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
+--- @param force boolean|nil Принудительная остановка (для совместимости с интерфейсом тюнера)
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
-function ChannelMonitor:destroy()
+function ChannelMonitor:destroy(force)
     if self._state ~= STATE.RUNNING then
         return nil
     end
@@ -500,27 +537,27 @@ function ChannelMonitor:destroy()
     self._active = false
     self._state = STATE.STOPPED
 
-    if self._monitor_instance then
+    if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
-        if self._monitor_instance.__options then
-            self._monitor_instance.__options.callback = nil
+        if self._instance.__options then
+            self._instance.__options.callback = nil
         end
 
         -- Физическое закрытие инстанса Astra
-        if type(self._monitor_instance.close) == "function" then
-            self._monitor_instance:close()
+        if type(self._instance.close) == "function" then
+            self._instance:close()
         end
-        self._monitor_instance = nil
+        self._instance = nil
     end
 
-    if self.input_instance then
-        kill_input(self.input_instance)
-        self.input_instance = nil
+    if self._input_instance then
+        kill_input(self._input_instance)
+        self._input_instance = nil
     end
 
     -- Очистка кэшей и данных
     self._psi_hash_cache = nil
-    self._analyze_stats = nil
+    self._stats = nil
     self._status = nil
     self._config = nil
     self._channel_data = nil
@@ -528,12 +565,12 @@ function ChannelMonitor:destroy()
     self._upstream = nil
     self._cached_source = nil
     self._status_table_reuse = nil
-    self._json_status_cache = nil
+    self._json_cache = nil
     self._current_method = nil
 
     -- Обнуление идентификаторов
-    self.name = nil
-    self.display_name = nil
+    self._name = nil
+    self._display_name = nil
     self._force_timer = nil
     self._check_timer = nil
     self._last_active_id = nil
@@ -548,7 +585,7 @@ end
 --- @return boolean Статус выполнения
 function ChannelMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
-        log_error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self.name))
+        log_error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self._name))
         return false
     end
 
@@ -574,8 +611,8 @@ function ChannelMonitor:update_parameters(params)
     end
 
     -- Обновление параметров в работающем экземпляре анализатора Astra
-    if self._monitor_instance and self._monitor_instance.__options then
-        local opts = self._monitor_instance.__options
+    if self._instance and self._instance.__options then
+        local opts = self._instance.__options
         if params.cc_limit ~= nil then opts.cc_limit = self._config.cc_limit end
         if params.bitrate_limit ~= nil then opts.bitrate_limit = self._config.bitrate_limit end
         if params.rate_stat ~= nil then opts.rate_stat = self._config.rate_stat end
@@ -583,7 +620,7 @@ function ChannelMonitor:update_parameters(params)
     end
 
     if has_errors then
-        log_error(COMPONENT_NAME, "[%s] update_parameters: some parameters failed to update", tostring(self.name))
+        log_error(COMPONENT_NAME, "[%s] update_parameters: some parameters failed to update", tostring(self._name))
         return false
     end
 
