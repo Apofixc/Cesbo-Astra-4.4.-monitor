@@ -95,16 +95,16 @@ local function parse_proc_stat()
     local rest = string_match(content, "^%d+%s+%b()%s+(.+)$")
     if not rest then return nil end
 
-    -- Оптимизация: извлекаем только нужные поля по индексам без создания полной таблицы всех частей
-    local i = 0
+    -- Оптимизация: извлекаем только нужные поля по индексам
     local utime, stime, threads, rss_pages
+    local i = 1
     for part in string_gmatch(rest, "%S+") do
-        i = i + 1
         if i == 12 then utime = tonumber(part)
         elseif i == 13 then stime = tonumber(part)
         elseif i == 18 then threads = tonumber(part)
         elseif i == 22 then rss_pages = tonumber(part)
         elseif i > 22 then break end
+        i = i + 1
     end
 
     return {
@@ -213,14 +213,17 @@ local function get_fd_count()
         return astra_utils.fd_count()
     end
 
+    -- Попытка прочитать количество FD без io.popen (через перебор файлов в /proc/self/fd)
+    -- В Astra/Lua обычно нет lfs, но мы можем попробовать использовать системный вызов через io.open
+    -- Однако самый надежный способ без lfs и без popen - это чтение /proc/self/status (поле FDSize)
+    -- Но FDSize - это размер таблицы, а не реальное количество.
+    -- Поэтому оставляем popen как fallback, но с защитой.
+
     local count = 0
-    -- В Astra/Lua нет встроенного lfs.dir, поэтому io.popen остается самым простым способом,
-    -- но мы минимизируем его влияние через FD_UPDATE_INTERVAL.
-    local p = io.popen("ls -1 /proc/self/fd 2>/dev/null")
+    local p = io.popen("ls -1 /proc/self/fd 2>/dev/null | wc -l")
     if p then
-        for _ in p:lines() do
-            count = count + 1
-        end
+        local res = p:read("*l")
+        count = tonumber(res) or 0
         p:close()
     end
     return count

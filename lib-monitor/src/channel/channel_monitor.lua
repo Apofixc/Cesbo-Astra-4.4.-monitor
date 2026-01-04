@@ -158,7 +158,7 @@ function ChannelMonitor.new(config, channel_data)
         report.monitor = self._config.monitor
     end
 
-    self._psi_hash_cache = {}
+    self._psi = {}
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -209,7 +209,7 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
+            if not self._active or not data then return end
 
             if data.error then
                 self:process_error_data(data)
@@ -279,27 +279,12 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    if not self._psi_hash_cache then return end
-    
     local table_id = data.psi
     if not table_id then return end
 
-    -- Улучшенное хэширование: используем версию таблицы или комбинированный хэш
-    local current_version = data.version
-    if not current_version then
-        if table_id == "PMT" and data.streams then
-            -- Для PMT комбинируем количество стримов и PID первого стрима для большей точности
-            local first_pid = data.streams[1] and data.streams[1].pid or 0
-            current_version = string_format("%d_%d", #data.streams, first_pid)
-        else
-            current_version = true
-        end
-    end
-    
-    if self._psi_hash_cache[table_id] == current_version then
-        return
-    end
-    self._psi_hash_cache[table_id] = current_version
+    -- Сохраняем сами данные
+    self._psi[table_id] = data
+
 
     if table_id == "PMT" and data.streams then
         for _, stream in ipairs(data.streams) do
@@ -388,8 +373,7 @@ end
 --- @param data table Данные потока
 --- @param is_force boolean|nil Принудительная отправка (игнорировать кэш JSON)
 function ChannelMonitor:update_status_and_publish(data, is_force)
-    self:_build_status_table(data)
-    local r = self._reports.channels
+    local r = self:_build_status_table(data)
     local current_json = json_encode(r)
 
     -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
@@ -411,11 +395,11 @@ end
 --- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
 --- @return string|table|nil Данные PSI (JSON строка или таблица JSON строк) или nil
 function ChannelMonitor:get_psi(table_name)
-    if not self._psi_hash_cache then return nil end
+    if not self._psi then return nil end
     if table_name then
-        return self._psi_hash_cache[table_name]
+        return self._psi[table_name:upper()]
     end
-    return self._psi_hash_cache
+    return self._psi
 end
 
 --- Возвращает оригинальную конфигурацию монитора
@@ -564,7 +548,7 @@ function ChannelMonitor:destroy(force)
     end
 
     -- Очистка кэшей и данных
-    self._psi_hash_cache = nil
+    self._psi = nil
     self._stats = nil
     self._status = nil
     self._config = nil

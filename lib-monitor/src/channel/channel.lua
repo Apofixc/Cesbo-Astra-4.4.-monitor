@@ -6,7 +6,6 @@ local type = type
 local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
-local Adapter = ModuleManager.get_module("adapter")
 local ChannelMonitor = ModuleManager.get_module("channel_monitor")
 local ChannelStorage = ModuleManager.get_module("channel_storage")
 local Logger = ModuleManager.get_module("logger")

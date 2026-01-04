@@ -7,7 +7,7 @@ local table_insert = table.insert
 local table_remove = table.remove
 local tostring = tostring
 local type = type
-local unpack = table.unpack
+local unpack = unpack or table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
 -- local MonitorConfig = ModuleManager.get_module("monitor_config") -- Загружается динамически в get_current_level

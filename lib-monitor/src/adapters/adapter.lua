@@ -8,7 +8,6 @@ local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local DvbTuner = ModuleManager.get_module("dvb_tuner")
 local DvbStorage = ModuleManager.get_module("dvb_storage")
 local Utils = ModuleManager.get_module("utils")

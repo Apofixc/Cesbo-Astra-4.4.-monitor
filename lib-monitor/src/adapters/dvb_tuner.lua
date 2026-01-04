@@ -218,7 +218,7 @@ function DvbTuner:start()
     -- Создаем рабочую копию конфига для Astra
     self._astra_conf = Utils.table_copy(self._config)
     self._astra_conf.callback = function(data)
-        if not self or self._state ~= STATE.RUNNING or not self._active or not data then return end
+        if not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
         if self._config.analyze and data.status and data.status > 0 then
@@ -239,6 +239,10 @@ function DvbTuner:start()
 
         -- Оптимизация: Сначала проверяем изменения в данных перед формированием JSON
         if self._current_method(self._status, data, self._astra_conf.rate) then
+            -- Дополнительная проверка на изменения через Utils.shallow_compare неэффективна здесь,
+            -- так как data - это сырые данные Astra, а self._status - наша структура.
+            -- Но мы можем сравнить ключевые поля.
+            
             local status = self._status
             status.status = data.status or -1
             status.signal = data.signal or -1
@@ -396,7 +400,7 @@ function DvbTuner:psi_update()
         name = "psi_update_" .. self._name,
         join_pid = true,
         callback = function(data)
-            if not self or not self._temp_analyzer then return end
+            if not data or not self._temp_analyzer then return end
             if data.psi then
                 self._psi[data.psi:lower()] = data
             end
