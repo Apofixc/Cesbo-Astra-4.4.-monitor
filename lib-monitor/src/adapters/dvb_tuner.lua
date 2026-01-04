@@ -1,6 +1,8 @@
 -- 1. Стандартные Lua функции
+local collectgarbage = collectgarbage
 local ipairs = ipairs
 local math_max = math.max
+local require = require
 local setmetatable = setmetatable
 local string_format = string.format
 local tostring = tostring
@@ -17,8 +19,8 @@ local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local analyze = ModuleManager.get_global_dependency("analyze")
-local collectgarbage = collectgarbage
 local timer = ModuleManager.get_global_dependency("timer")
+local bit = require("bit32")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
@@ -74,8 +76,6 @@ local COMPARISON_METHODS = {
 --- @return table Таблица с флагами {has_signal, has_carrier, has_viterbi, has_sync, has_lock}
 local function decode_status(status)
     status = status or 0
-    -- Используем bit32 для совместимости с Lua 5.2 (Astra)
-    local bit = require("bit32")
     return {
         has_signal  = bit.band(status, 0x01) ~= 0,
         has_carrier = bit.band(status, 0x02) ~= 0,
@@ -92,6 +92,12 @@ function DvbTuner:_clear_psi()
         self._psi_timer = nil
     end
     if self._temp_analyzer then
+        if self._temp_analyzer.__options then
+            self._temp_analyzer.__options.callback = nil
+        end
+        if type(self._temp_analyzer.close) == "function" then
+            self._temp_analyzer:close()
+        end
         self._temp_analyzer = nil
         collectgarbage()
     end
@@ -374,11 +380,7 @@ function DvbTuner:psi_update()
         interval = 10,
         callback = function()
             if not self or not self.name_adapter then return end
-            self._temp_analyzer = nil
-            if self._psi_timer then
-                self._psi_timer:close()
-                self._psi_timer = nil
-            end
+            self:_clear_psi()
             Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self.name_adapter))
         end
     })
@@ -409,8 +411,12 @@ end
 --- @param force boolean|nil Принудительная остановка (игнорировать счетчик каналов)
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function DvbTuner:destroy(force)
-    -- 1. Проверка: можно ли очистить ресурсы? (Защита от дурака)
-    if not self.instance or (self.instance.__options and self.instance.__options.channels > 1 and force ~= true) then
+    -- 1. Проверка: можно ли очистить ресурсы?
+    if not self.instance then return nil end
+    
+    local channels = self.instance.__options and self.instance.__options.channels or 0
+    if channels > 1 and force ~= true then
+        Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy tuner: busy (channels: %d)", tostring(self.name_adapter), channels)
         return nil
     end
 
@@ -421,7 +427,7 @@ function DvbTuner:destroy(force)
     self._state = STATE.STOPPED
     self:_clear_psi()
 
-    -- Очищаем callback во внутренней таблице параметров Astra
+    -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
     if self.instance.__options then
         self.instance.__options.callback = nil
     end
@@ -431,7 +437,6 @@ function DvbTuner:destroy(force)
         self._astra_conf.callback = nil
     end
 
-    -- Безопасная очистка внутреннего списка Astra
     if type(dvb_input_instance_list) == "table" and self.instance.__options then
         local opts = self.instance.__options
         if opts.adapter ~= nil and opts.device ~= nil then

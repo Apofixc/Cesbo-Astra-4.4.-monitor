@@ -252,11 +252,28 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
 
     local old_tuner_params = Utils.table_copy(tuner.config)
     local saved_channels = stop_dependent_channels(name_adapter)
+    
+    -- Создаем карту новых входов для быстрой проверки
+    local reserve_map = {}
+    if reserve_input and type(reserve_input) == "table" then
+        for _, item in ipairs(reserve_input) do
+            if item.name then reserve_map[item.name] = item.input end
+        end
+    end
+
+    -- Фильтруем сохраненные каналы: исключаем те, которые будут запущены с новыми входами
+    local filtered_saved_channels = {}
     local old_channels_map = {}
-    for _, conf in ipairs(saved_channels) do old_channels_map[conf.name] = conf end
+    for _, conf in ipairs(saved_channels) do
+        old_channels_map[conf.name] = conf
+        if not reserve_map[conf.name] then
+            table_insert(filtered_saved_channels, conf)
+        end
+    end
 
     -- Перенастройка тюнера (force=false, каналы уже остановлены)
-    if not restart_dvb_monitor(name_adapter, new_tuner_params, false, saved_channels) then
+    -- Передаем отфильтрованный список, чтобы restart_dvb_monitor не запустил лишнего
+    if not restart_dvb_monitor(name_adapter, new_tuner_params, false, filtered_saved_channels) then
         start_dependent_channels(saved_channels)
         return nil
     end
