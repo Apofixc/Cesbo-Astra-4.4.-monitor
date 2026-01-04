@@ -223,30 +223,11 @@ function ChannelMonitor:get_cached_source()
     return self._cached_source
 end
 
---- Создает или возвращает закэшированный базовый шаблон статуса
---- @return table Шаблон статуса
-function ChannelMonitor:get_status_template()
-    local source = self:get_cached_source()
-    if self._status_template_cache then
-        return self._status_template_cache
-    end
-    self._status_template_cache = {
-        type = "Channel",
-        server = Utils.get_server_name(),
-        channel = self.name,
-        display_name = self.display_name,
-        monitor = self._config.monitor,
-        stream = source.stream,
-        format = source.format,
-        addr = source.addr
-    }
-    return self._status_template_cache
-end
 
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local content = table_copy(self:get_status_template())
+    local content = self:_build_status_table()
     content.error = data.error
     HttpSubscriber.publish("error", json_encode(content))
 end
@@ -340,25 +321,19 @@ end
 --- Обновляет статус и публикует его
 --- @param data table Данные потока
 function ChannelMonitor:update_status_and_publish(data)
-    -- Оптимизация: проверяем изменения до создания копии таблицы и json_encode
-    local on_air = data.on_air
-    local scrambled = data.total.scrambled
-    local bitrate = data.total.bitrate or 0
-    local cc = self._status.cc_errors
-    local pes = self._status.pes_errors
+    -- Проверяем, изменился ли активный вход
+    local active_id = self._channel_data and self._channel_data.active_input_id or 1
+    local input_changed = active_id ~= self._last_active_id
 
-    -- Если данные не изменились по сравнению с кэшем (и это не принудительная отправка по таймеру),
-    -- то можно пропустить публикацию. Но так как мы сюда попадаем уже после проверки comparison_method,
-    -- мы проверяем только против последнего отправленного JSON.
-    
-    local status = table_copy(self:get_status_template())
-    status.ready = on_air
-    status.scrambled = scrambled
-    status.bitrate = bitrate
-    status.cc_errors = cc
-    status.pes_errors = pes
+    -- Если ни метрики (проверенные в comparison_method), ни вход не изменились, 
+    -- и это не принудительная отправка (force_timer), то можно пропустить.
+    -- Но так как мы уже здесь, значит либо comparison_method == true, либо force_timer сработал.
 
-    local current_json = json_encode(status)
+    -- Оптимизация: формируем таблицу и JSON только если есть реальные изменения в данных
+    -- или если кэш пуст.
+    local status_table = self:_build_status_table(data)
+    local current_json = json_encode(status_table)
+
     if current_json ~= self._json_status_cache then
         HttpSubscriber.publish("channels", current_json)
         self._json_status_cache = current_json
@@ -368,9 +343,9 @@ function ChannelMonitor:update_status_and_publish(data)
     self._status.ready = data.on_air
     self._status.scrambled = data.total.scrambled
     self._status.bitrate = data.total.bitrate or 0
-    -- Сброс счетчиков ошибок
     self._status.cc_errors = 0
     self._status.pes_errors = 0
+    self._last_active_id = active_id
 end
 
 --- Возвращает закэшированные PSI данные (в формате JSON)
@@ -401,26 +376,43 @@ function ChannelMonitor:get_json_status_cache()
     return self._json_status_cache
 end
 
---- Возвращает полный текущий статус монитора
---- @return table Статус монитора
-function ChannelMonitor:get_full_status()
+--- Внутренний метод для сборки таблицы полного статуса
+--- @param data table|nil Текущие данные (если есть)
+--- @return table Таблица статуса
+function ChannelMonitor:_build_status_table(data)
     local source = self:get_cached_source()
     local status = self._status or {}
+    
+    -- Если переданы свежие данные, используем их, иначе берем из self._status
+    local ready = data and data.on_air or status.ready or false
+    local bitrate = data and (data.total.bitrate or 0) or (status.bitrate or 0)
+    local scrambled = data and data.total.scrambled or status.scrambled or false
+    local cc = status.cc_errors or 0
+    local pes = status.pes_errors or 0
+
     return {
         id = self.name,
         name = self.name,
         display_name = self.display_name,
-        status = status.ready and "OK" or "ERROR",
-        bitrate = status.bitrate or 0,
-        cc_errors = status.cc_errors or 0,
-        pes_errors = status.pes_errors or 0,
-        scrambled = status.scrambled or false,
-        ready = status.ready or false,
+        status = ready and "OK" or "ERROR",
+        bitrate = bitrate,
+        cc_errors = cc,
+        pes_errors = pes,
+        scrambled = scrambled,
+        ready = ready,
         monitor = self._config.monitor,
         stream = source.stream,
         format = source.format,
-        addr = source.addr
+        addr = source.addr,
+        server = Utils.get_server_name(),
+        type = "Channel"
     }
+end
+
+--- Возвращает полный текущий статус монитора
+--- @return table Статус монитора
+function ChannelMonitor:get_full_status()
+    return self:_build_status_table()
 end
 
 --- Приостанавливает мониторинг

@@ -190,7 +190,10 @@ function DvbTuner:start()
                 self.stats.count = 0
             end
 
-            local current_json = json_encode(self.status)
+            -- Формируем полный статус для публикации
+            local status_table = self:_build_status_table()
+            local current_json = json_encode(status_table)
+            
             if current_json ~= self.json_cache then
                 HttpSubscriber.publish("dvb", current_json)
                 self.json_cache = current_json
@@ -248,9 +251,9 @@ function DvbTuner:get_psi()
     return self._psi
 end
 
---- Возвращает полный текущий статус тюнера
---- @return table Статус тюнера
-function DvbTuner:get_full_status()
+--- Внутренний метод для сборки таблицы полного статуса
+--- @return table Таблица статуса
+function DvbTuner:_build_status_table()
     local status = self.status or {}
     return {
         id = self.name_adapter,
@@ -260,14 +263,20 @@ function DvbTuner:get_full_status()
         ber = status.ber or 0,
         unc = status.unc or 0,
         quality = status.quality or 0,
-        lock = status.lock or false,
-        type = status.type,
-        server = status.server,
-        format = status.format,
-        modulation = status.modulation,
-        source = status.source,
-        name_adapter = status.name_adapter
+        lock = status.status and status.status > 0 or false,
+        type = status.type or "dvb",
+        server = status.server or Utils.get_server_name(),
+        format = status.format or "",
+        modulation = status.modulation or "",
+        source = status.source or "",
+        name_adapter = self.name_adapter
     }
+end
+
+--- Возвращает полный текущий статус тюнера
+--- @return table Статус тюнера
+function DvbTuner:get_full_status()
+    return self:_build_status_table()
 end
 
 --- Запускает сбор PSI таблиц на 10 секунд

@@ -114,8 +114,8 @@ function MonitorRoutes.update_monitor(server, client, request)
     end
 
     -- Вызов метода обновления в объекте монитора
-    if ch_obj.monitor.update_parameters then
-        local success, err = Logger.with_error(ch_obj.monitor.update_parameters, ch_obj.monitor, data)
+    if type(ch_obj.update_parameters) == "function" then
+        local success, err = Logger.with_error(ch_obj.update_parameters, ch_obj, data)
         if success then
             HttpHelpers.success(server, client, { message = "Monitor updated" })
         else
