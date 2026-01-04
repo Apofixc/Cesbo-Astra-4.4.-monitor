@@ -95,9 +95,9 @@ function SystemRoutes.reload(server, client, request)
     local delay = request.query and tonumber(request.query.delay) or 1
     
     -- Используем таймер для отложенной перезагрузки, чтобы успеть отправить ответ
-    local timer = ModuleManager.get_global_dependency("timer")
-    if timer then
-        timer({
+    local timer_obj = ModuleManager.get_global_dependency("timer")
+    if timer_obj then
+        timer_obj({
             interval = delay,
             count = 1,
             callback = function()
@@ -121,9 +121,9 @@ function SystemRoutes.exit(server, client, request)
 
     local delay = request.query and tonumber(request.query.delay) or 1
     
-    local timer = ModuleManager.get_global_dependency("timer")
-    if timer then
-        timer({
+    local timer_obj = ModuleManager.get_global_dependency("timer")
+    if timer_obj then
+        timer_obj({
             interval = delay,
             count = 1,
             callback = function()

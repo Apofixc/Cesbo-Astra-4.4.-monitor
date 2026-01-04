@@ -15,6 +15,8 @@ local Adapter = ModuleManager.get_module("adapter")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
+local dvb_list = ModuleManager.get_global_dependency("dvb_list")
+local dvbls = ModuleManager.get_global_dependency("dvbls")
 local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
@@ -29,18 +31,37 @@ function DvbRoutes.get_adapters(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local adapters = {}
-    local list = dvb_input_instance_list or {}
+    -- Используем dvb_list как основной источник данных о тюнерах
+    local list = dvb_list or {}
     
-    for id, _ in pairs(list) do
-        local dvb_obj = DvbStorage and DvbStorage.find(id)
-        table_insert(adapters, {
-            name = id,
-            display_name = dvb_obj and dvb_obj.name or id,
-            type = dvb_obj and dvb_obj.type or "unknown"
-        })
+    for id, data in pairs(list) do
+        table_insert(adapters, data)
+    end
+
+    -- Если dvb_list пуст, пробуем dvbls()
+    if #adapters == 0 and dvbls then
+        adapters = dvbls() or {}
     end
 
     HttpHelpers.success(server, client, adapters)
+end
+
+--- Возвращает список адаптеров с активным мониторингом
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.get_monitored_adapters(server, client, request)
+    if not request then return nil end
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local monitors = {}
+    local active_adapters = DvbStorage and DvbStorage.get_all and DvbStorage.get_all() or {}
+    
+    for id, _ in pairs(active_adapters) do
+        monitors[id] = id
+    end
+
+    HttpHelpers.success(server, client, monitors)
 end
 
 --- Запуск быстрого сканирования адаптера
@@ -70,10 +91,9 @@ function DvbRoutes.get_adapter_data(server, client, request)
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
-    -- Оптимизация: используем кэш JSON если он доступен
-    local cache = dvb_obj.get_json_cache and dvb_obj:get_json_cache()
-    if cache then
-        return HttpHelpers.send_raw_json(server, client, 200, cache)
+    -- Используем _json_cache напрямую для максимальной производительности
+    if dvb_obj._json_cache then
+        return HttpHelpers.send_raw_json(server, client, 200, dvb_obj._json_cache)
     end
 
     HttpHelpers.success(server, client, dvb_obj:get_full_status())
@@ -93,6 +113,7 @@ function DvbRoutes.get_adapter_psi(server, client, request)
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
+    -- Выполняем функцию get_dvb_psi (предполагается наличие метода get_psi у объекта)
     HttpHelpers.success(server, client, dvb_obj:get_psi() or {})
 end
 

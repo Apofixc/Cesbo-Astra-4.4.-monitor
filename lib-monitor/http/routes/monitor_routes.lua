@@ -13,6 +13,7 @@ local Channel = ModuleManager.get_module("channel")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_decode = ModuleManager.get_global_dependency("json.decode")
+local timer = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "MonitorRoutes"
@@ -91,12 +92,12 @@ function MonitorRoutes.get_monitor_data(server, client, request)
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
-    -- Оптимизация: используем кэш JSON если он доступен
-    local cache = ch_obj.get_json_cache and ch_obj:get_json_cache()
-    if cache then
-        return HttpHelpers.send_raw_json(server, client, 200, cache)
+    -- Используем _json_cache напрямую для максимальной производительности
+    if ch_obj._json_cache then
+        return HttpHelpers.send_raw_json(server, client, 200, ch_obj._json_cache)
     end
 
+    -- Если кэша нет, возвращаем полный статус
     HttpHelpers.success(server, client, ch_obj:get_full_status())
 end
 
@@ -137,10 +138,31 @@ function MonitorRoutes.kill_monitor(server, client, request)
     local name = request.path:match("/api/monitors/([^/]+)/kill")
     if not name then return HttpHelpers.error(server, client, 400, "Monitor name is required") end
 
-    local success, result_or_err = Logger.with_error(Channel.kill_monitor, name)
+    local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+
+    local success, result_or_err = Logger.with_error(function()
+        local config = Channel.kill_monitor(name)
+        if not config then return false, "Failed to kill monitor" end
+        
+        if reboot then
+            if timer then
+                timer({
+                    interval = 1,
+                    count = 1,
+                    callback = function()
+                        Channel.make_monitor(config, config.channel_data or config.name)
+                    end
+                })
+            else
+                Channel.make_monitor(config, config.channel_data or config.name)
+            end
+        end
+        return config
+    end)
+
     if success and result_or_err then
         HttpHelpers.success(server, client, { 
-            message = "Monitor killed",
+            message = reboot and "Monitor rebooting" or "Monitor killed",
             config = result_or_err
         })
     else
@@ -236,7 +258,28 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     HttpHelpers.success(server, client, ch_obj:get_stats())
 end
 
---- Очистка статистики по PID
+--- Получение статистики по битрейту
+--- @param server table
+--- @param client table
+--- @param request table
+function MonitorRoutes.get_monitor_rate_stat(server, client, request)
+    if not request then return nil end
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local name = request.path:match("/api/monitors/([^/]+)/rate_stat")
+    if not name then
+        return HttpHelpers.error(server, client, 400, "Monitor name is required")
+    end
+
+    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    if not ch_obj then
+        return HttpHelpers.error(server, client, 404, "Monitor not found")
+    end
+
+    HttpHelpers.success(server, client, ch_obj:get_rate_stat() or {})
+end
+
+--- Очистка статистики по PID и битрейту
 --- @param server table
 --- @param client table
 --- @param request table
@@ -255,7 +298,7 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     end
 
     ch_obj:clear_stats()
-    HttpHelpers.success(server, client, { message = "PID stats cleared" })
+    HttpHelpers.success(server, client, { message = "PID and rate stats cleared" })
 end
 
 return MonitorRoutes

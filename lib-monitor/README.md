@@ -123,7 +123,6 @@ lib-monitor/
     ```bash
     /opt/astra/astra4.4.182 /opt/tv3.lua
     ```
-*   **Структура тестов**: При создании новых тестов следует придерживаться синтаксиса существующих примеров в `test/` и использовать официальные методы Astra для конфигурации адаптеров и каналов.
 
 ## Разработка и стандарты
 
@@ -250,13 +249,14 @@ end
 
 ## API Endpoints:
 
-Все API-запросы требуют аутентификации с помощью заголовка `X-Api-Key`. Значение ключа устанавливается через переменную окружения `ASTRA_API_KEY` (по умолчанию "test"). Все успешные ответы содержат `"status": "ok"` (или `"healthy"` для health-check) и `"timestamp"`.
+Все API-запросы требуют аутентификации с помощью заголовка `X-Api-Key`. Все успешные ответы возвращаются с кодом `200 OK`. Ошибки возвращаются в формате JSON с описанием причины.
 
 ### Channel Routes (`/api/channels`)
 
 *   **GET `/api/channels`**
     *   **Описание**: Получает список всех каналов, настроенных в системе Astra.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Получает список всех каналов через обращение к таблице `channels_list`. Поле `display_name` берется из списка мониторов `ChannelStorage`.
+    *   **JSON**:
 ```json
         [
           {
@@ -269,7 +269,8 @@ end
 
 *   **GET `/api/channels/stats`**
     *   **Описание**: Возвращает агрегированную статистику по каналам (общее количество в Astra и детально по мониторингу).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: `total_astra_channels` получается подсчетом каналов в `channels_list`. Остальные поля берутся из `ChannelStorage` после анализа всех мониторов.
+    *   **JSON**:
 ```json
         {
           "total_astra_channels": 50,
@@ -282,11 +283,11 @@ end
 
 *   **GET `/api/channels/{id}`**
     *   **Описание**: Возвращает детальную информацию о канале (входы, выходы, карта PID). Ищет канал во всей системе Astra.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Возвращает полный конфиг канала из `channels_list` (аналогично параметрам для `make_channel`).
+    *   **JSON**:
 ```json
         {
           "name": "Discovery",
-          "display_name": "Discovery HD",
           "input": ["http://..."],
           "output": ["udp://..."],
           "map": "..."
@@ -295,9 +296,11 @@ end
 
 *   **GET `/api/channels/{id}/inputs`**
     *   **Описание**: Возвращает список входов канала из конфигурации Astra и индекс активного входа (если запущен мониторинг).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Данные извлекаются из `channels_list` по имени канала.
+    *   **JSON**:
 ```json
         {
+          "name": "Discovery",
           "inputs": ["http://input1", "http://input2"],
           "active_input": 1
         }
@@ -305,12 +308,21 @@ end
 
 *   **GET `/api/channels/{id}/psi`**
     *   **Описание**: Возвращает собранные PSI данные для канала.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Данные извлекаются из `ChannelStorage`.
+    *   **JSON**:
+```json
+        {
+          "name": "Discovery",
+          "display_name": "Discovery HD",
+          "pmt": { "pid": 256, "streams": [...] },
+          "sdt": { "pid": 17, "services": [...] }
+        }
+```
 
 *   **POST `/api/channels/create`**
     *   **Описание**: Создает новый канал Astra (без автоматического мониторинга).
-    *   **Параметры (JSON)**: Стандартная конфигурация канала Astra.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `make_channel`.
+    *   **JSON**:
 ```json
         {
           "message": "Channel created"
@@ -320,10 +332,12 @@ end
 *   **POST `/api/channels/{id}/kill`**
     *   **Описание**: Останавливает или перезагружает канал Astra.
     *   **Параметры (Query String)**: `reboot` (boolean).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `kill_channel`. Для перезапуска сохраняется конфигурация и вызывается `make_channel` (желательно с задержкой).
+    *   **JSON**:
 ```json
         {
-          "message": "Channel killed/rebooting"
+          "message": "Channel killed/rebooting",
+          "config": { "name": "Discovery", "input": [...], "output": [...] }
         }
 ```
 
@@ -331,8 +345,8 @@ end
 
 *   **POST `/api/streams`**
     *   **Описание**: Создает канал Astra и автоматически запускает для него мониторинг.
-    *   **Параметры (JSON)**: Конфигурация канала + секция `monitor`.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `make_stream`.
+    *   **JSON**:
 ```json
         {
           "message": "Stream and monitor created"
@@ -341,11 +355,12 @@ end
 
 *   **POST `/api/streams/{id}/kill`**
     *   **Описание**: Корректно останавливает и монитор, и канал.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `kill_stream`. Для перезапуска сохраняется конфигурация и вызывается `make_stream` (желательно с задержкой).
+    *   **JSON**:
 ```json
         {
           "message": "Stream and monitor killed",
-          "config": { "name": "Discovery", "input": [...], "output": [...] }
+          "config": { "name": "Discovery", "input": [...], "output": [...], "monitor": {...} }
         }
 ```
 
@@ -353,32 +368,51 @@ end
 
 *   **GET `/api/dvb/adapters`**
     *   **Описание**: Получает список всех DVB-адаптеров, видимых ядром Astra.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Обращение к `dvb_list` (заполняется после `dvb_tune()`) или использование `dvbls()`.
+    *   **JSON**:
 ```json
         [
-          { "name": "0", "display_name": "dvb0", "type": "S2" }
+          { "name": "0", "type": "S2", ... },
+          { ... }
         ]
+```
+
+*   **GET `/api/dvb/adapters/monitor`**
+    *   **Описание**: Получает список всех DVB-адаптеров, для которых активен монитор.
+    *   **Способ реализации**: Вызывается метод `get_all_dvb_monitors()`.
+    *   **JSON**:
+```json
+        {
+          "dvb0": "dvb0",
+          "dvb1": "dvb1"
+        }
 ```
 
 *   **GET `/api/dvb/adapters/{id}/data`**
     *   **Описание**: Получает детальные метрики тюнера (Signal, SNR, Quality).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Из `DvbStorage` берется объект монитора и поле `_json_cache` (готовый JSON с последней отправки).
+    *   **JSON**:
 ```json
         {
+          "type": "dvb",
+          "server": "astra-1",
+          "format": "S2",
+          "modulation": "QPSK",
+          "source": "11044:V:43200",
+          "name_adapter": "dvb0",
           "status": 1,
           "signal": 75.5,
           "snr": 24.8,
           "ber": 0,
           "unc": 0,
-          "quality": 100,
-          "lock": true,
-          "name_adapter": "dvb0"
+          "quality": 100
         }
 ```
 
 *   **POST `/api/dvb/adapters/{id}/psi/update`**
     *   **Описание**: Запускает 10-секундный процесс сбора PSI таблиц для адаптера.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `update_dvb_psi`.
+    *   **JSON**:
 ```json
         {
           "message": "PSI update started"
@@ -387,7 +421,8 @@ end
 
 *   **GET `/api/dvb/adapters/{id}/psi`**
     *   **Описание**: Возвращает собранные PSI данные из кэша.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `get_dvb_psi`.
+    *   **JSON**:
 ```json
         {
           "pmt": { "pid": 256, "streams": [...] },
@@ -397,8 +432,8 @@ end
 
 *   **POST `/api/dvb/adapters/{id}/switch-transponder`**
     *   **Описание**: Сценарий переключения частоты с сохранением выходов зависимых каналов.
-    *   **Параметры (JSON)**: `tp` (новые параметры тюнера), `reserve_input` (опционально).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `switch_transponder`.
+    *   **JSON**:
 ```json
         {
           "message": "Transponder switched successfully",
@@ -408,10 +443,21 @@ end
 
 *   **POST `/api/dvb/adapters/{id}/pause` / `resume`**
     *   **Описание**: Управление активностью мониторинга адаптера.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `pause_dvb_monitor` / `resume_dvb_monitor`.
+    *   **JSON**:
 ```json
         {
           "message": "Adapter monitoring paused/resumed"
+        }
+```
+
+*   **POST `/api/dvb/adapters/{id}/update`**
+    *   **Описание**: Обновляет параметры монитора (rate, time_check, method_comparison).
+    *   **Способ реализации**: Выполнить функцию `update_dvb_monitor_parameters`.
+    *   **JSON**:
+```json
+        {
+          "message": "Monitor updated"
         }
 ```
 
@@ -419,7 +465,8 @@ end
 
 *   **GET `/api/monitors`**
     *   **Описание**: Получает список всех активных мониторов каналов.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Получить данные из `ChannelStorage`.
+    *   **JSON**:
 ```json
         [
           { "name": "Discovery", "display_name": "Discovery HD", "type": "output" }
@@ -428,22 +475,30 @@ end
 
 *   **GET `/api/monitors/{id}/data`**
     *   **Описание**: Получает текущее состояние потока (Bitrate, CC, Scrambled).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Из `ChannelStorage` берется объект монитора и поле `_json_cache`.
+    *   **JSON**:
 ```json
         {
-          "status": "OK",
+          "type": "Channel",
+          "server": "astra-1",
+          "channel": "Discovery",
+          "display_name": "Discovery HD",
+          "monitor": "output",
+          "stream": "http://example.com/stream.ts",
+          "format": "http",
+          "addr": "example.com:80",
+          "ready": true,
+          "scrambled": false,
           "bitrate": 12500,
           "cc_errors": 0,
-          "pes_errors": 0,
-          "scrambled": false,
-          "ready": true
+          "pes_errors": 0
         }
 ```
 
 *   **POST `/api/monitors/create`**
     *   **Описание**: Создает новый монитор для существующего канала.
-    *   **Параметры (JSON)**: Конфигурация монитора.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `make_monitor`.
+    *   **JSON**:
 ```json
         {
           "message": "Monitor created"
@@ -452,7 +507,8 @@ end
 
 *   **POST `/api/monitors/{id}/update`**
     *   **Описание**: Обновляет параметры монитора (rate, time_check, method_comparison).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `update_monitor_parameters`.
+    *   **JSON**:
 ```json
         {
           "message": "Monitor updated"
@@ -461,7 +517,8 @@ end
 
 *   **POST `/api/monitors/{id}/pause` / `resume`**
     *   **Описание**: Приостановка/возобновление анализа потока.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Выполнить функцию `pause_monitor` / `resume_monitor`.
+    *   **JSON**:
 ```json
         {
           "message": "Monitoring paused/resumed"
@@ -470,7 +527,8 @@ end
 
 *   **POST `/api/monitors/{id}/kill`**
     *   **Описание**: Удаляет монитор (без удаления канала).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Вызывается функция `kill_monitor`. Для перезапуска сохраняется конфигурация и вызывается `make_monitor` (желательно с задержкой).
+    *   **JSON**:
 ```json
         {
           "message": "Monitor killed",
@@ -480,7 +538,8 @@ end
 
 *   **GET `/api/monitors/{id}/pids`**
     *   **Описание**: Получает детальную статистику ошибок в разрезе каждого PID.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **Способ реализации**: Из `ChannelStorage` берется объект монитора и вызывается метод `get_stats()`.
+    *   **JSON**:
 ```json
         {
           "256": { "type": "VIDEO", "cc": 10, "pes": 0, "sc": 0 },
@@ -488,20 +547,51 @@ end
         }
 ```
 
-*   **POST `/api/monitors/{id}/pids/clear`**
-    *   **Описание**: Сбрасывает накопленную статистику по PID.
-    *   **Ответ**: `HTTP 200 OK`.
+*   **GET `/api/monitors/{id}/rate_stat`**
+    *   **Описание**: Получает детальную статистику по битрейту.
+    *   **Способ реализации**: Из `ChannelStorage` берется объект монитора и вызывается метод `get_rate_stat()`.
+    *   **JSON**:
 ```json
         {
-          "message": "PID stats cleared"
+          "bitrate": [12000, 12500, 12300, ...]
+        }
+```
+
+*   **POST `/api/monitors/{id}/pids/clear`**
+    *   **Описание**: Сбрасывает накопленную статистику по PID и `rate_stat`.
+    *   **Способ реализации**: Из `ChannelStorage` берется объект монитора и вызывается метод `clear_stats()`.
+    *   **JSON**:
+```json
+        {
+          "message": "PID and rate stats cleared"
         }
 ```
 
 ### System Routes (`/api/system`)
 
+*   **GET `/api/system/reload`**
+    *   **Описание**: Перезагружает Astra.
+    *   **Способ реализации**: Выполнить `astra.reload()` (желательно с задержкой).
+    *   **JSON**:
+```json
+        {
+          "message": "Astra reloading"
+        }
+```
+
+*   **GET `/api/system/exit`**
+    *   **Описание**: Останавливает Astra.
+    *   **Способ реализации**: Выполнить `astra.exit()` (желательно с задержкой).
+    *   **JSON**:
+```json
+        {
+          "message": "Astra exiting"
+        }
+```
+
 *   **GET `/api/system/resources`**
     *   **Описание**: Получает данные о системных ресурсах (CPU, Memory, Network).
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **JSON**:
 ```json
         {
           "cpu": { "total": 12.5, "temp_c": 45.0 },
@@ -512,7 +602,7 @@ end
 
 *   **GET `/api/system/health`**
     *   **Описание**: Проверяет состояние сервера мониторинга.
-    *   **Ответ**: `HTTP 200 OK`.
+    *   **JSON**:
 ```json
         {
           "status": "healthy",

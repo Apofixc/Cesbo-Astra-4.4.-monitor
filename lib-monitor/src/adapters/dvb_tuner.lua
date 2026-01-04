@@ -270,8 +270,7 @@ function DvbTuner:start()
             end
 
             -- Формируем полный статус для публикации
-            self:_build_status_table()
-            local r = self._reports.dvb
+            local r = self:_build_status_table()
             local current_json = json_encode(r)
             
             -- Публикуем если JSON изменился

@@ -18,6 +18,7 @@ local find_channel = ModuleManager.get_global_dependency("find_channel")
 local make_channel = ModuleManager.get_global_dependency("make_channel")
 local kill_channel = ModuleManager.get_global_dependency("kill_channel")
 local channel_list = ModuleManager.get_global_dependency("channel_list")
+local timer = ModuleManager.get_global_dependency("timer")
 local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
@@ -112,15 +113,7 @@ function ChannelRoutes.get_channel_info(server, client, request)
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
-
-    HttpHelpers.success(server, client, {
-        name = name,
-        display_name = ch_obj and ch_obj.display_name or name,
-        input = ch_data.config.input,
-        output = ch_data.config.output,
-        map = ch_data.config.map
-    })
+    HttpHelpers.success(server, client, ch_data.config)
 end
 
 --- Возвращает список входов канала и активный вход
@@ -145,6 +138,7 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     local active_input = ch_obj and ch_obj._last_active_id or 1
     
     HttpHelpers.success(server, client, {
+        name = name,
         inputs = ch_data.config.input or {},
         active_input = active_input
     })
@@ -168,7 +162,11 @@ function ChannelRoutes.get_channel_psi(server, client, request)
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    HttpHelpers.success(server, client, ch_obj:get_psi() or {})
+    local psi = ch_obj:get_psi() or {}
+    psi.name = name
+    psi.display_name = ch_obj.display_name
+    
+    HttpHelpers.success(server, client, psi)
 end
 
 --- Создает новый канал (Raw Astra Channel)
@@ -214,18 +212,31 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     end
 
     local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+    local config = ch_data.config
     
     local success, err = Logger.with_error(function()
-        local config = ch_data.config
         kill_channel(ch_data)
         if reboot and config then
-            make_channel(config)
+            if timer then
+                timer({
+                    interval = 1,
+                    count = 1,
+                    callback = function()
+                        make_channel(config)
+                    end
+                })
+            else
+                make_channel(config)
+            end
         end
         return true
     end)
 
     if success then
-        HttpHelpers.success(server, client, { message = reboot and "Channel rebooting" or "Channel killed" })
+        HttpHelpers.success(server, client, { 
+            message = reboot and "Channel rebooting" or "Channel killed",
+            config = config
+        })
     else
         HttpHelpers.error(server, client, 500, err or "Operation failed")
     end
@@ -268,10 +279,31 @@ function ChannelRoutes.kill_stream(server, client, request)
     local name = request.path:match("/api/streams/([^/]+)/kill")
     if not name then return HttpHelpers.error(server, client, 400, "Stream name is required") end
 
-    local success, result_or_err = Logger.with_error(Channel.kill_stream, name)
+    local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+
+    local success, result_or_err = Logger.with_error(function()
+        local config = Channel.kill_stream(name)
+        if not config then return false, "Failed to kill stream" end
+        
+        if reboot then
+            if timer then
+                timer({
+                    interval = 1,
+                    count = 1,
+                    callback = function()
+                        Channel.make_stream(config)
+                    end
+                })
+            else
+                Channel.make_stream(config)
+            end
+        end
+        return config
+    end)
+
     if success and result_or_err then
         HttpHelpers.success(server, client, { 
-            message = "Stream and monitor killed",
+            message = reboot and "Stream rebooting" or "Stream and monitor killed",
             config = result_or_err
         })
     else
