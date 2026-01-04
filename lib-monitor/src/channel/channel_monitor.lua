@@ -437,7 +437,18 @@ end
 function ChannelMonitor:stop()
     self._active = false
 
-    self._monitor_instance = nil
+    if self._monitor_instance then
+        -- Очищаем callback во внутренней таблице параметров Astra (ОБЯЗАТЕЛЬНО согласно astra-api-usage.md)
+        if self._monitor_instance.__options then
+            self._monitor_instance.__options.callback = nil
+        end
+
+        -- Физическое закрытие инстанса Astra
+        if type(self._monitor_instance.close) == "function" then
+            self._monitor_instance:close()
+        end
+        self._monitor_instance = nil
+    end
 
     if self.input_instance then
         kill_input(self.input_instance)
@@ -462,6 +473,8 @@ function ChannelMonitor:stop()
     self._force_timer = nil
     self._check_timer = nil
     self._last_active_id = nil
+
+    collectgarbage()
 end
 
 --- Обновляет параметры монитора
