@@ -153,7 +153,11 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)/psi")
+    local name, table_name = request.path:match("/api/channels/([^/]+)/psi/([^/]+)$")
+    if not name then
+        name = request.path:match("/api/channels/([^/]+)/psi")
+    end
+
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
@@ -164,9 +168,17 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     end
 
     local psi = ch_obj:get_psi() or {}
+    
+    if table_name then
+        local table_data = psi[table_name:upper()]
+        if not table_data then
+            return HttpHelpers.error(server, client, 404, "PSI table not found")
+        end
+        return HttpHelpers.success(server, client, table_data)
+    end
+
     psi.name = name
     psi.display_name = ch_obj.display_name
-    
     HttpHelpers.success(server, client, psi)
 end
 

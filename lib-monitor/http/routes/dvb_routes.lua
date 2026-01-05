@@ -46,6 +46,22 @@ function DvbRoutes.get_adapters(server, client, request)
     HttpHelpers.success(server, client, adapters)
 end
 
+--- Возвращает список всех физических DVB-адаптеров, обнаруженных в системе
+--- @param server table
+--- @param client table
+--- @param request table
+function DvbRoutes.get_hardware_all(server, client, request)
+    if not request then return nil end
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local adapters = {}
+    if dvbls then
+        adapters = dvbls() or {}
+    end
+
+    HttpHelpers.success(server, client, adapters)
+end
+
 --- Возвращает список адаптеров с активным мониторингом
 --- @param server table
 --- @param client table
@@ -107,14 +123,27 @@ function DvbRoutes.get_adapter_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
+    local id, table_name = request.path:match("/api/dvb/adapters/([^/]+)/psi/([^/]+)$")
+    if not id then
+        id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
+    end
+
     local dvb_obj = DvbStorage and DvbStorage.find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
 
-    -- Выполняем функцию get_dvb_psi (предполагается наличие метода get_psi у объекта)
-    HttpHelpers.success(server, client, dvb_obj:get_psi() or {})
+    local psi = dvb_obj:get_psi() or {}
+
+    if table_name then
+        local table_data = psi[table_name:upper()]
+        if not table_data then
+            return HttpHelpers.error(server, client, 404, "PSI table not found")
+        end
+        return HttpHelpers.success(server, client, table_data)
+    end
+
+    HttpHelpers.success(server, client, psi)
 end
 
 --- Настройка частоты (смена источника сигнала)

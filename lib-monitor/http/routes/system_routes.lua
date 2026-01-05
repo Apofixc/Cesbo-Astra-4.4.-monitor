@@ -15,6 +15,8 @@ local ResourceMonitor = ModuleManager.get_module("resource_monitor")
 local astra_version = ModuleManager.get_global_dependency("astra.version")
 local astra_reload = ModuleManager.get_global_dependency("astra.reload")
 local astra_exit = ModuleManager.get_global_dependency("astra.exit")
+local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
+local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SystemRoutes"
@@ -152,6 +154,35 @@ function SystemRoutes.clear_cache(server, client, request)
     else
         HttpHelpers.error(server, client, 501, "Resource monitor not available")
     end
+end
+
+--- Возвращает список всех сетевых интерфейсов сервера
+--- @param server table
+--- @param client table
+--- @param request table
+function SystemRoutes.get_network_interfaces(server, client, request)
+    if not request then return nil end
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    local interfaces = {}
+    if utils_ifaddrs then
+        interfaces = utils_ifaddrs() or {}
+    end
+
+    HttpHelpers.success(server, client, interfaces)
+end
+
+--- Возвращает имя хоста сервера
+--- @param server table
+--- @param client table
+--- @param request table
+function SystemRoutes.get_hostname(server, client, request)
+    if not request then return nil end
+    if not HttpHelpers.check_auth(server, client, request) then return end
+
+    HttpHelpers.success(server, client, {
+        hostname = utils_hostname and utils_hostname() or "unknown"
+    })
 end
 
 return SystemRoutes
