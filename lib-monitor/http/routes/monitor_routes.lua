@@ -148,8 +148,8 @@ function MonitorRoutes.kill_monitor(server, client, request)
             if timer then
                 timer({
                     interval = 1,
-                    count = 1,
-                    callback = function()
+                    callback = function(self)
+                        self:close()
                         Channel.make_monitor(config, config.channel_data or config.name)
                     end
                 })

@@ -101,8 +101,8 @@ function SystemRoutes.reload(server, client, request)
     if timer_obj then
         timer_obj({
             interval = delay,
-            count = 1,
-            callback = function()
+            callback = function(self)
+                self:close()
                 if astra_reload then astra_reload() end
             end
         })
@@ -127,8 +127,8 @@ function SystemRoutes.exit(server, client, request)
     if timer_obj then
         timer_obj({
             interval = delay,
-            count = 1,
-            callback = function()
+            callback = function(self)
+                self:close()
                 if astra_exit then astra_exit() end
             end
         })

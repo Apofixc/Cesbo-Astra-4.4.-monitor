@@ -233,8 +233,8 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
             if timer then
                 timer({
                     interval = 1,
-                    count = 1,
-                    callback = function()
+                    callback = function(self)
+                        self:close()
                         make_channel(config)
                     end
                 })
@@ -302,8 +302,8 @@ function ChannelRoutes.kill_stream(server, client, request)
             if timer then
                 timer({
                     interval = 1,
-                    count = 1,
-                    callback = function()
+                    callback = function(self)
+                        self:close()
                         Channel.make_stream(config)
                     end
                 })
