@@ -213,3 +213,4 @@ cesbo-astra/scripts/stream.lua
 cesbo-astra/scripts/examples/http/file_server.lua
 cesbo-astra/scripts/examples/http/request.lua
 cesbo-astra/scripts/examples/http/websocket.lua
+lib-monitor/README_туц.md
