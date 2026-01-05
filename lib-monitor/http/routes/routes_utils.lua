@@ -236,7 +236,7 @@ function RoutesUtils.cleanup(server, client, request)
     HttpHelpers.success(server, client, {
         message = "Cleanup functionality is temporarily disabled for safety",
         cleaned_count = 0,
-        cleaned_objects = []
+        cleaned_objects = {}
     })
 end
 
