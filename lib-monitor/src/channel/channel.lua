@@ -7,11 +7,11 @@ local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local ChannelMonitor = ModuleManager.get_module("channel_monitor")
-local ChannelStorage = ModuleManager.get_module("channel_storage")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Utils = ModuleManager.get_module("utils")
-local DvbStorage = ModuleManager.get_module("dvb_storage")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local find_channel = ModuleManager.get_global_dependency("find_channel")
@@ -105,7 +105,7 @@ local monitor_type_handlers = {
 local format_handlers = {
     dvb = function(config)
         local cfg = { format = config.format, addr = config.addr }
-        local tuner = DvbStorage.find(config.addr)
+        local tuner = DvbRepository.find(config.addr)
         local status = tuner and tuner:get_full_status()
         cfg.stream = status and status.source or "dvb"
         return cfg
@@ -189,7 +189,7 @@ end
 --- @param config table Конфигурация монитора
 --- @return ChannelMonitor|nil Экземпляр монитора или nil
 local function make_monitor(config)
-    if ChannelStorage.count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
+    if ChannelRepository:count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
         return nil
     end
@@ -200,7 +200,7 @@ local function make_monitor(config)
         return nil
     end
 
-    if ChannelStorage.find(name) then
+    if ChannelRepository:find(name) then
         Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
         return nil
     end
@@ -264,7 +264,7 @@ local function make_monitor(config)
     local monitor_instance = monitor:start()
     if monitor_instance then
         monitor:set_input_instance(input_instance)
-        ChannelStorage.register(name, monitor)
+        ChannelRepository:register(name, monitor)
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully started", name)
         return monitor_instance
     else
@@ -279,7 +279,7 @@ end
 --- @param force boolean|nil Принудительная остановка
 --- @return table|nil Конфигурация монитора для восстановления или nil
 local function kill_monitor(name, force)
-    local config = ChannelStorage.unregister(name, force)
+    local config = ChannelRepository:unregister(name, force)
     if config then
         Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
         return type(config) == "table" and config or nil
@@ -360,14 +360,14 @@ end
 --- Возвращает список всех активных мониторов
 --- @return table<string, ChannelMonitor> Список мониторов
 local function get_list_monitor()
-    return ChannelStorage.get_all()
+    return ChannelRepository:get_all()
 end
 
 --- Находит экземпляр монитора по его имени
 --- @param name string Имя монитора
 --- @return ChannelMonitor|nil Экземпляр монитора или nil
 local function find_monitor(name)
-    return ChannelStorage.find(name)
+    return ChannelRepository:find(name)
 end
 
 --- Обновляет параметры
@@ -375,7 +375,7 @@ end
 --- @param params table Новые параметры
 --- @return boolean Статус выполнения
 local function update_monitor_parameters(name, params)
-    local monitor = ChannelStorage.find(name)
+    local monitor = ChannelRepository:find(name)
     if monitor then
         return monitor:update_parameters(params)
     end
@@ -387,7 +387,7 @@ end
 --- @param name string Имя монитора
 --- @return boolean Статус выполнения
 local function pause_monitor(name)
-    local monitor = ChannelStorage.find(name)
+    local monitor = ChannelRepository:find(name)
     if monitor then
         return monitor:pause()
     end
@@ -398,7 +398,7 @@ end
 --- @param name string Имя монитора
 --- @return boolean Статус выполнения
 local function resume_monitor(name)
-    local monitor = ChannelStorage.find(name)
+    local monitor = ChannelRepository:find(name)
     if monitor then
         return monitor:resume()
     end

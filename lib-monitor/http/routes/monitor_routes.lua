@@ -8,7 +8,7 @@ local table_insert = table.insert
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
-local ChannelStorage = ModuleManager.get_module("channel_storage")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
 local Channel = ModuleManager.get_module("channel")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -27,7 +27,7 @@ function MonitorRoutes.get_monitors(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local monitors = {}
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
     
     for name, ch_obj in pairs(active_channels) do
         table_insert(monitors, {
@@ -53,7 +53,7 @@ function MonitorRoutes.get_monitors_status(server, client, request)
     local error_count = 0
     local total_cc_errors = 0
 
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
         total = total + 1
@@ -87,7 +87,7 @@ function MonitorRoutes.get_monitor_data(server, client, request)
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
@@ -250,7 +250,7 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
@@ -271,7 +271,7 @@ function MonitorRoutes.get_monitor_rate_stat(server, client, request)
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
@@ -292,7 +292,7 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end

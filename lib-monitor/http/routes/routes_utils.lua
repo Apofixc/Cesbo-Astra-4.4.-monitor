@@ -10,8 +10,8 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
-local ChannelStorage = ModuleManager.get_module("channel_storage")
-local DvbStorage = ModuleManager.get_module("dvb_storage")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Utils = ModuleManager.get_module("utils")
 
@@ -31,11 +31,11 @@ function RoutesUtils.get_resource_stats(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local active_monitors = 0
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
     for _ in pairs(active_channels) do active_monitors = active_monitors + 1 end
 
     local active_dvb = 0
-    local active_adapters = DvbStorage and DvbStorage.get_all and DvbStorage.get_all() or {}
+    local active_adapters = DvbRepository and DvbRepository.get_all and DvbRepository:get_all() or {}
     for _ in pairs(active_adapters) do active_dvb = active_dvb + 1 end
 
     local total_astra_channels = 0
@@ -84,7 +84,7 @@ function RoutesUtils.get_channels_extended(server, client, request)
         local cfg = ch_data.config or {}
         local name = cfg.name
         if name then
-            local ch_obj = ChannelStorage and ChannelStorage.find(name)
+            local ch_obj = ChannelRepository and ChannelRepository:find(name)
             local item = {
                 name = name,
                 display_name = ch_obj and ch_obj.display_name or name,
@@ -118,7 +118,7 @@ function RoutesUtils.get_monitor_errors(server, client, request)
     local name = request.path:match("/api/utils/monitors/([^/]+)/errors")
     if not name then return HttpHelpers.error(server, client, 400, "Name required") end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
 
     HttpHelpers.success(server, client, {
@@ -151,7 +151,7 @@ function RoutesUtils.check_object(server, client, request)
     local name = request.query and request.query.name
     if not name then return HttpHelpers.error(server, client, 400, "Parameter 'name' is required") end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if ch_obj then
         return HttpHelpers.success(server, client, {
             name = name,
@@ -166,7 +166,7 @@ function RoutesUtils.check_object(server, client, request)
         })
     end
 
-    local dvb_obj = DvbStorage and DvbStorage.find(name)
+    local dvb_obj = DvbRepository and DvbRepository:find(name)
     if dvb_obj then
         return HttpHelpers.success(server, client, {
             name = name,
@@ -194,7 +194,7 @@ function RoutesUtils.get_all_objects(server, client, request)
 
     local objects = {}
     
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
     for name, ch_obj in pairs(active_channels) do
         table_insert(objects, {
             id = name,
@@ -206,7 +206,7 @@ function RoutesUtils.get_all_objects(server, client, request)
         })
     end
 
-    local active_adapters = DvbStorage and DvbStorage.get_all and DvbStorage.get_all() or {}
+    local active_adapters = DvbRepository and DvbRepository.get_all and DvbRepository:get_all() or {}
     for name, dvb_obj in pairs(active_adapters) do
         table_insert(objects, {
             id = name,

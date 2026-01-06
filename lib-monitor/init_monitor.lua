@@ -64,23 +64,24 @@ ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_co
 ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_config"})
 
 ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber"})
-ModuleManager.register_module("dvb_storage", "src.storage.dvb_storage", {"logger"})
-ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_storage"})
+ModuleManager.register_module("base_repository", "src.repository.base_repository", {"logger"})
+ModuleManager.register_module("dvb_repository", "src.repository.dvb_repository", {"logger", "base_repository"})
+ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository"})
 
 ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber"})
-ModuleManager.register_module("channel_storage", "src.storage.channel_storage", {"logger"})
-ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_storage", "adapter"})
+ModuleManager.register_module("channel_repository", "src.repository.channel_repository", {"logger", "base_repository"})
+ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "adapter"})
 
 ModuleManager.register_module("resource_monitor", "src.system.resource_monitor", {"logger"})
 
 -- Регистрация HTTP модулей
 ModuleManager.register_module("http_helpers", "http.http_helpers", {"logger"})
-ModuleManager.register_module("channel_routes", "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_storage"})
-ModuleManager.register_module("dvb_routes", "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_storage"})
+ModuleManager.register_module("channel_routes", "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_repository"})
+ModuleManager.register_module("dvb_routes", "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_repository"})
 ModuleManager.register_module("monitor_routes", "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
 ModuleManager.register_module("system_routes", "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
 ModuleManager.register_module("subscriber_routes", "http.routes.subscriber_routes", {"logger", "http_helpers"})
-ModuleManager.register_module("routes_utils", "http.routes.routes_utils", {"logger", "http_helpers", "channel_storage", "dvb_storage", "monitor_config"})
+ModuleManager.register_module("routes_utils", "http.routes.routes_utils", {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
 ModuleManager.register_module("http_server", "http.http_server", {
     "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils"
 })

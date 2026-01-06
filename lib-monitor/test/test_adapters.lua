@@ -86,11 +86,12 @@ local function setup_modules(custom_deps)
     ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_config"})
     ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_config"})
     ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber"})
-    ModuleManager.register_module("dvb_storage", "src.storage.dvb_storage", {"logger"})
-    ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_storage"})
+    ModuleManager.register_module("base_repository", "src.repository.base_repository", {"logger"})
+    ModuleManager.register_module("dvb_repository", "src.repository.dvb_repository", {"logger", "base_repository"})
+    ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository"})
     ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber"})
-    ModuleManager.register_module("channel_storage", "src.storage.channel_storage", {"logger"})
-    ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_storage", "adapter"})
+    ModuleManager.register_module("channel_repository", "src.repository.channel_repository", {"logger", "base_repository"})
+    ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "adapter"})
 
     local ok = ModuleManager.load_modules()
     if not ok then
@@ -102,10 +103,10 @@ local function setup_modules(custom_deps)
     -- Принудительно загружаем зависимые модули, если они не загрузились автоматически
     -- (хотя load_modules должен это делать)
     local ChannelMonitor = ModuleManager.get_module("channel_monitor")
-    local ChannelStorage = ModuleManager.get_module("channel_storage")
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
 
     local Adapter = ModuleManager.get_module("adapter")
-    local DvbStorage = ModuleManager.get_module("dvb_storage")
+    local DvbRepository = ModuleManager.get_module("dvb_repository")
     local Logger = ModuleManager.get_module("logger")
 
     -- Оставляем Logger.error для отладки тестов
@@ -114,10 +115,10 @@ local function setup_modules(custom_deps)
     Logger.debug = function() end
     Logger.warn = function(comp, fmt, ...) print(string.format("[WRN][%s] "..fmt, comp, ...)) end
     
-    return Adapter, DvbStorage
+    return Adapter, DvbRepository
 end
 
-local Adapter, DvbStorage = setup_modules()
+local Adapter, DvbRepository = setup_modules()
 
 -- 3. Тесты
 
@@ -140,13 +141,13 @@ local conf = {
 }
 
 assert_test(Adapter.dvb_tuner_monitor(conf), "Failed to create monitor")
-local tuner = DvbStorage.find("adapter_0")
-assert_test(tuner ~= nil, "Tuner not found in storage")
+local tuner = DvbRepository:find("adapter_0")
+assert_test(tuner ~= nil, "Tuner not found in repository")
 assert_test(_G["adapter_0"] ~= nil, "Tuner not found in _G")
-assert_test(tuner.instance.__options.channels == 1, "Wrong channels count")
+assert_test(tuner:get_instance().__options.channels == 1, "Wrong channels count")
 
 assert_test(Adapter.stop_dvb_monitor("adapter_0"), "Failed to stop monitor")
-assert_test(DvbStorage.find("adapter_0") == nil, "Tuner still in storage")
+assert_test(DvbRepository:find("adapter_0") == nil, "Tuner still in repository")
 assert_test(_G["adapter_0"] == nil, "Tuner still in _G")
 print("Test 1: PASSED")
 
@@ -174,17 +175,17 @@ print("Test 3: Restart and Rollback...")
 Adapter.dvb_tuner_monitor({ name_adapter = "adapter_restart", adapter = "0" })
 
 -- Имитируем ошибку при создании нового тюнера
-Adapter, DvbStorage = setup_modules({ dvb_tune = function() return nil end })
+Adapter, DvbRepository = setup_modules({ dvb_tune = function() return nil end })
 
 -- Теперь создание должно упасть
 assert_test(Adapter.dvb_tuner_monitor({ name_adapter = "adapter_fail", adapter = "0" }) == false, "Creation should fail with bad mock")
 
 -- Возвращаем нормальный мок
-Adapter, DvbStorage = setup_modules()
+Adapter, DvbRepository = setup_modules()
 
 -- Проверяем восстановление
 Adapter.dvb_tuner_monitor({ name_adapter = "adapter_restart", adapter = "0" })
-assert_test(DvbStorage.find("adapter_restart") ~= nil, "Should be able to recover")
+assert_test(DvbRepository:find("adapter_restart") ~= nil, "Should be able to recover")
 
 Adapter.stop_dvb_monitor("adapter_restart")
 print("Test 3: PASSED")
@@ -194,7 +195,7 @@ print("Test 4: Switch Transponder...")
 
 -- 1. Подготовка: создаем адаптер и канал на нем
 local mock_channels = {}
-    Adapter, DvbStorage = setup_modules({
+    Adapter, DvbRepository = setup_modules({
         channel_list = mock_channels,
         make_channel = function(conf)
             local ch = { 
@@ -244,8 +245,8 @@ print("Test 4: PASSED")
 print("Test 5: Shared Tuner Channels Counter...")
 -- Создаем первый монитор
 Adapter.dvb_tuner_monitor({ name_adapter = "tuner_shared", adapter = "0" })
-local t1 = DvbStorage.find("tuner_shared")
-local inst = t1.instance
+local t1 = DvbRepository:find("tuner_shared")
+local inst = t1:get_instance()
 
 -- Имитируем использование этого же инстанса другим монитором (в реальности это делает Astra)
 inst.__options.channels = inst.__options.channels + 1
@@ -253,11 +254,11 @@ inst.__options.channels = inst.__options.channels + 1
 -- Пытаемся удалить первый монитор без force
 local success_stop = Adapter.stop_dvb_monitor("tuner_shared")
 assert_test(success_stop == nil, "Should not stop shared tuner without force")
-assert_test(DvbStorage.find("tuner_shared") ~= nil, "Tuner should remain in storage")
+assert_test(DvbRepository:find("tuner_shared") ~= nil, "Tuner should remain in repository")
 
 -- Удаляем с force
 assert_test(Adapter.stop_dvb_monitor("tuner_shared", true) ~= nil, "Should stop with force")
-assert_test(DvbStorage.find("tuner_shared") == nil, "Tuner should be removed")
+assert_test(DvbRepository:find("tuner_shared") == nil, "Tuner should be removed")
 print("Test 5: PASSED")
 
 print("--- All Adapter Tests PASSED ---")

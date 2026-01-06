@@ -12,7 +12,7 @@ local table_insert = table.insert
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local Channel = ModuleManager.get_module("channel")
-local ChannelStorage = ModuleManager.get_module("channel_storage")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local find_channel = ModuleManager.get_global_dependency("find_channel")
@@ -40,7 +40,7 @@ function ChannelRoutes.get_channels(server, client, request)
         local cfg = ch_data.config or {}
         local name = cfg.name
         if name then
-            local ch_obj = ChannelStorage and ChannelStorage.find and ChannelStorage.find(name)
+            local ch_obj = ChannelRepository and ChannelRepository.find and ChannelRepository:find(name)
             table_insert(channels, {
                 name = name,
                 display_name = ch_obj and ch_obj.display_name or name,
@@ -72,7 +72,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     local offline = 0
     local with_errors = 0
 
-    local active_channels = ChannelStorage and ChannelStorage.get_all and ChannelStorage.get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
         total_monitored = total_monitored + 1
@@ -135,7 +135,7 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     local active_input = ch_obj and ch_obj._last_active_id or 1
     
     HttpHelpers.success(server, client, {
@@ -162,7 +162,7 @@ function ChannelRoutes.get_channel_psi(server, client, request)
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
 
-    local ch_obj = ChannelStorage and ChannelStorage.find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end

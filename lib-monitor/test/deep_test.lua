@@ -7,8 +7,8 @@ local ModuleManager = require "init_monitor"
 local Logger = ModuleManager.get_module("logger")
 local DvbTuner = ModuleManager.get_module("dvb_tuner")
 local Channel = ModuleManager.get_module("channel")
-local ChannelStorage = ModuleManager.get_module("channel_storage")
-local DvbStorage = ModuleManager.get_module("dvb_storage")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Adapter = ModuleManager.get_module("adapter")
 local timer = ModuleManager.get_global_dependency("timer")
 
@@ -41,14 +41,14 @@ local tuner_config = {
 local success = Adapter.dvb_tuner_monitor(tuner_config)
 assert_test(success == true, "Adapter.dvb_tuner_monitor start")
 
-local tuner = DvbStorage.find("deep_test_adapter")
-assert_test(tuner ~= nil, "DvbTuner instance found in storage")
+local tuner = DvbRepository:find("deep_test_adapter")
+assert_test(tuner ~= nil, "DvbTuner instance found in repository")
 assert_test(_G["deep_test_adapter"] ~= nil, "Tuner instance registered in _G")
 assert_test(tuner._active == true, "DvbTuner active status")
 
 -- Проверка обновления параметров
 local update_success = tuner:update_parameters({ time_check = 5 })
-assert_test(update_success == true and tuner.config.time_check == 5, "DvbTuner update_parameters")
+assert_test(update_success == true and tuner:get_config().time_check == 5, "DvbTuner update_parameters")
 
 -- Проверка паузы/резюме
 tuner:pause()
@@ -71,16 +71,16 @@ local ch_data = Channel.make_stream(stream_conf)
 assert_test(ch_data ~= nil, "Channel.make_stream creation")
 
 local monitor = Channel.find_monitor("TestStream")
-assert_test(monitor ~= nil, "Channel monitor registration in storage")
-assert_test(ChannelStorage.count() > 0, "ChannelStorage count increment")
+assert_test(monitor ~= nil, "Channel monitor registration in repository")
+assert_test(ChannelRepository:count() > 0, "ChannelRepository count increment")
 
--- 3. Тестирование DvbStorage
-print("\n--- 3. Testing DvbStorage ---")
--- DvbStorage обычно наполняется через Adapter.dvb_tuner_monitor, 
+-- 3. Тестирование DvbRepository
+print("\n--- 3. Testing DvbRepository ---")
+-- DvbRepository обычно наполняется через Adapter.dvb_tuner_monitor, 
 -- но мы можем проверить ручную регистрацию или поиск
-DvbStorage.register("deep_test_adapter", tuner)
-local found_tuner = DvbStorage.find("deep_test_adapter")
-assert_test(found_tuner == tuner, "DvbStorage register/find")
+DvbRepository:register("deep_test_adapter", tuner)
+local found_tuner = DvbRepository:find("deep_test_adapter")
+assert_test(found_tuner == tuner, "DvbRepository register/find")
 
 -- 4. Тестирование одновременной работы (несколько стримов на одном тюнере)
 print("\n--- 4. Testing Multiple Streams on One Tuner ---")
@@ -108,7 +108,7 @@ assert_test(Channel.find_monitor("TestStream2") == nil, "Kill stream 2 (monitor 
 
 -- Уничтожаем тюнер через Adapter
 Adapter.stop_dvb_monitor("deep_test_adapter", true)
-assert_test(DvbStorage.find("deep_test_adapter") == nil, "DvbTuner removed from storage")
+assert_test(DvbRepository:find("deep_test_adapter") == nil, "DvbTuner removed from repository")
 assert_test(_G["deep_test_adapter"] == nil, "Tuner removed from _G")
 
 print("\n=== DEEP TEST FINISHED ===\n")

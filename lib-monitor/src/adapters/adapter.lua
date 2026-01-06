@@ -9,7 +9,7 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local DvbTuner = ModuleManager.get_module("dvb_tuner")
-local DvbStorage = ModuleManager.get_module("dvb_storage")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -33,7 +33,7 @@ local function dvb_tuner_monitor(conf)
         return false
     end
 
-    if DvbStorage.find(conf.name_adapter) then
+    if DvbRepository:find(conf.name_adapter) then
         Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: tuner '%s' already exists", conf.name_adapter)
         return false
     end
@@ -45,7 +45,7 @@ local function dvb_tuner_monitor(conf)
 
     local instance = tuner:start()
     if instance then
-        DvbStorage.register(conf.name_adapter, tuner)
+        DvbRepository:register(conf.name_adapter, tuner)
         _G[conf.name_adapter] = instance
         return true
     else
@@ -58,7 +58,7 @@ end
 --- @param name_adapter string Уникальное имя адаптера
 --- @return DvbTuner|nil Объект тюнера или nil
 local function find_dvb_monitor(name_adapter)
-    return DvbStorage.find(name_adapter)
+    return DvbRepository:find(name_adapter)
 end
 
 --- Обновляет параметры мониторинга DVB-тюнера.
@@ -66,7 +66,7 @@ end
 --- @param params table Новые параметры (rate, time_check, method_comparison)
 --- @return boolean Статус выполнения
 local function update_dvb_monitor_parameters(name_adapter, params)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if tuner then
         return tuner:update_parameters(params)
     end
@@ -77,7 +77,7 @@ end
 --- Возвращает список всех активных мониторов тюнеров.
 --- @return table<string, DvbTuner> Список мониторов
 local function get_all_dvb_monitors()
-    return DvbStorage.get_all()
+    return DvbRepository:get_all()
 end
 
 --- Останавливает мониторинг DVB-тюнера и удаляет его из глобальной области видимости и хранилища.
@@ -85,7 +85,7 @@ end
 --- @param force boolean|nil Принудительная остановка
 --- @return table|nil Оригинальная конфигурация тюнера при успехе, иначе nil
 local function stop_dvb_monitor(name_adapter, force)
-    local config = DvbStorage.unregister(name_adapter, force)
+    local config = DvbRepository:unregister(name_adapter, force)
     if config then
         _G[name_adapter] = nil
         return config
@@ -99,13 +99,13 @@ end
 --- @return table Список сохраненных конфигураций каналов
 local function stop_dependent_channels(name_adapter)
     local Channel = ModuleManager.get_module("channel")
-    local ChannelStorage = ModuleManager.get_module("channel_storage")
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
     local saved_configs = {}
-    if not Channel or not ChannelStorage then
+    if not Channel or not ChannelRepository then
         return saved_configs
     end
 
-    local dependent_channels = ChannelStorage.find_by_adapter(name_adapter)
+    local dependent_channels = ChannelRepository:find_by_adapter(name_adapter)
     for name, _ in pairs(dependent_channels) do
         local ch_config = Channel.kill_stream(name)
         if ch_config then
@@ -138,7 +138,7 @@ end
 --- @param _pre_saved_channels table|nil Предварительно сохраненные конфигурации каналов
 --- @return boolean Статус выполнения
 local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_channels)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if not tuner then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
         return false
@@ -169,7 +169,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
         if not stop_dvb_monitor(name_adapter, force) then return false end
         if not Adapter.dvb_tuner_monitor(conf) then return false end
         
-        local new_tuner = DvbStorage.find(name_adapter)
+        local new_tuner = DvbRepository:find(name_adapter)
         if new_tuner then
             -- Сохраняем бэкап в новый объект
             new_tuner:set_backup(old_conf, saved_channels)
@@ -200,7 +200,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return boolean Статус выполнения
 local function pause_dvb_monitor(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if tuner then
         return tuner:pause()
     end
@@ -212,7 +212,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return boolean Статус выполнения
 local function resume_dvb_monitor(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if tuner then
         return tuner:resume()
     end
@@ -224,7 +224,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return boolean Статус запуска
 local function update_dvb_psi(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if tuner then
         return tuner:psi_update()
     end
@@ -236,7 +236,7 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return table|nil Таблица PSI или nil
 local function get_dvb_psi(name_adapter)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if tuner then
         return tuner:get_psi()
     end
@@ -253,7 +253,7 @@ end
 --- @param reserve_input table|nil Список новых входов {name, input}
 --- @return table|nil Снимок предыдущего состояния для возврата
 local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
-    local tuner = DvbStorage.find(name_adapter)
+    local tuner = DvbRepository:find(name_adapter)
     if not tuner then return nil end
 
     local old_tuner_params = Utils.table_copy(tuner:get_config())

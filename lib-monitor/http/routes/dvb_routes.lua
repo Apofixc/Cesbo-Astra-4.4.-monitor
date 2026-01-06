@@ -9,7 +9,7 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
-local DvbStorage = ModuleManager.get_module("dvb_storage")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Adapter = ModuleManager.get_module("adapter")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -71,7 +71,7 @@ function DvbRoutes.get_monitored_adapters(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local monitors = {}
-    local active_adapters = DvbStorage and DvbStorage.get_all and DvbStorage.get_all() or {}
+    local active_adapters = DvbRepository and DvbRepository.get_all and DvbRepository:get_all() or {}
     
     for id, _ in pairs(active_adapters) do
         monitors[id] = id
@@ -102,7 +102,7 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local name = request.path:match("/api/dvb/adapters/([^/]+)/data")
-    local dvb_obj = DvbStorage and DvbStorage.find(name)
+    local dvb_obj = DvbRepository and DvbRepository:find(name)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
@@ -128,7 +128,7 @@ function DvbRoutes.get_adapter_psi(server, client, request)
         id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
     end
 
-    local dvb_obj = DvbStorage and DvbStorage.find(id)
+    local dvb_obj = DvbRepository and DvbRepository:find(id)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
     end
