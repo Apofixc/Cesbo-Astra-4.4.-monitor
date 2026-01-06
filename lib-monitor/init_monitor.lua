@@ -30,7 +30,6 @@ local global_dependencies_to_check = {
     "utils",
     "utils.hostname",
     "utils.ifaddrs",
-    "softcam_list",
     "log",
     "dvb_input_instance_list"
 }
@@ -81,10 +80,9 @@ ModuleManager.register_module("dvb_routes", "http.routes.dvb_routes", {"logger",
 ModuleManager.register_module("monitor_routes", "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
 ModuleManager.register_module("system_routes", "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
 ModuleManager.register_module("subscriber_routes", "http.routes.subscriber_routes", {"logger", "http_helpers"})
-ModuleManager.register_module("cas_routes", "http.routes.cas_routes", {"logger", "http_helpers"})
 ModuleManager.register_module("routes_utils", "http.routes.routes_utils", {"logger", "http_helpers", "channel_storage", "dvb_storage", "monitor_config"})
 ModuleManager.register_module("http_server", "http.http_server", {
-    "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "cas_routes", "routes_utils"
+    "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils"
 })
 
 -- Валидация зависимостей

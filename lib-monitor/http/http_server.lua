@@ -12,7 +12,6 @@ local MonitorRoutes = ModuleManager.get_module("monitor_routes")
 local DvbRoutes = ModuleManager.get_module("dvb_routes")
 local SystemRoutes = ModuleManager.get_module("system_routes")
 local SubscriberRoutes = ModuleManager.get_module("subscriber_routes")
-local CasRoutes = ModuleManager.get_module("cas_routes")
 local RoutesUtils = ModuleManager.get_module("routes_utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -87,13 +86,6 @@ function HttpServer.start(addr, port)
         { "/api/system/clear-cache", SystemRoutes.clear_cache },
         { "/api/system/network/interfaces", SystemRoutes.get_network_interfaces },
         { "/api/system/network/hostname", SystemRoutes.get_hostname },
-
-        -- CAS
-        { "/api/cas/softcam", CasRoutes.get_softcams },
-        { "/api/cas/softcam/create", CasRoutes.create_softcam },
-        { "/api/cas/softcam/([^/]+)/stop", CasRoutes.stop_softcam },
-        { "/api/cas/softcam/([^/]+)/restart", CasRoutes.restart_softcam },
-        { "/api/cas/biss/update", CasRoutes.update_biss },
 
         -- Subscribers
         { "/api/subscribers", SubscriberRoutes.get_subscribers },
