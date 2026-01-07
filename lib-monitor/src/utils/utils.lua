@@ -4,6 +4,10 @@ local math_max = math.max
 local pairs = pairs
 local tostring = tostring
 local type = type
+local string_format = string.format
+local io_popen = io.popen
+local os_execute = os.execute
+local os_clock = os.clock
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -194,6 +198,44 @@ function Utils.init_report(t, type_name, name)
     t.type = type_name
     t.name = name
     t.server = HOSTNAME
+end
+
+--- Проверяет, занят ли TCP-порт
+--- @param port number Номер порта
+--- @return boolean true если занят, иначе false
+function Utils.is_port_busy(port)
+    if not port then return false end
+    local p = io_popen(string_format("ss -Hlnt 'sport == :%d'", port))
+    if not p then return false end
+    local res = p:read("*a")
+    p:close()
+    return res ~= ""
+end
+
+--- Принудительно освобождает TCP-порт, завершая процесс
+--- @param port number Номер порта
+--- @return boolean true если порт свободен или был успешно освобожден
+function Utils.free_port(port)
+    if not port then return false end
+    if not Utils.is_port_busy(port) then return true end
+    
+    Logger.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port)
+    os_execute(string_format("fuser -k %d/tcp >/dev/null 2>&1", port))
+    
+    -- Ожидание освобождения (до 2 секунд)
+    local start = os_clock()
+    while os_clock() - start < 2 do
+        if not Utils.is_port_busy(port) then
+            Logger.info(COMPONENT_NAME, "Порт %d успешно освобожден", port)
+            return true
+        end
+    end
+    
+    local busy = Utils.is_port_busy(port)
+    if busy then
+        Logger.error(COMPONENT_NAME, "Не удалось освободить порт %d", port)
+    end
+    return not busy
 end
 
 --- Очищает таблицу без удаления самой ссылки (для переиспользования в пулах)

@@ -16,6 +16,7 @@ local tonumber = tonumber
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
+local Utils = ModuleManager.get_module("utils")
 local ChannelRoutes = ModuleManager.get_module("channel_routes")
 local MonitorRoutes = ModuleManager.get_module("monitor_routes")
 local DvbRoutes = ModuleManager.get_module("dvb_routes")
@@ -206,7 +207,11 @@ function HttpServer.get_stats()
 end
 
 --- Запускает HTTP сервер мониторинга
-function HttpServer.start(addr, port, retry_count)
+--- @param addr string|nil IP-адрес (по умолчанию 0.0.0.0)
+--- @param port number|nil Порт (по умолчанию 8080)
+--- @param retry_count number|nil Текущая попытка рестарта
+--- @param force_free boolean|nil Принудительно освобождать порт если занят
+function HttpServer.start(addr, port, retry_count, force_free)
     if HttpServer._instance then
         HttpServer.stop()
     end
@@ -214,6 +219,20 @@ function HttpServer.start(addr, port, retry_count)
     addr = addr or DEFAULT_ADDR
     port = port or DEFAULT_PORT
     retry_count = retry_count or 0
+
+    -- Проверка занятости порта
+    if Utils and Utils.is_port_busy(port) then
+        Logger.warn(COMPONENT_NAME, "Порт %d уже занят", port)
+        if force_free then
+            if not Utils.free_port(port) then
+                Logger.error(COMPONENT_NAME, "Не удалось запустить сервер: порт %d занят и не может быть освобожден", port)
+                return false
+            end
+        else
+            Logger.error(COMPONENT_NAME, "Не удалось запустить сервер: порт %d занят. Используйте force_free=true для принудительного освобождения", port)
+            return false
+        end
+    end
 
     local resources = {
         -- HOT ROUTES
