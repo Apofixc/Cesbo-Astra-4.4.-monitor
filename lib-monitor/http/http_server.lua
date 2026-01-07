@@ -11,6 +11,7 @@ local collectgarbage = collectgarbage
 local setmetatable = setmetatable
 local type = type
 local os_clock = os.clock
+local tonumber = tonumber
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -32,6 +33,7 @@ local DEFAULT_ADDR = "0.0.0.0"
 local DEFAULT_PORT = 8080
 local RESTART_RETRY_COUNT = 3
 local RESTART_RETRY_DELAY = 1
+local MAX_PAYLOAD_SIZE = 1024 * 1024 -- 1 MB limit
 
 -- Внутреннее состояние сервера
 HttpServer._instance = nil
@@ -42,12 +44,48 @@ HttpServer._stats = {
     routes = {} -- Статистика по путям: { count, total_time, errors }
 }
 
+--- Middleware: Защита от слишком больших запросов (Payload Limit)
+local function payload_limit_middleware(handler)
+    return function(server, client, request)
+        local content_length = tonumber(request.headers and request.headers["content-length"]) or 0
+        if content_length > MAX_PAYLOAD_SIZE then
+            Logger.warn(COMPONENT_NAME, "Payload too large from %s (%d bytes)", tostring(request.addr), content_length)
+            return HttpHelpers.error(server, client, 413, "Payload Too Large")
+        end
+        return handler(server, client, request)
+    end
+end
+
+--- Middleware: Поддержка CORS
+local function cors_middleware(handler)
+    return function(server, client, request)
+        -- Обработка preflight запросов OPTIONS
+        if request.method == "OPTIONS" then
+            server:send(client, {
+                code = 204,
+                headers = {
+                    "Access-Control-Allow-Origin: *",
+                    "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers: X-Api-Key, Content-Type",
+                    "Access-Control-Max-Age: 86400",
+                    "Connection: close"
+                }
+            })
+            return true
+        end
+        
+        -- Для обычных запросов перехватываем отправку, чтобы добавить заголовок (упрощенно)
+        -- В Astra мы не можем легко обернуть server:send, поэтому просто полагаемся на то, 
+        -- что роутеры используют HttpHelpers, но для надежности добавим логику здесь если нужно.
+        return handler(server, client, request)
+    end
+end
+
 --- Middleware: Логирование и замер производительности
 local function logger_middleware(handler, path)
     return function(server, client, request)
         local start_time = os_clock()
         
-        -- Инициализация статистики пути
         if not HttpServer._stats.routes[path] then
             HttpServer._stats.routes[path] = { count = 0, total_time = 0, errors = 0 }
         end
@@ -69,37 +107,33 @@ local function logger_middleware(handler, path)
     end
 end
 
---- Создает обертку для маршрута с поддержкой Middleware и безопасной обработкой ошибок
---- @param methods table Таблица обработчиков по методам { GET = func, POST = func, ... }
+--- Создает обертку для маршрута с полной цепочкой Middleware
+--- @param methods table Таблица обработчиков по методам
 --- @param path string Путь маршрута
 --- @return function Обработчик для Astra http_server
 local function make_resource_handler(methods, path)
     local function core_handler(server, client, request)
-        -- 1. Централизованная проверка request
         if not request then return nil end
 
-        -- 2. Централизованная авторизация (X-Api-Key)
-        if not HttpHelpers.check_auth(server, client, request) then return true, "Unauthorized" end
+        -- Централизованная авторизация
+        if not HttpHelpers.check_auth(server, client, request) then return true end
 
         local handler = methods[request.method]
         if not handler then
-            HttpHelpers.error(server, client, 405, "Method Not Allowed")
-            return false, "Method Not Allowed"
+            return HttpHelpers.error(server, client, 405, "Method Not Allowed")
         end
 
-        -- 3. Глобальный перехват ошибок
+        -- Глобальный перехват ошибок
         local ok, success, result_or_msg = pcall(function()
             return Logger.with_error(handler, server, client, request)
         end)
 
         if not ok then
             Logger.error(COMPONENT_NAME, "Panic in handler %s: %s", tostring(path), tostring(success))
-            HttpHelpers.error(server, client, 500, "Critical Server Error")
-            return false, "Panic"
+            return HttpHelpers.error(server, client, 500, "Critical Server Error")
         end
 
         if not success then
-            -- Если обработчик вернул false/nil (и не отправил ответ сам), отправляем ошибку
             if result_or_msg then
                 HttpHelpers.error(server, client, 500, result_or_msg)
             end
@@ -109,8 +143,8 @@ local function make_resource_handler(methods, path)
         return true, result_or_msg
     end
 
-    -- Оборачиваем в Middleware
-    return logger_middleware(core_handler, path)
+    -- Цепочка Middleware: Logger -> CORS -> Payload Limit -> Core
+    return logger_middleware(cors_middleware(payload_limit_middleware(core_handler)), path)
 end
 
 --- Останавливает HTTP сервер и гарантированно освобождает порт
@@ -129,7 +163,6 @@ function HttpServer.stop()
         pcall(instance.close, instance)
     end
 
-    -- Агрессивный вызов GC для очистки userdata и окончательного закрытия сокетов на уровне ОС
     collectgarbage("collect")
     collectgarbage("collect")
     
@@ -142,9 +175,6 @@ function HttpServer.get_stats()
 end
 
 --- Запускает HTTP сервер мониторинга
---- @param addr string|nil IP адрес для прослушивания
---- @param port number|nil Порт для прослушивания
---- @param retry_count number|nil Текущий номер попытки
 function HttpServer.start(addr, port, retry_count)
     if HttpServer._instance then
         HttpServer.stop()
@@ -155,18 +185,14 @@ function HttpServer.start(addr, port, retry_count)
     retry_count = retry_count or 0
 
     local resources = {
-        -- HOT ROUTES (Metrics & Status)
+        -- HOT ROUTES
         ["/api/monitors/data"] = { GET = MonitorRoutes.get_monitor_data },
         ["/api/dvb/adapters/data"] = { GET = DvbRoutes.get_adapter_data },
         ["/api/monitors/status"] = { GET = MonitorRoutes.get_monitors_status },
         ["/api/system/resources"] = { GET = SystemRoutes.get_resources },
         ["/api/system/health"] = { GET = SystemRoutes.get_health },
-        
-        -- API Stats
         ["/api/system/api-stats"] = { 
-            GET = function(s, c, r) 
-                return HttpHelpers.success(s, c, HttpServer.get_stats()) 
-            end 
+            GET = function(s, c, r) return HttpHelpers.success(s, c, HttpServer.get_stats()) end 
         },
 
         -- Channels
@@ -227,7 +253,6 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/utils/info"] = { GET = RoutesUtils.get_api_info },
     }
 
-    -- Преобразование в формат Astra http_server. 
     local routes = {}
     local priority_order = {
         "/api/monitors/data", "/api/dvb/adapters/data", "/api/monitors/status",
@@ -254,36 +279,24 @@ function HttpServer.start(addr, port, retry_count)
 
     if ok then
         HttpServer._instance = result
-        
-        -- Sentinel для автоматической очистки при выходе из программы
         HttpServer._sentinel = setmetatable({}, {
             __gc = function()
-                if HttpServer._instance then
-                    pcall(HttpServer._instance.close, HttpServer._instance)
-                end
+                if HttpServer._instance then pcall(HttpServer._instance.close, HttpServer._instance) end
             end
         })
-
         Logger.info(COMPONENT_NAME, "HTTP Server started on %s:%s", addr, tostring(port))
         return true
     else
-        -- Если порт занят, пробуем повторить через секунду (до 3 раз)
         if retry_count < RESTART_RETRY_COUNT then
-            Logger.warn(COMPONENT_NAME, "Failed to bind port %s (attempt %d/%d). Retrying in %ds...", 
-                tostring(port), retry_count + 1, RESTART_RETRY_COUNT, RESTART_RETRY_DELAY)
-            
+            Logger.warn(COMPONENT_NAME, "Failed to bind port %s (attempt %d/%d). Retrying...", tostring(port), retry_count + 1, RESTART_RETRY_COUNT)
             if timer then
                 timer({
                     interval = RESTART_RETRY_DELAY,
-                    callback = function(self)
-                        self:close()
-                        HttpServer.start(addr, port, retry_count + 1)
-                    end
+                    callback = function(self) self:close(); HttpServer.start(addr, port, retry_count + 1) end
                 })
                 return true
             end
         end
-
         Logger.error(COMPONENT_NAME, "Failed to start HTTP Server: %s", tostring(result))
         return false
     end
