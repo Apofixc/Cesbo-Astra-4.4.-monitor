@@ -35,7 +35,7 @@ BaseMonitor.STATE = {
 function BaseMonitor.new(config, component_name)
     --- @type BaseMonitor
     local self = setmetatable({}, BaseMonitor)
-    self._config = type(config) == "table" and config or {}
+    self._config = config
     self._name = self._config.name or "Unknown"
     self._component_name = component_name or "BaseMonitor"
     self._active = false

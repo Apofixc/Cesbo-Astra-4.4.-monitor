@@ -76,7 +76,6 @@ function DvbTuner:_clear_psi()
             self._temp_analyzer:close()
         end
         self._temp_analyzer = nil
-        collectgarbage()
     end
 end
 
@@ -331,7 +330,7 @@ function DvbTuner:psi_update()
         callback = function(data)
             if not data or not self._temp_analyzer then return end
             if data.psi then
-                self._psi[data.psi:lower()] = data
+                self._psi[data.psi:upper()] = data
             end
         end
     })
@@ -414,6 +413,7 @@ function DvbTuner:destroy(force)
     -- Очищаем callback в рабочей конфигурации
     if self._astra_conf then
         self._astra_conf.callback = nil
+        self._astra_conf = nil
     end
 
     -- 3. Полная очистка полей объекта

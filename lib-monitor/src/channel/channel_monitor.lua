@@ -218,8 +218,7 @@ function ChannelMonitor:get_cached_source()
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
     if active_id ~= self._last_active_id then
         self._last_active_id = active_id
-        local input_index = active_id > 0 and active_id or 1
-        self._cached_source = self._stream_json[input_index] or DEFAULT_SOURCE_TEMPLATE
+        self._cached_source = self._stream_json[active_id] or DEFAULT_SOURCE_TEMPLATE
     end
     return self._cached_source
 end
@@ -244,7 +243,7 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    local table_id = data.psi
+    local table_id = data.psi and data.psi:upper()
     if not table_id then return end
 
     -- Сохраняем сами данные
@@ -500,7 +499,11 @@ function ChannelMonitor:update_parameters(params)
         rate = "channel_rate",
         time_check = "channel_time_check",
         method_comparison = "channel_method_comparison",
-        analyze = "channel_analyze"
+        analyze = "channel_analyze",
+        cc_limit = "channel_cc_limit",
+        bitrate_limit = "channel_bitrate_limit",
+        rate_stat = "channel_rate_stat",
+        join_pid = "channel_join_pid"
     }
 
     local has_errors = false
