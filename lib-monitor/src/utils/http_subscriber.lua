@@ -31,6 +31,49 @@ local HttpSubscriber = {}
 --- @type table<string, table[]> Таблица подписчиков: { [event_type] = { {host, port, path}, ... } }
 local subscribers = {}
 
+--- @type table<string, function> Карта активных обработчиков EventBus
+local active_handlers = {}
+
+--- Внутренний обработчик событий для рассылки по HTTP
+--- @private
+local function internal_event_handler(event_type, data)
+    if not event_type or not data then return end
+    
+    -- Если данные еще не в JSON, пробуем закодировать
+    local json_data = data
+    if type(data) == "table" then
+        local json_encode = ModuleManager.get_global_dependency("json.encode")
+        if json_encode then
+            local ok, res = pcall(json_encode, data)
+            if ok then json_data = res end
+        end
+    end
+
+    HttpSubscriber.publish(event_type, json_data)
+end
+
+--- Синхронизирует подписки с EventBus
+--- @private
+local function sync_event_bus(event_type)
+    local EventBus = ModuleManager.get_module("event_bus")
+    if not EventBus then return end
+
+    local recipients = subscribers[event_type]
+    local has_recipients = recipients and #recipients > 0
+
+    if has_recipients and not active_handlers[event_type] then
+        -- Создаем замыкание для конкретного типа события
+        local handler = function(data) internal_event_handler(event_type, data) end
+        active_handlers[event_type] = handler
+        EventBus.subscribe(event_type, handler)
+        Logger.debug(COMPONENT_NAME, "Динамическая подписка на EventBus для типа '%s' активирована", event_type)
+    elseif not has_recipients and active_handlers[event_type] then
+        EventBus.unsubscribe(event_type, active_handlers[event_type])
+        active_handlers[event_type] = nil
+        Logger.debug(COMPONENT_NAME, "Динамическая подписка на EventBus для типа '%s' деактивирована", event_type)
+    end
+end
+
 --- Загружает список подписчиков из конфигурации
 --- @private
 --- @return boolean Статус выполнения
@@ -38,6 +81,11 @@ local function load_subscribers()
     if MonitorConfig and MonitorConfig.subscribers then
         subscribers = MonitorConfig.subscribers
         Logger.info(COMPONENT_NAME, "Subscribers loaded from global config")
+        
+        -- Активируем подписки для всех загруженных типов
+        for event_type, _ in pairs(subscribers) do
+            sync_event_bus(event_type)
+        end
     else
         subscribers = {}
         if MonitorConfig then
@@ -125,6 +173,8 @@ function HttpSubscriber.subscribe(event_type, addr)
     })
 
     Logger.info(COMPONENT_NAME, "New subscriber added for '%s': %s:%s%s", event_type, addr.host, addr.port, addr.path)
+    
+    sync_event_bus(event_type)
     return save_subscribers()
 end
 
@@ -149,6 +199,7 @@ function HttpSubscriber.unsubscribe(event_type, addr)
 
     if found then
         Logger.info(COMPONENT_NAME, "Subscriber removed for '%s': %s:%s%s", event_type, addr.host, addr.port, addr.path)
+        sync_event_bus(event_type)
         return save_subscribers()
     end
 

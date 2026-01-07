@@ -74,11 +74,13 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     return true
 end
 
---- Публикует данные через HttpSubscriber
+--- Публикует данные через EventBus
 --- @param content string JSON-данные
 --- @param event_type string Тип события
 function BaseMonitor:publish(content, event_type)
-    HttpSubscriber.publish(event_type, content)
+    if EventBus then
+        EventBus.publish(event_type, content)
+    end
 end
 
 --- Возвращает оригинальную конфигурацию
