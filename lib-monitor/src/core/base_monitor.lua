@@ -28,6 +28,9 @@ BaseMonitor.STATE = {
     STOPPED = 3,
 }
 
+-- Кэш для ключей конфигурации (предотвращает лишние аллокации строк в gsub)
+local CONFIG_KEY_CACHE = {}
+
 --- Конструктор базового монитора
 --- @param config table Конфигурация монитора
 --- @param component_name string Имя компонента для логирования
@@ -60,7 +63,13 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
             tostring(self._name), param_name, tostring(value))
         return false
     end
-    local key = param_name:gsub(prefix, "")
+    
+    local key = CONFIG_KEY_CACHE[param_name]
+    if not key then
+        key = param_name:gsub(prefix, "")
+        CONFIG_KEY_CACHE[param_name] = key
+    end
+    
     self._config[key] = result
     return true
 end

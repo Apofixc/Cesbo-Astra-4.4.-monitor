@@ -21,6 +21,19 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream = "Unknown" }
 local FORCE_SEND_INTERVAL = 300
+local MAX_COUNTER = 1000000000
+local MAX_ERROR_COUNT = 1000000
+
+-- Стандартные имена PSI таблиц (предотвращает создание новых строк при :upper())
+local PSI_NAME_MAP = {
+    pmt = "PMT",
+    sdt = "SDT",
+    nit = "NIT",
+    pat = "PAT",
+    tdt = "TDT",
+    tot = "TOT",
+    eit = "EIT",
+}
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
@@ -246,8 +259,12 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    local table_id = data.psi and data.psi:upper()
-    if not table_id then return end
+    local raw_psi = data.psi
+    if not raw_psi then return end
+    
+    -- Используем предопределенную карту или делаем upper() без сохранения в кэш
+    -- чтобы избежать утечки памяти при большом количестве уникальных имен
+    local table_id = PSI_NAME_MAP[raw_psi] or raw_psi:upper()
 
     -- Сохраняем сами данные
     self._psi[table_id] = data
@@ -297,7 +314,6 @@ function ChannelMonitor:process_analyze_data(data)
                     self._stats[pid] = stats
                 else
                     -- Защита от переполнения
-                    local MAX_COUNTER = 1000000000
                     stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
                     stats.pes = (stats.pes + pes > MAX_COUNTER) and MAX_COUNTER or (stats.pes + pes)
                     stats.sc = (stats.sc + sc > MAX_COUNTER) and MAX_COUNTER or (stats.sc + sc)
@@ -310,14 +326,19 @@ end
 --- Обработка суммарных данных потока
 --- @param data table Суммарные данные
 function ChannelMonitor:process_total_data(data)
-    if not data.total then return end
+    local total = data.total
+    if not total then return end
+    
     local status = self._status
-    status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
-    status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
+    local cc_inc = total.cc_errors or 0
+    local pes_inc = total.pes_errors or 0
+    
+    status.cc_errors = status.cc_errors + cc_inc
+    status.pes_errors = status.pes_errors + pes_inc
 
     -- Защита от переполнения счетчиков
-    if status.cc_errors > 1000000 then status.cc_errors = 1000000 end
-    if status.pes_errors > 1000000 then status.pes_errors = 1000000 end
+    if status.cc_errors > MAX_ERROR_COUNT then status.cc_errors = MAX_ERROR_COUNT end
+    if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
 
     self._force_timer = self._force_timer + 1
     if self._check_timer < self._config.time_check then

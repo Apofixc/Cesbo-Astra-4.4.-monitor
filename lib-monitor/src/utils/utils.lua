@@ -181,4 +181,13 @@ function Utils.init_report(t, type_name, name)
     t.server = HOSTNAME
 end
 
+--- Очищает таблицу без удаления самой ссылки (для переиспользования в пулах)
+--- @param t table Таблица для очистки
+function Utils.table_clear(t)
+    if type(t) ~= "table" then return end
+    for k in pairs(t) do
+        t[k] = nil
+    end
+end
+
 return Utils
