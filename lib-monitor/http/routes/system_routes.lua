@@ -24,14 +24,14 @@ local COMPONENT_NAME = "SystemRoutes"
 
 --- Проверяет состояние сервера и возвращает метрики ресурсов процесса
 function SystemRoutes.get_health(server, client, request)
-    local resources = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
-    return HttpHelpers.success(server, client, {
+    local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
+    local response = {
         status = "healthy",
         astra_version = astra_version or "unknown",
         server_time = os_date("%Y-%m-%d %H:%M:%S"),
         timestamp = os_time(),
         resources = resources
-    })
+    }
 end
 
 --- Перезагружает Astra
