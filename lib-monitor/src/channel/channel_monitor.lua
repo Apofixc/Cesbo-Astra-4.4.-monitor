@@ -155,6 +155,11 @@ function ChannelMonitor:start()
         return nil
     end
 
+    if not self._upstream or type(self._upstream.stream) ~= "function" then
+        Logger.error(COMPONENT_NAME, "[%s] start: upstream is invalid or missing stream() method", tostring(self._name))
+        return nil
+    end
+
     local stream_data = self._upstream:stream()
     if not stream_data then
         Logger.error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", tostring(self._name))

@@ -233,7 +233,7 @@ function DvbTuner:start()
 
     local instance = dvb_tune(self._astra_conf)
     if not instance then
-        Logger.error(COMPONENT_NAME, "start: dvb_tune returned nil")
+        Logger.error(COMPONENT_NAME, "[%s] start: dvb_tune returned nil", tostring(self._name))
         return nil
     end
 

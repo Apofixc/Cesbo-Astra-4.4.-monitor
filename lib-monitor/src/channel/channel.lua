@@ -206,7 +206,7 @@ local function make_monitor(config)
     end
 
     if not Utils.validate_monitor_name(name) then
-        Logger.error(COMPONENT_NAME, "make_monitor: Invalid monitor name '%s'", tostring(name))
+        Logger.error(COMPONENT_NAME, "make_monitor: Invalid monitor name '%s'", tostring(config.name))
         return nil
     end
 

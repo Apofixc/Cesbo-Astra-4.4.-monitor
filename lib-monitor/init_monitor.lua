@@ -109,7 +109,7 @@ local Adapter = ModuleManager.get_module("adapter")
 local HttpServer = ModuleManager.get_module("http_server")
 
 -- Экспорт основных функций в глобальную область видимости для обратной совместимости
-if Channel then
+if type(Channel) == "table" then
     _G.make_stream = Channel.make_stream
     _G.kill_stream = Channel.kill_stream
     _G.make_monitor = Channel.make_monitor
@@ -119,14 +119,14 @@ if Channel then
     _G.update_monitor_parameters = Channel.update_monitor_parameters
 end
 
-if Adapter then
+if type(Adapter) == "table" then
     _G.dvb_tuner_monitor = Adapter.dvb_tuner_monitor
     _G.pause_dvb_monitor = Adapter.pause_dvb_monitor
     _G.resume_dvb_monitor = Adapter.resume_dvb_monitor
     _G.update_dvb_monitor_parameters = Adapter.update_dvb_monitor_parameters
 end
 
-if HttpServer then
+if type(HttpServer) == "table" then
     _G.server_start = HttpServer.start
 end
 
