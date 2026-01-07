@@ -36,26 +36,29 @@ local RESTART_RETRY_DELAY = 1 -- секунда
 HttpServer._instance = nil
 HttpServer._sentinel = nil
 
---- Создает обертку для маршрута с поддержкой HTTP методов и безопасной обработкой ошибок
+--- Создает обертку для маршрута с поддержкой HTTP методов, авторизации и безопасной обработкой ошибок
 --- @param methods table Таблица обработчиков по методам { GET = func, POST = func, ... }
 --- @return function Обработчик для Astra http_server
 local function make_resource_handler(methods)
     return function(server, client, request)
-        -- Обязательная проверка request согласно стандартам Astra
+        -- 1. Централизованная проверка request
         if not request then return nil end
+
+        -- 2. Централизованная авторизация (X-Api-Key)
+        if not HttpHelpers.check_auth(server, client, request) then return end
 
         local handler = methods[request.method]
         if not handler then
             return HttpHelpers.error(server, client, 405, "Method Not Allowed")
         end
 
-        -- Глобальный перехват ошибок для стабильности ядра Astra
+        -- 3. Глобальный перехват ошибок для стабильности ядра Astra
         local ok, err = pcall(function()
             -- Выполнение с поддержкой контекстных ошибок Logger
             local success, result_or_msg = Logger.with_error(handler, server, client, request)
             
             if not success then
-                -- Если обработчик вернул false/nil, отправляем ошибку из логгера или дефолтную
+                -- Если обработчик вернул false/nil (и не отправил ответ сам), отправляем ошибку
                 HttpHelpers.error(server, client, 500, result_or_msg or "Internal Server Error")
             end
         end)
@@ -77,9 +80,8 @@ function HttpServer.stop()
     
     local instance = HttpServer._instance
     HttpServer._instance = nil
-    HttpServer._sentinel = nil -- Удаляем sentinel, чтобы избежать двойного вызова
+    HttpServer._sentinel = nil
 
-    -- В Astra объект http_server имеет метод :close() для освобождения ресурсов и порта
     if type(instance.close) == "function" then
         local ok, err = pcall(instance.close, instance)
         if not ok then
@@ -87,19 +89,17 @@ function HttpServer.stop()
         end
     end
 
-    -- Агрессивный вызов GC. Userdata в Astra (такие как сокеты сервера) 
-    -- освобождаются только после того, как Lua соберет объект.
-    -- Вызываем дважды для гарантии отработки финализаторов.
+    -- Агрессивный вызов GC для очистки userdata и окончательного закрытия сокетов на уровне ОС
     collectgarbage("collect")
     collectgarbage("collect")
     
     Logger.info(COMPONENT_NAME, "HTTP Server stopped and port should be free")
 end
 
---- Запускает HTTP сервер мониторинга с поддержкой повторных попыток при занятом порте
+--- Запускает HTTP сервер мониторинга
 --- @param addr string|nil IP адрес для прослушивания
 --- @param port number|nil Порт для прослушивания
---- @param retry_count number|nil Текущий номер попытки (внутренний параметр)
+--- @param retry_count number|nil Текущий номер попытки
 function HttpServer.start(addr, port, retry_count)
     if HttpServer._instance then
         Logger.warn(COMPONENT_NAME, "HTTP Server is already running. Stopping old instance...")
@@ -231,7 +231,7 @@ function HttpServer.start(addr, port, retry_count)
                         HttpServer.start(addr, port, retry_count + 1)
                     end
                 })
-                return true -- Возвращаем true, так как процесс перезапуска запущен
+                return true
             end
         end
 

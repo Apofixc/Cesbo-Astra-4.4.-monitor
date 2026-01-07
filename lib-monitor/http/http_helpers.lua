@@ -12,7 +12,6 @@ local string_match = string.match
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_encode = ModuleManager.get_global_dependency("json.encode")
@@ -33,15 +32,15 @@ local JSON_HEADERS = {
 --- @param client table Объект клиента
 --- @param code number HTTP статус код
 --- @param data table Данные для отправки
+--- @return boolean Всегда true (сигнал завершения обработки)
 function HttpHelpers.send_json(server, client, code, data)
     local ok, content = pcall(json_encode, data or {})
     if not ok then
         Logger.error(COMPONENT_NAME, "Failed to encode JSON response: %s", tostring(content))
         server:abort(client, 500)
-        return
+        return true
     end
 
-    -- Добавляем Content-Length динамически, но используем кэшированные базовые заголовки
     local response_headers = {
         JSON_HEADERS[1],
         JSON_HEADERS[2],
@@ -53,6 +52,7 @@ function HttpHelpers.send_json(server, client, code, data)
         headers = response_headers,
         content = content,
     })
+    return true
 end
 
 --- Проверяет API ключ в заголовках запроса
@@ -68,10 +68,7 @@ function HttpHelpers.check_auth(server, client, request)
     local provided_key = headers and (headers["x-api-key"] or headers["X-Api-Key"])
 
     if provided_key ~= expected_key then
-        HttpHelpers.send_json(server, client, 401, {
-            status = "error",
-            message = "Unauthorized: Invalid or missing X-Api-Key"
-        })
+        HttpHelpers.error(server, client, 401, "Unauthorized: Invalid or missing X-Api-Key")
         return false
     end
     return true
@@ -81,8 +78,9 @@ end
 --- @param server table Объект сервера
 --- @param client table Объект клиента
 --- @param data table|nil Данные
+--- @return boolean Всегда true
 function HttpHelpers.success(server, client, data)
-    HttpHelpers.send_json(server, client, 200, data)
+    return HttpHelpers.send_json(server, client, 200, data)
 end
 
 --- Формирует JSON ответ с ошибкой
@@ -90,8 +88,9 @@ end
 --- @param client table Объект клиента
 --- @param code number HTTP статус код
 --- @param message string Сообщение об ошибке
+--- @return boolean Всегда true
 function HttpHelpers.error(server, client, code, message)
-    HttpHelpers.send_json(server, client, code, {
+    return HttpHelpers.send_json(server, client, code, {
         status = "error",
         message = message
     })
@@ -102,6 +101,7 @@ end
 --- @param client table Объект клиента
 --- @param code number HTTP статус код
 --- @param content string JSON строка
+--- @return boolean Всегда true
 function HttpHelpers.send_raw_json(server, client, code, content)
     if not content then
         return HttpHelpers.error(server, client, 404, "Data not available in cache")
@@ -118,6 +118,7 @@ function HttpHelpers.send_raw_json(server, client, code, content)
         headers = response_headers,
         content = content,
     })
+    return true
 end
 
 --- Извлекает JSON данные из тела запроса
@@ -142,14 +143,12 @@ function HttpHelpers.get_params(request)
     if not request then return {} end
     local params = {}
     
-    -- 1. Берем параметры из Query String
     if request.query then
         for k, v in pairs(request.query) do
             params[k] = v
         end
     end
     
-    -- 2. Дополняем параметрами из JSON Body (они имеют приоритет)
     local body = HttpHelpers.get_json_body(request)
     if body and type(body) == "table" then
         for k, v in pairs(body) do
@@ -171,27 +170,23 @@ function HttpHelpers.validate(params, schema)
     for key, rules in pairs(schema) do
         local val = params[key]
 
-        -- Проверка обязательности
         if rules.required and val == nil then
             return false, string.format("Parameter '%s' is required", key)
         end
 
         if val ~= nil then
-            -- Проверка типа
             if rules.type and type(val) ~= rules.type then
-                -- Попытка приведения типов для чисел из Query String
                 if rules.type == "number" and type(val) == "string" then
                     val = tonumber(val)
                     if not val then
                         return false, string.format("Parameter '%s' must be a number", key)
                     end
-                    params[key] = val -- Сохраняем приведенное значение
+                    params[key] = val
                 else
                     return false, string.format("Parameter '%s' must be a %s", key, rules.type)
                 end
             end
 
-            -- Проверка диапазона для чисел
             if rules.type == "number" then
                 if rules.min and val < rules.min then
                     return false, string.format("Parameter '%s' is too small (min: %s)", key, tostring(rules.min))
@@ -201,14 +196,12 @@ function HttpHelpers.validate(params, schema)
                 end
             end
 
-            -- Проверка паттерна для строк
             if rules.type == "string" and rules.pattern then
                 if not string_match(val, rules.pattern) then
                     return false, string.format("Parameter '%s' has invalid format", key)
                 end
             end
 
-            -- Проверка допустимых значений
             if rules.values then
                 local found = false
                 for _, allowed in pairs(rules.values) do
