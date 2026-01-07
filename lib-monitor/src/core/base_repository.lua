@@ -39,7 +39,7 @@ end
 
 --- Удаляет объект из репозитория и останавливает его
 --- @param name string Имя объекта
---- @param [force] boolean Принудительная остановка
+--- @param force boolean Принудительная остановка
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function BaseRepository:unregister(name, force)
     local instance = self.monitors[name]
