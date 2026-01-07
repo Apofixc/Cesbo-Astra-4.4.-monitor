@@ -12,8 +12,9 @@ local type = type
 local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
+local path_prefix = (... and (...):match("(.-)init_monitor$")) or ""
 --- @type ModuleManager
-local ModuleManager = require "src.core.module_manager"
+local ModuleManager = require(path_prefix .. "src.core.module_manager")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- Проверка и сохранение глобальных зависимостей от Astra API
@@ -58,55 +59,55 @@ for _, dep_path in ipairs(global_dependencies_to_check) do
 end
 
 if not all_astra_deps_found then
-    return false
+    error("[Init] Critical Astra dependencies missing. Initialization aborted.")
 end
 
 -- Установка найденных Astra-специфичных глобальных зависимостей в ModuleManager
 ModuleManager.set_global_dependencies(found_astra_deps)
 
 -- Регистрация модулей
-ModuleManager.register_module("monitor_config", "src.config.monitor_config")
+ModuleManager.register_module("monitor_config", path_prefix .. "src.config.monitor_config")
 
-ModuleManager.register_module("logger", "src.utils.logger", {"monitor_config"})
-ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_config"})
+ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
+ModuleManager.register_module("utils", path_prefix .. "src.utils.utils", {"logger", "monitor_config"})
 
-ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_config"})
+ModuleManager.register_module("http_subscriber", path_prefix .. "src.utils.http_subscriber", {"logger", "monitor_config"})
 
-ModuleManager.register_module("core.base_monitor", "src.core.base_monitor", {"logger", "utils", "http_subscriber"})
-ModuleManager.register_module("core.base_repository", "src.core.base_repository", {"logger"})
+ModuleManager.register_module("event_bus", path_prefix .. "src.core.event_bus")
+ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "http_subscriber"})
+ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
 
-ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
-ModuleManager.register_module("dvb_repository", "src.repository.dvb_repository", {"logger", "core.base_repository"})
-ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "event_bus"})
+ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository", {"logger", "core.base_repository"})
+ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "event_bus"})
 
-ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
-ModuleManager.register_module("channel_repository", "src.repository.channel_repository", {"logger", "core.base_repository"})
-ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "event_bus", "dvb_repository"})
+ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("channel_repository", path_prefix .. "src.repository.channel_repository", {"logger", "core.base_repository"})
+ModuleManager.register_module("channel", path_prefix .. "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "event_bus", "dvb_repository"})
 
-ModuleManager.register_module("resource_monitor", "src.system.resource_monitor", {"logger"})
+ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor", {"logger"})
 
 -- Регистрация HTTP модулей
-ModuleManager.register_module("http_helpers", "http.http_helpers", {"logger"})
-ModuleManager.register_module("channel_routes", "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_repository"})
-ModuleManager.register_module("dvb_routes", "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_repository"})
-ModuleManager.register_module("monitor_routes", "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
-ModuleManager.register_module("system_routes", "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
-ModuleManager.register_module("subscriber_routes", "http.routes.subscriber_routes", {"logger", "http_helpers"})
-ModuleManager.register_module("routes_utils", "http.routes.routes_utils", {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
-ModuleManager.register_module("http_server", "http.http_server", {
+ModuleManager.register_module("http_helpers", path_prefix .. "http.http_helpers", {"logger"})
+ModuleManager.register_module("channel_routes", path_prefix .. "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_repository"})
+ModuleManager.register_module("dvb_routes", path_prefix .. "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_repository"})
+ModuleManager.register_module("monitor_routes", path_prefix .. "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
+ModuleManager.register_module("system_routes", path_prefix .. "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
+ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes", {"logger", "http_helpers"})
+ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils", {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
+ModuleManager.register_module("http_server", path_prefix .. "http.http_server", {
     "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils"
 })
 
 -- Валидация зависимостей
 if not ModuleManager.validate_dependencies() then 
-    return false
+    error("[Init] Module dependency validation failed.")
 end
 
 -- Загрузка модулей
 local success_load, load_error = ModuleManager.load_modules()
 if not success_load then
-    print(string.format("[Init] Failed to load modules: %s", tostring(load_error)))
-    return false
+    error(string.format("[Init] Failed to load modules: %s", tostring(load_error)))
 end
 
 -- Инициализация объектов из загруженных модулей

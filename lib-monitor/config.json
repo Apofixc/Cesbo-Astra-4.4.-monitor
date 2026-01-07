@@ -1,1 +1,1 @@
-{json:true}
+{MaxPayloadSize:1048576,MaxRate:0.3,LogFormat:JSON,MinRate:0.001,STREAM:table: 0x6384ba26db70,ChannelMonitorLimit:200,LogLevel:INFO,MinMethodComparison:1,MaxTimeCheck:300,MaxMethodComparison:4,DvbMonitorLimit:20,CorsAllowOrigin:*,HttpTimeout:10,MaxMonitorNameLength:64,MinTimeCheck:0,subscribers:table: 0x6384ba26b8a0,}
