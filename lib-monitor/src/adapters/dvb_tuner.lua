@@ -362,8 +362,9 @@ function DvbTuner:destroy(force)
     end
 
     local channels = 0
-    if self._instance and type(self._instance.__options) == "table" then
-        channels = self._instance.__options.channels or 0
+    local opts = self._instance and self._instance.__options
+    if type(opts) == "table" then
+        channels = opts.channels or 0
     end
 
     -- Если тюнер используется другими каналами и закрытие не принудительное
@@ -373,8 +374,8 @@ function DvbTuner:destroy(force)
     end
 
     -- Декрементируем счетчик, так как монитор отключается
-    if self._instance.__options then
-        self._instance.__options.channels = channels - 1
+    if type(opts) == "table" then
+        opts.channels = channels - 1
     end
 
     local original_config = self._config and Utils.table_copy(self._config) or nil
@@ -386,13 +387,12 @@ function DvbTuner:destroy(force)
 
     if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra
-        local opts = self._instance.__options
-        if opts then
+        if type(opts) == "table" then
             opts.callback = nil
         end
 
         -- Безопасная очистка внутреннего списка Astra и закрытие инстанса
-        if type(dvb_input_instance_list) == "table" and opts then
+        if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
             local adapter = opts.adapter
             local device = opts.device or "0"
             if adapter ~= nil then

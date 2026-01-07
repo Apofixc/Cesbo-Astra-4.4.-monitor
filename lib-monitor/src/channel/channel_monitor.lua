@@ -250,7 +250,7 @@ function ChannelMonitor:process_psi_data(data)
     -- Сохраняем сами данные
     self._psi[table_id] = data
 
-    if table_id == "PMT" and data.streams then
+    if table_id == "PMT" and type(data.streams) == "table" then
         for _, stream in ipairs(data.streams) do
             local pid = stream.pid
             if pid then
@@ -274,7 +274,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._config.analyze then return end
+    if not self._config.analyze or type(data.analyze) ~= "table" then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -308,6 +308,7 @@ end
 --- Обработка суммарных данных потока
 --- @param data table Суммарные данные
 function ChannelMonitor:process_total_data(data)
+    if not data.total then return end
     local status = self._status
     status.cc_errors = status.cc_errors + (data.total.cc_errors or 0)
     status.pes_errors = status.pes_errors + (data.total.pes_errors or 0)
@@ -443,8 +444,9 @@ function ChannelMonitor:destroy(force)
 
     if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra
-        if self._instance.__options then
-            self._instance.__options.callback = nil
+        local opts = self._instance.__options
+        if type(opts) == "table" then
+            opts.callback = nil
         end
 
         -- Физическое закрытие инстанса Astra

@@ -35,8 +35,8 @@ BaseMonitor.STATE = {
 function BaseMonitor.new(config, component_name)
     --- @type BaseMonitor
     local self = setmetatable({}, BaseMonitor)
-    self._config = config
-    self._name = config and config.name or "Unknown"
+    self._config = type(config) == "table" and config or {}
+    self._name = self._config.name or "Unknown"
     self._component_name = component_name or "BaseMonitor"
     self._active = false
     self._state = BaseMonitor.STATE.IDLE
@@ -53,6 +53,7 @@ end
 --- @param prefix string Префикс для удаления (например, "dvb_" или "channel_")
 --- @return boolean Статус выполнения
 function BaseMonitor:_set_config_param(param_name, value, prefix)
+    if not self._config then return false end
     local result = Utils.validate_monitor_param(param_name, value)
     if result == nil then
         Logger.error(self._component_name, "[%s] Invalid parameter value for %s: %s", 

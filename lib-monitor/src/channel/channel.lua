@@ -35,17 +35,17 @@ local Channel = {}
 --- Таблица обработчиков типов мониторов
 local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
-        local input_data = channel_data.input[1]
+        local input_data = channel_data.input and channel_data.input[1]
         if not input_data then
             Logger.error(COMPONENT_NAME, "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
             return nil
         end
 
-        local upstream = input_data.input.tail
+        local upstream = input_data.input and input_data.input.tail
         
         -- Формируем информативное имя монитора для входа
         local monitor_target = "Input: Unknown"
-        if input_data.config then
+        if type(input_data.config) == "table" then
             local fmt = input_data.config.format or "Unknown"
             local addr = "Unknown"
             
@@ -70,14 +70,14 @@ local monitor_type_handlers = {
         return { upstream = upstream, monitor_target = monitor_target }
     end,
     [MONITOR_TYPE_IP] = function(conf, channel_data)
-        if not channel_data.output or #channel_data.output == 0 then
+        if type(channel_data.output) ~= "table" or #channel_data.output == 0 then
             Logger.error(COMPONENT_NAME, "Отсутствует channel_data.output для IP-монитора в потоке '%s'.", conf.name)
             return nil
         end
 
         local key = 1
         for index, output in ipairs(channel_data.output) do
-            if output.config and output.config.monitor then
+            if type(output) == "table" and type(output.config) == "table" and output.config.monitor then
                 key = index
                 break
             end
@@ -104,6 +104,7 @@ local monitor_type_handlers = {
 --- Таблица обработчиков форматов входных данных
 local format_handlers = {
     dvb = function(config)
+        if not config then return nil end
         local cfg = { format = config.format, addr = config.addr }
         local tuner = DvbRepository:find(config.addr)
         local status = tuner and tuner:get_full_status()
@@ -111,34 +112,38 @@ local format_handlers = {
         return cfg
     end,
     udp = function(config)
+        if not config then return nil end
         local cfg = { format = config.format }
         local localaddr = config.localaddr or ""
         if localaddr ~= "" then
-            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
+            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. (config.port or "0")
         else
-            cfg.addr = config.addr .. ":" .. config.port
+            cfg.addr = (config.addr or "0.0.0.0") .. ":" .. (config.port or "0")
         end
         cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
         return cfg
     end,
     rtp = function(config)
+        if not config then return nil end
         local cfg = { format = config.format }
         local localaddr = config.localaddr or ""
         if localaddr ~= "" then
-            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. config.port
+            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. (config.port or "0")
         else
-            cfg.addr = config.addr .. ":" .. config.port
+            cfg.addr = (config.addr or "0.0.0.0") .. ":" .. (config.port or "0")
         end
         cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
         return cfg
     end,
     http = function(config)
+        if not config then return nil end
         local cfg = { format = config.format }
-        cfg.addr = config.host .. ":" .. config.port .. config.path
+        cfg.addr = (config.host or "localhost") .. ":" .. (config.port or "80") .. (config.path or "/")
         cfg.stream = Utils.get_stream_name(config.host) or "unknown_stream"
         return cfg
     end,
     file = function(config)
+        if not config then return nil end
         local cfg = {format = config.format, addr = config.filename, stream = "file"}
         return cfg
     end,
@@ -151,12 +156,13 @@ local function prepare_stream_json(ch_data, monitor_url)
     local stream_json = {}
     
     -- Если есть данные канала, формируем из них
-    if ch_data and ch_data.input then
+    if ch_data and type(ch_data.input) == "table" then
         for key, input in ipairs(ch_data.input) do
-            local format = input.config.format or "Unknown"
+            local config = type(input) == "table" and input.config
+            local format = (type(config) == "table" and config.format) or "Unknown"
             local handler = format_handlers[format]
             if handler then
-                stream_json[key] = handler(input.config)
+                stream_json[key] = handler(config)
             else
                 stream_json[key] = {format = format, addr = "Unknown", stream = "Unknown"}
             end
