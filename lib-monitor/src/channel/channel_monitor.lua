@@ -365,31 +365,22 @@ function ChannelMonitor:process_total_data(data)
     local is_force = self._force_timer > FORCE_SEND_INTERVAL
 
     if input_changed or is_force or self._current_method(status, data, self._config.rate) then
-        self:update_status_and_publish(data, is_force)
-        self._force_timer = 0
-    end
-end
+        local r = self:_build_status_table(data)
+        local current_json = json_encode(r)
 
---- Обновляет статус и публикует его
---- @param data table Данные потока
---- @param is_force boolean|nil Принудительная отправка (игнорировать кэш JSON)
-function ChannelMonitor:update_status_and_publish(data, is_force)
-    local r = self:_build_status_table(data)
-    local current_json = json_encode(r)
-
-    -- Публикуем если JSON изменился ИЛИ если это принудительная отправка (keep-alive)
-    if is_force or current_json ~= self._json_cache then
+        -- Публикуем данные и обновляем кэш
         self:publish(current_json, "channels")
         self._json_cache = current_json
-    end
 
-    -- Обновление состояния для следующего сравнения
-    self._status.ready = data.on_air
-    self._status.scrambled = data.total.scrambled
-    self._status.bitrate = data.total.bitrate or 0
-    self._status.cc_errors = 0
-    self._status.pes_errors = 0
-    self._last_active_id = self._channel_data and self._channel_data.active_input_id or 1
+        -- Обновление состояния для следующего сравнения
+        status.ready = data.on_air
+        status.scrambled = data.total.scrambled
+        status.bitrate = data.total.bitrate or 0
+        status.cc_errors = 0
+        status.pes_errors = 0
+        self._last_active_id = active_id
+        self._force_timer = 0
+    end
 end
 
 --- Возвращает закэшированные PSI данные (в формате JSON)

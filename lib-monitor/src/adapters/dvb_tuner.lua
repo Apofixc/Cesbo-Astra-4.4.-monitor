@@ -273,11 +273,9 @@ function DvbTuner:start()
             local r = self:_build_status_table()
             local current_json = json_encode(r)
             
-            -- Публикуем если JSON изменился
-            if current_json ~= self._json_cache then
-                self:publish(current_json, "dvb")
-                self._json_cache = current_json
-            end
+            -- Публикуем данные и обновляем кэш
+            self:publish(current_json, "dvb")
+            self._json_cache = current_json
         end
     end
 
