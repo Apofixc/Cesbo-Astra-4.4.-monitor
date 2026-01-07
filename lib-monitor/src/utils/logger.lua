@@ -160,7 +160,7 @@ function Logger.with_error(func, ...)
     local success = results[2]
     if not success then
         -- Извлекаем ошибку, которая была сохранена для ЭТОГО контекста
-        local err = last_errors[context_id]
+        local err = last_errors[context_id] or "Unknown error"
         last_errors[context_id] = nil
         return false, err
     end

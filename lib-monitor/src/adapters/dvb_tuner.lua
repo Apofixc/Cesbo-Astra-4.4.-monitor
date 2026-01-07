@@ -226,8 +226,12 @@ function DvbTuner:start()
             local current_json = json_encode(r)
             
             -- Публикуем данные и обновляем кэш
-            self:publish(current_json, "dvb")
-            self._json_cache = current_json
+            if current_json then
+                self:publish(current_json, "dvb")
+                self._json_cache = current_json
+            else
+                Logger.error(COMPONENT_NAME, "[%s] callback: json_encode вернул nil", tostring(self._name))
+            end
         end
     end
 

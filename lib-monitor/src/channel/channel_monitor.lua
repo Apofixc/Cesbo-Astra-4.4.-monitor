@@ -332,12 +332,15 @@ function ChannelMonitor:process_total_data(data)
         local current_json = json_encode(r)
 
         -- Публикуем данные и обновляем кэш
-        if not current_json then
+        if current_json then
+            if current_json ~= self._json_cache then
+                self:publish(current_json, "channels")
+                self._json_cache = current_json
+            end
+        else
             Logger.error(COMPONENT_NAME, "[%s] process_total_data: json_encode вернул nil", tostring(self._name))
             return
         end
-        self:publish(current_json, "channels")
-        self._json_cache = current_json
 
         -- Обновление состояния для следующего сравнения
         status.ready = data.on_air

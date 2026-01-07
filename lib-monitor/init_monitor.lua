@@ -22,7 +22,6 @@ local global_dependencies_to_check = {
     "astra.reload",
     "astra.version",
     "channel_list",
-    "dvb_list",
     "dvbls",
     "dvb_tune",
     "find_channel",
