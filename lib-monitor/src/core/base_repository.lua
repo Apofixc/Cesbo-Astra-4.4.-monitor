@@ -57,10 +57,11 @@ function BaseRepository:unregister(name, force)
             end
         else
             -- Если метода destroy нет, просто удаляем из списка
+            local config = instance.get_config and instance:get_config() or {}
             self.monitors[name] = nil
             self.count_active = self.count_active - 1
             Logger.debug(self.component_name, "Object '%s' removed from repository (no destroy method).", name)
-            return {}
+            return config
         end
     end
     Logger.error(self.component_name, "unregister: Object '%s' not found", name)

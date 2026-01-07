@@ -445,6 +445,7 @@ function ChannelMonitor:destroy(force)
     end
 
     if self._input_instance then
+        -- kill_input самостоятельно очищает callback и ресурсы
         kill_input(self._input_instance)
         self._input_instance = nil
     end

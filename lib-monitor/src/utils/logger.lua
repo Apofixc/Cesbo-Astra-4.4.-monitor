@@ -41,8 +41,9 @@ local Logger = {}
 
 --- Обновляет кэшированный уровень логирования
 function Logger.refresh_log_level()
-    local config = ModuleManager.get_module("monitor_config")
-    local level_name = config and config.LogLevel or "INFO"
+    -- Используем pcall для безопасного получения модуля, чтобы избежать проблем при инициализации
+    local success, config = pcall(ModuleManager.get_module, "monitor_config")
+    local level_name = (success and config) and config.LogLevel or "INFO"
     cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
 end
 

@@ -366,14 +366,20 @@ function DvbTuner:destroy(force)
         channels = self._instance.__options.channels or 0
     end
 
+    -- Если тюнер используется другими каналами и закрытие не принудительное
     if channels > 1 and force ~= true then
-        Logger.warn(COMPONENT_NAME, "[%s] Cannot destroy tuner: busy (channels: %d)", tostring(self._name), channels)
+        Logger.info(COMPONENT_NAME, "[%s] Tuner remains open for other channels (active: %d)", tostring(self._name), channels)
         return nil
+    end
+
+    -- Декрементируем счетчик, так как монитор отключается
+    if self._instance.__options then
+        self._instance.__options.channels = channels - 1
     end
 
     local original_config = self._config and Utils.table_copy(self._config) or nil
 
-    -- 2. Очистка ресурсов
+    -- 2. Очистка ресурсов и физическое закрытие тюнера
     self._active = false
     self._state = BaseMonitor.STATE.STOPPED
     self:_clear_psi()
