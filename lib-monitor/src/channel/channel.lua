@@ -77,7 +77,16 @@ local monitor_type_handlers = {
 
         local key = 1
         for index, output in ipairs(channel_data.output) do
-            if type(output) == "table" and type(output.config) == "table" and output.config.monitor then
+            -- В Astra 4.4.182 output.config может быть userdata или таблицей
+            local cfg = output.config
+            if type(cfg) == "userdata" then
+                -- Если это userdata, пробуем получить доступ к __options
+                local opts = cfg.__options
+                if type(opts) == "table" and opts.monitor then
+                    key = index
+                    break
+                end
+            elseif type(cfg) == "table" and cfg.monitor then
                 key = index
                 break
             end

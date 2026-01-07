@@ -30,10 +30,25 @@ function ChannelRepository:find_by_adapter(adapter_name)
     local target_adapter = tostring(adapter_name)
     for _, ch_data in pairs(channel_list) do
         local inputs = ch_data.input
-        if inputs then
+        if type(inputs) == "table" then
             for i = 1, #inputs do
                 local input = inputs[i]
-                local cfg = input.config
+                -- В Astra ch_data.input[i] может быть строкой URL или таблицей с полем config
+                local cfg
+                if type(input) == "table" then
+                    cfg = input.config
+                elseif type(input) == "string" then
+                    -- Если это строка, пробуем распарсить её (упрощенно для DVB)
+                    if input:find("^dvb://") then
+                        local addr = input:match("^dvb://([^#?]+)")
+                        if addr == target_adapter then
+                            local name = (type(ch_data.config) == "table") and ch_data.config.name
+                            if name then result[name] = ch_data end
+                            break
+                        end
+                    end
+                end
+
                 if cfg and cfg.format == "dvb" and tostring(cfg.addr) == target_adapter then
                     local name = (type(ch_data.config) == "table") and ch_data.config.name
                     if name then

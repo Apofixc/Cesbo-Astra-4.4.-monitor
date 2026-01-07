@@ -123,6 +123,7 @@ function DvbTuner.new(conf)
     
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
     self._check_timer = 0
+    self._force_timer = 0
     self._stats = {
         ber_sum = 0,
         unc_sum = 0,
@@ -197,7 +198,7 @@ function DvbTuner:start()
     -- Создаем рабочую копию конфига для Astra
     self._astra_conf = Utils.table_copy(self._config)
     self._astra_conf.callback = function(data)
-        if not self._active or not data then return end
+        if not self or not self._active or not data then return end
         
         -- Накопление статистики для расчета качества (упрощенно)
         if self._config.analyze and data.status and data.status > 0 then
@@ -210,14 +211,18 @@ function DvbTuner:start()
             end
         end
 
+        self._force_timer = (self._force_timer or 0) + 1
         if self._check_timer < self._astra_conf.time_check then
             self._check_timer = self._check_timer + 1
             return
         end
         self._check_timer = 0
 
+        local is_force = self._force_timer >= 300 -- FORCE_SEND_INTERVAL
+
         -- Оптимизация: Сначала проверяем изменения в данных перед формированием JSON
-        if self._current_method(self._status, data, self._astra_conf.rate) then
+        if is_force or self._current_method(self._status, data, self._astra_conf.rate) then
+            self._force_timer = 0
             local status = self._status
             status.status = data.status or -1
             status.signal = data.signal or -1
@@ -370,7 +375,7 @@ function DvbTuner:psi_update()
         name = "psi_update_" .. self._name,
         join_pid = true,
         callback = function(data)
-            if not data or not self._temp_analyzer then return end
+            if not self or not data or not self._temp_analyzer then return end
             if data.psi then
                 self._psi[data.psi:upper()] = data
             end
@@ -402,22 +407,22 @@ function DvbTuner:destroy(force)
         return nil
     end
 
+    local original_config = self._config and Utils.table_copy(self._config) or nil
     local opts = self._instance and self._instance.__options
     local channels = (type(opts) == "table") and (opts.channels or 0) or 0
-    
-    -- Определяем, нужно ли физически закрывать тюнер
-    -- Закрываем только если это последний пользователь (channels <= 1) или принудительно
-    local should_close_physically = (channels <= 1) or (force == true)
+
+        -- Определяем, нужно ли физически закрывать тюнер
+    -- Закрываем только если больше нет пользователей или принудительно
+    local should_close_physically = (channels == 1) or (force == true)
     if not should_close_physically then
         return nil
     end
 
-    -- Декрементируем счетчик в любом случае, так как монитор отключается
+    -- Декрементируем счетчик, так как монитор отключается
     if type(opts) == "table" then
         opts.channels = (channels > 0) and (channels - 1) or 0
+        channels = opts.channels
     end
-
-    local original_config = self._config and Utils.table_copy(self._config) or nil
 
     -- 1. Остановка логики мониторинга
     self._active = false

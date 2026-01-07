@@ -285,12 +285,17 @@ function ChannelMonitor:process_psi_data(data)
                 local type_name = stream.type_name or "UNKNOWN"
                 local stats = self._stats[pid]
                 if not stats then
-                    self._stats[pid] = {
-                        type = type_name,
-                        cc = 0,
-                        pes = 0,
-                        sc = 0
-                    }
+                    -- Лимит на количество отслеживаемых PID
+                    local pid_count = 0
+                    for _ in pairs(self._stats) do pid_count = pid_count + 1 end
+                    if pid_count < 100 then
+                        self._stats[pid] = {
+                            type = type_name,
+                            cc = 0,
+                            pes = 0,
+                            sc = 0
+                        }
+                    end
                 else
                     stats.type = type_name
                 end
@@ -314,13 +319,18 @@ function ChannelMonitor:process_analyze_data(data)
             if cc > 0 or pes > 0 or sc > 0 then
                 local stats = self._stats[pid]
                 if not stats then
-                    stats = {
-                        type = "UNKNOWN",
-                        cc = cc,
-                        pes = pes,
-                        sc = sc
-                    }
-                    self._stats[pid] = stats
+                    -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
+                    local pid_count = 0
+                    for _ in pairs(self._stats) do pid_count = pid_count + 1 end
+                    if pid_count < 100 then
+                        stats = {
+                            type = "UNKNOWN",
+                            cc = cc,
+                            pes = pes,
+                            sc = sc
+                        }
+                        self._stats[pid] = stats
+                    end
                 else
                     -- Защита от переполнения
                     stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
@@ -358,7 +368,7 @@ function ChannelMonitor:process_total_data(data)
 
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
     local input_changed = active_id ~= self._last_active_id
-    local is_force = self._force_timer > FORCE_SEND_INTERVAL
+    local is_force = self._force_timer >= FORCE_SEND_INTERVAL
 
     if input_changed or is_force or self._current_method(status, data, self._config.rate) then
         local r = self:_build_status_table(data)
@@ -444,8 +454,8 @@ function ChannelMonitor:_build_status_table(data)
     
     -- Если переданы свежие данные, используем их, иначе берем из self._status
     local ready = data and data.on_air or status.ready or false
-    local bitrate = data and (data.total.bitrate or 0) or (status.bitrate or 0)
-    local scrambled = data and data.total.scrambled or status.scrambled or false
+    local bitrate = (data and data.total and data.total.bitrate) or status.bitrate or 0
+    local scrambled = (data and data.total and data.total.scrambled) or status.scrambled or false
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
 

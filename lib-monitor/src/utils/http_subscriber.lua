@@ -85,10 +85,10 @@ local function send_request(addr, content, event_type)
             "Content-Length: " .. #content,
             "Connection: close",
         },
-        callback = function(s, r)
-            if not s then
-                Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s' to %s: Connection error", event_type, url)
-            elseif type(r) == "table" and r.code and r.code ~= 200 then
+        callback = function(self, r)
+            if not r then
+                Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s' to %s: No response", event_type, url)
+            elseif r.code and r.code ~= 200 then
                 Logger.error(COMPONENT_NAME, "HTTP request failed for event '%s' to %s: Status %s", event_type, url, tostring(r.code))
             else
                 Logger.debug(COMPONENT_NAME, "Event '%s' successfully sent to %s", event_type, url)
