@@ -63,13 +63,15 @@ ModuleManager.register_module("utils", "src.utils.utils", {"logger", "monitor_co
 
 ModuleManager.register_module("http_subscriber", "src.utils.http_subscriber", {"logger", "monitor_config"})
 
-ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber"})
-ModuleManager.register_module("base_repository", "src.repository.base_repository", {"logger"})
-ModuleManager.register_module("dvb_repository", "src.repository.dvb_repository", {"logger", "base_repository"})
+ModuleManager.register_module("core.base_monitor", "src.core.base_monitor", {"logger", "utils", "http_subscriber"})
+ModuleManager.register_module("core.base_repository", "src.core.base_repository", {"logger"})
+
+ModuleManager.register_module("dvb_tuner", "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("dvb_repository", "src.repository.dvb_repository", {"logger", "core.base_repository"})
 ModuleManager.register_module("adapter", "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository"})
 
-ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber"})
-ModuleManager.register_module("channel_repository", "src.repository.channel_repository", {"logger", "base_repository"})
+ModuleManager.register_module("channel_monitor", "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("channel_repository", "src.repository.channel_repository", {"logger", "core.base_repository"})
 ModuleManager.register_module("channel", "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "adapter"})
 
 ModuleManager.register_module("resource_monitor", "src.system.resource_monitor", {"logger"})
