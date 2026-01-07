@@ -90,6 +90,7 @@ end
 --- Middleware: Логирование и замер производительности
 local function logger_middleware(handler, path)
     return function(server, client, request)
+        if not request then return nil end
         if HttpServer._is_stopping then
             return HttpHelpers.error(server, client, 503, "Server is shutting down")
         end
