@@ -3,7 +3,6 @@ local collectgarbage = collectgarbage
 local math_max = math.max
 local os_time = os.time
 local pairs = pairs
-local ipairs = ipairs
 local setmetatable = setmetatable
 local string_format = string.format
 local tostring = tostring
@@ -82,7 +81,7 @@ local COMPARISON_METHODS = {
 --- @private
 function DvbTuner:_clear_psi()
     if self._psi_timer then
-        if type(self._psi_timer.close) == "function" then
+        if self._psi_timer.close then
             self._psi_timer:close()
         end
         self._psi_timer = nil
@@ -91,7 +90,7 @@ function DvbTuner:_clear_psi()
         if self._temp_analyzer.__options then
             self._temp_analyzer.__options.callback = nil
         end
-        if type(self._temp_analyzer.close) == "function" then
+        if self._temp_analyzer.close then
             self._temp_analyzer:close()
         end
         self._temp_analyzer = nil
@@ -281,10 +280,10 @@ function DvbTuner:start()
     self._active = true
 
     -- Безопасное управление счетчиком каналов Astra
-    if self._instance and type(self._instance.__options) == "table" then
-        local current_channels = self._instance.__options.channels or 0
-        self._instance.__options.channels = current_channels + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", tostring(self._name), self._instance.__options.channels)
+    local opts = self._instance and self._instance.__options
+    if type(opts) == "table" then
+        opts.channels = (opts.channels or 0) + 1
+        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", tostring(self._name), opts.channels)
     end
 
     return self._instance
@@ -443,15 +442,13 @@ function DvbTuner:destroy(force)
                 local device = opts.device or "0"
                 if adapter ~= nil then
                     local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
-                    if dvb_input_instance_list[instance_id] then
-                        dvb_input_instance_list[instance_id] = nil
-                        Logger.debug(COMPONENT_NAME, "Удален тюнер '%s' из внутреннего списка Astra (id: %s)", tostring(self._name), instance_id)
-                    end
+                    dvb_input_instance_list[instance_id] = nil
+                    Logger.debug(COMPONENT_NAME, "Удален тюнер '%s' из внутреннего списка Astra (id: %s)", tostring(self._name), instance_id)
                 end
             end
 
             -- Физическое закрытие инстанса Astra
-            if type(self._instance.close) == "function" then
+            if self._instance.close then
                 self._instance:close()
             end
             Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))

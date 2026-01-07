@@ -502,7 +502,7 @@ function ChannelMonitor:destroy(force)
         end
 
         -- Физическое закрытие инстанса Astra
-        if type(self._instance.close) == "function" then
+        if self._instance.close then
             self._instance:close()
         end
         self._instance = nil

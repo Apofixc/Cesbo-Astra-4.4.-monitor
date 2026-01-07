@@ -52,8 +52,8 @@ end
 --- @param adapter_name string Имя адаптера (например, "0" или "0.1")
 --- @return table<string, table> Список найденных каналов (имя -> ch_data)
 function ChannelRepository:find_by_adapter(adapter_name)
-    local result = {}    
-    
+    local result = {}
+
     if not channel_list then
         Logger.error(COMPONENT_NAME, "find_by_adapter: channel_list dependency not found")
         return result

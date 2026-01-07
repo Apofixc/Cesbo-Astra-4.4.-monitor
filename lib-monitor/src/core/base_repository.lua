@@ -65,22 +65,19 @@ end
 --- @param name string Имя объекта
 --- @return any|nil Экземпляр объекта или nil
 function BaseRepository:find(name)
-    if not self or not self.monitors then return nil end
     return self.monitors[name]
 end
 
 --- Возвращает список всех объектов
 --- @return table<string, any> Таблица объектов
 function BaseRepository:get_all()
-    if not self or not self.monitors then return {} end
     return self.monitors
 end
 
 --- Возвращает количество активных объектов
 --- @return number Количество объектов
 function BaseRepository:count()
-    if not self then return 0 end
-    return self.count_active or 0
+    return self.count_active
 end
 
 return BaseRepository

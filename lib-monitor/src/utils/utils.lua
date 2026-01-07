@@ -55,11 +55,7 @@ end
 --- @param t table Исходная таблица
 --- @return table Копия таблицы
 function Utils.table_copy(t)
-    if type(t) ~= "table" then
-        return {}
-    end
-
-    local copy = {} 
+    local copy = {}
     for k, v in pairs(t) do
         copy[k] = v
     end
@@ -67,15 +63,23 @@ function Utils.table_copy(t)
     return copy
 end
 
---- Создает быструю поверхностную копию таблицы (без проверок типа)
---- @param t table Исходная таблица
---- @return table Копия таблицы
-function Utils.fast_copy(t)
-    local copy = {}
-    for k, v in pairs(t) do
-        copy[k] = v
+--- Разделяет строку по разделителю (аналог string.split из Astra)
+--- @param s string Исходная строка
+--- @param d string Разделитель
+--- @return table|nil Таблица частей строки или nil
+function Utils.split(s, d)
+    if type(s) ~= "string" then return nil end
+    local p = 1
+    local t = {}
+    while true do
+        local b = s:find(d, p)
+        if not b then
+            t[#t + 1] = s:sub(p)
+            return t
+        end
+        t[#t + 1] = s:sub(p, b - 1)
+        p = b + #d
     end
-    return copy
 end
 
 --- Создает глубокую копию таблицы

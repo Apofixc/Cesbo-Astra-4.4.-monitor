@@ -7,7 +7,6 @@ local tonumber = tonumber
 local io_open = io.open
 local collectgarbage = collectgarbage
 local pairs = pairs
-local ipairs = ipairs
 
 -- 2. Глобальные зависимости Astra
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")

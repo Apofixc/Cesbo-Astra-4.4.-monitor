@@ -112,7 +112,6 @@ local monitor_type_handlers = {
 
 --- Таблица обработчиков форматов входных данных
 local function network_format_handler(config)
-    if not config then return nil end
     local cfg = { format = config.format }
     local localaddr = config.localaddr or ""
     local host = config.addr or config.host or "0.0.0.0"
@@ -127,7 +126,6 @@ end
 
 local format_handlers = {
     dvb = function(config)
-        if not config then return nil end
         local cfg = { format = config.format, addr = config.addr }
         local tuner = DvbRepository:find(config.addr)
         local status = tuner and tuner:get_full_status()
@@ -137,15 +135,13 @@ local format_handlers = {
     udp = network_format_handler,
     rtp = network_format_handler,
     http = function(config)
-        if not config then return nil end
         local cfg = { format = config.format }
         cfg.addr = (config.host or "localhost") .. ":" .. (config.port or "80") .. (config.path or "/")
         cfg.stream = Utils.get_stream_name(config.host) or "unknown_stream"
         return cfg
     end,
     file = function(config)
-        if not config then return nil end
-        local cfg = {format = config.format, addr = config.filename, stream = "file"}
+        local cfg = { format = config.format, addr = config.filename, stream = "file" }
         return cfg
     end,
 }
