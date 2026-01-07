@@ -254,6 +254,20 @@ function ResourceMonitor.check()
         -- и не логировать отсутствие файлов для него в будущем
     end
 
+    -- Инициализация времени при первом запуске
+    if ResourceMonitor._last_stats.time == 0 then
+        ResourceMonitor._last_stats.time = os.time()
+        if stat then
+            ResourceMonitor._last_stats.utime = stat.utime
+            ResourceMonitor._last_stats.stime = stat.stime
+        end
+        if io_stats then
+            ResourceMonitor._last_stats.read_bytes = io_stats.read_bytes
+            ResourceMonitor._last_stats.write_bytes = io_stats.write_bytes
+        end
+        return
+    end
+
     local current_time = os.time()
     local cpu = { total = 0, user = 0, sys = 0 }
     local io_speed = { read_bps = 0, write_bps = 0 }
