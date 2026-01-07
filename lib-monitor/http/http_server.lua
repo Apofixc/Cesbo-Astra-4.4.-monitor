@@ -137,10 +137,10 @@ local function make_resource_handler(methods, path)
             if result_or_msg then
                 HttpHelpers.error(server, client, 500, result_or_msg)
             end
-            return false, result_or_msg
+            return true
         end
         
-        return true, result_or_msg
+        return true
     end
 
     -- Цепочка Middleware: Logger -> CORS -> Payload Limit -> Core

@@ -700,13 +700,15 @@ end
   "astra_version": "4.4.182",
   "server_time": "2026-01-07 18:56:00",
   "timestamp": 1767801360,
-  "pid": 1234,
-  "uptime": 3600,
-  "cpu": { "usage": 12.5, "user": 10.2, "system": 2.3, "threads": 8 },
-  "memory": { "lua": 1024, "resident": 51200, "virtual": 150000 },
-  "network": [
-    { "interface": "eth0", "ip": "192.168.1.10" }
-  ]
+  "resources": {
+    "pid": 1234,
+    "uptime": 3600,
+    "cpu": { "usage": 12.5, "user": 10.2, "system": 2.3, "threads": 8 },
+    "memory": { "lua": 1024, "resident": 51200, "virtual": 150000 },
+    "network": [
+      { "interface": "eth0", "ip": "192.168.1.10" }
+    ]
+  }
 }
 ```
 

@@ -23,6 +23,7 @@ local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream =
 local FORCE_SEND_INTERVAL = 300
 local MAX_COUNTER = 1000000000
 local MAX_ERROR_COUNT = 1000000
+local MAX_PSI_CACHE_SIZE = 50
 
 -- Стандартные имена PSI таблиц (предотвращает создание новых строк при :upper())
 local PSI_NAME_MAP = {
@@ -265,6 +266,14 @@ function ChannelMonitor:process_psi_data(data)
     -- Используем предопределенную карту или делаем upper() без сохранения в кэш
     -- чтобы избежать утечки памяти при большом количестве уникальных имен
     local table_id = PSI_NAME_MAP[raw_psi] or raw_psi:upper()
+
+    -- Защита от переполнения кэша PSI
+    local count = 0
+    for _ in pairs(self._psi) do count = count + 1 end
+    if count >= MAX_PSI_CACHE_SIZE and not self._psi[table_id] then
+        Logger.warn(COMPONENT_NAME, "[%s] PSI cache limit reached, ignoring new table: %s", tostring(self._name), table_id)
+        return
+    end
 
     -- Сохраняем сами данные
     self._psi[table_id] = data

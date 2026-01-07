@@ -177,7 +177,7 @@ function DvbRoutes.restart_adapter(server, client, request)
     })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
-    local success, result_err = Adapter.restart_dvb_monitor(params.name, params.force == true, params)
+    local success, result_err = Adapter.restart_dvb_monitor(params.name, params, params.force == true)
     if not success then return false, result_err or "Failed to restart" end
 
     return HttpHelpers.success(server, client, { message = "Adapter restarted" })

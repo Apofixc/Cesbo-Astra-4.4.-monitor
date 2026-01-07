@@ -30,8 +30,9 @@ function SystemRoutes.get_health(server, client, request)
         astra_version = astra_version or "unknown",
         server_time = os_date("%Y-%m-%d %H:%M:%S"),
         timestamp = os_time(),
-        resources = resources
+        resources = report
     }
+    return HttpHelpers.success(server, client, response)
 end
 
 --- Перезагружает Astra
