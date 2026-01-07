@@ -157,7 +157,7 @@ function ChannelMonitor:start()
 
     local stream_data = self._upstream:stream()
     if not stream_data then
-        Logger.error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", self._name)
+        Logger.error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", tostring(self._name))
         return nil
     end
 
@@ -327,6 +327,10 @@ function ChannelMonitor:process_total_data(data)
         local current_json = json_encode(r)
 
         -- Публикуем данные и обновляем кэш
+        if not current_json then
+            Logger.error(COMPONENT_NAME, "[%s] process_total_data: json_encode returned nil", tostring(self._name))
+            return
+        end
         self:publish(current_json, "channels")
         self._json_cache = current_json
 

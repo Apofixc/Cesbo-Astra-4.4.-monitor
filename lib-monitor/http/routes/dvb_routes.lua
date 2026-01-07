@@ -104,6 +104,9 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local name = request.path:match("/api/dvb/adapters/([^/]+)/data")
+    if not Adapter or not Adapter.get_full_status then
+        return HttpHelpers.error(server, client, 500, "Adapter module not properly loaded")
+    end
     local dvb_obj = DvbRepository and DvbRepository:find(name)
     if not dvb_obj then
         return HttpHelpers.error(server, client, 404, "Adapter not found")
@@ -175,6 +178,9 @@ function DvbRoutes.tune_adapter(server, client, request)
     data.name_adapter = id
 
     -- Вызов функции настройки Astra
+    if not Adapter or not Adapter.dvb_tuner_monitor then
+        return HttpHelpers.error(server, client, 500, "Adapter module not properly loaded")
+    end
     local success, err = Logger.with_error(Adapter.dvb_tuner_monitor, data)
     if success then
         HttpHelpers.success(server, client, { message = "Adapter tuning and monitoring started" })

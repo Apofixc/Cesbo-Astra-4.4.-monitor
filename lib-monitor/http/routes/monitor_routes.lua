@@ -120,7 +120,7 @@ function MonitorRoutes.create_monitor(server, client, request)
         return HttpHelpers.error(server, client, 400, "Name and monitor address are required")
     end
 
-    local success, result_or_err = Logger.with_error(Channel.make_monitor, data, data.channel_data or data.name)
+    local success, result_or_err = Logger.with_error(Channel.make_monitor, data)
     if success and result_or_err then
         HttpHelpers.success(server, client, { message = "Monitor created" })
     else
@@ -151,11 +151,11 @@ function MonitorRoutes.kill_monitor(server, client, request)
                     interval = 1,
                     callback = function(self)
                         self:close()
-                        Channel.make_monitor(config, config.channel_data or config.name)
+                        Channel.make_monitor(config)
                     end
                 })
             else
-                Channel.make_monitor(config, config.channel_data or config.name)
+                Channel.make_monitor(config)
             end
         end
         return config

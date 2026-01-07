@@ -13,7 +13,6 @@ local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ChannelRepository = ModuleManager.get_module("channel_repository")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
-local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local channel_list = ModuleManager.get_global_dependency("channel_list")

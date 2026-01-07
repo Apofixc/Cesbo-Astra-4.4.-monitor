@@ -46,7 +46,7 @@ local nested_dependency_cache = {}
 --- @private
 local function init_logger()
     if not Logger then
-        local module_info = registered_modules["utils.logger"]
+        local module_info = registered_modules["logger"]
         if not module_info then return end
         
         -- Использовать require вместо ModuleManager.get_module для избежания рекурсии
@@ -198,7 +198,7 @@ function ModuleManager.load_modules()
         
         loaded_modules[name] = module
 
-        if name == "utils.logger" and not Logger then
+        if name == "logger" and not Logger then
             init_logger()
         end
 

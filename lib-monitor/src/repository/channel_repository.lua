@@ -7,7 +7,7 @@ local Logger = ModuleManager.get_module("logger")
 local BaseRepository = ModuleManager.get_module("core.base_repository")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- Нет прямых зависимостей
+local channel_list = ModuleManager.get_global_dependency("channel_list")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
@@ -21,7 +21,6 @@ local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
 --- @return table<string, table> Список найденных каналов (имя -> ch_data)
 function ChannelRepository:find_by_adapter(adapter_name)
     local result = {}    
-    local channel_list = ModuleManager.get_global_dependency("channel_list")
     
     if not channel_list then
         Logger.error(COMPONENT_NAME, "find_by_adapter: channel_list dependency not found")

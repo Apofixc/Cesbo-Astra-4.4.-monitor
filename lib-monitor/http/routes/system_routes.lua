@@ -47,7 +47,6 @@ function SystemRoutes.get_resources(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local ResourceMonitor = ModuleManager.get_module("resource_monitor")
     if not ResourceMonitor then
         return HttpHelpers.error(server, client, 500, "ResourceMonitor module not found")
     end

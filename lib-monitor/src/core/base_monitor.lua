@@ -36,6 +36,7 @@ function BaseMonitor.new(config, component_name)
     --- @type BaseMonitor
     local self = setmetatable({}, BaseMonitor)
     self._config = config
+    self._name = config and config.name or "Unknown"
     self._component_name = component_name or "BaseMonitor"
     self._active = false
     self._state = BaseMonitor.STATE.IDLE

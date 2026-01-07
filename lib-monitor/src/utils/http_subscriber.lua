@@ -84,7 +84,7 @@ local function save_subscribers()
 
     -- Проверка существования директории (базовая)
     local dir = path:match("(.+)/[^/]+$")
-    if dir then
+    if dir and dir ~= "" then
         local p = io.popen(string_format("mkdir -p %s 2>/dev/null", dir))
         if p then p:close() end
     end
