@@ -4,6 +4,7 @@ local pairs = pairs
 local setmetatable = setmetatable
 local tostring = tostring
 local type = type
+local collectgarbage = collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

@@ -3,6 +3,7 @@ local SubscriberRoutes = {}
 
 -- 1. Стандартные Lua функции
 local type = type
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

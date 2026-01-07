@@ -3,7 +3,8 @@ local MonitorRoutes = {}
 
 -- 1. Стандартные Lua функции
 local pairs = pairs
-local table_insert = table.insert
+local table_insert = table_insert
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -32,7 +33,7 @@ function MonitorRoutes.get_monitors(server, client, request)
     for name, ch_obj in pairs(active_channels) do
         table_insert(monitors, {
             name = name,
-            display_name = ch_obj.display_name,
+            display_name = ch_obj._display_name,
             type = ch_obj._config and ch_obj._config.monitor_type or "output"
         })
     end

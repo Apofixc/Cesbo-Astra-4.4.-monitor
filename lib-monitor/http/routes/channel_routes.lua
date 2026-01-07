@@ -7,6 +7,7 @@ local ipairs = ipairs
 local type = type
 local tonumber = tonumber
 local table_insert = table.insert
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -43,7 +44,7 @@ function ChannelRoutes.get_channels(server, client, request)
             local ch_obj = ChannelRepository and ChannelRepository.find and ChannelRepository:find(name)
             table_insert(channels, {
                 name = name,
-                display_name = ch_obj and ch_obj.display_name or name,
+                display_name = ch_obj and ch_obj._display_name or name,
                 output = cfg.output or {}
             })
         end
@@ -141,7 +142,8 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     HttpHelpers.success(server, client, {
         name = name,
         inputs = ch_data.config.input or {},
-        active_input = active_input
+        active_input = active_input,
+        display_name = ch_obj and ch_obj._display_name or name
     })
 end
 
@@ -178,7 +180,7 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     end
 
     psi.name = name
-    psi.display_name = ch_obj.display_name
+    psi.display_name = ch_obj and ch_obj._display_name or name
     HttpHelpers.success(server, client, psi)
 end
 

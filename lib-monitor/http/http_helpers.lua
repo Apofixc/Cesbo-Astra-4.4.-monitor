@@ -5,6 +5,8 @@ local HttpHelpers = {}
 local type = type
 local os_time = os.time
 local os_getenv = os.getenv
+local pcall = pcall
+local tostring = tostring
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

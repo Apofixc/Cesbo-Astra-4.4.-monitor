@@ -105,7 +105,7 @@ local monitor_type_handlers = {
 local format_handlers = {
     dvb = function(config)
         local cfg = { format = config.format, addr = config.addr }
-        local tuner = DvbRepository.find(config.addr)
+        local tuner = DvbRepository:find(config.addr)
         local status = tuner and tuner:get_full_status()
         cfg.stream = status and status.source or "dvb"
         return cfg

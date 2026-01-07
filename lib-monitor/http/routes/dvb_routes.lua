@@ -5,6 +5,8 @@ local DvbRoutes = {}
 local pairs = pairs
 local table_insert = table.insert
 local type = type
+local pcall = pcall
+local tostring = tostring
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

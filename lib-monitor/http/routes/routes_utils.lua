@@ -87,7 +87,7 @@ function RoutesUtils.get_channels_extended(server, client, request)
             local ch_obj = ChannelRepository and ChannelRepository:find(name)
             local item = {
                 name = name,
-                display_name = ch_obj and ch_obj.display_name or name,
+                display_name = ch_obj and ch_obj._display_name or name,
                 has_monitor = ch_obj ~= nil,
                 monitor_type = ch_obj and ch_obj._config and ch_obj._config.monitor_type,
                 inputs = cfg.input or {},
@@ -123,7 +123,7 @@ function RoutesUtils.get_monitor_errors(server, client, request)
 
     HttpHelpers.success(server, client, {
         name = name,
-        display_name = ch_obj.display_name,
+        display_name = ch_obj._display_name,
         current_status = ch_obj._status or {},
         error_history = {} -- История пока не реализована в базе
     })
@@ -161,7 +161,7 @@ function RoutesUtils.check_object(server, client, request)
             state = ch_obj._status and ch_obj._status.ready and 2 or 1,
             details = {
                 monitor_type = ch_obj._config and ch_obj._config.monitor_type,
-                display_name = ch_obj.display_name
+                display_name = ch_obj._display_name
             }
         })
     end
@@ -200,7 +200,7 @@ function RoutesUtils.get_all_objects(server, client, request)
             id = name,
             name = name,
             type = "channel_monitor",
-            display_name = ch_obj.display_name,
+            display_name = ch_obj._display_name,
             active = true,
             state = ch_obj._status and ch_obj._status.ready and 2 or 1
         })

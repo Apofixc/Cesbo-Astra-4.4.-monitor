@@ -2,9 +2,10 @@
 local SystemRoutes = {}
 
 -- 1. Стандартные Lua функции
-local os_time = os.time
-local os_date = os.date
+local os_time = os_time
+local os_date = os_date
 local tostring = tostring
+local tonumber = tonumber
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -51,7 +52,7 @@ function SystemRoutes.get_resources(server, client, request)
         return HttpHelpers.error(server, client, 500, "ResourceMonitor module not found")
     end
 
-    HttpHelpers.success(server, client, ResourceMonitor.get_stats())
+    HttpHelpers.success(server, client, ResourceMonitor.get_report())
 end
 
 --- Возвращает статистику работы ResourceMonitor

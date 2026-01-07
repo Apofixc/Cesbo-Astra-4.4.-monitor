@@ -8,6 +8,7 @@ BaseRepository.__index = BaseRepository
 -- 1. Стандартные Lua функции
 local pairs = pairs
 local tostring = tostring
+local setmetatable = setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

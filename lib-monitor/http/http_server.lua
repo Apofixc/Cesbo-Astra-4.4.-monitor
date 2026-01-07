@@ -4,6 +4,8 @@ local HttpServer = {}
 -- 1. Стандартные Lua функции
 local pairs = pairs
 local ipairs = ipairs
+local pcall = pcall
+local tostring = tostring
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
