@@ -3,10 +3,12 @@ local collectgarbage = collectgarbage
 local math_max = math.max
 local os_time = os.time
 local pairs = pairs
+local ipairs = ipairs
 local setmetatable = setmetatable
 local string_format = string.format
 local tostring = tostring
 local type = type
+local bit32 = bit32
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -23,6 +25,19 @@ local timer = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
 
+-- Предварительно рассчитанная таблица состояний для всех возможных значений статуса (0-31)
+-- Это исключает циклы и побитовые операции в основном callback-е, обеспечивая максимальную производительность.
+local STATUS_LOOKUP = {}
+for i = 0, 31 do
+    STATUS_LOOKUP[i] = {
+        has_signal  = bit32.band(i, 0x01) ~= 0,
+        has_carrier = bit32.band(i, 0x02) ~= 0,
+        has_viterbi = bit32.band(i, 0x04) ~= 0,
+        has_sync    = bit32.band(i, 0x08) ~= 0,
+        has_lock    = bit32.band(i, 0x10) ~= 0,
+    }
+end
+
 -- Методы сравнения
 local METHOD_ALWAYS = 1
 local METHOD_STRICT = 2
@@ -30,6 +45,8 @@ local METHOD_RATIO = 3
 
 --- @class DvbTuner : BaseMonitor
 --- @field private _status table|nil Текущий статус (signal, snr, ber, unc)
+--- @field private _current_flags table|nil Текущие битовые флаги состояния
+--- @field private _last_status_num number|nil Последнее числовое значение статуса
 --- @field private _check_timer number|nil Счетчик для интервала проверки
 --- @field private _stats table|nil Накопленная статистика для расчета качества
 --- @field private _astra_conf table|nil Рабочая конфигурация для Astra
@@ -129,6 +146,8 @@ function DvbTuner.new(conf)
     self._psi = {}
     self._psi_timer = nil
     self._backup = nil
+    self._last_status_num = -1
+    self._current_flags = STATUS_LOOKUP[0]
     
     -- Инициализация пула таблиц отчетов
     self._reports = {
@@ -222,6 +241,16 @@ function DvbTuner:start()
                 status.quality = -1
             end
 
+            local s_num = data.status
+            if s_num and s_num ~= self._last_status_num then
+                -- Используем предрассчитанную таблицу для мгновенного получения флагов
+                local flags = STATUS_LOOKUP[bit32.band(s_num, 0x1F)]
+                if flags then
+                    self._current_flags = flags
+                    self._last_status_num = s_num
+                end
+            end
+
             -- Формируем полный статус для публикации
             local r = self:_build_status_table()
             local current_json = json_encode(r)
@@ -313,6 +342,12 @@ function DvbTuner:_build_status_table()
     t.ber = status.ber or 0
     t.unc = status.unc or 0
     t.quality = status.quality or 0
+    
+    -- Добавляем битовые флаги в отчет
+    for name, val in pairs(self._current_flags) do
+        t[name] = val
+    end
+
     t.timestamp = os_time()
     return t
 end

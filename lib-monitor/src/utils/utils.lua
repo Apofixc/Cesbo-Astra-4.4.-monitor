@@ -67,6 +67,17 @@ function Utils.table_copy(t)
     return copy
 end
 
+--- Создает быструю поверхностную копию таблицы (без проверок типа)
+--- @param t table Исходная таблица
+--- @return table Копия таблицы
+function Utils.fast_copy(t)
+    local copy = {}
+    for k, v in pairs(t) do
+        copy[k] = v
+    end
+    return copy
+end
+
 --- Создает глубокую копию таблицы
 --- @param t table Исходная таблица
 --- @return table Глубокая копия таблицы

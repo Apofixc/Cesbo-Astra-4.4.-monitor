@@ -20,6 +20,8 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "HttpSubscriber"
+local USER_AGENT = "User-Agent: Astra v." .. (astra_version or "unknown")
+local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class HttpSubscriber
@@ -129,9 +131,9 @@ local function send_request(addr, content, event_type)
         port = addr.port,
         timeout = timeout,
         headers = {
-            "User-Agent: Astra v." .. (astra_version or "unknown"),
+            USER_AGENT,
             "Host: " .. addr.host .. ":" .. addr.port,
-            "Content-Type: application/json;charset=utf-8",
+            CONTENT_TYPE,
             "Content-Length: " .. #content,
             "Connection: close",
         },
