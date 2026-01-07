@@ -310,7 +310,7 @@ end
 --- Обработка данных анализа (статистика по PID)
 --- @param data table Данные анализа
 function ChannelMonitor:process_analyze_data(data)
-    if not self._stats or not self._config.analyze then return end
+    if not self._config.analyze then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -354,7 +354,7 @@ function ChannelMonitor:process_total_data(data)
     if status.pes_errors > 1000000 then status.pes_errors = 1000000 end
 
     self._force_timer = self._force_timer + 1
-    if self._check_timer < (self._config.time_check or 0) then
+    if self._check_timer < self._config.time_check then
         self._check_timer = self._check_timer + 1
         return
     end

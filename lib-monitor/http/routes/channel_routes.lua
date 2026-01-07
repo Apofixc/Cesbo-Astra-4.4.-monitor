@@ -200,7 +200,15 @@ function ChannelRoutes.create_channel_raw(server, client, request)
         return HttpHelpers.error(server, client, 400, "Name and input are required")
     end
 
-    local success, err = Logger.with_error(make_channel, data)
+    local success, err = Logger.with_error(function()
+        local ch = make_channel(data)
+        if not ch then
+            Logger.error(COMPONENT_NAME, "Failed to create channel '%s'", tostring(data.name))
+            return false
+        end
+        return true
+    end)
+
     if success then
         HttpHelpers.success(server, client, { message = "Channel created" })
     else

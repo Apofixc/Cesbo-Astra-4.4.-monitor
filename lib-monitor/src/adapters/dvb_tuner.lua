@@ -483,6 +483,9 @@ function DvbTuner:destroy(force)
             opts.callback = nil
         end
 
+        -- Очистка PSI если запущен
+        self:_clear_psi()
+
         -- Безопасная очистка внутреннего списка Astra и закрытие инстанса
         -- Мы попадаем сюда только если channels <= 1 или force == true
         if type(dvb_input_instance_list) == "table" and opts then
