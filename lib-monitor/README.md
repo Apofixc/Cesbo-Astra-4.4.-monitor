@@ -321,6 +321,18 @@ end
         }
 ```
 
+**DELETE `/api/channels/{name}`**
+*   **Описание**: Удаляет или перезапускает канал (Raw Astra Channel).
+*   **Параметры**: `reboot=true` для перезапуска.
+*   **Реализация**: Использует `kill_channel` и при необходимости `make_channel` с задержкой.
+*   **JSON-ответ**:
+```json
+        {
+          "message": "Channel killed/rebooting",
+          "config": { "name": "Discovery", "input": [...], "output": [...] }
+        }
+```
+
 **GET `/api/channels/{name}/inputs`**
 *   **Описание**: Возвращает список входов канала и активный вход.
 *   **Реализация**: Извлекает данные из `find_channel` и информацию об активном входе из `ChannelRepository`.
@@ -333,7 +345,7 @@ end
         }
 ```
 
-**GET `/api/channels/{name}/psi/raw`**
+**GET `/api/channels/{name}/psi`**
 *   **Описание**: Возвращает все собранные PSI/SI таблицы канала без фильтрации (включая NIT, CAT, BAT и др.).
 *   **Реализация**: Извлекает полный дамп таблиц из объекта монитора в `ChannelRepository`.
 *   **JSON-ответ**:
@@ -353,7 +365,7 @@ end
 *   **Реализация**: Извлекает указанную таблицу из кэша монитора в `ChannelRepository`.
 *   **JSON-ответ**: Данные запрошенной таблицы в формате JSON.
 
-**POST `/api/channels/create`**
+**POST `/api/channels`**
 *   **Описание**: Создает новый канал (Raw Astra Channel).
 *   **Параметры**: JSON с конфигурацией канала (`name`, `input`, `output` и др.)
 *   **Реализация**: Вызывает `make_channel` из Astra.
@@ -361,18 +373,6 @@ end
 ```json
         {
           "message": "Channel created"
-        }
-```
-
-**POST `/api/channels/{name}/kill`**
-*   **Описание**: Удаляет или перезапускает канал (Raw Astra Channel).
-*   **Параметры**: `reboot=true` для перезапуска.
-*   **Реализация**: Использует `kill_channel` и при необходимости `make_channel` с задержкой.
-*   **JSON-ответ**:
-```json
-        {
-          "message": "Channel killed/rebooting",
-          "config": { "name": "Discovery", "input": [...], "output": [...] }
         }
 ```
 
@@ -390,7 +390,7 @@ end
         }
 ```
 
-**POST `/api/streams/{name}/kill`**
+**DELETE `/api/streams/{name}`**
 *   **Описание**: Удаляет поток и монитор.
 *   **Параметры**: `reboot=true` для перезапуска.
 *   **Реализация**: Использует `Channel.kill_stream` и при необходимости `Channel.make_stream` с задержкой.
@@ -432,7 +432,7 @@ end
         }
 ```
 
-**GET `/api/monitors/{name}/data`**
+**GET `/api/monitors/{name}`**
 *   **Описание**: Возвращает текущие метрики конкретного монитора.
 *   **Реализация**: Использует кэшированный JSON из объекта монитора или `get_full_status()`.
 *   **JSON-ответ**:
@@ -454,7 +454,7 @@ end
         }
 ```
 
-**POST `/api/monitors/create`**
+**POST `/api/monitors`**
 *   **Описание**: Создает новый монитор (без создания канала).
 *   **Параметры**: JSON с конфигурацией монитора (`name`, `monitor`, `display_name`, параметры мониторинга)
 *   **Реализация**: Вызывает `Channel.make_monitor`.
@@ -465,7 +465,7 @@ end
         }
 ```
 
-**POST `/api/monitors/{name}/update`**
+**PATCH `/api/monitors/{name}`**
 *   **Описание**: Обновляет параметры монитора.
 *   **Параметры**: JSON с новыми параметрами (`rate`, `time_check`, `method_comparison` и др.)
 *   **Реализация**: Вызывает `Channel.update_monitor_parameters`.
@@ -473,6 +473,18 @@ end
 ```json
         {
   "message": "Monitor updated"
+        }
+```
+
+**DELETE `/api/monitors/{name}`**
+*   **Описание**: Удаляет монитор (без удаления канала).
+*   **Параметры**: `reboot=true` для перезапуска.
+*   **Реализация**: Вызывает `Channel.kill_monitor` и при необходимости `Channel.make_monitor` с задержкой.
+*   **JSON-ответ**:
+```json
+        {
+  "message": "Monitor killed/rebooting",
+  "config": { "name": "Discovery", "monitor": "output", ... }
         }
 ```
 
@@ -496,18 +508,6 @@ end
         }
 ```
 
-**POST `/api/monitors/{name}/kill`**
-*   **Описание**: Удаляет монитор (без удаления канала).
-*   **Параметры**: `reboot=true` для перезапуска.
-*   **Реализация**: Вызывает `Channel.kill_monitor` и при необходимости `Channel.make_monitor` с задержкой.
-*   **JSON-ответ**:
-```json
-        {
-  "message": "Monitor killed/rebooting",
-  "config": { "name": "Discovery", "monitor": "output", ... }
-        }
-```
-
 **GET `/api/monitors/{name}/pids`**
 *   **Описание**: Получает статистику по PID.
 *   **Реализация**: Использует метод `get_stats()` объекта монитора.
@@ -519,6 +519,16 @@ end
         }
 ```
 
+**DELETE `/api/monitors/{name}/pids`**
+*   **Описание**: Очищает статистику по PID и битрейту.
+*   **Реализация**: Вызывает `clear_stats()` объекта монитора.
+*   **JSON-ответ**:
+```json
+        {
+  "message": "PID and rate stats cleared"
+        }
+```
+
 **GET `/api/monitors/{name}/rate_stat`**
 *   **Описание**: Получает статистику по битрейту.
 *   **Реализация**: Использует метод `get_rate_stat()` объекта монитора.
@@ -526,16 +536,6 @@ end
 ```json
         {
   "bitrate": [12000, 12500, 12300, ...]
-        }
-```
-
-**POST `/api/monitors/{name}/pids/clear`**
-*   **Описание**: Очищает статистику по PID и битрейту.
-*   **Реализация**: Вызывает `clear_stats()` объекта монитора.
-*   **JSON-ответ**:
-```json
-        {
-  "message": "PID and rate stats cleared"
         }
 ```
 
@@ -575,7 +575,7 @@ end
 }
 ```
 
-**GET `/api/dvb/adapters/{name_adapter}/data`**
+**GET `/api/dvb/adapters/{name_adapter}`**
 *   **Описание**: Возвращает состояние тюнера (Signal, SNR, BER, Lock).
 *   **Реализация**: Использует кэшированный JSON из объекта тюнера или `get_full_status()`.
 *   **JSON-ответ**:
@@ -596,7 +596,30 @@ end
         }
 ```
 
-**GET `/api/dvb/adapters/{name_adapter}/psi/raw`**
+**PATCH `/api/dvb/adapters/{name_adapter}`**
+*   **Описание**: Обновление параметров мониторинга адаптера.
+*   **Параметры**: JSON с новыми параметрами (`rate`, `time_check`, `method_comparison`, `analyze`)
+*   **Реализация**: Вызывает `Adapter.update_dvb_monitor_parameters`.
+*   **JSON-ответ**:
+```json
+        {
+  "message": "Adapter monitor updated"
+        }
+```
+
+**DELETE `/api/dvb/adapters/{name_adapter}`**
+*   **Описание**: Остановка мониторинга адаптера.
+*   **Параметры**: Опционально `force=true`.
+*   **Реализация**: Вызывает `Adapter.stop_dvb_monitor`.
+*   **JSON-ответ**:
+```json
+        {
+  "message": "Adapter stopped successfully",
+  "config": { "name_adapter": "dvb0", "tp": "11044:V:43200", ... }
+        }
+```
+
+**GET `/api/dvb/adapters/{name_adapter}/psi`**
 *   **Описание**: Возвращает все собранные PSI/SI таблицы адаптера без фильтрации.
 *   **Реализация**: Использует метод `get_psi()` объекта тюнера без параметров.
 *   **JSON-ответ**: Полный дамп всех доступных таблиц (NIT, CAT, BAT и др.).
@@ -605,6 +628,16 @@ end
   "adapter_name": "adapter1",
   "PMT": { "pid": 256, "streams": [...] },
   "SDT": { "pid": 17, "services": [...] }
+        }
+```
+
+**POST `/api/dvb/adapters/{name_adapter}/psi`**
+*   **Описание**: Запуск обновления PSI таблиц.
+*   **Реализация**: Вызывает `Adapter.update_dvb_psi`.
+*   **JSON-ответ**:
+```json
+        {
+  "message": "PSI update started"
         }
 ```
 
@@ -617,16 +650,6 @@ end
 *   **Описание**: Возвращает список всех физических DVB-адаптеров, обнаруженных в системе.
 *   **Реализация**: Использует функцию `dvbls()` ядра Astra.
 *   **JSON-ответ**: Список объектов с параметрами адаптеров.
-
-**POST `/api/dvb/adapters/{name_adapter}/psi/update`**
-*   **Описание**: Запуск обновления PSI таблиц.
-*   **Реализация**: Вызывает `Adapter.update_dvb_psi`.
-*   **JSON-ответ**:
-```json
-        {
-  "message": "PSI update started"
-        }
-```
 
 **POST `/api/dvb/adapters/{name_adapter}/tune`**
 *   **Описание**: Настройка частоты (смена источника сигнала).
@@ -648,17 +671,6 @@ end
         {
   "message": "Transponder switched successfully",
   "backup": { "tuner_params": {...}, "channels_configs": [...] }
-        }
-```
-
-**POST `/api/dvb/adapters/{name_adapter}/update`**
-*   **Описание**: Обновление параметров мониторинга адаптера.
-*   **Параметры**: JSON с новыми параметрами (`rate`, `time_check`, `method_comparison`, `analyze`)
-*   **Реализация**: Вызывает `Adapter.update_dvb_monitor_parameters`.
-*   **JSON-ответ**:
-```json
-        {
-  "message": "Adapter monitor updated"
         }
 ```
 
@@ -691,18 +703,6 @@ end
 {
   "message": "Adapter restarted successfully"
 }
-```
-
-**POST `/api/dvb/adapters/{name_adapter}/kill`**
-*   **Описание**: Остановка мониторинга адаптера.
-*   **Параметры**: Опционально `force=true`.
-*   **Реализация**: Вызывает `Adapter.stop_dvb_monitor`.
-*   **JSON-ответ**:
-```json
-        {
-  "message": "Adapter stopped successfully",
-  "config": { "name_adapter": "dvb0", "tp": "11044:V:43200", ... }
-        }
 ```
 
 ### System Routes (/api/system)
@@ -859,7 +859,7 @@ end
 ]
 ```
 
-**POST /api/subscribers/subscribe**
+**POST `/api/subscribers`**
 *   **Описание**: Добавляет нового получателя.
 *   **Параметры**: JSON с параметрами (`event_type`, `host`, `port`, `path`).
 *   **Реализация**: Вызывает `HttpSubscriber.subscribe`.
@@ -870,7 +870,7 @@ end
         }
 ```
 
-**POST `/api/subscribers/unsubscribe`**
+**DELETE `/api/subscribers`**
 *   **Описание**: Удаляет получателя.
 *   **Параметры**: JSON с параметрами (`event_type`, `host`, `port`, `path`).
 *   **Реализация**: Вызывает `HttpSubscriber.unsubscribe`.

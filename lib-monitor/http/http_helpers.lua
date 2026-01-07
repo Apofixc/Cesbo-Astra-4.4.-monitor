@@ -13,6 +13,7 @@ local Logger = ModuleManager.get_module("logger")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_encode = ModuleManager.get_global_dependency("json.encode")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "HttpHelpers"
@@ -101,6 +102,18 @@ function HttpHelpers.send_raw_json(server, client, code, content)
         },
         content = content,
     })
+end
+
+--- Извлекает JSON данные из тела запроса
+--- @param request table Объект запроса
+--- @return table|nil Декодированные данные или nil
+function HttpHelpers.get_json_body(request)
+    if not request or not request.content then return nil end
+    if request.content_type ~= "application/json" then return nil end
+
+    local ok, data = pcall(json_decode, request.content)
+    if ok then return data end
+    return nil
 end
 
 return HttpHelpers

@@ -83,7 +83,7 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/data")
+    local name = request.path:match("/api/monitors/([^/]+)")
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
@@ -110,11 +110,7 @@ function MonitorRoutes.create_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.monitor or not data.name then
         return HttpHelpers.error(server, client, 400, "Name and monitor address are required")
@@ -136,7 +132,7 @@ function MonitorRoutes.kill_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/kill")
+    local name = request.path:match("/api/monitors/([^/]+)")
     if not name then return HttpHelpers.error(server, client, 400, "Monitor name is required") end
 
     local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
@@ -179,14 +175,10 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/update")
+    local name = request.path:match("/api/monitors/([^/]+)")
     if not name then return HttpHelpers.error(server, client, 400, "Monitor name required") end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     local success, err = Logger.with_error(Channel.update_monitor_parameters, name, data)
     if success then
@@ -288,7 +280,7 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/pids/clear")
+    local name = request.path:match("/api/monitors/([^/]+)/pids")
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end

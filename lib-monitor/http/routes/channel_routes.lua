@@ -105,7 +105,7 @@ function ChannelRoutes.get_channel_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)$")
+    local name = request.path:match("/api/channels/([^/]+)")
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
@@ -192,11 +192,7 @@ function ChannelRoutes.create_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.name or not data.input then
         return HttpHelpers.error(server, client, 400, "Name and input are required")
@@ -226,7 +222,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)/kill")
+    local name = request.path:match("/api/channels/([^/]+)")
     if not name then return HttpHelpers.error(server, client, 400, "Channel name is required") end
 
     local ch_data = find_channel(name)
@@ -273,11 +269,7 @@ function ChannelRoutes.create_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.name or not data.input then
         return HttpHelpers.error(server, client, 400, "Name and input are required")
@@ -299,7 +291,7 @@ function ChannelRoutes.kill_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/streams/([^/]+)/kill")
+    local name = request.path:match("/api/streams/([^/]+)")
     if not name then return HttpHelpers.error(server, client, 400, "Stream name is required") end
 
     local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)

@@ -103,7 +103,7 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/dvb/adapters/([^/]+)/data")
+    local name = request.path:match("/api/dvb/adapters/([^/]+)")
     if not Adapter or not Adapter.get_full_status then
         return HttpHelpers.error(server, client, 500, "Adapter module not properly loaded")
     end
@@ -164,11 +164,7 @@ function DvbRoutes.tune_adapter(server, client, request)
         return HttpHelpers.error(server, client, 400, "Adapter ID is required")
     end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.tp then
         return HttpHelpers.error(server, client, 400, "Tuning parameters (tp) required")
@@ -197,14 +193,10 @@ function DvbRoutes.update_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/update")
+    local id = request.path:match("/api/dvb/adapters/([^/]+)")
     if not id then return HttpHelpers.error(server, client, 400, "Adapter ID required") end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     local success, err = Logger.with_error(Adapter.update_dvb_monitor_parameters, id, data)
     if success then
@@ -222,7 +214,7 @@ function DvbRoutes.update_adapter_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/psi/update")
+    local id = request.path:match("/api/dvb/adapters/([^/]+)/psi")
     if not id then
         return HttpHelpers.error(server, client, 400, "Adapter ID is required")
     end
@@ -244,11 +236,7 @@ function DvbRoutes.switch_transponder(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local id = request.path:match("/api/dvb/adapters/([^/]+)/switch%-transponder")
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.tp then
         return HttpHelpers.error(server, client, 400, "New tuner parameters (tp) required")
@@ -320,11 +308,7 @@ function DvbRoutes.restart_adapter(server, client, request)
         return HttpHelpers.error(server, client, 400, "Adapter ID is required")
     end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     local force = data and (data.force == "true" or data.force == true)
     local success, err = Logger.with_error(Adapter.restart_dvb_monitor, id, data, force)
@@ -343,7 +327,7 @@ function DvbRoutes.stop_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local id = request.path:match("/api/dvb/adapters/([^/]+)/kill")
+    local id = request.path:match("/api/dvb/adapters/([^/]+)")
     if not id then
         return HttpHelpers.error(server, client, 400, "Adapter ID is required")
     end

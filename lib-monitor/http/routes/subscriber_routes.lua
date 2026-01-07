@@ -40,11 +40,7 @@ function SubscriberRoutes.subscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.event_type or not data.host or not data.port or not data.path then
         return HttpHelpers.error(server, client, 400, "event_type, host, port, and path are required")
@@ -72,11 +68,7 @@ function SubscriberRoutes.unsubscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = request.query
-    if request.content_type == "application/json" and request.content then
-        local ok, decoded = pcall(json_decode, request.content)
-        if ok then data = decoded end
-    end
+    local data = HttpHelpers.get_json_body(request) or request.query
 
     if not data or not data.event_type or not data.host or not data.port or not data.path then
         return HttpHelpers.error(server, client, 400, "event_type, host, port, and path are required")
