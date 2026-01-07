@@ -49,7 +49,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
         for _ in pairs(channel_list) do total_astra_channels = total_astra_channels + 1 end
     end
 
-    local total_monitored = 0
+    local total_monitored = ChannelRepository and ChannelRepository:count() or 0
     local online = 0
     local offline = 0
     local with_errors = 0
@@ -57,10 +57,9 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
-        total_monitored = total_monitored + 1
         local status = ch_obj._status or {}
         if status.ready then online = online + 1 else offline = offline + 1 end
-        if status.cc_errors and status.cc_errors > 0 then with_errors = with_errors + 1 end
+        if (status.cc_errors or 0) > 0 then with_errors = with_errors + 1 end
     end
 
     return HttpHelpers.success(server, client, {

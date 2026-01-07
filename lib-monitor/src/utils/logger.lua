@@ -58,19 +58,35 @@ local function should_log(level)
     return level >= get_current_level()
 end
 
+--- Внутренняя функция для записи лога
+--- @private
+local function write_log(level_name, component, format_str, ...)
+    local level = LOG_LEVELS[level_name]
+    local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
+    
+    if level_name == "ERROR" and current_context_id then
+        last_errors[current_context_id] = msg
+        for _, id in ipairs(context_stack) do
+            last_errors[id] = msg
+        end
+    end
+
+    if should_log(level) then
+        local lower_level = level_name:lower()
+        if log and log[lower_level] then
+            log[lower_level](string_format("[%s] %s", component, msg))
+        else
+            print(string_format("[%s][%s] %s", level_name, component, msg))
+        end
+    end
+end
+
 --- Логирует сообщение с уровнем INFO
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.info(component, format_str, ...)
-    if should_log(LOG_LEVELS.INFO) then
-        local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        if log and log.info then
-            log.info(string_format("[%s] %s", component, msg))
-        else
-            print(string_format("[INFO][%s] %s", component, msg))
-        end
-    end
+    write_log("INFO", component, format_str, ...)
 end
 
 --- Логирует сообщение с уровнем ERROR и сохраняет в контекст, если он активен
@@ -78,23 +94,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.error(component, format_str, ...)
-    local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-    
-    -- Сохранение во все активные контексты в стеке
-    if current_context_id then
-        last_errors[current_context_id] = msg
-        for _, id in ipairs(context_stack) do
-            last_errors[id] = msg
-        end
-    end
-
-    if should_log(LOG_LEVELS.ERROR) then
-        if log and log.error then
-            log.error(string_format("[%s] %s", component, msg))
-        else
-            print(string_format("[ERROR][%s] %s", component, msg))
-        end
-    end
+    write_log("ERROR", component, format_str, ...)
 end
 
 --- Логирует сообщение с уровнем DEBUG
@@ -102,14 +102,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.debug(component, format_str, ...)
-    if should_log(LOG_LEVELS.DEBUG) then
-        local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        if log and log.debug then
-            log.debug(string_format("[%s] %s", component, msg))
-        else
-            print(string_format("[DEBUG][%s] %s", component, msg))
-        end
-    end
+    write_log("DEBUG", component, format_str, ...)
 end
 
 --- Логирует сообщение с уровнем WARN
@@ -117,14 +110,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.warn(component, format_str, ...)
-    if should_log(LOG_LEVELS.WARN) then
-        local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
-        if log and log.warn then
-            log.warn(string_format("[%s] %s", component, msg))
-        else
-            print(string_format("[WARN][%s] %s", component, msg))
-        end
-    end
+    write_log("WARN", component, format_str, ...)
 end
 
 --- Выполняет функцию в контексте отслеживания ошибок

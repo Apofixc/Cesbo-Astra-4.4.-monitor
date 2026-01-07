@@ -98,37 +98,17 @@ end
 --- @param name_adapter string Имя адаптера
 --- @return table Список сохраненных конфигураций каналов
 local function stop_dependent_channels(name_adapter)
-    local Channel = ModuleManager.get_module("channel")
     local ChannelRepository = ModuleManager.get_module("channel_repository")
-    local saved_configs = {}
-    if not Channel or not ChannelRepository then
-        return saved_configs
-    end
-
-    local dependent_channels = ChannelRepository:find_by_adapter(name_adapter)
-    for name, _ in pairs(dependent_channels) do
-        local ch_config = Channel.kill_stream(name)
-        if ch_config then
-            table_insert(saved_configs, ch_config)
-        end
-    end
-    return saved_configs
+    if not ChannelRepository then return {} end
+    return ChannelRepository:stop_dependent_channels(name_adapter)
 end
 
 --- Запускает каналы на основе предоставленных конфигураций.
 --- @param configs table Список конфигураций каналов
 local function start_dependent_channels(configs)
-    if not configs or type(configs) ~= "table" then
-        return
-    end
-    local Channel = ModuleManager.get_module("channel")
-    if not Channel then
-        return
-    end
-
-    for _, conf in ipairs(configs) do
-        Channel.make_stream(conf)
-    end
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
+    if not ChannelRepository then return end
+    ChannelRepository:start_dependent_channels(configs)
 end
 
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.

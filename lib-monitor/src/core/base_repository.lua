@@ -43,29 +43,21 @@ end
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function BaseRepository:unregister(name, force)
     local instance = self.monitors[name]
-    if instance then
-        -- Предполагаем, что у объекта есть метод destroy
-        if instance.destroy then
-            local config = instance:destroy(force)
-            if config then
-                self.monitors[name] = nil
-                self.count_active = self.count_active - 1
-                Logger.debug(self.component_name, "Объект '%s' удален и остановлен (force: %s).", name, tostring(force))
-                return config
-            else
-                Logger.error(self.component_name, "unregister: не удалось уничтожить объект '%s'", name)
-                return nil
-            end
-        else
-            -- Если метода destroy нет, просто удаляем из списка
-            local config = instance.get_config and instance:get_config() or {}
-            self.monitors[name] = nil
-            self.count_active = self.count_active - 1
-            Logger.debug(self.component_name, "Объект '%s' удален из репозитория (метод destroy отсутствует).", name)
-            return config
-        end
+    if not instance then
+        Logger.error(self.component_name, "unregister: Объект '%s' не найден", name)
+        return nil
     end
-    Logger.error(self.component_name, "unregister: Объект '%s' не найден", name)
+
+    -- Все мониторы наследуются от BaseMonitor и имеют метод destroy
+    local config = instance.destroy and instance:destroy(force)
+    if config then
+        self.monitors[name] = nil
+        self.count_active = self.count_active - 1
+        Logger.debug(self.component_name, "Объект '%s' удален и остановлен (force: %s).", name, tostring(force))
+        return config
+    end
+
+    Logger.error(self.component_name, "unregister: не удалось уничтожить объект '%s'", name)
     return nil
 end
 

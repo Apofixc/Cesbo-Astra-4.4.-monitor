@@ -111,6 +111,20 @@ local monitor_type_handlers = {
 }
 
 --- Таблица обработчиков форматов входных данных
+local function network_format_handler(config)
+    if not config then return nil end
+    local cfg = { format = config.format }
+    local localaddr = config.localaddr or ""
+    local host = config.addr or config.host or "0.0.0.0"
+    if localaddr ~= "" then
+        cfg.addr = localaddr .. "@" .. host .. ":" .. (config.port or "0")
+    else
+        cfg.addr = host .. ":" .. (config.port or "0")
+    end
+    cfg.stream = Utils.get_stream_name(host) or "unknown_stream"
+    return cfg
+end
+
 local format_handlers = {
     dvb = function(config)
         if not config then return nil end
@@ -120,30 +134,8 @@ local format_handlers = {
         cfg.stream = status and status.source or "dvb"
         return cfg
     end,
-    udp = function(config)
-        if not config then return nil end
-        local cfg = { format = config.format }
-        local localaddr = config.localaddr or ""
-        if localaddr ~= "" then
-            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. (config.port or "0")
-        else
-            cfg.addr = (config.addr or "0.0.0.0") .. ":" .. (config.port or "0")
-        end
-        cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
-        return cfg
-    end,
-    rtp = function(config)
-        if not config then return nil end
-        local cfg = { format = config.format }
-        local localaddr = config.localaddr or ""
-        if localaddr ~= "" then
-            cfg.addr = localaddr .. "@" .. config.addr .. ":" .. (config.port or "0")
-        else
-            cfg.addr = (config.addr or "0.0.0.0") .. ":" .. (config.port or "0")
-        end
-        cfg.stream = Utils.get_stream_name(config.addr) or "unknown_stream"
-        return cfg
-    end,
+    udp = network_format_handler,
+    rtp = network_format_handler,
     http = function(config)
         if not config then return nil end
         local cfg = { format = config.format }

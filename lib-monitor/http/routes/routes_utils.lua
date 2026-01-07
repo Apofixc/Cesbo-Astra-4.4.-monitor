@@ -22,12 +22,10 @@ local COMPONENT_NAME = "RoutesUtils"
 
 --- Возвращает статистику использования ресурсов мониторинга
 function RoutesUtils.get_resource_stats(server, client, request)
-    local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
-    local active_adapters = DvbRepository and DvbRepository:get_all() or {}
-
-    local channel_count, adapter_count, astra_channels, astra_adapters = 0, 0, 0, 0
-    for _ in pairs(active_channels) do channel_count = channel_count + 1 end
-    for _ in pairs(active_adapters) do adapter_count = adapter_count + 1 end
+    local channel_count = ChannelRepository and ChannelRepository:count() or 0
+    local adapter_count = DvbRepository and DvbRepository:count() or 0
+    
+    local astra_channels, astra_adapters = 0, 0
     if channel_list then for _ in pairs(channel_list) do astra_channels = astra_channels + 1 end end
     if dvb_input_instance_list then for _ in pairs(dvb_input_instance_list) do astra_adapters = astra_adapters + 1 end end
 
