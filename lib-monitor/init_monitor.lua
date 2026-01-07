@@ -6,7 +6,7 @@
 -- ===========================================================================
 
 --- @type ModuleManager
-local ModuleManager = require "src.module_manager"
+local ModuleManager = require "src.core.module_manager"
 
 -- Проверка и сохранение глобальных зависимостей от AstraAPI
 local global_dependencies_to_check = {
