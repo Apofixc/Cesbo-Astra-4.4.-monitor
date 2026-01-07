@@ -77,17 +77,17 @@ local COMPARISON_METHODS = {
 --- @return ChannelMonitor|nil Экземпляр монитора или nil
 function ChannelMonitor.new(config, channel_data)
     if not config or type(config) ~= "table" then
-        Logger.error(COMPONENT_NAME, "new: config is required and must be a table")
+        Logger.error(COMPONENT_NAME, "new: конфигурация обязательна и должна быть таблицей")
         return nil
     end
 
     if not config.monitor or type(config.monitor) ~= "string" then
-        Logger.error(COMPONENT_NAME, "new: monitor address is required in config")
+        Logger.error(COMPONENT_NAME, "new: адрес монитора обязателен в конфигурации")
         return nil
     end
 
     if not config.upstream then
-        Logger.error(COMPONENT_NAME, "new: upstream is required in config")
+        Logger.error(COMPONENT_NAME, "new: upstream обязателен в конфигурации")
         return nil
     end
 
@@ -143,26 +143,26 @@ function ChannelMonitor.new(config, channel_data)
 end
 
 --- Запускает мониторинг
---- @return any|nil Экземпляр монитора или nil
+--- @return any|nil Экземпляр анализатора Astra или nil
 function ChannelMonitor:start()
     if self._state == BaseMonitor.STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Monitor already running", tostring(self._name))
+        Logger.warn(COMPONENT_NAME, "[%s] Монитор уже запущен", tostring(self._name))
         return self._instance
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, "[%s] start: Invalid comparison method %s", self._name, tostring(self._config.method_comparison))
+        Logger.error(COMPONENT_NAME, "[%s] start: Некорректный метод сравнения %s", self._name, tostring(self._config.method_comparison))
         return nil
     end
 
     if not self._upstream or type(self._upstream.stream) ~= "function" then
-        Logger.error(COMPONENT_NAME, "[%s] start: upstream is invalid or missing stream() method", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] start: upstream некорректен или отсутствует метод stream()", tostring(self._name))
         return nil
     end
 
     local stream_data = self._upstream:stream()
     if not stream_data then
-        Logger.error(COMPONENT_NAME, "[%s] start: upstream:stream() returned nil", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] start: upstream:stream() вернул nil", tostring(self._name))
         return nil
     end
 
@@ -202,7 +202,7 @@ function ChannelMonitor:start()
     })
 
     if not self._instance then
-        Logger.error(COMPONENT_NAME, "[%s] start: analyze returned nil", self._name)
+        Logger.error(COMPONENT_NAME, "[%s] start: analyze вернул nil", self._name)
         return nil
     end
 
@@ -333,7 +333,7 @@ function ChannelMonitor:process_total_data(data)
 
         -- Публикуем данные и обновляем кэш
         if not current_json then
-            Logger.error(COMPONENT_NAME, "[%s] process_total_data: json_encode returned nil", tostring(self._name))
+            Logger.error(COMPONENT_NAME, "[%s] process_total_data: json_encode вернул nil", tostring(self._name))
             return
         end
         self:publish(current_json, "channels")
@@ -429,7 +429,7 @@ end
 
 --- Останавливает мониторинг и уничтожает объект.
 --- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
---- @param force boolean|nil Принудительная остановка
+--- @param [force] boolean Принудительная остановка
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function ChannelMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
@@ -481,7 +481,7 @@ function ChannelMonitor:destroy(force)
     self._check_timer = nil
     self._last_active_id = nil
 
-    Logger.debug(COMPONENT_NAME, "Monitor object destroyed")
+    Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")
     collectgarbage()
     return original_config
 end
@@ -491,7 +491,7 @@ end
 --- @return boolean Статус выполнения
 function ChannelMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: params must be a table", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
         return false
     end
 
@@ -530,7 +530,7 @@ function ChannelMonitor:update_parameters(params)
     end
 
     if has_errors then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: some parameters failed to update", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] update_parameters: не удалось обновить некоторые параметры", tostring(self._name))
         return false
     end
 

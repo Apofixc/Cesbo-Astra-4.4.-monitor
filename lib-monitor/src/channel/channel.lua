@@ -42,13 +42,13 @@ local monitor_type_handlers = {
         end
 
         local upstream = input_data.input and input_data.input.tail
-        
+
         -- Формируем информативное имя монитора для входа
         local monitor_target = "Input: Unknown"
         if type(input_data.config) == "table" then
             local fmt = input_data.config.format or "Unknown"
             local addr = "Unknown"
-            
+
             if fmt == "dvb" then
                 addr = input_data.config.addr or "Unknown"
             elseif fmt == "udp" or fmt == "rtp" then
@@ -58,7 +58,7 @@ local monitor_type_handlers = {
             elseif fmt == "file" then
                 addr = input_data.config.filename or "Unknown"
             end
-            
+
             monitor_target = string_format("Input: %s (%s)", fmt:upper(), addr)
         end
 
@@ -193,7 +193,7 @@ end
 
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
---- @return ChannelMonitor|nil Экземпляр монитора или nil
+--- @return any|nil Экземпляр монитора Astra или nil
 local function make_monitor(config)
     if ChannelRepository:count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
         Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
@@ -271,23 +271,23 @@ local function make_monitor(config)
     if monitor_instance then
         monitor:set_input_instance(input_instance)
         ChannelRepository:register(name, monitor)
-        Logger.info(COMPONENT_NAME, "Monitor '%s' successfully started", name)
+        Logger.info(COMPONENT_NAME, "Монитор '%s' успешно запущен", name)
         return monitor_instance
     else
         if input_instance then kill_input(input_instance) end
-        Logger.error(COMPONENT_NAME, "make_monitor: failed to start monitor for '%s'", name)
+        Logger.error(COMPONENT_NAME, "make_monitor: не удалось запустить монитор для '%s'", name)
         return nil
     end
 end
 
 --- Останавливает монитор
 --- @param name string Имя монитора
---- @param force boolean|nil Принудительная остановка
+--- @param [force] boolean Принудительная остановка
 --- @return table|nil Конфигурация монитора для восстановления или nil
 local function kill_monitor(name, force)
     local config = ChannelRepository:unregister(name, force)
     if config then
-        Logger.info(COMPONENT_NAME, "Monitor '%s' successfully killed", name)
+        Logger.info(COMPONENT_NAME, "Монитор '%s' успешно остановлен", name)
         return type(config) == "table" and config or nil
     end
     return nil
@@ -295,7 +295,7 @@ end
 
 --- Создает поток и монитор для него
 --- @param conf table Конфигурация потока
---- @return any|nil Данные канала или nil
+--- @return table|nil Данные канала Astra или nil
 local function make_stream(conf)
     local channel_data = make_channel(conf)
     if not channel_data then
@@ -337,7 +337,7 @@ local function make_stream(conf)
     }
 
     if not make_monitor(monitor_config) then
-        Logger.error(COMPONENT_NAME, "make_stream: make_monitor failed for '%s', killing channel", conf.name)
+        Logger.error(COMPONENT_NAME, "make_stream: make_monitor не удался для '%s', удаляем канал", conf.name)
         kill_channel(channel_data)
         return nil
     end
@@ -346,7 +346,7 @@ local function make_stream(conf)
 end
 
 --- Останавливает поток и монитор
---- @param channel_data table|string Данные канала или имя
+--- @param channel_data table|string Данные канала Astra или его имя
 --- @return table|nil Конфигурация потока для восстановления или nil
 local function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
@@ -357,12 +357,12 @@ local function kill_stream(channel_data)
     local name = ch_data.config.name
     
     if not kill_monitor(name) then
-        Logger.warn(COMPONENT_NAME, "kill_stream: monitor '%s' was not active or failed to kill", name)
+        Logger.warn(COMPONENT_NAME, "kill_stream: монитор '%s' не был активен или не удалось остановить", name)
     end
 
     kill_channel(ch_data)
-    
-    Logger.info(COMPONENT_NAME, "Stream and monitor '%s' successfully killed", name)
+
+    Logger.info(COMPONENT_NAME, "Поток и монитор '%s' успешно остановлены", name)
     return ch_data.config
 end
 

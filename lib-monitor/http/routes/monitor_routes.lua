@@ -20,9 +20,9 @@ local timer = ModuleManager.get_global_dependency("timer")
 local COMPONENT_NAME = "MonitorRoutes"
 
 --- Возвращает список активных мониторов
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.get_monitors(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -42,9 +42,9 @@ function MonitorRoutes.get_monitors(server, client, request)
 end
 
 --- Возвращает сводный статус по всем мониторам
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.get_monitors_status(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -76,9 +76,9 @@ function MonitorRoutes.get_monitors_status(server, client, request)
 end
 
 --- Возвращает текущие метрики конкретного монитора
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.get_monitor_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -103,9 +103,9 @@ function MonitorRoutes.get_monitor_data(server, client, request)
 end
 
 --- Создает новый монитор (без создания канала)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.create_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -129,9 +129,9 @@ function MonitorRoutes.create_monitor(server, client, request)
 end
 
 --- Удаляет монитор (без удаления канала)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.kill_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -172,9 +172,9 @@ function MonitorRoutes.kill_monitor(server, client, request)
 end
 
 --- Обновляет параметры монитора
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.update_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -197,9 +197,9 @@ function MonitorRoutes.update_monitor(server, client, request)
 end
 
 --- Приостановка мониторинга канала
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.pause_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -218,9 +218,9 @@ function MonitorRoutes.pause_monitor(server, client, request)
 end
 
 --- Возобновление мониторинга канала
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.resume_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -239,9 +239,9 @@ function MonitorRoutes.resume_monitor(server, client, request)
 end
 
 --- Получение статистики по PID
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.get_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -260,9 +260,9 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
 end
 
 --- Получение статистики по битрейту
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.get_monitor_rate_stat(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -281,9 +281,9 @@ function MonitorRoutes.get_monitor_rate_stat(server, client, request)
 end
 
 --- Очистка статистики по PID и битрейту
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

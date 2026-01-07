@@ -70,7 +70,7 @@ local function read_file(path)
         -- Логируем только один раз для каждого пути, чтобы не спамить
         if not ResourceMonitor._missing_files then ResourceMonitor._missing_files = {} end
         if not ResourceMonitor._missing_files[path] then
-            Logger.warn(COMPONENT_NAME, "File not found or not readable: %s", path)
+            Logger.warn(COMPONENT_NAME, "Файл не найден или недоступен для чтения: %s", path)
             ResourceMonitor._missing_files[path] = true
         end
         return nil
@@ -407,7 +407,7 @@ end
 --- @return boolean Статус выполнения
 function ResourceMonitor.start()
     if ResourceMonitor._timer then
-        Logger.debug(COMPONENT_NAME, "Monitor already running")
+        Logger.debug(COMPONENT_NAME, "Монитор ресурсов уже запущен")
         return true
     end
 
@@ -421,17 +421,21 @@ function ResourceMonitor.start()
         end
     })
 
-    Logger.info(COMPONENT_NAME, "ResourceMonitor started (interval: %d s)", UPDATE_INTERVAL)
+    Logger.info(COMPONENT_NAME, "ResourceMonitor запущен (интервал: %d сек)", UPDATE_INTERVAL)
     return true
 end
 
 --- Останавливает фоновый мониторинг
+--- @return boolean Статус выполнения
 function ResourceMonitor.stop()
     if ResourceMonitor._timer then
-        ResourceMonitor._timer:close()
+        if ResourceMonitor._timer.close then
+            ResourceMonitor._timer:close()
+        end
         ResourceMonitor._timer = nil
-        Logger.info(COMPONENT_NAME, "ResourceMonitor stopped")
+        Logger.info(COMPONENT_NAME, "ResourceMonitor остановлен")
     end
+    collectgarbage()
     return true
 end
 

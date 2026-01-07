@@ -13,12 +13,12 @@ BaseMonitor.__index = BaseMonitor
 
 -- 1. Стандартные Lua функции
 local setmetatable = setmetatable
-local type = type
 local tostring = tostring
+local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("logger")
 local HttpSubscriber = ModuleManager.get_module("http_subscriber")
+local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 
 -- 4. Константы
@@ -29,9 +29,9 @@ BaseMonitor.STATE = {
 }
 
 --- Конструктор базового монитора
---- @param config table Конфигурация
+--- @param config table Конфигурация монитора
 --- @param component_name string Имя компонента для логирования
---- @return BaseMonitor
+--- @return BaseMonitor Экземпляр базового монитора
 function BaseMonitor.new(config, component_name)
     --- @type BaseMonitor
     local self = setmetatable({}, BaseMonitor)
@@ -66,14 +66,14 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
 end
 
 --- Публикует данные через HttpSubscriber
---- @param content string JSON данные
+--- @param content string JSON-данные
 --- @param event_type string Тип события
 function BaseMonitor:publish(content, event_type)
     HttpSubscriber.publish(event_type, content)
 end
 
 --- Возвращает оригинальную конфигурацию
---- @return table Конфигурация
+--- @return table Конфигурация монитора
 function BaseMonitor:get_config()
     return self._config
 end
@@ -85,19 +85,19 @@ function BaseMonitor:get_name()
 end
 
 --- Возвращает экземпляр Astra
---- @return any|nil Экземпляр Astra
+--- @return any|nil Экземпляр Astra (анализатор или тюнер)
 function BaseMonitor:get_instance()
     return self._instance
 end
 
 --- Возвращает текущее состояние
---- @return number Состояние (STATE)
+--- @return number Текущее состояние (STATE)
 function BaseMonitor:get_state()
     return self._state
 end
 
 --- Возвращает кэш последнего отправленного JSON
---- @return string|nil JSON статус
+--- @return string|nil JSON-статус из кэша
 function BaseMonitor:get_json_cache()
     return self._json_cache
 end
@@ -105,7 +105,7 @@ end
 --- Приостанавливает мониторинг
 function BaseMonitor:pause()
     self._active = false
-    Logger.info(self._component_name, "[%s] Monitoring paused", tostring(self._name))
+    Logger.info(self._component_name, "[%s] Мониторинг приостановлен", tostring(self._name))
 end
 
 --- Возобновляет мониторинг
@@ -116,7 +116,7 @@ function BaseMonitor:resume()
         return false
     end
     self._active = true
-    Logger.info(self._component_name, "[%s] Monitoring resumed", tostring(self._name))
+    Logger.info(self._component_name, "[%s] Мониторинг возобновлен", tostring(self._name))
     return true
 end
 

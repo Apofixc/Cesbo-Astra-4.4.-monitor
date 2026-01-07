@@ -17,9 +17,9 @@ local json_decode = ModuleManager.get_global_dependency("json.decode")
 local COMPONENT_NAME = "SubscriberRoutes"
 
 --- Возвращает список всех получателей данных
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SubscriberRoutes.get_subscribers(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -33,9 +33,9 @@ function SubscriberRoutes.get_subscribers(server, client, request)
 end
 
 --- Добавляет нового получателя
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SubscriberRoutes.subscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -65,9 +65,9 @@ function SubscriberRoutes.subscribe(server, client, request)
 end
 
 --- Удаляет получателя
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SubscriberRoutes.unsubscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

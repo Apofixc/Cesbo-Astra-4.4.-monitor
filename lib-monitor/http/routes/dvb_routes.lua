@@ -25,9 +25,9 @@ local json_decode = ModuleManager.get_global_dependency("json.decode")
 local COMPONENT_NAME = "DvbRoutes"
 
 --- Возвращает список используемых DVB-адаптеров
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.get_adapters(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -49,9 +49,9 @@ function DvbRoutes.get_adapters(server, client, request)
 end
 
 --- Возвращает список всех физических DVB-адаптеров, обнаруженных в системе
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.get_hardware_all(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -65,9 +65,9 @@ function DvbRoutes.get_hardware_all(server, client, request)
 end
 
 --- Возвращает список адаптеров с активным мониторингом
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.get_monitored_adapters(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -83,9 +83,9 @@ function DvbRoutes.get_monitored_adapters(server, client, request)
 end
 
 --- Запуск быстрого сканирования адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.scan_adapters(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -96,9 +96,9 @@ function DvbRoutes.scan_adapters(server, client, request)
 end
 
 --- Возвращает состояние тюнера (Signal, SNR, BER, Lock)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.get_adapter_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -121,9 +121,9 @@ function DvbRoutes.get_adapter_data(server, client, request)
 end
 
 --- Возвращает таблицу PSI для адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.get_adapter_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -152,9 +152,9 @@ function DvbRoutes.get_adapter_psi(server, client, request)
 end
 
 --- Настройка частоты (смена источника сигнала)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.tune_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -190,9 +190,9 @@ function DvbRoutes.tune_adapter(server, client, request)
 end
 
 --- Обновление параметров мониторинга адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.update_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -215,9 +215,9 @@ function DvbRoutes.update_adapter(server, client, request)
 end
 
 --- Запуск обновления PSI таблиц
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.update_adapter_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -236,9 +236,9 @@ function DvbRoutes.update_adapter_psi(server, client, request)
 end
 
 --- Переключение транспондера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.switch_transponder(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -266,9 +266,9 @@ function DvbRoutes.switch_transponder(server, client, request)
 end
 
 --- Приостановка мониторинга адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.pause_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -287,9 +287,9 @@ function DvbRoutes.pause_adapter(server, client, request)
 end
 
 --- Возобновление мониторинга адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.resume_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -308,9 +308,9 @@ function DvbRoutes.resume_adapter(server, client, request)
 end
 
 --- Перезапуск мониторинга адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.restart_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -336,9 +336,9 @@ function DvbRoutes.restart_adapter(server, client, request)
 end
 
 --- Остановка мониторинга адаптера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function DvbRoutes.stop_adapter(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

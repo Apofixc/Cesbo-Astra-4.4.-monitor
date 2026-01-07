@@ -29,17 +29,17 @@ end
 --- @param instance any Экземпляр объекта
 function BaseRepository:register(name, instance)
     if self.monitors[name] then
-        Logger.warn(self.component_name, "Object '%s' already registered. Overwriting.", name)
+        Logger.warn(self.component_name, "Объект '%s' уже зарегистрирован. Перезапись.", name)
     else
         self.count_active = self.count_active + 1
     end
     self.monitors[name] = instance
-    Logger.debug(self.component_name, "Object '%s' registered.", name)
+    Logger.debug(self.component_name, "Объект '%s' зарегистрирован.", name)
 end
 
 --- Удаляет объект из репозитория и останавливает его
 --- @param name string Имя объекта
---- @param force boolean|nil Принудительная остановка
+--- @param [force] boolean Принудительная остановка
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function BaseRepository:unregister(name, force)
     local instance = self.monitors[name]
@@ -50,10 +50,10 @@ function BaseRepository:unregister(name, force)
             if config then
                 self.monitors[name] = nil
                 self.count_active = self.count_active - 1
-                Logger.debug(self.component_name, "Object '%s' unregistered and stopped (force: %s).", name, tostring(force))
+                Logger.debug(self.component_name, "Объект '%s' удален и остановлен (force: %s).", name, tostring(force))
                 return config
             else
-                Logger.error(self.component_name, "unregister: failed to destroy object '%s'", name)
+                Logger.error(self.component_name, "unregister: не удалось уничтожить объект '%s'", name)
                 return nil
             end
         else
@@ -61,11 +61,11 @@ function BaseRepository:unregister(name, force)
             local config = instance.get_config and instance:get_config() or {}
             self.monitors[name] = nil
             self.count_active = self.count_active - 1
-            Logger.debug(self.component_name, "Object '%s' removed from repository (no destroy method).", name)
+            Logger.debug(self.component_name, "Объект '%s' удален из репозитория (метод destroy отсутствует).", name)
             return config
         end
     end
-    Logger.error(self.component_name, "unregister: Object '%s' not found", name)
+    Logger.error(self.component_name, "unregister: Объект '%s' не найден", name)
     return nil
 end
 

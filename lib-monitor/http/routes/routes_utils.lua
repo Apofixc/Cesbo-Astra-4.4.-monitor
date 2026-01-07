@@ -22,9 +22,9 @@ local dvb_list = ModuleManager.get_global_dependency("dvb_list")
 local COMPONENT_NAME = "RoutesUtils"
 
 --- Возвращает статистику использования ресурсов мониторинга
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_resource_stats(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -69,9 +69,9 @@ function RoutesUtils.get_resource_stats(server, client, request)
 end
 
 --- Возвращает расширенную информацию обо всех каналах
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_channels_extended(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -107,9 +107,9 @@ function RoutesUtils.get_channels_extended(server, client, request)
 end
 
 --- Возвращает историю ошибок для монитора (заглушка)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_monitor_errors(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -129,9 +129,9 @@ function RoutesUtils.get_monitor_errors(server, client, request)
 end
 
 --- Возвращает конфигурацию системы мониторинга
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_system_config(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -140,9 +140,9 @@ function RoutesUtils.get_system_config(server, client, request)
 end
 
 --- Проверяет доступность и статус монитора по имени
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.check_object(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -184,9 +184,9 @@ function RoutesUtils.check_object(server, client, request)
 end
 
 --- Возвращает список всех объектов (мониторы + адаптеры)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_all_objects(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -225,9 +225,9 @@ function RoutesUtils.get_all_objects(server, client, request)
 end
 
 --- Очищает неактивные мониторы (заглушка)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.cleanup(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -240,9 +240,9 @@ function RoutesUtils.cleanup(server, client, request)
 end
 
 --- Возвращает информацию о версии API
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function RoutesUtils.get_api_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

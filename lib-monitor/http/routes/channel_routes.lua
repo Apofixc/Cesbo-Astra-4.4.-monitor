@@ -27,9 +27,9 @@ local json_decode = ModuleManager.get_global_dependency("json.decode")
 local COMPONENT_NAME = "ChannelRoutes"
 
 --- Возвращает список всех каналов с их адресами вещания
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.get_channels(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -54,9 +54,9 @@ function ChannelRoutes.get_channels(server, client, request)
 end
 
 --- Возвращает агрегированную статистику по каналам
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.get_channels_stats(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -98,9 +98,9 @@ function ChannelRoutes.get_channels_stats(server, client, request)
 end
 
 --- Возвращает детальную информацию о канале
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.get_channel_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -119,9 +119,9 @@ function ChannelRoutes.get_channel_info(server, client, request)
 end
 
 --- Возвращает список входов канала и активный вход
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.get_channel_inputs(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -148,9 +148,9 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
 end
 
 --- Возвращает данные PSI/SI канала
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.get_channel_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -185,9 +185,9 @@ function ChannelRoutes.get_channel_psi(server, client, request)
 end
 
 --- Создает новый канал (Raw Astra Channel)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.create_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -219,9 +219,9 @@ function ChannelRoutes.create_channel_raw(server, client, request)
 end
 
 --- Удаляет или перезапускает канал (Raw Astra Channel)
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.kill_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -266,9 +266,9 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
 end
 
 --- Создает поток с мониторингом
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.create_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -292,9 +292,9 @@ function ChannelRoutes.create_stream(server, client, request)
 end
 
 --- Удаляет поток и монитор
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function ChannelRoutes.kill_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

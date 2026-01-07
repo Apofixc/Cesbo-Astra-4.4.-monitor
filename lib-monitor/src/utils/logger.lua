@@ -6,7 +6,7 @@ local string_format = string.format
 local table_insert = table.insert
 local table_remove = table.remove
 local tostring = tostring
-local unpack = unpack or table.unpack
+local unpack = table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
 -- local MonitorConfig = ModuleManager.get_module("monitor_config") -- Загружается динамически в get_current_level
@@ -130,8 +130,8 @@ end
 --- Выполняет функцию в контексте отслеживания ошибок
 --- @param func function Функция для выполнения
 --- @param ... any Аргументы функции
---- @return boolean Статус выполнения
---- @return any|string|nil Данные, nil или сообщение об ошибке (для HTTP-функций)
+--- @return boolean success Статус выполнения
+--- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке (для HTTP-функций)
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
     context_counter = context_counter + 1

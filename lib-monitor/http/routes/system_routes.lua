@@ -23,9 +23,9 @@ local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
 local COMPONENT_NAME = "SystemRoutes"
 
 --- Возвращает информацию о версии Astra и аптайме
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_env_astra(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -40,9 +40,9 @@ function SystemRoutes.get_env_astra(server, client, request)
 end
 
 --- Возвращает метрики CPU, RAM, Disk, Network
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_resources(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -55,9 +55,9 @@ function SystemRoutes.get_resources(server, client, request)
 end
 
 --- Возвращает статистику работы ResourceMonitor
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_monitor_stats(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -71,9 +71,9 @@ function SystemRoutes.get_monitor_stats(server, client, request)
 end
 
 --- Проверяет состояние сервера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_health(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -87,9 +87,9 @@ function SystemRoutes.get_health(server, client, request)
 end
 
 --- Перезагружает Astra
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.reload(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -114,9 +114,9 @@ function SystemRoutes.reload(server, client, request)
 end
 
 --- Останавливает Astra
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.exit(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -140,9 +140,9 @@ function SystemRoutes.exit(server, client, request)
 end
 
 --- Очищает кэш системных метрик
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.clear_cache(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -157,9 +157,9 @@ function SystemRoutes.clear_cache(server, client, request)
 end
 
 --- Возвращает список всех сетевых интерфейсов сервера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_network_interfaces(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
@@ -173,9 +173,9 @@ function SystemRoutes.get_network_interfaces(server, client, request)
 end
 
 --- Возвращает имя хоста сервера
---- @param server table
---- @param client table
---- @param request table
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
 function SystemRoutes.get_hostname(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end

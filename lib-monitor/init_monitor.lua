@@ -5,10 +5,18 @@
 -- отвечая за инициализацию и загрузку всех ее компонентов.
 -- ===========================================================================
 
+-- 1. Стандартные Lua функции
+local ipairs = ipairs
+local print = print
+local type = type
+local string_format = string.format
+
+-- 2. Функции из ModuleManager.get_module()
 --- @type ModuleManager
 local ModuleManager = require "src.core.module_manager"
 
--- Проверка и сохранение глобальных зависимостей от AstraAPI
+-- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- Проверка и сохранение глобальных зависимостей от Astra API
 local global_dependencies_to_check = {
     "analyze",
     "astra.reload",
@@ -131,8 +139,7 @@ if type(HttpServer) == "table" then
 end
 
 if Logger then
-    Logger.info("Init", "Library lib-monitor successfully initialized")
+    Logger.info("Init", "Библиотека lib-monitor успешно инициализирована")
 end
-
 
 return ModuleManager
