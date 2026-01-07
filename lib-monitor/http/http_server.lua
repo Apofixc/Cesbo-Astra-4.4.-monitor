@@ -258,6 +258,7 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/dvb/adapters/pause"] = { POST = DvbRoutes.pause_adapter },
         ["/api/dvb/adapters/resume"] = { POST = DvbRoutes.resume_adapter },
         ["/api/dvb/adapters/restart"] = { POST = DvbRoutes.restart_adapter },
+        ["/api/dvb/adapters/status-info"] = { GET = DvbRoutes.get_adapter_status_info },
         ["/api/dvb/hardware/all"] = { GET = DvbRoutes.get_hardware_all },
 
         -- System

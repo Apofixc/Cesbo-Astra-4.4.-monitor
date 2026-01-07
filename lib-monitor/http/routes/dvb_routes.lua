@@ -189,4 +189,16 @@ function DvbRoutes.get_hardware_all(server, client, request)
     return HttpHelpers.success(server, client, list)
 end
 
+--- Возвращает детальные флаги состояния DVB адаптера (has_signal, has_lock и т.д.)
+function DvbRoutes.get_adapter_status_info(server, client, request)
+    local params = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    local dvb_obj = DvbRepository and DvbRepository:find(params.name)
+    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
+
+    return HttpHelpers.success(server, client, dvb_obj:get_status_flags())
+end
+
 return DvbRoutes

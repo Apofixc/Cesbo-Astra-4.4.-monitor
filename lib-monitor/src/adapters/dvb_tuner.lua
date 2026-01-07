@@ -347,11 +347,6 @@ function DvbTuner:_build_status_table()
     t.unc = status.unc or 0
     t.quality = status.quality or 0
     
-    -- Добавляем битовые флаги в отчет
-    for name, val in pairs(self._current_flags) do
-        t[name] = val
-    end
-
     t.timestamp = os_time()
     return t
 end
@@ -360,6 +355,19 @@ end
 --- @return table Статус тюнера
 function DvbTuner:get_full_status()
     return self:_build_status_table()
+end
+
+--- Возвращает детальные флаги состояния тюнера (has_signal, has_lock и т.д.)
+--- @return table Таблица флагов
+function DvbTuner:get_status_flags()
+    local flags = self._current_flags or STATUS_LOOKUP[0]
+    local result = {
+        name_adapter = self._name
+    }
+    for k, v in pairs(flags) do
+        result[k] = v
+    end
+    return result
 end
 
 --- Запускает сбор PSI таблиц на 10 секунд

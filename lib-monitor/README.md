@@ -686,6 +686,23 @@ end
 { "message": "Adapter restarted successfully" }
 ```
 
+**GET `/api/dvb/adapters/status-info`**
+*   **Описание**: Возвращает детальные флаги состояния адаптера (has_signal, has_lock и т.д.).
+*   **Параметры**: `name` (имя адаптера).
+*   **Примеры вызова**:
+    *   **Query String**: `/api/dvb/adapters/status-info?name=dvb0`
+*   **JSON-ответ**:
+```json
+{
+  "name_adapter": "dvb0",
+  "has_signal": true,
+  "has_carrier": true,
+  "has_viterbi": true,
+  "has_sync": true,
+  "has_lock": true
+}
+```
+
 ### System Routes (/api/system)
 
 **GET `/api/system/health`**
