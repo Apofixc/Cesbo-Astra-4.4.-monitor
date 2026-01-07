@@ -189,7 +189,6 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/monitors/data"] = { GET = MonitorRoutes.get_monitor_data },
         ["/api/dvb/adapters/data"] = { GET = DvbRoutes.get_adapter_data },
         ["/api/monitors/status"] = { GET = MonitorRoutes.get_monitors_status },
-        ["/api/system/resources"] = { GET = SystemRoutes.get_resources },
         ["/api/system/health"] = { GET = SystemRoutes.get_health },
         ["/api/system/api-stats"] = { 
             GET = function(s, c, r) return HttpHelpers.success(s, c, HttpServer.get_stats()) end 
@@ -231,13 +230,11 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/dvb/hardware/all"] = { GET = DvbRoutes.get_hardware_all },
 
         -- System
-        ["/api/system/monitor-stats"] = { GET = SystemRoutes.get_monitor_stats },
         ["/api/system/reload"] = { POST = SystemRoutes.reload },
         ["/api/system/exit"] = { POST = SystemRoutes.exit },
         ["/api/system/clear-cache"] = { POST = SystemRoutes.clear_cache },
         ["/api/system/network/interfaces"] = { GET = SystemRoutes.get_network_interfaces },
         ["/api/system/network/hostname"] = { GET = SystemRoutes.get_hostname },
-        ["/api/env/astra"] = { GET = SystemRoutes.get_env_astra },
 
         -- Subscribers
         ["/api/subscribers"] = { GET = SubscriberRoutes.get_subscribers, POST = SubscriberRoutes.subscribe, DELETE = SubscriberRoutes.unsubscribe },
@@ -256,7 +253,7 @@ function HttpServer.start(addr, port, retry_count)
     local routes = {}
     local priority_order = {
         "/api/monitors/data", "/api/dvb/adapters/data", "/api/monitors/status",
-        "/api/system/resources", "/api/system/health", "/api/system/api-stats"
+        "/api/system/health", "/api/system/api-stats"
     }
     
     for _, path in ipairs(priority_order) do

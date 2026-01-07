@@ -3,106 +3,118 @@ local ResourceMonitor = {}
 
 -- 1. Стандартные Lua функции
 local os_time = os.time
-local pcall = pcall
-local tostring = tostring
+local tonumber = tonumber
 local io_open = io.open
+local collectgarbage = collectgarbage
+local pairs = pairs
+local ipairs = ipairs
 
--- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("logger")
-
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
-local json_encode = ModuleManager.get_global_dependency("json.encode")
-
--- 4. Константы и конфигурации
-local COMPONENT_NAME = "ResourceMonitor"
-local UPDATE_INTERVAL = 5 -- секунд
+-- 2. Глобальные зависимости Astra
+local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
 
 -- Внутреннее состояние
-ResourceMonitor._report = {}
-ResourceMonitor._json_cache = nil
-ResourceMonitor._last_update = 0
 ResourceMonitor._pid = nil
+ResourceMonitor._start_time = os_time()
+ResourceMonitor._last_utime = 0
+ResourceMonitor._last_stime = 0
+ResourceMonitor._last_cpu_check = 0
+ResourceMonitor._report = {}
 
---- Инициализация монитора ресурсов
-function ResourceMonitor.init()
-    -- Получаем PID процесса Astra
-    local f = io_open("/proc/self/stat", "r")
-    if f then
-        local content = f:read("*a")
-        f:close()
-        ResourceMonitor._pid = content:match("^(%d+)")
-    end
-    
-    ResourceMonitor.check()
-    Logger.info(COMPONENT_NAME, "Resource monitor initialized (PID: %s)", tostring(ResourceMonitor._pid))
+-- Инициализация PID
+local f = io_open("/proc/self/stat", "r")
+if f then
+    ResourceMonitor._pid = f:read("*a"):match("^(%d+)")
+    f:close()
 end
 
---- Собирает актуальные метрики системы
+--- Собирает актуальные метрики процесса
+--- @return table
 function ResourceMonitor.check()
     local now = os_time()
-    if now - ResourceMonitor._last_update < UPDATE_INTERVAL and ResourceMonitor._json_cache then
-        return
+    
+    -- Чтение /proc/self/status
+    local status = {}
+    local f_status = io_open("/proc/self/status", "r")
+    if f_status then
+        for line in f_status:lines() do
+            local key, val = line:match("^(%w+):%s+(.+)$")
+            if key then status[key] = val end
+        end
+        f_status:close()
+    end
+
+    -- Чтение /proc/self/stat для CPU
+    local utime, stime = 0, 0
+    local f_stat = io_open("/proc/self/stat", "r")
+    if f_stat then
+        local content = f_stat:read("*a")
+        f_stat:close()
+        local i = 1
+        for val in content:gmatch("[^%s]+") do
+            if i == 14 then utime = tonumber(val) or 0
+            elseif i == 15 then stime = tonumber(val) or 0
+            end
+            i = i + 1
+        end
     end
 
     local report = {
-        type = "sys",
         pid = tonumber(ResourceMonitor._pid),
-        timestamp = now,
+        uptime = now - ResourceMonitor._start_time,
         cpu = {
-            total = 0, -- В реальной Astra здесь будет вызов системных утилит
-            threads = 0
+            usage = 0,
+            user = 0,
+            system = 0,
+            threads = tonumber(status.Threads) or 0
         },
         memory = {
-            lua_kb = collectgarbage("count"),
-            rss_kb = 0
+            lua = collectgarbage("count"),
+            resident = tonumber(status.VmRSS and status.VmRSS:match("%d+")) or 0,
+            virtual = tonumber(status.VmSize and status.VmSize:match("%d+")) or 0,
         },
-        system = {
-            load_avg = {0, 0, 0}
-        }
+        network = {}
     }
 
-    -- Попытка получить реальные данные из /proc (упрощенно)
-    local f = io_open("/proc/loadavg", "r")
-    if f then
-        local line = f:read("*l")
-        f:close()
-        if line then
-            local l1, l5, l15 = line:match("([^%s]+)%s+([^%s]+)%s+([^%s]+)")
-            report.system.load_avg = {tonumber(l1), tonumber(l5), tonumber(l15)}
+    -- Расчет CPU (на основе 100 тиков в секунду)
+    if ResourceMonitor._last_cpu_check > 0 then
+        local delta_time = now - ResourceMonitor._last_cpu_check
+        if delta_time > 0 then
+            report.cpu.user = ((utime - ResourceMonitor._last_utime) / 100 / delta_time) * 100
+            report.cpu.system = ((stime - ResourceMonitor._last_stime) / 100 / delta_time) * 100
+            report.cpu.usage = report.cpu.user + report.cpu.system
+        end
+    end
+    
+    ResourceMonitor._last_utime = utime
+    ResourceMonitor._last_stime = stime
+    ResourceMonitor._last_cpu_check = now
+
+    -- Сетевые интерфейсы
+    if utils_ifaddrs then
+        for name, addrs in pairs(utils_ifaddrs()) do
+            if addrs.ipv4 and addrs.ipv4[1] then
+                table.insert(report.network, {
+                    interface = name,
+                    ip = addrs.ipv4[1]
+                })
+            end
         end
     end
 
     ResourceMonitor._report = report
-    ResourceMonitor._last_update = now
-    
-    -- Кэшируем JSON для HTTP сервера
-    local ok, json = pcall(json_encode, report)
-    if ok then
-        ResourceMonitor._json_cache = json
-    end
+    return report
 end
 
 --- Возвращает последний отчет
---- @return table Таблица с метриками
+--- @return table
 function ResourceMonitor.get_report()
-    ResourceMonitor.check()
-    return ResourceMonitor._report
+    return ResourceMonitor.check()
 end
 
---- Возвращает кэшированный JSON отчет
---- @return string|nil JSON строка
-function ResourceMonitor.get_json_report()
-    ResourceMonitor.check()
-    return ResourceMonitor._json_cache
-end
-
---- Проверяет, запущен ли монитор (всегда true, если модуль загружен)
+--- Заглушка для совместимости
 --- @return boolean
 function ResourceMonitor.is_running()
     return true
 end
-
--- Автоматическая инициализация при загрузке
-ResourceMonitor.init()
 
 return ResourceMonitor

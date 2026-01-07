@@ -22,40 +22,15 @@ local timer_obj = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SystemRoutes"
 
---- Возвращает информацию о версии Astra и аптайме
-function SystemRoutes.get_env_astra(server, client, request)
-    local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
-    return HttpHelpers.success(server, client, {
-        astra = {
-            version = astra_version or "unknown",
-            uptime = report.timestamp and (os_time() - report.timestamp) or 0
-        }
-    })
-end
-
---- Возвращает метрики CPU, RAM, Disk, Network
-function SystemRoutes.get_resources(server, client, request)
-    if not ResourceMonitor then return HttpHelpers.error(server, client, 500, "Module not found") end
-    return HttpHelpers.success(server, client, ResourceMonitor.get_report())
-end
-
---- Возвращает статистику работы ResourceMonitor
-function SystemRoutes.get_monitor_stats(server, client, request)
-    return HttpHelpers.success(server, client, {
-        stats = {
-            is_running = ResourceMonitor and ResourceMonitor.is_running and ResourceMonitor.is_running() or false,
-            pid = ResourceMonitor and ResourceMonitor._pid
-        }
-    })
-end
-
---- Проверяет состояние сервера
+--- Проверяет состояние сервера и возвращает метрики ресурсов процесса
 function SystemRoutes.get_health(server, client, request)
+    local resources = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
     return HttpHelpers.success(server, client, {
         status = "healthy",
-        pid = ResourceMonitor and ResourceMonitor._pid,
         astra_version = astra_version or "unknown",
-        server_time = os_date("%Y-%m-%d %H:%M:%S")
+        server_time = os_date("%Y-%m-%d %H:%M:%S"),
+        timestamp = os_time(),
+        resources = resources
     })
 end
 
