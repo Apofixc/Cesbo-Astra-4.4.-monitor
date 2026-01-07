@@ -22,8 +22,9 @@
 *   **Система подписок (Webhooks)**: Автоматическая отправка данных мониторинга на настроенные адреса при изменении состояния объектов.
 *   **Мониторинг системных ресурсов**: Сбор метрик CPU, RAM, Disk, Network с высоким разрешением.
 *   **Полноценный REST API**: Более 40 эндпоинтов для полного управления системой мониторинга.
+*   **Middleware и Аналитика**: Встроенная система отслеживания производительности каждого эндпоинта (время обработки, количество запросов, ошибки).
 *   **Гибкая конфигурация**: Настраиваемые параметры мониторинга, включая пороги сравнения, интервалы проверки и методы анализа.
-*   **Безопасность**: Аутентификация по API-ключу для всех HTTP-запросов.
+*   **Безопасность**: Аутентификация по API-ключу для всех HTTP-запросов и строгая валидация входящих данных.
 *   **Управление ресурсами**: Гарантированное освобождение сетевых портов при остановке сервера или завершении программы.
 
 ## Структура проекта:
@@ -35,8 +36,8 @@ lib-monitor/
 ├── config.json             # Внешний файл конфигурации (JSON).
 ├── subscribers.json        # Постоянное хранилище активных HTTP-подписок.
 ├── http/                   # Слой HTTP-сервера.
-│   ├── http_server.lua     # Ядро сервера (маршрутизация запросов).
-│   ├── http_helpers.lua    # Утилиты (Auth, JSON-ответы, валидация заголовков).
+│   ├── http_server.lua     # Ядро сервера (маршрутизация запросов, Middleware, Аналитика).
+│   ├── http_helpers.lua    # Утилиты (Auth, JSON-ответы, Валидация).
 │   └── routes/             # Обработчики API (маршруты).
 │       ├── channel_routes.lua    # Маршруты для управления каналами.
 │       ├── dvb_routes.lua        # Маршруты для управления DVB-тюнерами.
@@ -344,7 +345,7 @@ end
 
 **POST `/api/channels`**
 *   **Описание**: Создает новый канал (Raw Astra Channel).
-*   **Параметры**: JSON с конфигурацией канала (`name`, `input`, `output` и др.)
+*   **Параметры**: JSON with channel configuration (`name`, `input`, `output`, etc.)
 *   **Реализация**: Вызывает `make_channel` из Astra.
 *   **JSON-ответ**:
 ```json
@@ -358,7 +359,7 @@ end
 
 **POST `/api/streams`**
 *   **Описание**: Создает поток с мониторингом (канал + монитор).
-*   **Параметры**: JSON с конфигурацией потока (`name`, `input`, `monitor` и др.)
+*   **Параметры**: JSON with stream configuration (`name`, `input`, `monitor`, etc.)
 *   **Реализация**: Вызывает `Channel.make_stream`.
 *   **JSON-ответ**:
 ```json
@@ -433,7 +434,7 @@ end
 
 **POST `/api/monitors`**
 *   **Описание**: Создает новый монитор (без создания канала).
-*   **Параметры**: JSON с конфигурацией монитора (`name`, `monitor`, `display_name`, параметры мониторинга)
+*   **Параметры**: JSON with monitor configuration (`name`, `monitor`, `display_name`, monitoring parameters)
 *   **Реализация**: Вызывает `Channel.make_monitor`.
 *   **JSON-ответ**:
 ```json
@@ -444,7 +445,7 @@ end
 
 **PATCH `/api/monitors/{name}`**
 *   **Описание**: Обновляет параметры монитора.
-*   **Параметры**: JSON с новыми параметрами (`rate`, `time_check`, `method_comparison` и др.)
+*   **Параметры**: JSON with new parameters (`rate`, `time_check`, `method_comparison`, etc.)
 *   **Реализация**: Вызывает `Channel.update_monitor_parameters`.
 *   **JSON-ответ**:
 ```json
@@ -575,7 +576,7 @@ end
 
 **PATCH `/api/dvb/adapters/{name_adapter}`**
 *   **Описание**: Обновление параметров мониторинга адаптера.
-*   **Параметры**: JSON с новым параметрами (`rate`, `time_check`, `method_comparison`, `analyze`)
+*   **Параметры**: JSON with new parameters (`rate`, `time_check`, `method_comparison`, `analyze`)
 *   **Реализация**: Вызывает `Adapter.update_dvb_monitor_parameters`.
 *   **JSON-ответ**:
 ```json
@@ -586,7 +587,7 @@ end
 
 **DELETE `/api/dvb/adapters/{name_adapter}`**
 *   **Описание**: Остановка мониторинга адаптера.
-*   **Параметры**: Опционально `force=true`.
+*   **Параметры**: Optional `force=true`.
 *   **Реализация**: Вызывает `Adapter.stop_dvb_monitor`.
 *   **JSON-ответ**:
 ```json
@@ -599,7 +600,7 @@ end
 **GET `/api/dvb/adapters/{name_adapter}/psi`**
 *   **Описание**: Возвращает все собранные PSI/SI таблицы адаптера без фильтрации.
 *   **Реализация**: Использует метод `get_psi()` объекта тюнера без параметров.
-*   **JSON-ответ**: Полный дамп всех доступных таблиц (NIT, CAT, BAT и др.).
+*   **JSON-ответ**: Full dump of all available tables (NIT, CAT, BAT, etc.).
 ```json
         {
   "adapter_name": "adapter1",
@@ -621,16 +622,16 @@ end
 **GET `/api/dvb/adapters/{name_adapter}/psi/{table}`**
 *   **Описание**: Возвращает конкретную PSI таблицу адаптера по её имени.
 *   **Реализация**: Извлекает указанную таблицу из кэша тюнера в `DvbRepository`.
-*   **JSON-ответ**: Данные запрошенной таблицы.
+*   **JSON-ответ**: Data of the requested table.
 
 **GET `/api/dvb/hardware/all`**
 *   **Описание**: Возвращает список всех физических DVB-адаптеров, обнаруженных в системе.
 *   **Реализация**: Использует функцию `dvbls()` ядра Astra.
-*   **JSON-ответ**: Список объектов с параметрами адаптеров.
+*   **JSON-ответ**: List of objects with adapter parameters.
 
 **POST `/api/dvb/adapters/{name_adapter}/tune`**
 *   **Описание**: Настройка частоты (смена источника сигнала).
-*   **Параметры**: JSON с параметрами тюнера (`tp`, `name_adapter` и др.)
+*   **Параметры**: JSON with tuner parameters (`tp`, `name_adapter`, etc.)
 *   **Реализация**: Вызывает `Adapter.dvb_tuner_monitor`.
 *   **JSON-ответ**:
 ```json
@@ -641,7 +642,7 @@ end
 
 **POST `/api/dvb/adapters/{name_adapter}/switch-transponder`**
 *   **Описание**: Переключение транспондера.
-*   **Параметры**: JSON с новыми параметрами тюнера (`tp`) и опционально `reserve_input`.
+*   **Параметры**: JSON with new tuner parameters (`tp`) and optional `reserve_input`.
 *   **Реализация**: Вызывает `Adapter.switch_transponder`.
 *   **JSON-ответ**:
 ```json
@@ -673,7 +674,7 @@ end
 
 **POST `/api/dvb/adapters/{name_adapter}/restart`**
 *   **Описание**: Перезапуск мониторинга адаптера.
-*   **Параметры**: Опционально `force=true` и другие параметры.
+*   **Параметры**: Optional `force=true` and other parameters.
 *   **Реализация**: Вызывает `Adapter.restart_dvb_monitor`.
 *   **JSON-ответ**:
 ```json
@@ -768,10 +769,24 @@ end
 }
 ```
 
+**GET `/api/system/api-stats`**
+*   **Описание**: Возвращает статистику производительности API (Middleware).
+*   **Реализация**: Извлекает данные из `HttpServer`.
+*   **JSON-ответ**:
+```json
+{
+  "total_requests": 1000,
+  "total_errors": 5,
+  "routes": {
+    "/api/monitors/data": { "count": 500, "total_time": 0.25, "errors": 0 }
+  }
+}
+```
+
 **POST `/api/system/reload`**
 *   **Описание**: Перезагружает Astra.
-*   **Параметры**: Опционально `delay=1` (секунды).
-*   **Реализация**: Использует `astra.reload()` с задержкой через `timer`.
+*   **Параметры**: Optional `delay=1` (seconds).
+*   **Реализация**: Использует `astra.reload()` with delay via `timer`.
 *   **JSON-ответ**:
 ```json
         {
@@ -781,8 +796,8 @@ end
 
 **POST `/api/system/exit`**
 *   **Описание**: Останавливает Astra.
-*   **Параметры**: Опционально `delay=1` (секунды).
-*   **Реализация**: Использует `astra.exit() or os.exit(0)` с задержкой через `timer`.
+*   **Параметры**: Optional `delay=1` (seconds).
+*   **Реализация**: Использует `astra.exit() or os.exit(0)` with delay via `timer`.
 *   **JSON-ответ**:
 ```json
         {
@@ -806,7 +821,7 @@ end
 **GET `/api/system/network/interfaces`**
 *   **Описание**: Возвращает список всех сетевых интерфейсов сервера с их IP и MAC адресами.
 *   **Реализация**: Использует `utils.ifaddrs()` ядра Astra.
-*   **JSON-ответ**: Список интерфейсов с детальной информацией.
+*   **JSON-ответ**: List of interfaces with detailed info.
 
 **GET `/api/system/network/hostname`**
 *   **Описание**: Возвращает имя хоста сервера.
@@ -838,7 +853,7 @@ end
 
 **POST `/api/subscribers`**
 *   **Описание**: Добавляет нового получателя.
-*   **Параметры**: JSON с параметрами (`event_type`, `host`, `port`, `path`).
+*   **Параметры**: JSON with parameters (`event_type`, `host`, `port`, `path`).
 *   **Реализация**: Вызывает `HttpSubscriber.subscribe`.
 *   **JSON-ответ**:
 ```json
@@ -849,7 +864,7 @@ end
 
 **DELETE `/api/subscribers`**
 *   **Описание**: Удаляет получателя.
-*   **Параметры**: JSON с параметрами (`event_type`, `host`, `port`, `path`).
+*   **Параметры**: JSON with parameters (`event_type`, `host`, `port`, `path`).
 *   **Реализация**: Вызывает `HttpSubscriber.unsubscribe`.
 *   **JSON-ответ**:
 ```json
@@ -951,7 +966,7 @@ end
 
 **GET `/api/utils/check`**
 *   **Описание**: Проверяет доступность и статус монитора по имени.
-*   **Параметры**: `name` (обязательный) - имя монитора для проверки.
+*   **Параметры**: `name` (required) - name of the monitor to check.
 *   **Реализация**: Проверяет наличие в `ChannelRepository` и `DvbRepository`.
 *   **JSON-ответ**:
 ```json
@@ -1015,9 +1030,9 @@ end
 *   **JSON-ответ**:
 ```json
 {
-  "api_version": "1.0.0",
-  "library_version": "2.3.1",
-  "supported_methods": ["GET", "POST"],
+  "api_version": "1.1.0",
+  "library_version": "2.3.2",
+  "supported_methods": ["GET", "POST", "PATCH", "DELETE"],
   "requires_auth": true,
   "auth_header": "X-Api-Key",
   "default_port": 8080,
@@ -1100,6 +1115,6 @@ dvb_tuner_monitor({
 Для полноценной работы библиотека требует наличия Astra 4.4.182 или выше. Все ошибки API возвращаются в формате JSON с описанием причины, полученным из системного логгера.
 
 *   **Версия библиотеки**: 2.3.2
-*   **Версия API**: 1.0.0
+*   **Версия API**: 1.1.0
 *   **Требуемая версия Astra**: 4.4.182+
 *   **Количество реализованных эндпоинтов**: 45+

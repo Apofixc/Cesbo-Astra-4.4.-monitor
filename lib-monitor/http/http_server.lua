@@ -10,6 +10,7 @@ local table_insert = table.insert
 local collectgarbage = collectgarbage
 local setmetatable = setmetatable
 local type = type
+local os_clock = os.clock
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -30,44 +31,86 @@ local COMPONENT_NAME = "HttpServer"
 local DEFAULT_ADDR = "0.0.0.0"
 local DEFAULT_PORT = 8080
 local RESTART_RETRY_COUNT = 3
-local RESTART_RETRY_DELAY = 1 -- секунда
+local RESTART_RETRY_DELAY = 1
 
 -- Внутреннее состояние сервера
 HttpServer._instance = nil
 HttpServer._sentinel = nil
+HttpServer._stats = {
+    total_requests = 0,
+    total_errors = 0,
+    routes = {} -- Статистика по путям: { count, total_time, errors }
+}
 
---- Создает обертку для маршрута с поддержкой HTTP методов, авторизации и безопасной обработкой ошибок
---- @param methods table Таблица обработчиков по методам { GET = func, POST = func, ... }
---- @return function Обработчик для Astra http_server
-local function make_resource_handler(methods)
+--- Middleware: Логирование и замер производительности
+local function logger_middleware(handler, path)
     return function(server, client, request)
+        local start_time = os_clock()
+        
+        -- Инициализация статистики пути
+        if not HttpServer._stats.routes[path] then
+            HttpServer._stats.routes[path] = { count = 0, total_time = 0, errors = 0 }
+        end
+        local route_stats = HttpServer._stats.routes[path]
+        
+        local success, result = handler(server, client, request)
+        
+        local duration = os_clock() - start_time
+        HttpServer._stats.total_requests = HttpServer._stats.total_requests + 1
+        route_stats.count = route_stats.count + 1
+        route_stats.total_time = route_stats.total_time + duration
+        
+        if not success then
+            HttpServer._stats.total_errors = HttpServer._stats.total_errors + 1
+            route_stats.errors = route_stats.errors + 1
+        end
+        
+        return success, result
+    end
+end
+
+--- Создает обертку для маршрута с поддержкой Middleware и безопасной обработкой ошибок
+--- @param methods table Таблица обработчиков по методам { GET = func, POST = func, ... }
+--- @param path string Путь маршрута
+--- @return function Обработчик для Astra http_server
+local function make_resource_handler(methods, path)
+    local function core_handler(server, client, request)
         -- 1. Централизованная проверка request
         if not request then return nil end
 
         -- 2. Централизованная авторизация (X-Api-Key)
-        if not HttpHelpers.check_auth(server, client, request) then return end
+        if not HttpHelpers.check_auth(server, client, request) then return true, "Unauthorized" end
 
         local handler = methods[request.method]
         if not handler then
-            return HttpHelpers.error(server, client, 405, "Method Not Allowed")
+            HttpHelpers.error(server, client, 405, "Method Not Allowed")
+            return false, "Method Not Allowed"
         end
 
-        -- 3. Глобальный перехват ошибок для стабильности ядра Astra
-        local ok, err = pcall(function()
-            -- Выполнение с поддержкой контекстных ошибок Logger
-            local success, result_or_msg = Logger.with_error(handler, server, client, request)
-            
-            if not success then
-                -- Если обработчик вернул false/nil (и не отправил ответ сам), отправляем ошибку
-                HttpHelpers.error(server, client, 500, result_or_msg or "Internal Server Error")
-            end
+        -- 3. Глобальный перехват ошибок
+        local ok, success, result_or_msg = pcall(function()
+            return Logger.with_error(handler, server, client, request)
         end)
 
         if not ok then
-            Logger.error(COMPONENT_NAME, "Panic in handler %s: %s", tostring(request.path), tostring(err))
+            Logger.error(COMPONENT_NAME, "Panic in handler %s: %s", tostring(path), tostring(success))
             HttpHelpers.error(server, client, 500, "Critical Server Error")
+            return false, "Panic"
         end
+
+        if not success then
+            -- Если обработчик вернул false/nil (и не отправил ответ сам), отправляем ошибку
+            if result_or_msg then
+                HttpHelpers.error(server, client, 500, result_or_msg)
+            end
+            return false, result_or_msg
+        end
+        
+        return true, result_or_msg
     end
+
+    -- Оборачиваем в Middleware
+    return logger_middleware(core_handler, path)
 end
 
 --- Останавливает HTTP сервер и гарантированно освобождает порт
@@ -83,10 +126,7 @@ function HttpServer.stop()
     HttpServer._sentinel = nil
 
     if type(instance.close) == "function" then
-        local ok, err = pcall(instance.close, instance)
-        if not ok then
-            Logger.error(COMPONENT_NAME, "Error while closing HTTP server: %s", tostring(err))
-        end
+        pcall(instance.close, instance)
     end
 
     -- Агрессивный вызов GC для очистки userdata и окончательного закрытия сокетов на уровне ОС
@@ -96,13 +136,17 @@ function HttpServer.stop()
     Logger.info(COMPONENT_NAME, "HTTP Server stopped and port should be free")
 end
 
+--- Возвращает статистику производительности API
+function HttpServer.get_stats()
+    return HttpServer._stats
+end
+
 --- Запускает HTTP сервер мониторинга
 --- @param addr string|nil IP адрес для прослушивания
 --- @param port number|nil Порт для прослушивания
 --- @param retry_count number|nil Текущий номер попытки
 function HttpServer.start(addr, port, retry_count)
     if HttpServer._instance then
-        Logger.warn(COMPONENT_NAME, "HTTP Server is already running. Stopping old instance...")
         HttpServer.stop()
     end
 
@@ -110,8 +154,6 @@ function HttpServer.start(addr, port, retry_count)
     port = port or DEFAULT_PORT
     retry_count = retry_count or 0
 
-    -- Ресурсно-ориентированные маршруты. 
-    -- ПРИОРИТЕТ: Самые часто запрашиваемые (метрики/статус) идут первыми для ускорения поиска в C-ядре Astra.
     local resources = {
         -- HOT ROUTES (Metrics & Status)
         ["/api/monitors/data"] = { GET = MonitorRoutes.get_monitor_data },
@@ -119,6 +161,13 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/monitors/status"] = { GET = MonitorRoutes.get_monitors_status },
         ["/api/system/resources"] = { GET = SystemRoutes.get_resources },
         ["/api/system/health"] = { GET = SystemRoutes.get_health },
+        
+        -- API Stats
+        ["/api/system/api-stats"] = { 
+            GET = function(s, c, r) 
+                return HttpHelpers.success(s, c, HttpServer.get_stats()) 
+            end 
+        },
 
         -- Channels
         ["/api/channels"] = { GET = ChannelRoutes.get_channels, POST = ChannelRoutes.create_channel_raw },
@@ -132,7 +181,7 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/streams"] = { POST = ChannelRoutes.create_stream },
         ["/api/streams/kill"] = { DELETE = ChannelRoutes.kill_stream },
 
-        -- Monitors (Management)
+        -- Monitors
         ["/api/monitors"] = { GET = MonitorRoutes.get_monitors, POST = MonitorRoutes.create_monitor },
         ["/api/monitors/update"] = { PATCH = MonitorRoutes.update_monitor },
         ["/api/monitors/kill"] = { DELETE = MonitorRoutes.kill_monitor },
@@ -141,7 +190,7 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/monitors/pids"] = { GET = MonitorRoutes.get_monitor_pids, DELETE = MonitorRoutes.clear_monitor_pids },
         ["/api/monitors/rate_stat"] = { GET = MonitorRoutes.get_monitor_rate_stat },
 
-        -- DVB Adapters (Management)
+        -- DVB Adapters
         ["/api/dvb/adapters"] = { GET = DvbRoutes.get_adapters },
         ["/api/dvb/adapters/monitor"] = { GET = DvbRoutes.get_monitored_adapters },
         ["/api/dvb/adapters/scan"] = { POST = DvbRoutes.scan_adapters },
@@ -155,7 +204,7 @@ function HttpServer.start(addr, port, retry_count)
         ["/api/dvb/adapters/restart"] = { POST = DvbRoutes.restart_adapter },
         ["/api/dvb/hardware/all"] = { GET = DvbRoutes.get_hardware_all },
 
-        -- System (Other)
+        -- System
         ["/api/system/monitor-stats"] = { GET = SystemRoutes.get_monitor_stats },
         ["/api/system/reload"] = { POST = SystemRoutes.reload },
         ["/api/system/exit"] = { POST = SystemRoutes.exit },
@@ -182,18 +231,18 @@ function HttpServer.start(addr, port, retry_count)
     local routes = {}
     local priority_order = {
         "/api/monitors/data", "/api/dvb/adapters/data", "/api/monitors/status",
-        "/api/system/resources", "/api/system/health"
+        "/api/system/resources", "/api/system/health", "/api/system/api-stats"
     }
     
     for _, path in ipairs(priority_order) do
         if resources[path] then
-            table_insert(routes, { path, make_resource_handler(resources[path]) })
+            table_insert(routes, { path, make_resource_handler(resources[path], path) })
             resources[path] = nil
         end
     end
     
     for path, methods in pairs(resources) do
-        table_insert(routes, { path, make_resource_handler(methods) })
+        table_insert(routes, { path, make_resource_handler(methods, path) })
     end
 
     local ok, result = pcall(http_server, {
