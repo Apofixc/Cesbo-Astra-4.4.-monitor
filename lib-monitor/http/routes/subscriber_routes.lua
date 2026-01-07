@@ -11,7 +11,7 @@ local HttpHelpers = ModuleManager.get_module("http_helpers")
 local HttpSubscriber = ModuleManager.get_module("http_subscriber")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
-local json_decode = ModuleManager.get_global_dependency("json.decode")
+-- Нет глобальных зависимостей
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriberRoutes"
@@ -30,6 +30,7 @@ function SubscriberRoutes.get_subscribers(server, client, request)
     end
 
     HttpHelpers.success(server, client, list)
+    return true
 end
 
 --- Добавляет нового получателя
@@ -40,11 +41,14 @@ function SubscriberRoutes.subscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
-
-    if not data or not data.event_type or not data.host or not data.port or not data.path then
-        return HttpHelpers.error(server, client, 400, "event_type, host, port, and path are required")
-    end
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        event_type = { type = "string", required = true },
+        host = { type = "string", required = true },
+        port = { type = "number", required = true },
+        path = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local addr = {
         host = data.host,
@@ -52,11 +56,12 @@ function SubscriberRoutes.subscribe(server, client, request)
         path = data.path
     }
 
-    local success, err = Logger.with_error(HttpSubscriber.subscribe, data.event_type, addr)
+    local success, result_err = HttpSubscriber.subscribe(data.event_type, addr)
     if success then
         HttpHelpers.success(server, client, { message = "Subscribed successfully" })
+        return true
     else
-        HttpHelpers.error(server, client, 500, err or "Failed to subscribe")
+        return false, result_err or "Failed to subscribe"
     end
 end
 
@@ -68,11 +73,14 @@ function SubscriberRoutes.unsubscribe(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
-
-    if not data or not data.event_type or not data.host or not data.port or not data.path then
-        return HttpHelpers.error(server, client, 400, "event_type, host, port, and path are required")
-    end
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        event_type = { type = "string", required = true },
+        host = { type = "string", required = true },
+        port = { type = "number", required = true },
+        path = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local addr = {
         host = data.host,
@@ -80,11 +88,12 @@ function SubscriberRoutes.unsubscribe(server, client, request)
         path = data.path
     }
 
-    local success, err = Logger.with_error(HttpSubscriber.unsubscribe, data.event_type, addr)
+    local success, result_err = HttpSubscriber.unsubscribe(data.event_type, addr)
     if success then
         HttpHelpers.success(server, client, { message = "Unsubscribed successfully" })
+        return true
     else
-        HttpHelpers.error(server, client, 500, err or "Failed to unsubscribe")
+        return false, result_err or "Failed to unsubscribe"
     end
 end
 

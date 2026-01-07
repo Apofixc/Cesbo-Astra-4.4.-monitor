@@ -3,12 +3,9 @@ local SystemRoutes = {}
 
 -- 1. Стандартные Lua функции
 local os_time = os.time
-local os_date = os.date
+local os_date = os_date
 local tostring = tostring
 local tonumber = tonumber
-
-if not os_time then os_time = os.time end
-if not os_date then os_date = os.date end
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -21,6 +18,7 @@ local astra_reload = ModuleManager.get_global_dependency("astra.reload")
 local astra_exit = ModuleManager.get_global_dependency("astra.exit")
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
+local timer_obj = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SystemRoutes"
@@ -40,6 +38,7 @@ function SystemRoutes.get_env_astra(server, client, request)
             uptime = report.timestamp and (os_time() - report.timestamp) or 0
         }
     })
+    return true
 end
 
 --- Возвращает метрики CPU, RAM, Disk, Network
@@ -55,6 +54,7 @@ function SystemRoutes.get_resources(server, client, request)
     end
 
     HttpHelpers.success(server, client, ResourceMonitor.get_report())
+    return true
 end
 
 --- Возвращает статистику работы ResourceMonitor
@@ -71,6 +71,7 @@ function SystemRoutes.get_monitor_stats(server, client, request)
             pid = ResourceMonitor and ResourceMonitor._pid
         }
     })
+    return true
 end
 
 --- Проверяет состояние сервера
@@ -87,6 +88,7 @@ function SystemRoutes.get_health(server, client, request)
         astra_version = astra_version or "unknown",
         server_time = os_date("%Y-%m-%d %H:%M:%S")
     })
+    return true
 end
 
 --- Перезагружает Astra
@@ -97,10 +99,9 @@ function SystemRoutes.reload(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local delay = request.query and tonumber(request.query.delay) or 1
+    local params = HttpHelpers.get_params(request)
+    local delay = tonumber(params.delay) or 1
     
-    -- Используем таймер для отложенной перезагрузки, чтобы успеть отправить ответ
-    local timer_obj = ModuleManager.get_global_dependency("timer")
     if timer_obj then
         timer_obj({
             interval = delay,
@@ -114,6 +115,7 @@ function SystemRoutes.reload(server, client, request)
         if astra_reload then astra_reload() end
         HttpHelpers.success(server, client, { message = "Astra reloading" })
     end
+    return true
 end
 
 --- Останавливает Astra
@@ -124,9 +126,9 @@ function SystemRoutes.exit(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local delay = request.query and tonumber(request.query.delay) or 1
+    local params = HttpHelpers.get_params(request)
+    local delay = tonumber(params.delay) or 1
     
-    local timer_obj = ModuleManager.get_global_dependency("timer")
     if timer_obj then
         timer_obj({
             interval = delay,
@@ -140,6 +142,7 @@ function SystemRoutes.exit(server, client, request)
         if astra_exit then astra_exit() end
         HttpHelpers.success(server, client, { message = "Astra exiting" })
     end
+    return true
 end
 
 --- Очищает кэш системных метрик
@@ -150,12 +153,12 @@ function SystemRoutes.clear_cache(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    -- В ResourceMonitor нет метода clear_cache, но есть check() для принудительного обновления
     if ResourceMonitor and ResourceMonitor.check then
         ResourceMonitor.check()
         HttpHelpers.success(server, client, { message = "Metrics updated" })
+        return true
     else
-        HttpHelpers.error(server, client, 501, "Resource monitor not available")
+        return HttpHelpers.error(server, client, 501, "Resource monitor not available")
     end
 end
 
@@ -173,6 +176,7 @@ function SystemRoutes.get_network_interfaces(server, client, request)
     end
 
     HttpHelpers.success(server, client, interfaces)
+    return true
 end
 
 --- Возвращает имя хоста сервера
@@ -186,6 +190,7 @@ function SystemRoutes.get_hostname(server, client, request)
     HttpHelpers.success(server, client, {
         hostname = utils_hostname and utils_hostname() or "unknown"
     })
+    return true
 end
 
 return SystemRoutes

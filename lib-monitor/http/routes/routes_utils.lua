@@ -30,8 +30,8 @@ function RoutesUtils.get_resource_stats(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
-    local active_adapters = DvbRepository and DvbRepository.get_all and DvbRepository:get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
+    local active_adapters = DvbRepository and DvbRepository:get_all() or {}
 
     local channel_count = 0
     for _ in pairs(active_channels) do channel_count = channel_count + 1 end
@@ -65,6 +65,7 @@ function RoutesUtils.get_resource_stats(server, client, request)
             total_astra_adapters = astra_adapters
         }
     })
+    return true
 end
 
 --- Возвращает расширенную информацию обо всех каналах
@@ -97,6 +98,7 @@ function RoutesUtils.get_channels_extended(server, client, request)
     end
 
     HttpHelpers.success(server, client, result)
+    return true
 end
 
 --- Возвращает историю ошибок для монитора
@@ -108,22 +110,23 @@ function RoutesUtils.get_monitor_errors(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
-    local name = params.name
-    if not name then
-        return HttpHelpers.error(server, client, 400, "Monitor name is required")
-    end
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
-    local ch_obj = ChannelRepository and ChannelRepository:find(name)
+    local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
     if not ch_obj then
         return HttpHelpers.error(server, client, 404, "Monitor not found")
     end
 
     HttpHelpers.success(server, client, {
-        name = name,
+        name = params.name,
         display_name = ch_obj._display_name,
         current_status = ch_obj._status,
         error_history = {} -- Заглушка для будущей реализации
     })
+    return true
 end
 
 --- Возвращает текущую конфигурацию системы
@@ -142,6 +145,7 @@ function RoutesUtils.get_system_config(server, client, request)
     end
 
     HttpHelpers.success(server, client, config)
+    return true
 end
 
 --- Проверяет существование и статус объекта
@@ -153,16 +157,17 @@ function RoutesUtils.check_object(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
-    local name = params.name
-    if not name then
-        return HttpHelpers.error(server, client, 400, "Object name is required")
-    end
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
+    local name = params.name
     local ch_obj = ChannelRepository and ChannelRepository:find(name)
     local dvb_obj = DvbRepository and DvbRepository:find(name)
 
     if ch_obj then
-        return HttpHelpers.success(server, client, {
+        HttpHelpers.success(server, client, {
             name = name,
             exists = true,
             type = "channel",
@@ -173,8 +178,9 @@ function RoutesUtils.check_object(server, client, request)
                 monitor_type = ch_obj._config.monitor_type
             }
         })
+        return true
     elseif dvb_obj then
-        return HttpHelpers.success(server, client, {
+        HttpHelpers.success(server, client, {
             name = name,
             exists = true,
             type = "dvb",
@@ -185,12 +191,14 @@ function RoutesUtils.check_object(server, client, request)
                 source = dvb_obj._config.tp
             }
         })
+        return true
     end
 
     HttpHelpers.success(server, client, {
         name = name,
         exists = false
     })
+    return true
 end
 
 --- Возвращает список всех объектов системы
@@ -202,8 +210,8 @@ function RoutesUtils.get_all_objects(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local objects = {}
-    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
-    local active_adapters = DvbRepository and DvbRepository.get_all and DvbRepository:get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
+    local active_adapters = DvbRepository and DvbRepository:get_all() or {}
 
     for name, ch_obj in pairs(active_channels) do
         table_insert(objects, {
@@ -232,6 +240,7 @@ function RoutesUtils.get_all_objects(server, client, request)
         total = #objects,
         objects = objects
     })
+    return true
 end
 
 --- Очистка неактивных ресурсов (заглушка)
@@ -247,6 +256,7 @@ function RoutesUtils.cleanup(server, client, request)
         cleaned_count = 0,
         cleaned_objects = {}
     })
+    return true
 end
 
 --- Возвращает информацию об API
@@ -274,6 +284,7 @@ function RoutesUtils.get_api_info(server, client, request)
             utils = "/api/utils"
         }
     })
+    return true
 end
 
 return RoutesUtils

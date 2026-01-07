@@ -21,7 +21,6 @@ local make_channel = ModuleManager.get_global_dependency("make_channel")
 local kill_channel = ModuleManager.get_global_dependency("kill_channel")
 local channel_list = ModuleManager.get_global_dependency("channel_list")
 local timer = ModuleManager.get_global_dependency("timer")
-local json_decode = ModuleManager.get_global_dependency("json.decode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRoutes"
@@ -41,7 +40,7 @@ function ChannelRoutes.get_channels(server, client, request)
         local cfg = ch_data.config or {}
         local name = cfg.name
         if name then
-            local ch_obj = ChannelRepository and ChannelRepository.find and ChannelRepository:find(name)
+            local ch_obj = ChannelRepository and ChannelRepository:find(name)
             table_insert(channels, {
                 name = name,
                 display_name = ch_obj and ch_obj._display_name or name,
@@ -51,6 +50,7 @@ function ChannelRoutes.get_channels(server, client, request)
     end
 
     HttpHelpers.success(server, client, channels)
+    return true
 end
 
 --- Возвращает агрегированную статистику по каналам
@@ -73,7 +73,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     local offline = 0
     local with_errors = 0
 
-    local active_channels = ChannelRepository and ChannelRepository.get_all and ChannelRepository:get_all() or {}
+    local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
     
     for _, ch_obj in pairs(active_channels) do
         total_monitored = total_monitored + 1
@@ -95,6 +95,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
         offline = offline,
         with_errors = with_errors
     })
+    return true
 end
 
 --- Возвращает детальную информацию о канале
@@ -106,17 +107,18 @@ function ChannelRoutes.get_channel_info(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
-    local name = params.name
-    if not name then
-        return HttpHelpers.error(server, client, 400, "Channel name is required")
-    end
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
-    local ch_data = find_channel(name)
+    local ch_data = find_channel(params.name)
     if not ch_data or not ch_data.config then
         return HttpHelpers.error(server, client, 404, "Channel not found")
     end
 
     HttpHelpers.success(server, client, ch_data.config)
+    return true
 end
 
 --- Возвращает список входов канала и активный вход
@@ -128,11 +130,12 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
-    local name = params.name
-    if not name then
-        return HttpHelpers.error(server, client, 400, "Channel name is required")
-    end
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
+    local name = params.name
     local ch_data = find_channel(name)
     if not ch_data or not ch_data.config then
         return HttpHelpers.error(server, client, 404, "Channel not found")
@@ -147,6 +150,7 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
         active_input = active_input,
         display_name = ch_obj and ch_obj._display_name or name
     })
+    return true
 end
 
 --- Возвращает данные PSI/SI канала
@@ -158,12 +162,14 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true },
+        table = { type = "string", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
     local name = params.name
     local table_name = params.table
-
-    if not name then
-        return HttpHelpers.error(server, client, 400, "Channel name is required")
-    end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(name)
     if not ch_obj then
@@ -177,12 +183,14 @@ function ChannelRoutes.get_channel_psi(server, client, request)
         if not table_data then
             return HttpHelpers.error(server, client, 404, "PSI table not found")
         end
-        return HttpHelpers.success(server, client, table_data)
+        HttpHelpers.success(server, client, table_data)
+        return true
     end
 
     psi.name = name
     psi.display_name = ch_obj and ch_obj._display_name or name
     HttpHelpers.success(server, client, psi)
+    return true
 end
 
 --- Создает новый канал (Raw Astra Channel)
@@ -194,25 +202,20 @@ function ChannelRoutes.create_channel_raw(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        name = { type = "string", required = true },
+        input = { type = "table", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
-    if not data or not data.name or not data.input then
-        return HttpHelpers.error(server, client, 400, "Name and input are required")
+    local ch = make_channel(data)
+    if not ch then
+        Logger.error(COMPONENT_NAME, "Failed to create channel '%s'", tostring(data.name))
+        return false, "Failed to create channel in Astra core"
     end
 
-    local success, err = Logger.with_error(function()
-        local ch = make_channel(data)
-        if not ch then
-            Logger.error(COMPONENT_NAME, "Failed to create channel '%s'", tostring(data.name))
-            return false
-        end
-        return true
-    end)
-
-    if success then
-        HttpHelpers.success(server, client, { message = "Channel created" })
-    else
-        HttpHelpers.error(server, client, 500, err or "Failed to create channel")
-    end
+    HttpHelpers.success(server, client, { message = "Channel created" })
+    return true
 end
 
 --- Удаляет или перезапускает канал (Raw Astra Channel)
@@ -224,43 +227,41 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
-    local name = params.name
-    if not name then return HttpHelpers.error(server, client, 400, "Channel name is required") end
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true },
+        reboot = { type = "boolean", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
+    local name = params.name
     local ch_data = find_channel(name)
     if not ch_data then
         return HttpHelpers.error(server, client, 404, "Channel not found in Astra")
     end
 
-    local reboot = params.reboot == "true" or params.reboot == true
+    local reboot = params.reboot == true
     local config = ch_data.config
     
-    local success, err = Logger.with_error(function()
-        kill_channel(ch_data)
-        if reboot and config then
-            if timer then
-                timer({
-                    interval = 1,
-                    callback = function(self)
-                        self:close()
-                        make_channel(config)
-                    end
-                })
-            else
-                make_channel(config)
-            end
+    kill_channel(ch_data)
+    if reboot and config then
+        if timer then
+            timer({
+                interval = 1,
+                callback = function(self)
+                    self:close()
+                    make_channel(config)
+                end
+            })
+        else
+            make_channel(config)
         end
-        return true
-    end)
-
-    if success then
-        HttpHelpers.success(server, client, { 
-            message = reboot and "Channel rebooting" or "Channel killed",
-            config = config
-        })
-    else
-        HttpHelpers.error(server, client, 500, err or "Operation failed")
     end
+
+    HttpHelpers.success(server, client, { 
+        message = reboot and "Channel rebooting" or "Channel killed",
+        config = config
+    })
+    return true
 end
 
 --- Создает поток с мониторингом
@@ -272,16 +273,19 @@ function ChannelRoutes.create_stream(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        name = { type = "string", required = true },
+        input = { type = "table", required = true },
+        monitor = { type = "table", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
 
-    if not data or not data.name or not data.input then
-        return HttpHelpers.error(server, client, 400, "Name and input are required")
-    end
-
-    local success, result_or_err = Logger.with_error(Channel.make_stream, data)
-    if success and result_or_err then
+    local success, result = Channel.make_stream(data)
+    if success and result then
         HttpHelpers.success(server, client, { message = "Stream and monitor created" })
+        return true
     else
-        HttpHelpers.error(server, client, 500, result_or_err or "Failed to create stream")
+        return false, result or "Failed to create stream"
     end
 end
 
@@ -294,39 +298,39 @@ function ChannelRoutes.kill_stream(server, client, request)
     if not HttpHelpers.check_auth(server, client, request) then return end
 
     local params = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true },
+        reboot = { type = "boolean", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
     local name = params.name
-    if not name then return HttpHelpers.error(server, client, 400, "Stream name is required") end
+    local reboot = params.reboot == true
 
-    local reboot = params.reboot == "true" or params.reboot == true
-
-    local success, result_or_err = Logger.with_error(function()
-        local config = Channel.kill_stream(name)
-        if not config then return false, "Failed to kill stream" end
-        
-        if reboot then
-            if timer then
-                timer({
-                    interval = 1,
-                    callback = function(self)
-                        self:close()
-                        Channel.make_stream(config)
-                    end
-                })
-            else
-                Channel.make_stream(config)
-            end
-        end
-        return config
-    end)
-
-    if success and result_or_err then
-        HttpHelpers.success(server, client, { 
-            message = reboot and "Stream rebooting" or "Stream and monitor killed",
-            config = result_or_err
-        })
-    else
-        HttpHelpers.error(server, client, 500, result_or_err or "Failed to kill stream")
+    local config = Channel.kill_stream(name)
+    if not config then 
+        return HttpHelpers.error(server, client, 404, "Stream not found")
     end
+    
+    if reboot then
+        if timer then
+            timer({
+                interval = 1,
+                callback = function(self)
+                    self:close()
+                    Channel.make_stream(config)
+                end
+            })
+        else
+            Channel.make_stream(config)
+        end
+    end
+
+    HttpHelpers.success(server, client, { 
+        message = reboot and "Stream rebooting" or "Stream and monitor killed",
+        config = config
+    })
+    return true
 end
 
 return ChannelRoutes

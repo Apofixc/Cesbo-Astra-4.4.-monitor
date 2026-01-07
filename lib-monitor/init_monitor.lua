@@ -135,6 +135,7 @@ end
 
 if type(HttpServer) == "table" then
     _G.server_start = HttpServer.start
+    _G.server_stop = HttpServer.stop
 end
 
 if Logger then
