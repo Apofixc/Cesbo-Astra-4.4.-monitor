@@ -1,1 +1,25 @@
-{"subscribers":{"test_event":[{"host":"1.2.3.4","path":"/webhook","port":"80"}]},"HttpTimeout":15,"LogLevel":"INFO","STREAM":{"127.0.0.6":"Mediatech","127.0.0.1":"Узда","127.0.0.3":"Старобин","127.0.0.5":"Червень","127.0.0.9":"WikiLink","127.0.0.2":"Дружный","127.0.0.8":"BeCloud","127.0.0.7":"PlayOut","127.0.0.4":"Октябрьский"},"MinTimeCheck":0,"MaxMonitorNameLength":64,"MaxTimeCheck":300,"MaxRate":0,"DvbMonitorLimit":20,"SubscribersFilePath":"/opt/astra/lib-monitor/config.json","ChannelMonitorLimit":200,"MinMethodComparison":1,"MaxMethodComparison":4,"MinRate":0}
+{
+    "LogLevel": "INFO",
+    "ChannelMonitorLimit": 200,
+    "DvbMonitorLimit": 20,
+    "MaxMonitorNameLength": 64,
+    "MinRate": 0.001,
+    "MaxRate": 0.3,
+    "MinTimeCheck": 0,
+    "MaxTimeCheck": 300,
+    "MinMethodComparison": 1,
+    "MaxMethodComparison": 4,
+    "HttpTimeout": 15,
+    "subscribers": {},
+    "STREAM": {
+        "127.0.0.1": "Узда",
+        "127.0.0.2": "Дружный",
+        "127.0.0.3": "Старобин",
+        "127.0.0.4": "Октябрьский",
+        "127.0.0.5": "Червень",
+        "127.0.0.6": "Mediatech",
+        "127.0.0.7": "PlayOut",
+        "127.0.0.8": "BeCloud",
+        "127.0.0.9": "WikiLink"
+    }
+}

@@ -30,7 +30,7 @@ local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @field MinMethodComparison number Минимальное значение для метода сравнения
 --- @field MaxMethodComparison number Максимальное значение для метода сравнения
 --- @field HttpTimeout number Таймаут HTTP-запросов
---- @field SubscribersFilePath string Путь к файлу с подписчиками
+--- @field subscribers table<string, table[]> Список подписчиков
 --- @field ValidationSchema table<string, table> Схема валидации для параметров мониторов
 local MonitorConfig = {}
 
@@ -57,7 +57,7 @@ MonitorConfig.MaxTimeCheck = 300
 MonitorConfig.MinMethodComparison = 1
 MonitorConfig.MaxMethodComparison = 4
 MonitorConfig.HttpTimeout = 10
-MonitorConfig.SubscribersFilePath = "/opt/astra/lib-monitor/subscribers.json"
+MonitorConfig.subscribers = {}
 
 --- Загружает конфигурацию из внешнего JSON файла
 local function load_from_file()
