@@ -414,7 +414,6 @@ function DvbTuner:destroy(force)
     -- Очищаем callback в рабочей конфигурации
     if self._astra_conf then
         self._astra_conf.callback = nil
-        self._astra_conf = nil
     end
 
     -- 3. Полная очистка полей объекта
