@@ -10,12 +10,13 @@
 -- Нет стандартных Lua функций в этом модуле
 
 -- 2. Функции из ModuleManager.get_module()
--- Нет функций из ModuleManager.get_module() в этом модуле
+local ModuleManager = _G.ModuleManager
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- Нет глобальных зависимостей Astra в этом модуле
+-- Глобальные зависимости будут получены динамически при загрузке конфига
 
 -- 4. Константы и конфигурации
+local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @class MonitorConfig
 --- @field STREAM table<string, string> Карта имен потоков по их IP-адресам
 --- @field LogLevel string Настройки логирования
@@ -33,8 +34,7 @@
 --- @field ValidationSchema table<string, table> Схема валидации для параметров мониторов
 local MonitorConfig = {}
 
---- Карта имен потоков по их IP-адресам.
---- @type table<string, string>
+-- Значения по умолчанию
 MonitorConfig.STREAM = {
     ["127.0.0.1"] = "Узда",
     ["127.0.0.2"] = "Дружный",
@@ -46,42 +46,72 @@ MonitorConfig.STREAM = {
     ["127.0.0.8"] = "BeCloud",
     ["127.0.0.9"] = "WikiLink",
 }
+MonitorConfig.LogLevel = "INFO"
+MonitorConfig.ChannelMonitorLimit = 200
+MonitorConfig.DvbMonitorLimit = 20
+MonitorConfig.MaxMonitorNameLength = 64
+MonitorConfig.MinRate = 0.001
+MonitorConfig.MaxRate = 0.3
+MonitorConfig.MinTimeCheck = 0
+MonitorConfig.MaxTimeCheck = 300
+MonitorConfig.MinMethodComparison = 1
+MonitorConfig.MaxMethodComparison = 4
+MonitorConfig.HttpTimeout = 10
+MonitorConfig.SubscribersFilePath = "/opt/astra/lib-monitor/subscribers.json"
+
+--- Загружает конфигурацию из внешнего JSON файла
+local function load_from_file()
+    if not ModuleManager then return end
+    local json_decode = ModuleManager.get_global_dependency("json.decode")
+    if not json_decode then return end
+
+    local f = io.open(CONFIG_PATH, "rb")
+    if not f then return end
+
+    local content = f:read("*all")
+    f:close()
+
+    if not content or content == "" then return end
+
+    local success, data = pcall(json_decode, content)
+    if success and type(data) == "table" then
+        for k, v in pairs(data) do
+            MonitorConfig[k] = v
+        end
+    end
+end
+
+--- Сохраняет текущую конфигурацию в JSON файл
+--- @return boolean Статус выполнения
+function MonitorConfig.save()
+    if not ModuleManager then return false end
+    local json_encode = ModuleManager.get_global_dependency("json.encode")
+    if not json_encode then return false end
+
+    -- Создаем копию для сохранения, исключая ValidationSchema
+    local data_to_save = {}
+    for k, v in pairs(MonitorConfig) do
+        if k ~= "ValidationSchema" and type(v) ~= "function" then
+            data_to_save[k] = v
+        end
+    end
+
+    local ok, content = pcall(json_encode, data_to_save)
+    if not ok then return false end
+
+    local f = io.open(CONFIG_PATH, "w")
+    if not f then return false end
+
+    f:write(content)
+    f:close()
+    return true
+end
+
+-- Вызов загрузки при инициализации модуля
+load_from_file()
 
 -- 5. Инициализация объектов из загруженных модулей
 -- Нет объектов для инициализации в этом модуле
-
---- Настройки логирования.
---- Определяет уровень детализации сообщений, выводимых в лог.
---- Доступные уровни: "DEBUG", "INFO", "WARN", "ERROR", "NONE".
---- @type string
-MonitorConfig.LogLevel = "INFO" -- Изменено на "INFO" для баланса детализации и объема логов.
-
---- Настройки монитора канала.
---- Эти параметры используются для конфигурирования поведения ChannelMonitor.
---- @type number
-MonitorConfig.ChannelMonitorLimit = 200 -- Максимальное количество одновременно активных мониторов каналов.
---- @type number
-MonitorConfig.DvbMonitorLimit = 20  -- Максимальное количество одновременно активных DVB-мониторов (примерное значение).
---- @type number
-MonitorConfig.MaxMonitorNameLength = 64 -- Максимальная длина имени монитора.
---- @type number
-MonitorConfig.MinRate = 0.001       -- Минимальное допустимое значение погрешности при сравнении битрейта.
---- @type number
-MonitorConfig.MaxRate = 0.3         -- Максимальное допустимое значение погрешности при сравнении битрейта.
---- @type number
-MonitorConfig.MinTimeCheck = 0      -- Минимальный интервал (в секундах) между проверками данных монитором.
---- @type number
-MonitorConfig.MaxTimeCheck = 300    -- Максимальный интервал (в секундах) между проверками данных монитором.
---- @type number
-MonitorConfig.MinMethodComparison = 1 -- Минимальное значение для метода сравнения состояния потока.
---- @type number
-MonitorConfig.MaxMethodComparison = 4 -- Максимальное значение для метода сравнения состояния потока.
-
---- Настройки HTTP-подписчика.
---- @type number
-MonitorConfig.HttpTimeout = 10 -- Таймаут HTTP-запросов в секундах.
---- @type string
-MonitorConfig.SubscribersFilePath = "/opt/astra/lib-monitor/subscribers.json" -- Путь к файлу с подписчиками.
 
 --- Схема валидации для параметров мониторов.
 --- Определяет правила валидации, значения по умолчанию и типы для каждого параметра.

@@ -31,81 +31,29 @@ local HttpSubscriber = {}
 --- @type table<string, table[]> Таблица подписчиков: { [event_type] = { {host, port, path}, ... } }
 local subscribers = {}
 
---- Загружает список подписчиков из файла
+--- Загружает список подписчиков из конфигурации
 --- @private
 --- @return boolean Статус выполнения
 local function load_subscribers()
-    local path = MonitorConfig and MonitorConfig.SubscribersFilePath
-    if not path then
-        Logger.error(COMPONENT_NAME, "load_subscribers: SubscribersFilePath not configured")
-        return false
-    end
-
-    local f, err = io.open(path, "r")
-    if not f then
-        Logger.info(COMPONENT_NAME, "Subscribers file not found or not readable: %s. Starting with empty list", tostring(err))
-        subscribers = {}
-        return true
-    end
-
-    local content = f:read("*a")
-    f:close()
-
-    if content and content:match("%S") then
-        local ok, data = pcall(json_decode, content)
-        if ok and type(data) == "table" then
-            subscribers = data
-            Logger.info(COMPONENT_NAME, "Subscribers loaded from %s", path)
-            return true
-        else
-            Logger.error(COMPONENT_NAME, "Failed to decode subscribers from %s: %s", path, tostring(data))
-        end
+    if MonitorConfig and MonitorConfig.subscribers then
+        subscribers = MonitorConfig.subscribers
+        Logger.info(COMPONENT_NAME, "Subscribers loaded from global config")
     else
-        Logger.info(COMPONENT_NAME, "Subscribers file is empty")
+        subscribers = {}
+        if MonitorConfig then
+            MonitorConfig.subscribers = subscribers
+        end
     end
-
-    subscribers = {}
-    return true -- Возвращаем true, так как это валидное состояние (пустой список)
+    return true
 end
 
---- Сохраняет список подписчиков в файл
+--- Сохраняет список подписчиков в конфигурацию
 --- @private
 --- @return boolean Статус выполнения
 local function save_subscribers()
-    local path = MonitorConfig and MonitorConfig.SubscribersFilePath
-    if not path then
-        Logger.error(COMPONENT_NAME, "save_subscribers: SubscribersFilePath not configured")
-        return false
-    end
-
-    local ok, content = pcall(json_encode, subscribers)
-    if not ok then
-        Logger.error(COMPONENT_NAME, "Failed to encode subscribers for saving")
-        return false
-    end
-
-    -- Проверка существования директории (базовая)
-    local dir = path:match("(.+)/[^/]+$")
-    if dir and dir ~= "" then
-        local p = io.popen(string_format("mkdir -p %s 2>/dev/null", dir))
-        if p then p:close() end
-    end
-
-    local f, err = io.open(path, "w")
-    if not f then
-        Logger.error(COMPONENT_NAME, "Failed to open subscribers file for writing: %s (%s)", path, tostring(err))
-        return false
-    end
-
-    local success, write_err = f:write(content)
-    f:close()
-
-    if not success then
-        Logger.error(COMPONENT_NAME, "Failed to write subscribers to file: %s", tostring(write_err))
-        return false
-    end
-
-    return true
+    if not MonitorConfig then return false end
+    MonitorConfig.subscribers = subscribers
+    return MonitorConfig.save()
 end
 
 --- Возвращает список всех подписчиков
