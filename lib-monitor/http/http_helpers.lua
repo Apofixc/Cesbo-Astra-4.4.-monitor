@@ -108,12 +108,38 @@ end
 --- @param request table Объект запроса
 --- @return table|nil Декодированные данные или nil
 function HttpHelpers.get_json_body(request)
-    if not request or not request.content then return nil end
-    if request.content_type ~= "application/json" then return nil end
+    if not request or not request.content or request.content == "" then return nil end
+    -- В Astra заголовки могут быть в разном регистре
+    local ct = request.headers and (request.headers["content-type"] or request.headers["Content-Type"])
+    if ct and not ct:find("application/json") then return nil end
 
     local ok, data = pcall(json_decode, request.content)
     if ok then return data end
     return nil
+end
+
+--- Унифицированное получение параметров из Query String или JSON Body
+--- @param request table Объект запроса
+--- @return table Таблица параметров
+function HttpHelpers.get_params(request)
+    local params = {}
+    
+    -- 1. Берем параметры из Query String
+    if request.query then
+        for k, v in pairs(request.query) do
+            params[k] = v
+        end
+    end
+    
+    -- 2. Дополняем параметрами из JSON Body (они имеют приоритет)
+    local body = HttpHelpers.get_json_body(request)
+    if body and type(body) == "table" then
+        for k, v in pairs(body) do
+            params[k] = v
+        end
+    end
+    
+    return params
 end
 
 return HttpHelpers

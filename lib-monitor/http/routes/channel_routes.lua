@@ -105,7 +105,8 @@ function ChannelRoutes.get_channel_info(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
@@ -126,7 +127,8 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)/inputs")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
     end
@@ -155,10 +157,9 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name, table_name = request.path:match("/api/channels/([^/]+)/psi/([^/]+)$")
-    if not name then
-        name = request.path:match("/api/channels/([^/]+)/psi")
-    end
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
+    local table_name = params.table
 
     if not name then
         return HttpHelpers.error(server, client, 400, "Channel name is required")
@@ -192,7 +193,7 @@ function ChannelRoutes.create_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
+    local data = HttpHelpers.get_params(request)
 
     if not data or not data.name or not data.input then
         return HttpHelpers.error(server, client, 400, "Name and input are required")
@@ -222,7 +223,8 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/channels/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then return HttpHelpers.error(server, client, 400, "Channel name is required") end
 
     local ch_data = find_channel(name)
@@ -230,7 +232,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
         return HttpHelpers.error(server, client, 404, "Channel not found in Astra")
     end
 
-    local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+    local reboot = params.reboot == "true" or params.reboot == true
     local config = ch_data.config
     
     local success, err = Logger.with_error(function()
@@ -269,7 +271,7 @@ function ChannelRoutes.create_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
+    local data = HttpHelpers.get_params(request)
 
     if not data or not data.name or not data.input then
         return HttpHelpers.error(server, client, 400, "Name and input are required")
@@ -291,10 +293,11 @@ function ChannelRoutes.kill_stream(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/streams/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then return HttpHelpers.error(server, client, 400, "Stream name is required") end
 
-    local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+    local reboot = params.reboot == "true" or params.reboot == true
 
     local success, result_or_err = Logger.with_error(function()
         local config = Channel.kill_stream(name)

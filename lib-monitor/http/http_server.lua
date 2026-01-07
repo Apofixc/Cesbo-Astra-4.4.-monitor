@@ -45,7 +45,7 @@ function HttpServer.start(addr, port)
     addr = addr or DEFAULT_ADDR
     port = port or DEFAULT_PORT
 
-    -- Ресурсно-ориентированные маршруты
+    -- Ресурсно-ориентированные маршруты (статические пути для Astra)
     local resources = {
         -- Channels
         ["/api/channels"] = {
@@ -55,17 +55,16 @@ function HttpServer.start(addr, port)
         ["/api/channels/stats"] = {
             GET = ChannelRoutes.get_channels_stats,
         },
-        ["/api/channels/([^/]+)"] = {
+        ["/api/channels/info"] = {
             GET = ChannelRoutes.get_channel_info,
+        },
+        ["/api/channels/kill"] = {
             DELETE = ChannelRoutes.kill_channel_raw,
         },
-        ["/api/channels/([^/]+)/inputs"] = {
+        ["/api/channels/inputs"] = {
             GET = ChannelRoutes.get_channel_inputs,
         },
-        ["/api/channels/([^/]+)/psi"] = {
-            GET = ChannelRoutes.get_channel_psi,
-        },
-        ["/api/channels/([^/]+)/psi/([^/]+)"] = {
+        ["/api/channels/psi"] = {
             GET = ChannelRoutes.get_channel_psi,
         },
 
@@ -73,7 +72,7 @@ function HttpServer.start(addr, port)
         ["/api/streams"] = {
             POST = ChannelRoutes.create_stream,
         },
-        ["/api/streams/([^/]+)"] = {
+        ["/api/streams/kill"] = {
             DELETE = ChannelRoutes.kill_stream,
         },
 
@@ -85,22 +84,26 @@ function HttpServer.start(addr, port)
         ["/api/monitors/status"] = {
             GET = MonitorRoutes.get_monitors_status,
         },
-        ["/api/monitors/([^/]+)"] = {
+        ["/api/monitors/data"] = {
             GET = MonitorRoutes.get_monitor_data,
+        },
+        ["/api/monitors/update"] = {
             PATCH = MonitorRoutes.update_monitor,
+        },
+        ["/api/monitors/kill"] = {
             DELETE = MonitorRoutes.kill_monitor,
         },
-        ["/api/monitors/([^/]+)/pause"] = {
+        ["/api/monitors/pause"] = {
             POST = MonitorRoutes.pause_monitor,
         },
-        ["/api/monitors/([^/]+)/resume"] = {
+        ["/api/monitors/resume"] = {
             POST = MonitorRoutes.resume_monitor,
         },
-        ["/api/monitors/([^/]+)/pids"] = {
+        ["/api/monitors/pids"] = {
             GET = MonitorRoutes.get_monitor_pids,
             DELETE = MonitorRoutes.clear_monitor_pids,
         },
-        ["/api/monitors/([^/]+)/rate_stat"] = {
+        ["/api/monitors/rate_stat"] = {
             GET = MonitorRoutes.get_monitor_rate_stat,
         },
 
@@ -114,31 +117,32 @@ function HttpServer.start(addr, port)
         ["/api/dvb/adapters/scan"] = {
             POST = DvbRoutes.scan_adapters,
         },
-        ["/api/dvb/adapters/([^/]+)"] = {
+        ["/api/dvb/adapters/data"] = {
             GET = DvbRoutes.get_adapter_data,
+        },
+        ["/api/dvb/adapters/update"] = {
             PATCH = DvbRoutes.update_adapter,
+        },
+        ["/api/dvb/adapters/stop"] = {
             DELETE = DvbRoutes.stop_adapter,
         },
-        ["/api/dvb/adapters/([^/]+)/psi"] = {
+        ["/api/dvb/adapters/psi"] = {
             GET = DvbRoutes.get_adapter_psi,
             POST = DvbRoutes.update_adapter_psi,
         },
-        ["/api/dvb/adapters/([^/]+)/psi/([^/]+)"] = {
-            GET = DvbRoutes.get_adapter_psi,
-        },
-        ["/api/dvb/adapters/([^/]+)/tune"] = {
+        ["/api/dvb/adapters/tune"] = {
             POST = DvbRoutes.tune_adapter,
         },
-        ["/api/dvb/adapters/([^/]+)/switch-transponder"] = {
+        ["/api/dvb/adapters/switch-transponder"] = {
             POST = DvbRoutes.switch_transponder,
         },
-        ["/api/dvb/adapters/([^/]+)/pause"] = {
+        ["/api/dvb/adapters/pause"] = {
             POST = DvbRoutes.pause_adapter,
         },
-        ["/api/dvb/adapters/([^/]+)/resume"] = {
+        ["/api/dvb/adapters/resume"] = {
             POST = DvbRoutes.resume_adapter,
         },
-        ["/api/dvb/adapters/([^/]+)/restart"] = {
+        ["/api/dvb/adapters/restart"] = {
             POST = DvbRoutes.restart_adapter,
         },
         ["/api/dvb/hardware/all"] = {
@@ -188,7 +192,7 @@ function HttpServer.start(addr, port)
         ["/api/utils/channels/extended"] = {
             GET = RoutesUtils.get_channels_extended,
         },
-        ["/api/utils/monitors/([^/]+)/errors"] = {
+        ["/api/utils/monitors/errors"] = {
             GET = RoutesUtils.get_monitor_errors,
         },
         ["/api/utils/system/config"] = {

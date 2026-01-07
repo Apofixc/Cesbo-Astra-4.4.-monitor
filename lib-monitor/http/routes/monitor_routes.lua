@@ -3,7 +3,7 @@ local MonitorRoutes = {}
 
 -- 1. Стандартные Lua функции
 local pairs = pairs
-local table_insert = table_insert
+local table_insert = table.insert
 local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
@@ -83,7 +83,8 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
@@ -110,7 +111,7 @@ function MonitorRoutes.create_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
+    local data = HttpHelpers.get_params(request)
 
     if not data or not data.monitor or not data.name then
         return HttpHelpers.error(server, client, 400, "Name and monitor address are required")
@@ -132,10 +133,11 @@ function MonitorRoutes.kill_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then return HttpHelpers.error(server, client, 400, "Monitor name is required") end
 
-    local reboot = request.query and (request.query.reboot == "true" or request.query.reboot == true)
+    local reboot = params.reboot == "true" or params.reboot == true
 
     local success, result_or_err = Logger.with_error(function()
         local config = Channel.kill_monitor(name)
@@ -175,12 +177,11 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then return HttpHelpers.error(server, client, 400, "Monitor name required") end
 
-    local data = HttpHelpers.get_json_body(request) or request.query
-
-    local success, err = Logger.with_error(Channel.update_monitor_parameters, name, data)
+    local success, err = Logger.with_error(Channel.update_monitor_parameters, name, params)
     if success then
         HttpHelpers.success(server, client, { message = "Monitor updated" })
     else
@@ -196,12 +197,14 @@ function MonitorRoutes.pause_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/pause")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
 
     local success, err = Logger.with_error(Channel.pause_monitor, name)
+    
     if success then
         HttpHelpers.success(server, client, { message = "Monitoring paused" })
     else
@@ -217,7 +220,8 @@ function MonitorRoutes.resume_monitor(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/resume")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
@@ -238,7 +242,8 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/pids")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
@@ -259,7 +264,8 @@ function MonitorRoutes.get_monitor_rate_stat(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/rate_stat")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end
@@ -280,7 +286,8 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not request then return nil end
     if not HttpHelpers.check_auth(server, client, request) then return end
 
-    local name = request.path:match("/api/monitors/([^/]+)/pids")
+    local params = HttpHelpers.get_params(request)
+    local name = params.name
     if not name then
         return HttpHelpers.error(server, client, 400, "Monitor name is required")
     end

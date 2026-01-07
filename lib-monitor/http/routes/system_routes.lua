@@ -2,10 +2,13 @@
 local SystemRoutes = {}
 
 -- 1. Стандартные Lua функции
-local os_time = os_time
-local os_date = os_date
+local os_time = os.time
+local os_date = os.date
 local tostring = tostring
 local tonumber = tonumber
+
+if not os_time then os_time = os.time end
+if not os_date then os_date = os.date end
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

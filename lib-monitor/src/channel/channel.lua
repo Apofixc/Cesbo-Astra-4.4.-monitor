@@ -282,7 +282,7 @@ end
 
 --- Останавливает монитор
 --- @param name string Имя монитора
---- @param [force] boolean Принудительная остановка
+--- @param force boolean Принудительная остановка
 --- @return table|nil Конфигурация монитора для восстановления или nil
 local function kill_monitor(name, force)
     local config = ChannelRepository:unregister(name, force)
@@ -398,7 +398,8 @@ end
 local function pause_monitor(name)
     local monitor = ChannelRepository:find(name)
     if monitor then
-        return monitor:pause()
+        monitor:pause()
+        return true
     end
     return false
 end

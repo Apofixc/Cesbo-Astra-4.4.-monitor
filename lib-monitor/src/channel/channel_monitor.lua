@@ -403,7 +403,13 @@ end
 --- Возвращает статистику анализа по PID
 --- @return table Статистика по PID
 function ChannelMonitor:get_stats()
-    return self._stats or {}
+    local stats = {}
+    if self._stats then
+        for k, v in pairs(self._stats) do
+            stats[tostring(k)] = v
+        end
+    end
+    return stats
 end
 
 --- Возвращает статистику битрейта (rate_stat)
@@ -457,7 +463,7 @@ end
 
 --- Останавливает мониторинг и уничтожает объект.
 --- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
---- @param [force] boolean Принудительная остановка
+--- @param force boolean Принудительная остановка
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function ChannelMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
