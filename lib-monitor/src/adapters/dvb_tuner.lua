@@ -242,10 +242,10 @@ function DvbTuner:start()
     self._active = true
 
     -- Безопасное управление счетчиком каналов Astra
-    if self._instance and self._instance.__options then
+    if self._instance and type(self._instance.__options) == "table" then
         local current_channels = self._instance.__options.channels or 0
         self._instance.__options.channels = current_channels + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", self._name, self._instance.__options.channels)
+        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", tostring(self._name), self._instance.__options.channels)
     end
 
     return self._instance
@@ -362,7 +362,7 @@ function DvbTuner:destroy(force)
     end
 
     local channels = 0
-    if self._instance and self._instance.__options then
+    if self._instance and type(self._instance.__options) == "table" then
         channels = self._instance.__options.channels or 0
     end
 

@@ -297,7 +297,10 @@ local function make_stream(conf)
         return nil
     end
 
-    local monitor_type = (conf.monitor and conf.monitor.monitor_type and string_lower(conf.monitor.monitor_type)) or MONITOR_TYPE_OUTPUT
+    local monitor_type = MONITOR_TYPE_OUTPUT
+    if type(conf.monitor) == "table" and conf.monitor.monitor_type then
+        monitor_type = string_lower(conf.monitor.monitor_type)
+    end
 
     local handler = monitor_type_handlers[monitor_type]
     if not handler then

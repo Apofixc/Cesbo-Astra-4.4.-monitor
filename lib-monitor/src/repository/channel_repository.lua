@@ -35,7 +35,7 @@ function ChannelRepository:find_by_adapter(adapter_name)
                 local input = inputs[i]
                 local cfg = input.config
                 if cfg and cfg.format == "dvb" and tostring(cfg.addr) == target_adapter then
-                    local name = ch_data.config and ch_data.config.name
+                    local name = (type(ch_data.config) == "table") and ch_data.config.name
                     if name then
                         result[name] = ch_data
                     end

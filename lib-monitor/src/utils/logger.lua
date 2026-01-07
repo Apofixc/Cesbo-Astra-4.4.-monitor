@@ -43,7 +43,7 @@ local Logger = {}
 function Logger.refresh_log_level()
     -- Используем pcall для безопасного получения модуля, чтобы избежать проблем при инициализации
     local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
-    local level_name = (success and config) and config.LogLevel or "INFO"
+    local level_name = (success and config and type(config) == "table") and config.LogLevel or "INFO"
     cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
 end
 

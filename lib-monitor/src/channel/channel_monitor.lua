@@ -516,7 +516,7 @@ function ChannelMonitor:update_parameters(params)
     end
 
     -- Обновление параметров в работающем экземпляре анализатора Astra
-    if self._instance and self._instance.__options then
+    if self._instance and type(self._instance.__options) == "table" then
         local opts = self._instance.__options
         if params.cc_limit ~= nil then opts.cc_limit = self._config.cc_limit end
         if params.bitrate_limit ~= nil then opts.bitrate_limit = self._config.bitrate_limit end
