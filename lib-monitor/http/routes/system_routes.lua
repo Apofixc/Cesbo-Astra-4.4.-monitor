@@ -25,6 +25,10 @@ local COMPONENT_NAME = "SystemRoutes"
 --- Проверяет состояние сервера и возвращает метрики ресурсов процесса
 function SystemRoutes.get_health(server, client, request)
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
+    
+    -- Добавляем мониторинг памяти Lua
+    report.lua_mem_kb = collectgarbage("count")
+    
     local response = {
         status = "healthy",
         astra_version = astra_version or "unknown",

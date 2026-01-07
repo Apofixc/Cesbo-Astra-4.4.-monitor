@@ -13,6 +13,7 @@ local unpack = table.unpack
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local log = ModuleManager.get_global_dependency("log")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local LOG_LEVELS = {
@@ -72,11 +73,30 @@ local function write_log(level_name, component, format_str, ...)
     end
 
     if should_log(level) then
+        local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
+        local use_json = (success and config and type(config) == "table") and config.LogFormat == "JSON"
+
+        if use_json and json_encode then
+            local log_data = {
+                timestamp = os.time(),
+                level = level_name,
+                component = component,
+                message = msg,
+                context_id = current_context_id
+            }
+            local ok, json_str = pcall(json_encode, log_data)
+            if ok then
+                msg = json_str
+            end
+        else
+            msg = string_format("[%s] %s", component, msg)
+        end
+
         local lower_level = level_name:lower()
         if log and log[lower_level] then
-            log[lower_level](string_format("[%s] %s", component, msg))
+            log[lower_level](msg)
         else
-            print(string_format("[%s][%s] %s", level_name, component, msg))
+            print(string_format("[%s] %s", level_name, msg))
         end
     end
 end

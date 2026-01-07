@@ -47,6 +47,9 @@ MonitorConfig.STREAM = {
     ["127.0.0.9"] = "WikiLink",
 }
 MonitorConfig.LogLevel = "INFO"
+MonitorConfig.LogFormat = "TEXT"
+MonitorConfig.MaxPayloadSize = 1024 * 1024 -- 1MB
+MonitorConfig.CorsAllowOrigin = "*"
 MonitorConfig.ChannelMonitorLimit = 200
 MonitorConfig.DvbMonitorLimit = 20
 MonitorConfig.MaxMonitorNameLength = 64
@@ -65,18 +68,31 @@ local function load_from_file()
     local json_decode = ModuleManager.get_global_dependency("json.decode")
     if not json_decode then return end
 
+    -- 1. Загрузка основного конфига библиотеки
     local f = io.open(CONFIG_PATH, "rb")
-    if not f then return end
+    if f then
+        local content = f:read("*all")
+        f:close()
+        if content and content ~= "" then
+            local success, data = pcall(json_decode, content)
+            if success and type(data) == "table" then
+                for k, v in pairs(data) do MonitorConfig[k] = v end
+            end
+        end
+    end
 
-    local content = f:read("*all")
-    f:close()
-
-    if not content or content == "" then return end
-
-    local success, data = pcall(json_decode, content)
-    if success and type(data) == "table" then
-        for k, v in pairs(data) do
-            MonitorConfig[k] = v
+    -- 2. Загрузка глобального конфига для Middleware (CORS и др.)
+    local global_f = io.open("/opt/config.json", "rb")
+    if global_f then
+        local content = global_f:read("*all")
+        global_f:close()
+        if content and content ~= "" then
+            local success, data = pcall(json_decode, content)
+            if success and type(data) == "table" then
+                if data.cors_allow_origin then
+                    MonitorConfig.CorsAllowOrigin = data.cors_allow_origin
+                end
+            end
         end
     end
 end

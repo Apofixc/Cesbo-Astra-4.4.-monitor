@@ -843,7 +843,10 @@ end
 
 Библиотека поддерживает загрузку глобальных настроек из файла `config.json`.
 
-*   **`LogLevel`**: Уровень логирования.
+*   **`LogLevel`**: Уровень логирования (DEBUG, INFO, WARN, ERROR).
+*   **`LogFormat`**: Формат логов (TEXT или JSON).
+*   **`CorsAllowOrigin`**: Настройка CORS (подтягивается из глобального `/opt/config.json`).
+*   **`MaxPayloadSize`**: Максимальный размер тела запроса (по умолчанию 1MB).
 *   **`ChannelMonitorLimit`**: Лимит мониторов каналов.
 *   **`HttpTimeout`**: Таймаут HTTP-запросов.
 
