@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local collectgarbage = collectgarbage
 local math_max = math.max
+local os_time = os.time
 local pairs = pairs
 local setmetatable = setmetatable
 local string_format = string.format
@@ -312,6 +313,7 @@ function DvbTuner:_build_status_table()
     t.ber = status.ber or 0
     t.unc = status.unc or 0
     t.quality = status.quality or 0
+    t.timestamp = os_time()
     return t
 end
 

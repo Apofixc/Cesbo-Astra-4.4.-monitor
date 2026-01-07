@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local ipairs = ipairs
 local pairs = pairs
+local os_time = os.time
 local setmetatable = setmetatable
 local tostring = tostring
 local type = type
@@ -229,6 +230,7 @@ end
 function ChannelMonitor:process_error_data(data)
     local r = self._reports.error
     r.error = data.error
+    r.timestamp = os_time()
     self:publish(json_encode(r), "error")
 end
 
@@ -237,6 +239,7 @@ end
 function ChannelMonitor:process_rate_stat_data(data)
     local r = self._reports.rate_stat
     r.rate_stat = data
+    r.timestamp = os_time()
     self:publish(json_encode(r), "rate_stat")
 end
 
@@ -420,6 +423,7 @@ function ChannelMonitor:_build_status_table(data)
     t.stream = source.stream
     t.format = source.format
     t.addr = source.addr
+    t.timestamp = os_time()
     
     return t
 end

@@ -227,7 +227,8 @@ end
   "scrambled": false,
   "bitrate": 12500,
   "cc_errors": 0,
-  "pes_errors": 0
+  "pes_errors": 0,
+  "timestamp": 1673791200
 }
 ```
 
@@ -245,7 +246,8 @@ end
   "snr": 24.8,
   "ber": 0,
   "unc": 0,
-  "quality": 100
+  "quality": 100,
+  "timestamp": 1673791200
 }
 ```
 
@@ -260,7 +262,8 @@ end
   "stream": "http://...",
   "format": "http",
   "addr": "...",
-  "error": "Connection timeout"
+  "error": "Connection timeout",
+  "timestamp": 1673791200
 }
 ```
 
@@ -914,7 +917,8 @@ end
     "monitor_status": {
       "ready": true,
       "bitrate": 12500,
-      "cc_errors": 0
+      "cc_errors": 0,
+      "timestamp": 1673791200
     }
   }
 ]
@@ -931,7 +935,8 @@ end
   "current_status": {
     "ready": true,
     "bitrate": 12500,
-    "cc_errors": 0
+    "cc_errors": 0,
+    "timestamp": 1673791200
   },
   "error_history": []
 }
