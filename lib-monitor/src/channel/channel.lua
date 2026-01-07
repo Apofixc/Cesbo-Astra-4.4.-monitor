@@ -411,6 +411,32 @@ local function resume_monitor(name)
     return false
 end
 
+-- Внутреннее хранилище для перезапуска каналов при рестарте адаптера
+local restart_configs = {}
+
+--- Обработчик события: Перед рестартом адаптера
+local function on_adapter_before_restart(adapter_name)
+    Logger.info(COMPONENT_NAME, "Обработка рестарта адаптера '%s': остановка зависимых каналов", adapter_name)
+    local saved = ChannelRepository:stop_dependent_channels(adapter_name)
+    restart_configs[adapter_name] = saved
+end
+
+--- Обработчик события: После рестарта адаптера
+local function on_adapter_after_restart(adapter_name)
+    local configs = restart_configs[adapter_name]
+    if configs and #configs > 0 then
+        Logger.info(COMPONENT_NAME, "Обработка завершения рестарта адаптера '%s': запуск %d каналов", adapter_name, #configs)
+        ChannelRepository:start_dependent_channels(configs)
+    end
+    restart_configs[adapter_name] = nil
+end
+
+-- Подписка на события
+if EventBus then
+    EventBus.subscribe(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, on_adapter_before_restart)
+    EventBus.subscribe(EventBus.EVENTS.ADAPTER_AFTER_RESTART, on_adapter_after_restart)
+end
+
 -- Экспорт в таблицу модуля для ModuleManager
 Channel.make_monitor = make_monitor
 Channel.kill_monitor = kill_monitor

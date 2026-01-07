@@ -115,9 +115,8 @@ end
 --- @param name_adapter string Уникальное имя адаптера
 --- @param new_params table|nil Новые параметры тюнинга
 --- @param force boolean|nil Принудительный перезапуск
---- @param _pre_saved_channels table|nil Предварительно сохраненные конфигурации каналов
 --- @return boolean Статус выполнения
-local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_channels)
+local function restart_dvb_monitor(name_adapter, new_params, force)
     local tuner = DvbRepository:find(name_adapter)
     if not tuner then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
@@ -131,17 +130,17 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
         for k, v in pairs(new_params) do new_conf[k] = v end
     end
 
-    -- 2. Управление каналами и счетчиками
-    local old_channels_count = 0
-    local saved_channels = {}
+    -- 2. Уведомление о начале рестарта (для остановки каналов)
+    if not force and EventBus then
+        EventBus.publish(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
+    end
 
+    local old_channels_count = 0
     if force then
         local instance = tuner:get_instance()
         if instance and instance.__options then
             old_channels_count = instance.__options.channels or 0
         end
-    else
-        saved_channels = _pre_saved_channels or stop_dependent_channels(name_adapter)
     end
 
     -- 3. Перезапуск монитора
@@ -152,7 +151,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
         local new_tuner = DvbRepository:find(name_adapter)
         if new_tuner then
             -- Сохраняем бэкап в новый объект
-            new_tuner:set_backup(old_conf, saved_channels)
+            new_tuner:set_backup(old_conf, {})
             
             local instance = new_tuner:get_instance()
             if force and instance and instance.__options then
@@ -165,12 +164,15 @@ local function restart_dvb_monitor(name_adapter, new_params, force, _pre_saved_c
     if not perform_restart(new_conf) then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to restart '%s'. Rolling back...", name_adapter)
         perform_restart(old_conf)
-        start_dependent_channels(saved_channels)
+        if not force and EventBus then
+            EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+        end
         return false
     end
 
-    if not force then
-        start_dependent_channels(saved_channels)
+    -- 4. Уведомление о завершении рестарта (для запуска каналов)
+    if not force and EventBus then
+        EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
     return true
@@ -225,7 +227,7 @@ local function get_dvb_psi(name_adapter)
 end
 
 --- Сценарий "Переключение транспондера":
---- 1. Останавливает каналы
+--- 1. Останавливает каналы (через события)
 --- 2. Перенастраивает тюнер
 --- 3. Запускает новые каналы, наследуя выходы старых
 --- @param name_adapter string Имя адаптера
@@ -237,60 +239,47 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     if not tuner then return nil end
 
     local old_tuner_params = Utils.table_copy(tuner:get_config())
-    local saved_channels = stop_dependent_channels(name_adapter)
     
-    -- Создаем карту новых входов для быстрой проверки
-    local reserve_map = {}
-    if reserve_input and type(reserve_input) == "table" then
-        for _, item in ipairs(reserve_input) do
-            if item.name then reserve_map[item.name] = item.input end
-        end
+    -- 1. Уведомление о начале переключения (каналы остановятся сами)
+    if EventBus then
+        EventBus.publish(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
-    -- Фильтруем сохраненные каналы: исключаем те, которые будут запущены с новыми входами
-    local filtered_saved_channels = {}
-    local old_channels_map = {}
-    for _, conf in ipairs(saved_channels) do
-        old_channels_map[conf.name] = conf
-        if not reserve_map[conf.name] then
-            table_insert(filtered_saved_channels, conf)
-        end
-    end
-
-    -- Перенастройка тюнера (force=false, каналы уже остановлены)
-    -- Передаем отфильтрованный список, чтобы restart_dvb_monitor не запустил лишнего
-    if not restart_dvb_monitor(name_adapter, new_tuner_params, false, filtered_saved_channels) then
-        -- В случае ошибки restart_dvb_monitor уже попытался запустить filtered_saved_channels.
-        -- Нам нужно запустить остальные (те, что были в reserve_map), чтобы полностью восстановить состояние.
-        local remaining_channels = {}
-        for _, conf in ipairs(saved_channels) do
-            if reserve_map[conf.name] then
-                table_insert(remaining_channels, conf)
-            end
-        end
-        start_dependent_channels(remaining_channels)
+    -- 2. Перенастройка тюнера
+    if not restart_dvb_monitor(name_adapter, new_tuner_params, true) then
+        -- В случае ошибки возвращаем старый конфиг
+        restart_dvb_monitor(name_adapter, old_tuner_params, true)
+        if EventBus then EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter) end
         return nil
     end
 
-    -- После успешного рестарта в restart_dvb_monitor уже сохранен бэкап,
-    -- но если мы переключаем транспондер с новыми входами, 
-    -- возможно стоит обновить бэкап или оставить как есть (там старые конфиги).
-
-    -- Запуск новых каналов с сохранением выходов
+    -- 3. Запуск новых каналов с сохранением выходов (если переданы)
     if reserve_input and type(reserve_input) == "table" then
+        -- Здесь мы все еще используем динамический вызов, но только для специфического сценария
         local Channel = ModuleManager.get_module("channel")
-        for _, item in ipairs(reserve_input) do
-            local old_conf = old_channels_map[item.name]
-            if old_conf and item.input then
-                local final_conf = Utils.table_copy(old_conf)
-                final_conf.input = item.input
-                Channel.make_stream(final_conf)
+        if Channel then
+            for _, item in ipairs(reserve_input) do
+                -- Находим старый конфиг через репозиторий (он еще должен быть там в бэкапе или памяти)
+                local ChannelRepository = ModuleManager.get_module("channel_repository")
+                local old_ch = ChannelRepository and ChannelRepository:find(item.name)
+                local old_conf = old_ch and old_ch:get_config()
+                
+                if old_conf and item.input then
+                    local final_conf = Utils.table_copy(old_conf)
+                    final_conf.input = item.input
+                    Channel.make_stream(final_conf)
+                end
             end
         end
     end
 
+    -- 4. Уведомление о завершении (остальные каналы запустятся сами)
+    if EventBus then
+        EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+    end
+
     Logger.info(COMPONENT_NAME, "Transponder switched on adapter '%s'", name_adapter)
-    return { tuner_params = old_tuner_params, channels_configs = saved_channels }
+    return { tuner_params = old_tuner_params }
 end
 
 -- Экспорт в таблицу модуля для ModuleManager
