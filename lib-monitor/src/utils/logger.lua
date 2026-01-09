@@ -79,9 +79,15 @@ end
 --- @private
 local function write_log(level_name, component, format_str, ...)
     local level = LOG_LEVELS[level_name]
+    local is_error = (level_name == "ERROR")
+    
+    if not should_log(level) and not (is_error and current_context_id) then
+        return
+    end
+
     local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
     
-    if level_name == "ERROR" and current_context_id then
+    if is_error and current_context_id then
         last_errors[current_context_id] = msg
         for _, id in ipairs(context_stack) do
             last_errors[id] = msg

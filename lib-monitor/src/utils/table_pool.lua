@@ -24,10 +24,14 @@ local TablePool = {}
 
 local pools = {}
 
---- Очищает таблицу рекурсивно (только первый уровень для производительности)
+--- Очищает таблицу рекурсивно
 --- @param t table Таблица для очистки
-local function clear_table(t)
-    for k in pairs(t) do
+--- @param deep boolean|nil Флаг глубокой очистки
+local function clear_table(t, deep)
+    for k, v in pairs(t) do
+        if deep and type(v) == "table" then
+            clear_table(v, true)
+        end
         t[k] = nil
     end
 end
@@ -54,8 +58,9 @@ end
 --- Возвращает таблицу в пул для повторного использования.
 --- Перед возвратом таблица полностью очищается.
 --- @param t table Таблица для возврата
---- @param pool_type? string [Тип пула. По умолчанию "generic"]
-function TablePool.release(t, pool_type)
+--- @param pool_type string|nil Тип пула. По умолчанию "generic"
+--- @param deep boolean|nil Флаг глубокой очистки. По умолчанию false
+function TablePool.release(t, pool_type, deep)
     if type(t) ~= "table" then return end
     
     pool_type = pool_type or "generic"
@@ -66,7 +71,7 @@ function TablePool.release(t, pool_type)
     end
 
     if #pool < MAX_POOL_SIZE then
-        clear_table(t)
+        clear_table(t, deep)
         table_insert(pool, t)
     end
 end

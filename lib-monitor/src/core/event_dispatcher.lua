@@ -123,22 +123,23 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     end
 
     local p = priority or self.PRIORITIES.MEDIUM
-    local event = {
-        id = generate_event_id(),
-        type = event_type,
-        data = event_data,
-        priority = p,
-        timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time(),
-        source = (options and options.source) or "unknown",
-        is_table = options and options.is_table or (type(event_data) == "table"),
-        json_cache = nil -- Кэш для ленивой сериализации
-    }
+    local event = TablePool and TablePool.get("event") or {}
+    
+    event.id = generate_event_id()
+    event.type = event_type
+    event.data = event_data
+    event.priority = p
+    event.timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time()
+    event.source = (options and options.source) or "unknown"
+    event.is_table = options and options.is_table or (type(event_data) == "table")
+    event.json_cache = nil -- Кэш для ленивой сериализации
     
     local queue = self.event_queues[p]
     if queue then
         table_insert(queue, event)
         if #queue > 1000 then
-            table_remove(queue, 1)
+            local dropped_event = table_remove(queue, 1)
+            if TablePool then TablePool.release(dropped_event, "event") end
             self.stats.dropped = self.stats.dropped + 1
         end
     end
@@ -229,6 +230,11 @@ function EventDispatcher:process_queue()
                 end
                 
                 self.stats.processed = self.stats.processed + 1
+                
+                -- Возвращаем сам объект события в пул
+                if TablePool then
+                    TablePool.release(event, "event")
+                end
             end
         end
     end

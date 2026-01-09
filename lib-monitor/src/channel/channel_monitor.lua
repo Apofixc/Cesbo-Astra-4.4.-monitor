@@ -256,15 +256,18 @@ function ChannelMonitor:process_psi_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID
-                    if self._stats_count < 100 then
-                        self._stats[pid] = {
-                            type = type_name,
-                            cc = 0,
-                            pes = 0,
-                            sc = 0
-                        }
-                        self._stats_count = self._stats_count + 1
+                    if self._stats_count >= 100 then
+                        self:clear_stats()
+                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached during PSI processing, clearing stats", tostring(self._name))
                     end
+
+                    self._stats[pid] = {
+                        type = type_name,
+                        cc = 0,
+                        pes = 0,
+                        sc = 0
+                    }
+                    self._stats_count = self._stats_count + 1
                 else
                     stats.type = type_name
                 end
@@ -289,16 +292,20 @@ function ChannelMonitor:process_analyze_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
-                    if self._stats_count < 100 then
-                        stats = {
-                            type = "UNKNOWN",
-                            cc = cc,
-                            pes = pes,
-                            sc = sc
-                        }
-                        self._stats[pid] = stats
-                        self._stats_count = self._stats_count + 1
+                    -- Если лимит превышен, сбрасываем статистику для очистки места
+                    if self._stats_count >= 100 then
+                        self:clear_stats()
+                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached, clearing stats", tostring(self._name))
                     end
+                    
+                    stats = {
+                        type = "UNKNOWN",
+                        cc = cc,
+                        pes = pes,
+                        sc = sc
+                    }
+                    self._stats[pid] = stats
+                    self._stats_count = self._stats_count + 1
                 else
                     -- Защита от переполнения
                     stats.cc = (stats.cc + cc > MAX_COUNTER) and MAX_COUNTER or (stats.cc + cc)
