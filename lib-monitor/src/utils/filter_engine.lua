@@ -9,9 +9,9 @@
 local type = type
 local pairs = pairs
 local pcall = pcall
-local loadstring = loadstring or load
+local load = load
 local tostring = tostring
-local os_time = os_time or os.time
+local os_time = os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -20,24 +20,10 @@ local Logger = ModuleManager.get_module("logger")
 local COMPONENT_NAME = "FilterEngine"
 
 --- @class FilterEngine
+--- @field private duration_state table<string, table<number, number>> Состояние фильтров по длительности
 local FilterEngine = {}
 
--- Состояние для фильтров по длительности (Duration)
--- Структура: state[sub_id][condition_index] = { first_match_time }
-local duration_state = {}
-
---- Получает значение из таблицы по вложенному пути
-local function get_nested_value(data, path)
-    if not path or path == "" then return data end
-    local current = data
-    for part in path:gmatch("[^%.]+") do
-        if type(current) ~= "table" then return nil end
-        current = current[part]
-    end
-    return current
-end
-
---- Операторы сравнения
+--- @type table<string, function> Операторы сравнения
 local OPERATORS = {
     eq = function(a, b) return a == b end,
     ne = function(a, b) return a ~= b end,
@@ -49,7 +35,30 @@ local OPERATORS = {
     matches = function(a, b) return (type(a) == "string" and type(b) == "string") and a:match(b) ~= nil end,
 }
 
---- Проверяет соответствие данных условию
+-- Состояние для фильтров по длительности (Duration)
+-- Структура: state[sub_id][condition_index] = { first_match_time }
+local duration_state = {}
+
+--- Извлекает значение из таблицы по вложенному пути (например, "total.bitrate").
+--- @param data table Исходная таблица
+--- @param path string|nil Путь к полю через точку
+--- @return any|nil Значение поля или nil
+local function get_nested_value(data, path)
+    if not path or path == "" then return data end
+    local current = data
+    for part in path:gmatch("[^%.]+") do
+        if type(current) ~= "table" then return nil end
+        current = current[part]
+    end
+    return current
+end
+
+--- Проверяет соответствие данных конкретному условию с учетом оператора и длительности.
+--- @param data table Данные события
+--- @param condition table Параметры условия (field, op, value, duration)
+--- @param sub_id string|nil ID подписки (для отслеживания длительности)
+--- @param cond_idx number Индекс условия в списке
+--- @return boolean Результат проверки
 local function check_condition(data, condition, sub_id, cond_idx)
     if not condition.field then return true end
     
@@ -84,16 +93,20 @@ local function check_condition(data, condition, sub_id, cond_idx)
     return is_match
 end
 
---- Проверяет данные события на соответствие фильтрам
+--- Проверяет данные события на соответствие набору фильтров.
+--- Поддерживает Fast Path (если фильтры пусты), Lua-скрипты и логические группы условий.
+--- @param data table Данные события
+--- @param filters table Схема фильтров
+--- @param sub_id string|nil ID подписки для отслеживания состояний
+--- @return boolean Результат проверки
 function FilterEngine.match(data, filters, sub_id)
     if not filters or next(filters) == nil then return true end
 
     -- 1. Проверка Lua-скрипта
     if filters.script and type(filters.script) == "string" then
         local env = { data = data, type = type, tostring = tostring, os_time = os_time }
-        local func, err = loadstring(filters.script)
+        local func, err = load(filters.script, "=(filter_script)", "t", env)
         if func then
-            setfenv(func, env)
             local ok, res = pcall(func)
             if ok then return res == true end
         end

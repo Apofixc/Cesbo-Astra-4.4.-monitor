@@ -15,12 +15,18 @@ local Logger = ModuleManager.get_module("logger")
 local COMPONENT_NAME = "WsSubscriber"
 
 --- @class WsSubscriber
+--- @field private clients table<any, boolean> Список активных WebSocket клиентов
+--- @field private http_server_instance any Ссылка на экземпляр http_server
 local WsSubscriber = {}
 
 local clients = {}
 local http_server_instance = nil
 
---- Обработчик WebSocket соединений
+--- Обработчик WebSocket соединений (callback для http_websocket).
+--- Регистрирует новых клиентов и обрабатывает входящие сообщения.
+--- @param server any Экземпляр сервера
+--- @param client any Экземпляр клиента (userdata)
+--- @param request any Данные запроса (строка сообщения или nil при закрытии)
 function WsSubscriber.on_message(server, client, request)
     http_server_instance = server
     if request == nil then
@@ -34,7 +40,10 @@ function WsSubscriber.on_message(server, client, request)
     end
 end
 
---- Рассылает уже готовый JSON всем клиентам
+--- Рассылает уже готовый JSON всем подключенным клиентам.
+--- Данные оборачиваются в структуру события {event, data}.
+--- @param event_type string Тип события
+--- @param json_data string JSON-строка с данными
 function WsSubscriber.broadcast_raw(event_type, json_data)
     if not http_server_instance or not json_data then return end
     local message = '{"event":"' .. event_type .. '","data":' .. json_data .. '}'

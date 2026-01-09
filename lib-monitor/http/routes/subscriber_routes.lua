@@ -15,14 +15,23 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriberRoutes"
 
---- Возвращает список всех получателей данных
+--- Возвращает список всех активных подписок в системе.
+--- @param server any Экземпляр http_server
+--- @param client any Экземпляр клиента
+--- @param request table Данные запроса
+--- @return boolean Статус выполнения
 function SubscriberRoutes.get_subscribers(server, client, request)
     local dispatcher = EventDispatcher.get_instance()
     local list = dispatcher.subscription_manager:get_all_subscriptions()
     return HttpHelpers.success(server, client, list)
 end
 
---- Добавляет нового получателя
+--- Регистрирует новую подписку на события.
+--- Ожидает JSON с полями: event_type, callback, [filters], [throttle_ms].
+--- @param server any Экземпляр http_server
+--- @param client any Экземпляр клиента
+--- @param request table Данные запроса
+--- @return boolean Статус выполнения
 function SubscriberRoutes.subscribe(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {
@@ -43,7 +52,12 @@ function SubscriberRoutes.subscribe(server, client, request)
     return HttpHelpers.success(server, client, { message = "Subscribed", id = sub_id })
 end
 
---- Удаляет получателя
+--- Удаляет существующую подписку по её уникальному ID.
+--- Ожидает JSON с полем: id.
+--- @param server any Экземпляр http_server
+--- @param client any Экземпляр клиента
+--- @param request table Данные запроса
+--- @return boolean Статус выполнения
 function SubscriberRoutes.unsubscribe(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {

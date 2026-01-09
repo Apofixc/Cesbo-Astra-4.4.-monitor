@@ -40,13 +40,16 @@ local MAX_RETRIES = 3
 local RETRY_DELAY = 5
 
 --- @class SubscriptionManager
+--- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
+--- @field private stats table Глобальная статистика подписок
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
 -- Очередь на повторную отправку
 local retry_queue = {}
 
--- Генерация UUID
+--- Генерирует уникальный идентификатор (UUID v4) для подписки.
+--- @return string UUID
 local function generate_uuid()
     local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
     return string.gsub(template, '[xy]', function (c)
@@ -55,7 +58,10 @@ local function generate_uuid()
     end)
 end
 
---- Проверяет соответствие имени события маске
+--- Проверяет соответствие имени события маске (wildcard).
+--- @param pattern string Маска (например, "channel:*")
+--- @param name string Имя события
+--- @return boolean Результат проверки
 local function match_wildcard(pattern, name)
     if pattern == name or pattern == "*" then return true end
     if not pattern:find("*") then return pattern == name end
@@ -63,8 +69,13 @@ local function match_wildcard(pattern, name)
     return name:match("^" .. regex .. "$") ~= nil
 end
 
---- Транспорты для доставки событий
+--- @type table<string, function> Транспорты для доставки событий
 local Transport = {
+    --- Доставка через HTTP POST запрос
+    --- @param config table Параметры (host, port, path)
+    --- @param event_data table|string Данные события
+    --- @param event_type string Тип события
+    --- @param retry_count? number [Текущая попытка повтора]
     HTTP = function(config, event_data, event_type, retry_count)
         if not http_request then return false, "http_request not available" end
         local content = (type(event_data) == "table") and json_encode(event_data) or tostring(event_data)
@@ -87,6 +98,10 @@ local Transport = {
         })
         return true
     end,
+    --- Доставка через WebSocket
+    --- @param config table Параметры транспорта
+    --- @param event_data table|string Данные события
+    --- @param event_type string Тип события
     WS = function(config, event_data, event_type)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
@@ -96,10 +111,17 @@ local Transport = {
         end
         return false, "WsSubscriber not available"
     end,
+    --- Доставка через вызов Lua функции
+    --- @param config table Параметры (callback)
+    --- @param event_data table|string Данные события
     LUA_CALLBACK = function(config, event_data)
         if type(config.callback) ~= "function" then return false, "Invalid callback" end
         return pcall(config.callback, event_data)
     end,
+    --- Вывод события в консоль (лог Astra)
+    --- @param config table Параметры транспорта
+    --- @param event_data table|string Данные события
+    --- @param event_type string Тип события
     CONSOLE = function(config, event_data, event_type)
         local message = (type(event_data) == "table") and json_encode(event_data) or event_data
         Logger.info("Console", "[EVENT:%s] %s", tostring(event_type), tostring(message))
@@ -107,7 +129,9 @@ local Transport = {
     end
 }
 
---- Создает новый экземпляр SubscriptionManager
+--- Создает и инициализирует новый экземпляр SubscriptionManager.
+--- Загружает сохраненные подписки из файла и запускает обработчик повторов.
+--- @return SubscriptionManager Экземпляр менеджера
 function SubscriptionManager.new()
     local self = setmetatable({}, SubscriptionManager)
     self.subscriptions = {} -- [event_type][subscription_id] = sub_data
@@ -117,7 +141,8 @@ function SubscriptionManager.new()
     return self
 end
 
---- Запускает обработчик повторов
+--- Запускает фоновый процесс обработки очереди повторных попыток отправки HTTP-уведомлений.
+--- @private
 function SubscriptionManager:start_retry_processor()
     if not timer then return end
     timer({
@@ -135,7 +160,9 @@ function SubscriptionManager:start_retry_processor()
     })
 end
 
---- Сохраняет подписки в файл
+--- Сохраняет текущие активные подписки в JSON файл.
+--- Lua-коллбэки игнорируются при сохранении.
+--- @return boolean Статус выполнения
 function SubscriptionManager:save()
     local data_to_save = {}
     for event_type, subs in pairs(self.subscriptions) do
@@ -160,7 +187,8 @@ function SubscriptionManager:save()
     return false
 end
 
---- Загружает подписки из файла
+--- Загружает подписки из JSON файла и регистрирует их в системе.
+--- @private
 function SubscriptionManager:load()
     local f = io.open(STORAGE_PATH, "r")
     if not f then return end
@@ -176,7 +204,11 @@ function SubscriptionManager:load()
     end
 end
 
---- Создает новую подписку
+--- Регистрирует новую подписку на события.
+--- @param event_type string Тип события или маска
+--- @param sub_data table Данные подписки (callback, filters, throttle_ms)
+--- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
+--- @return string|nil ID подписки (UUID) или nil при ошибке
 function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     local transport = self:detect_transport(sub_data.callback)
     if not transport then return nil end
@@ -197,7 +229,10 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     return sub_id
 end
 
---- Публикует событие для всех подходящих подписчиков
+--- Рассылает событие всем подписчикам, чьи условия (маски, фильтры, троттлинг) соответствуют событию.
+--- @param event_type string Точное имя события
+--- @param event_data table Данные события
+--- @return number, number Количество успешно доставленных и проваленных уведомлений
 function SubscriptionManager:publish(event_type, event_data)
     local delivered, failed = 0, 0
     local now = os_time()
@@ -235,7 +270,12 @@ function SubscriptionManager:publish(event_type, event_data)
     return delivered, failed
 end
 
---- Отправляет событие конкретному подписчику
+--- Отправляет событие конкретному подписчику по его ID.
+--- Используется для инициализации (LVC) или отладки.
+--- @param sub_id string ID подписки
+--- @param event_type string Имя события
+--- @param event_data table Данные события
+--- @return boolean Статус выполнения
 function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     for _, subs in pairs(self.subscriptions) do
         local sub = subs[sub_id]
@@ -247,6 +287,9 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     return false
 end
 
+--- Определяет тип транспорта на основе конфигурации callback.
+--- @param cfg function|table Конфигурация коллбэка или функция
+--- @return string|nil Тип транспорта (HTTP, WS, CONSOLE, LUA_CALLBACK)
 function SubscriptionManager:detect_transport(cfg)
     if type(cfg) == "function" then return "LUA_CALLBACK" end
     if type(cfg) == "table" then
@@ -257,6 +300,9 @@ function SubscriptionManager:detect_transport(cfg)
     return nil
 end
 
+--- Удаляет подписку по её ID и сохраняет изменения в файл.
+--- @param sub_id string ID подписки
+--- @return boolean Статус выполнения
 function SubscriptionManager:unsubscribe(sub_id)
     for event_type, subs in pairs(self.subscriptions) do
         if subs[sub_id] then
@@ -269,6 +315,8 @@ function SubscriptionManager:unsubscribe(sub_id)
     return false
 end
 
+--- Возвращает список всех активных подписок в системе.
+--- @return table<string, table> Таблица подписок
 function SubscriptionManager:get_all_subscriptions()
     local res = {}
     for _, subs in pairs(self.subscriptions) do

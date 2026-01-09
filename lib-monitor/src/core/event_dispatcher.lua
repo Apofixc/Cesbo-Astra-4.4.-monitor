@@ -30,12 +30,18 @@ local timer = ModuleManager.get_global_dependency("timer")
 local COMPONENT_NAME = "EventDispatcher"
 
 --- @class EventDispatcher
+--- @field public subscription_manager SubscriptionManager Менеджер подписок
+--- @field private _lvc table<string, table> Кэш последних значений (Last Value Cache)
+--- @field private event_queues table<number, table> Очереди событий по приоритетам
+--- @field private stats table Статистика диспетчера
+--- @field private active boolean Флаг активности обработки
 local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
 
 local instance = nil
 
---- Приоритеты событий
+--- Приоритеты событий (1 - самый высокий, 4 - самый низкий)
+--- @type table<string, number>
 EventDispatcher.PRIORITIES = {
     CRITICAL = 1,
     HIGH = 2,
@@ -43,7 +49,8 @@ EventDispatcher.PRIORITIES = {
     LOW = 4
 }
 
---- Стандартные имена событий
+--- Стандартные имена событий системы
+--- @type table<string, string>
 EventDispatcher.EVENTS = {
     ADAPTER_BEFORE_RESTART = "adapter:before_restart",
     ADAPTER_AFTER_RESTART = "adapter:after_restart",
@@ -61,6 +68,9 @@ end
 
 --- Проверяет соответствие имени события маске (например, "channel:*" соответствует "channel:created")
 --- @private
+--- @param pattern string Маска события
+--- @param name string Реальное имя события
+--- @return boolean Результат проверки
 local function match_wildcard(pattern, name)
     if pattern == name or pattern == "*" then return true end
     if not pattern:find("*") then return pattern == name end
@@ -70,8 +80,8 @@ local function match_wildcard(pattern, name)
     return name:match("^" .. regex .. "$") ~= nil
 end
 
---- Возвращает единственный экземпляр EventDispatcher
---- @return EventDispatcher
+--- Возвращает единственный экземпляр EventDispatcher (Singleton)
+--- @return EventDispatcher Экземпляр диспетчера
 function EventDispatcher.get_instance()
     if not instance then
         instance = setmetatable({}, EventDispatcher)
@@ -80,7 +90,8 @@ function EventDispatcher.get_instance()
     return instance
 end
 
---- Инициализация диспетчера
+--- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди.
+--- @private
 function EventDispatcher:initialize()
     self.subscription_manager = SubscriptionManager.new()
     
@@ -107,11 +118,12 @@ function EventDispatcher:initialize()
     Logger.info(COMPONENT_NAME, "EventDispatcher initialized with LVC and Wildcard support")
 end
 
---- Публикует событие
---- @param event_type string Тип события
---- @param event_data table Данные события
---- @param priority number Приоритет (1-4)
---- @param options table Дополнительные опции {source, no_cache}
+--- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
+--- @param event_type string Тип события (например, "channel:error")
+--- @param event_data table Таблица с данными события
+--- @param priority? number [Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).]
+--- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC).]
+--- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
     
@@ -146,9 +158,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     return event.id
 end
 
---- Возвращает последнее известное состояние для типа события
---- @param event_type string Тип события (поддерживает маски)
---- @return table Список последних событий
+--- Возвращает последние известные значения (LVC) для указанного типа события.
+--- Поддерживает маски (wildcards), например "channel:*".
+--- @param event_type string Тип события или маска
+--- @return table<string, table> Таблица последних событий, где ключ - точное имя события
 function EventDispatcher:get_last_values(event_type)
     local result = {}
     for name, entry in pairs(self._lvc) do
@@ -159,15 +172,23 @@ function EventDispatcher:get_last_values(event_type)
     return result
 end
 
---- Алиас для совместимости
+--- Алиас для совместимости со старым EventBus.
+--- @param event_type string Тип события
+--- @param ... any Аргументы события
+--- @return string|nil ID события
 function EventDispatcher:publish(event_type, ...)
     local args = {...}
     local data = args[1]
     if #args > 1 then data = { args = args } end
-    return self:emit(event_type, data)
+    return self:emit(event_type, data, nil, nil)
 end
 
---- Подписка на события (поддерживает маски)
+--- Регистрирует новую подписку на события.
+--- @param event_type string Тип события или маска (например, "adapter:*")
+--- @param callback function|table Функция-обработчик или конфигурация транспорта
+--- @param filters? table [Схема фильтрации (условия, операторы или Lua-скрипт)]
+--- @param options? table [Дополнительные опции: throttle_ms (ограничение частоты), send_lvc (отправить последнее состояние сразу)]
+--- @return string|nil ID подписки (UUID)
 function EventDispatcher:subscribe(event_type, callback, filters, options)
     local sub_id = self.subscription_manager:subscribe(event_type, { 
         callback = callback,
@@ -187,7 +208,8 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     return sub_id
 end
 
---- Запускает обработчик очереди
+--- Запускает фоновый таймер для обработки очереди событий.
+--- @private
 function EventDispatcher:start_queue_processor()
     if not timer then return end
     
@@ -199,7 +221,8 @@ function EventDispatcher:start_queue_processor()
     })
 end
 
---- Обрабатывает очередь событий
+--- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager.
+--- @private
 function EventDispatcher:process_queue()
     for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
         local queue = self.event_queues[p]
