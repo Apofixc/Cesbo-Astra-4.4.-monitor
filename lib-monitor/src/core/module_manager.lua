@@ -13,10 +13,16 @@ local string_format = string.format
 
 -- 2. Функции из ModuleManager.get_module()
 -- Logger будет загружен позже, чтобы избежать циклической зависимости при инициализации ModuleManager
-local Logger
-local log_info = function(component, format_str, ...) if Logger and Logger.info then Logger.info(component, format_str, ...) end end
-local log_error = function(component, format_str, ...) if Logger and Logger.error then Logger.error(component, format_str, ...) end end
-local log_debug = function(component, format_str, ...) if Logger and Logger.debug then Logger.debug(component, format_str, ...) end end
+local Logger = nil
+local function log_info(component, format_str, ...)
+    if Logger and Logger.info then Logger.info(component, format_str, ...) end
+end
+local function log_error(component, format_str, ...)
+    if Logger and Logger.error then Logger.error(component, format_str, ...) end
+end
+local function log_debug(component, format_str, ...)
+    if Logger and Logger.debug then Logger.debug(component, format_str, ...) end
+end
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- Нет прямых глобальных зависимостей Astra, кроме тех, что управляются самим ModuleManager.
@@ -171,40 +177,37 @@ function ModuleManager.load_modules()
         -- Пропускаем уже загруженные модули
         if loaded_modules[name] then
             if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем.", name) end
-            goto continue
-        end
-        
-        local module_info = registered_modules[name]
-        if Logger then log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path) end
-        
-        local success, module_or_err = pcall(require, module_info.path)
-        
-        if not success then
-            local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, tostring(module_or_err))
-            if Logger then
-                log_error(COMPONENT_NAME, err_msg)
-            else
-                print(string_format("[%s][ERROR] %s", COMPONENT_NAME, err_msg))
+        else
+            local module_info = registered_modules[name]
+            if Logger then log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path) end
+            
+            local success, module_or_err = pcall(require, module_info.path)
+            
+            if not success then
+                local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, tostring(module_or_err))
+                if Logger then
+                    log_error(COMPONENT_NAME, err_msg)
+                else
+                    print(string_format("[%s][ERROR] %s", COMPONENT_NAME, err_msg))
+                end
+                return nil
             end
-            return nil
-        end
-        
-        if module_or_err == nil then
-            log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
-            return nil
-        end
-        
-        local module = module_or_err
-        
-        loaded_modules[name] = module
+            
+            if module_or_err == nil then
+                log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
+                return nil
+            end
+            
+            local module = module_or_err
+            
+            loaded_modules[name] = module
 
-        if name == "logger" and not Logger then
-            init_logger()
-        end
+            if name == "logger" and not Logger then
+                init_logger()
+            end
 
-        if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name) end
-        
-        ::continue::
+            if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name) end
+        end
     end
     
     log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)

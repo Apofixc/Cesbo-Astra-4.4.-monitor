@@ -203,7 +203,7 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     })
 
     -- Если запрошено получение последнего состояния при подписке
-    if sub_id and options and options.send_lvc then
+    if sub_id and options and type(options) == "table" and options.send_lvc then
         local last_values = self:get_last_values(event_type)
         for name, entry in pairs(last_values) do
             -- Отправляем немедленно (вне очереди) для инициализации подписчика
