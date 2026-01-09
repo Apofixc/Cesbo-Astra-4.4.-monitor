@@ -201,7 +201,7 @@ lib-monitor/
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local tuner = DvbRepository.find("dvb0")
 if tuner then
-    local status = tuner:get_full_status()
+    local status = tuner:get_status_table()
     tuner:psi_update() -- Запустить сбор PSI на 10 секунд
 end
 ```

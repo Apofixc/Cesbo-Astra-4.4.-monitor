@@ -48,7 +48,7 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
 
     if dvb_obj._json_cache then return HttpHelpers.send_raw_json(server, client, 200, dvb_obj._json_cache) end
-    return HttpHelpers.success(server, client, dvb_obj:get_full_status())
+    return HttpHelpers.success(server, client, dvb_obj:get_status_table())
 end
 
 --- Обновляет параметры мониторинга DVB адаптера

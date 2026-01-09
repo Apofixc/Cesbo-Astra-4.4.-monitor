@@ -342,12 +342,6 @@ function DvbTuner:get_status_table()
     return self._current_status_table
 end
 
---- Возвращает полный текущий статус тюнера (алиас для совместимости)
---- @return table Статус тюнера
-function DvbTuner:get_full_status()
-    return self:get_status_table()
-end
-
 --- Возвращает детальные флаги состояния тюнера (has_signal, has_lock и т.д.)
 --- @return table Таблица флагов
 function DvbTuner:get_status_flags()

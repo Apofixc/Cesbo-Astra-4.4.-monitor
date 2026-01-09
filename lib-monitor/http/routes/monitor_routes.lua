@@ -60,7 +60,7 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
 
     if ch_obj._json_cache then return HttpHelpers.send_raw_json(server, client, 200, ch_obj._json_cache) end
-    return HttpHelpers.success(server, client, ch_obj:get_full_status())
+    return HttpHelpers.success(server, client, ch_obj:get_status_table())
 end
 
 --- Создает новый монитор (без создания канала)

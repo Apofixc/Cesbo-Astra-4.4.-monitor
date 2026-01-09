@@ -439,12 +439,6 @@ function ChannelMonitor:get_status_table()
     return self._current_status_table
 end
 
---- Возвращает полный текущий статус монитора (алиас для совместимости)
---- @return table Статус монитора
-function ChannelMonitor:get_full_status()
-    return self:get_status_table()
-end
-
 --- Останавливает мониторинг и уничтожает объект.
 --- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
 --- @param force boolean Принудительная остановка
