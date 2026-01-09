@@ -403,10 +403,11 @@ function DvbTuner:destroy(force)
     local opts = self._instance and self._instance.__options
     local channels = (type(opts) == "table") and (opts.channels or 0) or 0
 
-        -- Определяем, нужно ли физически закрывать тюнер
-    -- Закрываем только если больше нет пользователей или принудительно
-    local should_close_physically = (channels == 1) or (force == true)
-    if not should_close_physically then
+    -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
+    -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
+    if channels > 1 and not force then
+        Logger.warn(COMPONENT_NAME, "[%s] destroy: адаптер занят (%d канала), удаление отменено", 
+            tostring(self._name), channels)
         return nil
     end
 
@@ -429,27 +430,22 @@ function DvbTuner:destroy(force)
             opts.callback = nil
         end
 
-        if should_close_physically then
-            -- Безопасная очистка внутреннего списка Astra
-            if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
-                local adapter = opts.adapter
-                local device = opts.device or "0"
-                if adapter ~= nil then
-                    local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
-                    dvb_input_instance_list[instance_id] = nil
-                    Logger.debug(COMPONENT_NAME, "Удален тюнер '%s' из внутреннего списка Astra (id: %s)", tostring(self._name), instance_id)
-                end
+        -- Безопасная очистка внутреннего списка Astra
+        if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
+            local adapter = opts.adapter
+            local device = opts.device or "0"
+            if adapter ~= nil then
+                local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
+                dvb_input_instance_list[instance_id] = nil
+                Logger.debug(COMPONENT_NAME, "Удален тюнер '%s' из внутреннего списка Astra (id: %s)", tostring(self._name), instance_id)
             end
-
-            -- Физическое закрытие инстанса Astra
-            if self._instance.close then
-                self._instance:close()
-            end
-            Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))
-        else
-            Logger.info(COMPONENT_NAME, "[%s] Тюнер остается открытым для других каналов (осталось пользователей: %d)", 
-                tostring(self._name), opts.channels)
         end
+
+        -- Физическое закрытие инстанса Astra
+        if self._instance.close then
+            self._instance:close()
+        end
+        Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))
         
         self._instance = nil
     end
