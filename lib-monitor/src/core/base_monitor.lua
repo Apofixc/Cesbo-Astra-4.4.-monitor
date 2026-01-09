@@ -25,6 +25,9 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 
+-- 3. Глобальные зависимости Astra
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+
 -- 4. Константы
 BaseMonitor.STATE = {
     IDLE = 1,
@@ -82,14 +85,51 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     return true
 end
 
---- Публикует данные через EventBus
---- @param content string JSON-данные
+--- Публикует данные через EventBus.
+--- Теперь принимает таблицу и поддерживает ленивую сериализацию.
+--- @param data table|string Данные события
 --- @param event_type string Тип события
-function BaseMonitor:publish(content, event_type)
+--- @param is_table? boolean [Флаг, что данные из пула таблиц]
+function BaseMonitor:publish(data, event_type, is_table)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
     if dispatcher then
-        dispatcher:emit(event_type, content)
+        dispatcher:emit(event_type, data, nil, { 
+            is_table = is_table,
+            source = self._name
+        })
     end
+end
+
+--- Возвращает актуальные данные в виде таблицы (сырые данные).
+--- Должен быть переопределен в наследниках.
+--- @return table|nil Таблица данных
+function BaseMonitor:get_status_table()
+    return nil
+end
+
+--- Возвращает актуальные данные в виде JSON-строки.
+--- Реализует ленивое кэширование.
+--- @return string|nil JSON-строка
+function BaseMonitor:get_status_json()
+    if self._json_cache then return self._json_cache end
+    
+    local data = self:get_status_table()
+    if not data then return nil end
+    
+    if json_encode then
+        self._json_cache = json_encode(data)
+    else
+        self._json_cache = tostring(data)
+    end
+    
+    return self._json_cache
+end
+
+--- Сбрасывает кэш JSON-представления.
+--- Вызывается при обновлении данных монитора.
+--- @protected
+function BaseMonitor:_clear_json_cache()
+    self._json_cache = nil
 end
 
 --- Возвращает оригинальную конфигурацию

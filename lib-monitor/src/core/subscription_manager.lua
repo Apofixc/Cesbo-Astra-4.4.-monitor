@@ -14,7 +14,7 @@ local ipairs = ipairs
 local pairs = pairs
 local table_insert = table.insert
 local table_remove = table.remove
-local os_time = os_time
+local os_time = os.time
 local pcall = pcall
 local setmetatable = setmetatable
 local io = io
@@ -23,6 +23,7 @@ local io = io
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local FilterEngine = ModuleManager.get_module("utils.filter_engine")
+local Wildcard = ModuleManager.get_module("utils.wildcard")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -42,7 +43,7 @@ local RETRY_DELAY = 5
 --- @class SubscriptionManager
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
 --- @field private stats table Глобальная статистика подписок
---- @field private _wildcard_cache table<string, table<string, boolean>> Кэш результатов сопоставления масок
+--- @field private _matchers table<string, function> Кэш скомпилированных матчеров
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
@@ -59,27 +60,34 @@ local function generate_uuid()
     end))
 end
 
---- Проверяет соответствие имени события маске (wildcard).
---- @param pattern string Маска (например, "channel:*")
---- @param name string Имя события
---- @return boolean Результат проверки
-local function match_wildcard(pattern, name)
-    if pattern == name or pattern == "*" then return true end
-    if not pattern:find("*") then return pattern == name end
-    local regex = pattern:gsub("([%^%$%(%)%%%.%[%]%+%-%?])", "%%%1"):gsub("%*", ".*")
-    return name:match("^" .. regex .. "$") ~= nil
+--- Вспомогательная функция для получения JSON из события (Lazy JSON)
+--- @param event table Объект события
+--- @return string|nil JSON-строка
+local function get_event_json(event)
+    if not event then return nil end
+    if event.json_cache then return event.json_cache end
+    
+    if type(event.data) == "string" then
+        event.json_cache = event.data
+    else
+        event.json_cache = json_encode(event.data)
+    end
+    return event.json_cache
 end
 
 --- @type table<string, function> Транспорты для доставки событий
 local Transport = {
     --- Доставка через HTTP POST запрос
     --- @param config table Параметры (host, port, path)
-    --- @param event_data table|string Данные события
+    --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
     --- @param retry_count? number [Текущая попытка повтора]
-    HTTP = function(config, event_data, event_type, retry_count)
+    HTTP = function(config, event, event_type, retry_count)
         if not http_request then return false, "http_request not available" end
-        local content = (type(event_data) == "table") and json_encode(event_data) or tostring(event_data)
+        
+        local content = (type(event) == "table" and event.id) and get_event_json(event) or 
+                        ((type(event) == "table") and json_encode(event) or tostring(event))
+        
         if not content then return false, "JSON encode failed" end
         
         retry_count = retry_count or 0
@@ -90,8 +98,16 @@ local Transport = {
             headers = { USER_AGENT, "Host: " .. config.host .. ":" .. config.port, CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close" },
             callback = function(s, r)
                 if not s and retry_count < MAX_RETRIES then
+                    -- Для ретрая делаем копию данных, если это была таблица из пула
+                    local retry_data = event
+                    if type(event) == "table" and event.is_table then
+                        -- Если это событие с таблицей из пула, к этому моменту таблица может быть уже возвращена в пул.
+                        -- Поэтому для ретрая используем уже готовый JSON.
+                        retry_data = content
+                    end
+
                     table_insert(retry_queue, {
-                        config = config, data = event_data, type = event_type,
+                        config = config, data = retry_data, type = event_type,
                         retries = retry_count + 1, time = os_time() + RETRY_DELAY
                     })
                 end
@@ -101,12 +117,13 @@ local Transport = {
     end,
     --- Доставка через WebSocket
     --- @param config table Параметры транспорта
-    --- @param event_data table|string Данные события
+    --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    WS = function(config, event_data, event_type)
+    WS = function(config, event, event_type)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
-            local json_data = (type(event_data) == "table") and json_encode(event_data) or event_data
+            local json_data = (type(event) == "table" and event.id) and get_event_json(event) or 
+                             ((type(event) == "table") and json_encode(event) or event)
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
         end
@@ -114,17 +131,19 @@ local Transport = {
     end,
     --- Доставка через вызов Lua функции
     --- @param config table Параметры (callback)
-    --- @param event_data table|string Данные события
-    LUA_CALLBACK = function(config, event_data)
+    --- @param event table|string Объект события или данные
+    LUA_CALLBACK = function(config, event)
         if type(config.callback) ~= "function" then return false, "Invalid callback" end
-        return pcall(config.callback, event_data)
+        local data = (type(event) == "table" and event.id) and event.data or event
+        return pcall(config.callback, data)
     end,
     --- Вывод события в консоль (лог Astra)
     --- @param config table Параметры транспорта
-    --- @param event_data table|string Данные события
+    --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    CONSOLE = function(config, event_data, event_type)
-        local message = (type(event_data) == "table") and json_encode(event_data) or event_data
+    CONSOLE = function(config, event, event_type)
+        local message = (type(event) == "table" and event.id) and get_event_json(event) or 
+                        ((type(event) == "table") and json_encode(event) or event)
         Logger.info("Console", "[EVENT:%s] %s", tostring(event_type), tostring(message))
         return true
     end
@@ -137,7 +156,7 @@ function SubscriptionManager.new()
     local self = setmetatable({}, SubscriptionManager)
     self.subscriptions = {} -- [event_type][subscription_id] = sub_data
     self.stats = { total = 0, delivered = 0, failed = 0 }
-    self._wildcard_cache = {} -- [pattern][event_type] = boolean
+    self._matchers = {} -- [pattern] = function
     self:load()
     self:start_retry_processor()
     return self
@@ -223,7 +242,13 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         last_event_at = 0, stats = { delivered = 0, failed = 0 }
     }
 
-    if not self.subscriptions[event_type] then self.subscriptions[event_type] = {} end
+    if not self.subscriptions[event_type] then 
+        self.subscriptions[event_type] = {} 
+        -- Предкомпиляция маски
+        if Wildcard then
+            self._matchers[event_type] = Wildcard.compile(event_type)
+        end
+    end
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
     
@@ -231,29 +256,39 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     return sub_id
 end
 
---- Рассылает событие всем подписчикам, чьи условия (маски, фильтры, троттлинг) соответствуют событию.
+--- Проверяет соответствие имени события маске.
+--- @param pattern string Маска
+--- @param name string Имя события
+--- @return boolean Результат
+function SubscriptionManager:match(pattern, name)
+    local matcher = self._matchers[pattern]
+    if matcher then return matcher(name) end
+    return pattern == name
+end
+
+--- Рассылает событие всем подписчикам (устаревший метод).
 --- @param event_type string Точное имя события
 --- @param event_data table Данные события
 --- @return number, number Количество успешно доставленных и проваленных уведомлений
 function SubscriptionManager:publish(event_type, event_data)
+    return self:publish_event({
+        type = event_type,
+        data = event_data,
+        timestamp = os_time()
+    })
+end
+
+--- Рассылает объект события всем подписчикам.
+--- @param event table Объект события (из EventDispatcher)
+--- @return number, number Количество успешно доставленных и проваленных уведомлений
+function SubscriptionManager:publish_event(event)
     local delivered, failed = 0, 0
     local now = os_time()
+    local event_type = event.type
+    local event_data = event.data
 
     for pattern, subs in pairs(self.subscriptions) do
-        -- Оптимизация: кэширование результатов wildcard match
-        local cache = self._wildcard_cache[pattern]
-        if not cache then
-            cache = {}
-            self._wildcard_cache[pattern] = cache
-        end
-        
-        local is_match = cache[event_type]
-        if is_match == nil then
-            is_match = match_wildcard(pattern, event_type)
-            cache[event_type] = is_match
-        end
-
-        if is_match then
+        if self:match(pattern, event_type) then
             for id, sub in pairs(subs) do
                 if sub.active then
                     local should_send = true
@@ -266,7 +301,7 @@ function SubscriptionManager:publish(event_type, event_data)
                         end
                     end
                     if should_send then
-                        local success, err = Transport[sub.transport](sub.callback, event_data, event_type)
+                        local success, err = Transport[sub.transport](sub.callback, event, event_type)
                         if success then
                             delivered = delivered + 1
                             sub.stats.delivered = sub.stats.delivered + 1
@@ -323,8 +358,13 @@ function SubscriptionManager:unsubscribe(sub_id)
         if subs[sub_id] then
             subs[sub_id] = nil
             self.stats.total = self.stats.total - 1
-            -- Сбрасываем кэш масок при изменении состава подписок
-            self._wildcard_cache = {}
+            
+            -- Если подписок на этот тип больше нет, удаляем матчер
+            if not next(subs) then
+                self.subscriptions[event_type] = nil
+                self._matchers[event_type] = nil
+            end
+            
             self:save()
             return true
         end

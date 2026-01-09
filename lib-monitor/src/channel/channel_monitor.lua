@@ -11,6 +11,7 @@ local collectgarbage = collectgarbage
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
@@ -113,17 +114,11 @@ function ChannelMonitor.new(config, channel_data)
     self._last_active_id = nil
     self._cached_source = nil
     
-    -- Инициализация пула таблиц отчетов
-    self._reports = {
-        channels = {},
-        error = {},
-        rate_stat = {}
-    }
-    for _, report in pairs(self._reports) do
-        Utils.init_report(report, "Channel", self._name)
-        report.display_name = self._display_name
-        report.monitor = self._config.monitor
-    end
+    -- Таблица для Pull-запросов (всегда актуальное состояние)
+    self._current_status_table = {}
+    Utils.init_report(self._current_status_table, "Channel", self._name)
+    self._current_status_table.display_name = self._display_name
+    self._current_status_table.monitor = self._config.monitor
 
     self._status = {
         cc_errors = 0,
@@ -225,19 +220,25 @@ end
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local r = self._reports.error
+    local r = TablePool.get("report")
+    Utils.init_report(r, "Channel", self._name)
+    r.display_name = self._display_name
+    r.monitor = self._config.monitor
     r.error = data.error
     r.timestamp = os_time()
-    self:publish(json_encode(r), "error")
+    self:publish(r, "error", true)
 end
 
 --- Обработка статистики битрейта
 --- @param data table Данные статистики
 function ChannelMonitor:process_rate_stat_data(data)
-    local r = self._reports.rate_stat
+    local r = TablePool.get("report")
+    Utils.init_report(r, "Channel", self._name)
+    r.display_name = self._display_name
+    r.monitor = self._config.monitor
     r.rate_stat = data
     r.timestamp = os_time()
-    self:publish(json_encode(r), "rate_stat")
+    self:publish(r, "rate_stat", true)
 end
 
 --- Обработка PSI данных
@@ -333,19 +334,20 @@ function ChannelMonitor:process_total_data(data)
        (active_id ~= self._last_active_id or self._force_timer >= self._force_interval or self._current_method(status, data, self._config.rate)) 
     then
         self:_reset_force_timer()
-        local r = self:_build_status_table(data)
-        local current_json = json_encode(r)
+        self:_clear_json_cache()
+        
+        -- Обновляем таблицу для Pull-запросов
+        self:_build_status_table(self._current_status_table, data)
+        
+        -- Создаем таблицу для Push-уведомления из пула
+        local r = TablePool.get("report")
+        Utils.init_report(r, "Channel", self._name)
+        r.display_name = self._display_name
+        r.monitor = self._config.monitor
+        self:_build_status_table(r, data)
 
-        -- Публикуем данные и обновляем кэш
-        if current_json then
-            if current_json ~= self._json_cache then
-                self:publish(current_json, "channels")
-                self._json_cache = current_json
-            end
-        else
-            Logger.error(COMPONENT_NAME, "[%s] process_total_data: json_encode вернул nil", tostring(self._name))
-            return
-        end
+        -- Публикуем таблицу (EventDispatcher сам решит, когда делать encode)
+        self:publish(r, "channels", true)
 
         -- Обновление состояния для следующего сравнения
         status.ready = data.on_air
@@ -394,12 +396,12 @@ function ChannelMonitor:clear_stats()
     self._rate_stat = nil
 end
 
---- Внутренний метод для сборки таблицы полного статуса
---- Обновляет таблицу в пуле self._reports.channels
+--- Внутренний метод для сборки таблицы полного статуса.
 --- @private
+--- @param t table Целевая таблица для заполнения
 --- @param data table|nil Текущие данные (если есть)
 --- @return table Таблица статуса
-function ChannelMonitor:_build_status_table(data)
+function ChannelMonitor:_build_status_table(t, data)
     local source = self:get_cached_source()
     local status = self._status or {}
     
@@ -410,7 +412,6 @@ function ChannelMonitor:_build_status_table(data)
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
 
-    local t = self._reports.channels
     t.status = ready
     t.bitrate = bitrate
     t.cc_errors = cc
@@ -425,10 +426,16 @@ function ChannelMonitor:_build_status_table(data)
     return t
 end
 
---- Возвращает полный текущий статус монитора
+--- Возвращает актуальные данные в виде таблицы (сырые данные).
+--- @return table|nil Таблица данных
+function ChannelMonitor:get_status_table()
+    return self._current_status_table
+end
+
+--- Возвращает полный текущий статус монитора (алиас для совместимости)
 --- @return table Статус монитора
 function ChannelMonitor:get_full_status()
-    return self:_build_status_table()
+    return self:get_status_table()
 end
 
 --- Останавливает мониторинг и уничтожает объект.
@@ -475,7 +482,7 @@ function ChannelMonitor:destroy(force)
     self._stream_json = nil
     self._upstream = nil
     self._cached_source = nil
-    self._reports = nil
+    self._current_status_table = nil
     self._json_cache = nil
     self._current_method = nil
 

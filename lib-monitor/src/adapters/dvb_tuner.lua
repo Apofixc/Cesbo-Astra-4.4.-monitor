@@ -13,6 +13,7 @@ local bit32 = bit32
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -145,17 +146,13 @@ function DvbTuner.new(conf)
     self._last_status_num = -1
     self._current_flags = STATUS_LOOKUP[0]
     
-    -- Инициализация пула таблиц отчетов
-    self._reports = {
-        dvb = {}
-    }
-    for _, report in pairs(self._reports) do
-        Utils.init_report(report, "dvb", self._name)
-        report.name_adapter = self._name
-        report.format = conf.type or ""
-        report.modulation = conf.modulation or ""
-        report.source = conf.tp or conf.frequency
-    end
+    -- Таблица для Pull-запросов (всегда актуальное состояние)
+    self._current_status_table = {}
+    Utils.init_report(self._current_status_table, "dvb", self._name)
+    self._current_status_table.name_adapter = self._name
+    self._current_status_table.format = conf.type or ""
+    self._current_status_table.modulation = conf.modulation or ""
+    self._current_status_table.source = conf.tp or conf.frequency
 
     return self
 end
@@ -211,6 +208,8 @@ function DvbTuner:start()
            (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate)) 
         then
             self:_reset_force_timer()
+            self:_clear_json_cache()
+
             local status = self._status
             status.status = data.status or -1
             status.signal = data.signal or -1
@@ -244,17 +243,20 @@ function DvbTuner:start()
                 end
             end
 
-            -- Формируем полный статус для публикации
-            local r = self:_build_status_table()
-            local current_json = json_encode(r)
-            
-            -- Публикуем данные и обновляем кэш
-            if current_json then
-                self:publish(current_json, "dvb")
-                self._json_cache = current_json
-            else
-                Logger.error(COMPONENT_NAME, "[%s] callback: json_encode вернул nil", tostring(self._name))
-            end
+            -- Обновляем таблицу для Pull-запросов
+            self:_build_status_table(self._current_status_table)
+
+            -- Создаем таблицу для Push-уведомления из пула
+            local r = TablePool.get("report")
+            Utils.init_report(r, "dvb", self._name)
+            r.name_adapter = self._name
+            r.format = self._config.type or ""
+            r.modulation = self._config.modulation or ""
+            r.source = self._config.tp or self._config.frequency
+            self:_build_status_table(r)
+
+            -- Публикуем таблицу
+            self:publish(r, "dvb", true)
         end
     end
 
@@ -317,13 +319,12 @@ function DvbTuner:update_parameters(params)
 end
 
 
---- Внутренний метод для сборки таблицы полного статуса
---- Обновляет таблицу в пуле self._reports.dvb
+--- Внутренний метод для сборки таблицы полного статуса.
 --- @private
+--- @param t table Целевая таблица для заполнения
 --- @return table Таблица статуса
-function DvbTuner:_build_status_table()
+function DvbTuner:_build_status_table(t)
     local status = self._status or {}
-    local t = self._reports.dvb
     t.status = status.status or 0
     t.signal = status.signal or 0
     t.snr = status.snr or 0
@@ -335,10 +336,16 @@ function DvbTuner:_build_status_table()
     return t
 end
 
---- Возвращает полный текущий статус тюнера
+--- Возвращает актуальные данные в виде таблицы (сырые данные).
+--- @return table|nil Таблица данных
+function DvbTuner:get_status_table()
+    return self._current_status_table
+end
+
+--- Возвращает полный текущий статус тюнера (алиас для совместимости)
 --- @return table Статус тюнера
 function DvbTuner:get_full_status()
-    return self:_build_status_table()
+    return self:get_status_table()
 end
 
 --- Возвращает детальные флаги состояния тюнера (has_signal, has_lock и т.д.)
@@ -467,7 +474,7 @@ function DvbTuner:destroy(force)
     self._json_cache = nil
     self._stats = nil
     self._backup = nil
-    self._reports = nil
+    self._current_status_table = nil
 
     Logger.debug(COMPONENT_NAME, "Объект тюнера уничтожен")
     collectgarbage()

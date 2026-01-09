@@ -22,6 +22,7 @@ local math_random = math.random
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer = ModuleManager.get_global_dependency("timer")
@@ -35,7 +36,6 @@ local COMPONENT_NAME = "EventDispatcher"
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
 --- @field private stats table Статистика диспетчера
 --- @field private active boolean Флаг активности обработки
---- @field private _wildcard_cache table<string, table<string, boolean>> Кэш результатов сопоставления масок
 local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
 
@@ -67,20 +67,6 @@ local function generate_event_id()
     return string_format("evt_%d_%d", os_time(), math_random(10000, 99999))
 end
 
---- Проверяет соответствие имени события маске (например, "channel:*" соответствует "channel:created")
---- @private
---- @param pattern string Маска события
---- @param name string Реальное имя события
---- @return boolean Результат проверки
-local function match_wildcard(pattern, name)
-    if pattern == name or pattern == "*" then return true end
-    if not pattern:find("*") then return pattern == name end
-    
-    -- Превращаем маску в регулярное выражение Lua
-    local regex = pattern:gsub("([%^%$%(%)%%%.%[%]%+%-%?])", "%%%1"):gsub("%*", ".*")
-    return name:match("^" .. regex .. "$") ~= nil
-end
-
 --- Возвращает единственный экземпляр EventDispatcher (Singleton)
 --- @return EventDispatcher Экземпляр диспетчера
 function EventDispatcher.get_instance()
@@ -98,7 +84,6 @@ function EventDispatcher:initialize()
     
     -- Кэш последних значений (Last Value Cache)
     self._lvc = {}
-    self._wildcard_cache = {}
     
     self.event_queues = {
         [self.PRIORITIES.CRITICAL] = {},
@@ -122,9 +107,9 @@ end
 
 --- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
 --- @param event_type string Тип события (например, "channel:error")
---- @param event_data table Таблица с данными события
+--- @param event_data table|string Данные события
 --- @param priority? number [Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).]
---- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC).]
+--- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC), is_table (данные из пула).]
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
@@ -143,8 +128,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         type = event_type,
         data = event_data,
         priority = p,
-        timestamp = (event_data and event_data.timestamp) or os_time(),
-        source = (options and options.source) or "unknown"
+        timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time(),
+        source = (options and options.source) or "unknown",
+        is_table = options and options.is_table or (type(event_data) == "table"),
+        json_cache = nil -- Кэш для ленивой сериализации
     }
     
     local queue = self.event_queues[p]
@@ -167,20 +154,9 @@ end
 function EventDispatcher:get_last_values(event_type)
     local result = {}
     
-    local cache = self._wildcard_cache[event_type]
-    if not cache then
-        cache = {}
-        self._wildcard_cache[event_type] = cache
-    end
-
+    -- Используем SubscriptionManager для сопоставления масок
     for name, entry in pairs(self._lvc) do
-        local is_match = cache[name]
-        if is_match == nil then
-            is_match = match_wildcard(event_type, name)
-            cache[name] = is_match
-        end
-        
-        if is_match then
+        if self.subscription_manager:match(event_type, name) then
             result[name] = entry
         end
     end
@@ -244,8 +220,14 @@ function EventDispatcher:process_queue()
         while #queue > 0 do
             local event = table_remove(queue, 1)
             if event then
-                -- SubscriptionManager теперь сам умеет обрабатывать маски
-                self.subscription_manager:publish(event.type, event.data)
+                -- Передаем весь объект события для поддержки ленивого JSON
+                self.subscription_manager:publish_event(event)
+                
+                -- Если данные были из пула, возвращаем их
+                if event.is_table and TablePool then
+                    TablePool.release(event.data, "report")
+                end
+                
                 self.stats.processed = self.stats.processed + 1
             end
         end
