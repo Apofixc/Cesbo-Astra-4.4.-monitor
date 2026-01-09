@@ -17,7 +17,7 @@ local tostring = tostring
 local type = type
 
 -- 2. Функции из ModuleManager.get_module()
-local HttpSubscriber = ModuleManager.get_module("http_subscriber")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 
@@ -78,8 +78,9 @@ end
 --- @param content string JSON-данные
 --- @param event_type string Тип события
 function BaseMonitor:publish(content, event_type)
-    if EventBus then
-        EventBus.publish(event_type, content)
+    local dispatcher = EventDispatcher and EventDispatcher.get_instance()
+    if dispatcher then
+        dispatcher:emit(event_type, content)
     end
 end
 

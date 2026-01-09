@@ -70,20 +70,22 @@ ModuleManager.register_module("monitor_config", path_prefix .. "src.config.monit
 
 ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
 ModuleManager.register_module("utils", path_prefix .. "src.utils.utils", {"logger", "monitor_config"})
+ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine", {"logger"})
+ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber", {"logger"})
 
-ModuleManager.register_module("http_subscriber", path_prefix .. "src.utils.http_subscriber", {"logger", "monitor_config"})
+ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager", {"logger", "monitor_config", "utils.filter_engine"})
+ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager"})
 
-ModuleManager.register_module("event_bus", path_prefix .. "src.core.event_bus")
-ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "http_subscriber"})
+ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "core.event_dispatcher"})
 ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
 
-ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "core.base_monitor"})
 ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository", {"logger", "core.base_repository"})
-ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "event_bus"})
+ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "core.event_dispatcher"})
 
-ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "http_subscriber", "core.base_monitor"})
+ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "core.base_monitor"})
 ModuleManager.register_module("channel_repository", path_prefix .. "src.repository.channel_repository", {"logger", "core.base_repository"})
-ModuleManager.register_module("channel", path_prefix .. "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "event_bus", "dvb_repository"})
+ModuleManager.register_module("channel", path_prefix .. "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "core.event_dispatcher", "dvb_repository"})
 
 ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor", {"logger"})
 
@@ -93,10 +95,10 @@ ModuleManager.register_module("channel_routes", path_prefix .. "http.routes.chan
 ModuleManager.register_module("dvb_routes", path_prefix .. "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_repository"})
 ModuleManager.register_module("monitor_routes", path_prefix .. "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
 ModuleManager.register_module("system_routes", path_prefix .. "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
-ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes", {"logger", "http_helpers"})
+ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes", {"logger", "http_helpers", "core.event_dispatcher"})
 ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils", {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
 ModuleManager.register_module("http_server", path_prefix .. "http.http_server", {
-    "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils"
+    "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils", "ws_subscriber"
 })
 
 -- Валидация зависимостей
@@ -115,6 +117,12 @@ local Logger = ModuleManager.get_module("logger")
 local Channel = ModuleManager.get_module("channel")
 local Adapter = ModuleManager.get_module("adapter")
 local HttpServer = ModuleManager.get_module("http_server")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+
+-- Инициализация глобального диспетчера событий
+if EventDispatcher then
+    _G.EventBus = EventDispatcher.get_instance()
+end
 
 -- Экспорт основных функций в глобальную область видимости для обратной совместимости
 if type(Channel) == "table" then

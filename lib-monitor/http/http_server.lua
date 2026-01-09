@@ -23,9 +23,11 @@ local DvbRoutes = ModuleManager.get_module("dvb_routes")
 local SystemRoutes = ModuleManager.get_module("system_routes")
 local SubscriberRoutes = ModuleManager.get_module("subscriber_routes")
 local RoutesUtils = ModuleManager.get_module("routes_utils")
+local WsSubscriber = ModuleManager.get_module("ws_subscriber")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_server = ModuleManager.get_global_dependency("http_server")
+local http_websocket = ModuleManager.get_global_dependency("http_websocket")
 local timer = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
@@ -290,6 +292,9 @@ function HttpServer.start(addr, port, retry_count, force_free)
 
         -- Subscribers
         ["/api/subscribers"] = { GET = SubscriberRoutes.get_subscribers, POST = SubscriberRoutes.subscribe, DELETE = SubscriberRoutes.unsubscribe },
+
+        -- WebSocket
+        ["/api/ws"] = http_websocket and http_websocket({ callback = WsSubscriber.on_message }) or nil,
 
         -- Utils
         ["/api/utils/resource-stats"] = { GET = RoutesUtils.get_resource_stats },
