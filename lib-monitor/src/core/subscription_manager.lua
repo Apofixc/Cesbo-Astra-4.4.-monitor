@@ -53,10 +53,10 @@ local retry_queue = {}
 --- @return string UUID
 local function generate_uuid()
     local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    return string.gsub(template, '[xy]', function (c)
+    return (string.gsub(template, '[xy]', function (c)
         local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
         return string.format('%x', v)
-    end)
+    end))
 end
 
 --- Проверяет соответствие имени события маске (wildcard).
