@@ -89,16 +89,24 @@ end
 
 --- Создает глубокую копию таблицы
 --- @param t table Исходная таблица
+--- @param cache? table [Внутренний кэш для обработки циклических ссылок]
 --- @return table Глубокая копия таблицы
-function Utils.deep_copy(t)
+function Utils.deep_copy(t, cache)
     if type(t) ~= "table" then
         return t
     end
 
+    cache = cache or {}
+    if cache[t] then
+        return cache[t]
+    end
+
     local copy = {}
+    cache[t] = copy
+    
     for k, v in pairs(t) do
         if type(v) == "table" then
-            copy[k] = Utils.deep_copy(v)
+            copy[k] = Utils.deep_copy(v, cache)
         else
             copy[k] = v
         end

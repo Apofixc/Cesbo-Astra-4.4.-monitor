@@ -51,6 +51,7 @@ local METHOD_RATIO = 3
 --- @field private _astra_conf table|nil Рабочая конфигурация для Astra
 --- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field private _psi table|nil Таблица с PSI данными
+--- @field private _psi_count number Текущее количество таблиц в кэше PSI
 --- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
 --- @field private _psi_timer any|nil Таймер сбора PSI
 local DvbTuner = setmetatable({}, BaseMonitor)
@@ -144,6 +145,7 @@ function DvbTuner.new(conf)
     }
     self._temp_analyzer = nil
     self._psi = {}
+    self._psi_count = 0
     self._psi_timer = nil
     self._backup = nil
     self._last_status_num = -1
@@ -384,7 +386,16 @@ function DvbTuner:psi_update()
         callback = function(data)
             if not self or not data or not self._temp_analyzer then return end
             if data.psi then
-                self._psi[data.psi:upper()] = data
+                local table_id = data.psi:upper()
+                if not self._psi[table_id] then
+                    -- Лимит на PSI в тюнере (используем константу из ChannelMonitor или 50 по умолчанию)
+                    if self._psi_count < 50 then
+                        self._psi[table_id] = data
+                        self._psi_count = self._psi_count + 1
+                    end
+                else
+                    self._psi[table_id] = data
+                end
             end
         end
     })
@@ -483,6 +494,7 @@ function DvbTuner:destroy(force)
     self._json_cache = nil
     self._stats = nil
     self._psi = nil
+    self._psi_count = nil
     self._backup = nil
     self._reports = nil
 

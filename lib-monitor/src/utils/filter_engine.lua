@@ -23,6 +23,10 @@ local COMPONENT_NAME = "FilterEngine"
 --- @field private duration_state table<string, table<number, number>> Состояние фильтров по длительности
 local FilterEngine = {}
 
+-- Кэш для скомпилированных скриптов и путей
+local script_cache = {}
+local path_cache = {}
+
 --- @type table<string, function> Операторы сравнения
 local OPERATORS = {
     eq = function(a, b) return a == b end,
@@ -45,10 +49,20 @@ local duration_state = {}
 --- @return any|nil Значение поля или nil
 local function get_nested_value(data, path)
     if not path or path == "" then return data end
+    
+    local parts = path_cache[path]
+    if not parts then
+        parts = {}
+        for part in path:gmatch("[^%.]+") do
+            parts[#parts + 1] = part
+        end
+        path_cache[path] = parts
+    end
+
     local current = data
-    for part in path:gmatch("[^%.]+") do
+    for i = 1, #parts do
         if type(current) ~= "table" then return nil end
-        current = current[part]
+        current = current[parts[i]]
     end
     return current
 end
@@ -104,13 +118,21 @@ function FilterEngine.match(data, filters, sub_id)
 
     -- 1. Проверка Lua-скрипта
     if filters.script and type(filters.script) == "string" then
-        local env = { data = data, type = type, tostring = tostring, os_time = os_time }
-        local func, err = load(filters.script, "=(filter_script)", "t", env)
-        if func then
-            local ok, res = pcall(func)
-            if ok then return res == true end
+        local func = script_cache[filters.script]
+        if not func then
+            local env = { data = data, type = type, tostring = tostring, os_time = os_time }
+            local err
+            func, err = load(filters.script, "=(filter_script)", "t", env)
+            if func then
+                script_cache[filters.script] = func
+            else
+                Logger.error(COMPONENT_NAME, "Ошибка компиляции скрипта фильтра: %s", tostring(err))
+                return false
+            end
         end
-        return false
+        
+        local ok, res = pcall(func)
+        return ok and res == true
     end
 
     -- 2. Проверка условий (conditions)

@@ -19,10 +19,15 @@ ResourceMonitor._last_stime = 0
 ResourceMonitor._last_cpu_check = 0
 ResourceMonitor._report = {}
 
+-- Кэширование путей
+local PROC_STAT = "/proc/self/stat"
+local PROC_STATUS = "/proc/self/status"
+
 -- Инициализация PID
-local f = io_open("/proc/self/stat", "r")
+local f = io_open(PROC_STAT, "r")
 if f then
-    ResourceMonitor._pid = f:read("*a"):match("^(%d+)")
+    local content = f:read(64) -- PID всегда в начале
+    if content then ResourceMonitor._pid = content:match("^(%d+)") end
     f:close()
 end
 
@@ -33,27 +38,34 @@ function ResourceMonitor.check()
     
     -- Чтение /proc/self/status
     local status = {}
-    local f_status = io_open("/proc/self/status", "r")
+    local f_status = io_open(PROC_STATUS, "r")
     if f_status then
+        -- Оптимизированное чтение: ищем только нужные поля
         for line in f_status:lines() do
             local key, val = line:match("^(%w+):%s+(.+)$")
-            if key then status[key] = val end
+            if key == "VmRSS" or key == "VmSize" or key == "Threads" then
+                status[key] = val
+            end
         end
         f_status:close()
     end
 
     -- Чтение /proc/self/stat для CPU
     local utime, stime = 0, 0
-    local f_stat = io_open("/proc/self/stat", "r")
+    local f_stat = io_open(PROC_STAT, "r")
     if f_stat then
         local content = f_stat:read("*a")
         f_stat:close()
-        local i = 1
+        
+        -- Оптимизированный парсинг: utime и stime - это 14-й и 15-й параметры
+        local count = 0
         for val in content:gmatch("[^%s]+") do
-            if i == 14 then utime = tonumber(val) or 0
-            elseif i == 15 then stime = tonumber(val) or 0
+            count = count + 1
+            if count == 14 then utime = tonumber(val) or 0
+            elseif count == 15 then 
+                stime = tonumber(val) or 0
+                break -- Дальше парсить не нужно
             end
-            i = i + 1
         end
     end
 

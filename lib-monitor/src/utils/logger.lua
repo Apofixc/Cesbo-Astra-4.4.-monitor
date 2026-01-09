@@ -30,8 +30,11 @@ local context_stack = {}
 local current_context_id = nil
 local context_counter = 0
 
--- Кэширование уровня логирования
+-- Кэширование уровня логирования и конфига
 local cached_log_level = nil
+local cached_log_format = nil
+local last_config_check = 0
+local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Logger
@@ -48,10 +51,23 @@ function Logger.refresh_log_level()
     cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
 end
 
-local function get_current_level()
-    if not cached_log_level then
-        Logger.refresh_log_level()
+local function refresh_cache_if_needed()
+    local now = os.time()
+    if not cached_log_level or (now - last_config_check) > CONFIG_REFRESH_INTERVAL then
+        local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
+        if success and config and type(config) == "table" then
+            cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
+            cached_log_format = config.LogFormat
+        else
+            cached_log_level = cached_log_level or LOG_LEVELS.INFO
+            cached_log_format = cached_log_format or "TEXT"
+        end
+        last_config_check = now
     end
+end
+
+local function get_current_level()
+    refresh_cache_if_needed()
     return cached_log_level
 end
 
@@ -73,8 +89,7 @@ local function write_log(level_name, component, format_str, ...)
     end
 
     if should_log(level) then
-        local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
-        local use_json = (success and config and type(config) == "table") and config.LogFormat == "JSON"
+        local use_json = (cached_log_format == "JSON")
 
         if use_json and json_encode then
             local log_data = {

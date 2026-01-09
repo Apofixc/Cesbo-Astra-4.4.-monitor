@@ -35,6 +35,7 @@ local COMPONENT_NAME = "EventDispatcher"
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
 --- @field private stats table Статистика диспетчера
 --- @field private active boolean Флаг активности обработки
+--- @field private _wildcard_cache table<string, table<string, boolean>> Кэш результатов сопоставления масок
 local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
 
@@ -97,6 +98,7 @@ function EventDispatcher:initialize()
     
     -- Кэш последних значений (Last Value Cache)
     self._lvc = {}
+    self._wildcard_cache = {}
     
     self.event_queues = {
         [self.PRIORITIES.CRITICAL] = {},
@@ -164,8 +166,21 @@ end
 --- @return table<string, table> Таблица последних событий, где ключ - точное имя события
 function EventDispatcher:get_last_values(event_type)
     local result = {}
+    
+    local cache = self._wildcard_cache[event_type]
+    if not cache then
+        cache = {}
+        self._wildcard_cache[event_type] = cache
+    end
+
     for name, entry in pairs(self._lvc) do
-        if match_wildcard(event_type, name) then
+        local is_match = cache[name]
+        if is_match == nil then
+            is_match = match_wildcard(event_type, name)
+            cache[name] = is_match
+        end
+        
+        if is_match then
             result[name] = entry
         end
     end

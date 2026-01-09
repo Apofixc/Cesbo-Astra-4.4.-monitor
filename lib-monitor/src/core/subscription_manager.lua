@@ -42,6 +42,7 @@ local RETRY_DELAY = 5
 --- @class SubscriptionManager
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
 --- @field private stats table Глобальная статистика подписок
+--- @field private _wildcard_cache table<string, table<string, boolean>> Кэш результатов сопоставления масок
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
@@ -136,6 +137,7 @@ function SubscriptionManager.new()
     local self = setmetatable({}, SubscriptionManager)
     self.subscriptions = {} -- [event_type][subscription_id] = sub_data
     self.stats = { total = 0, delivered = 0, failed = 0 }
+    self._wildcard_cache = {} -- [pattern][event_type] = boolean
     self:load()
     self:start_retry_processor()
     return self
@@ -238,7 +240,20 @@ function SubscriptionManager:publish(event_type, event_data)
     local now = os_time()
 
     for pattern, subs in pairs(self.subscriptions) do
-        if match_wildcard(pattern, event_type) then
+        -- Оптимизация: кэширование результатов wildcard match
+        local cache = self._wildcard_cache[pattern]
+        if not cache then
+            cache = {}
+            self._wildcard_cache[pattern] = cache
+        end
+        
+        local is_match = cache[event_type]
+        if is_match == nil then
+            is_match = match_wildcard(pattern, event_type)
+            cache[event_type] = is_match
+        end
+
+        if is_match then
             for id, sub in pairs(subs) do
                 if sub.active then
                     local should_send = true
@@ -308,6 +323,8 @@ function SubscriptionManager:unsubscribe(sub_id)
         if subs[sub_id] then
             subs[sub_id] = nil
             self.stats.total = self.stats.total - 1
+            -- Сбрасываем кэш масок при изменении состава подписок
+            self._wildcard_cache = {}
             self:save()
             return true
         end
