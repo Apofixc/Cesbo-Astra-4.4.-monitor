@@ -2,7 +2,7 @@
 -- Модуль `utils.filter_engine`
 --
 -- Реализует логику фильтрации событий. Поддерживает простые сравнения,
--- операторы (gt, lt, matches) и выполнение Lua-выражений.
+-- операторы (gt, lt, matches), выполнение Lua-выражений и фильтры по длительности.
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
@@ -11,6 +11,7 @@ local pairs = pairs
 local pcall = pcall
 local loadstring = loadstring or load
 local tostring = tostring
+local os_time = os_time or os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -21,8 +22,11 @@ local COMPONENT_NAME = "FilterEngine"
 --- @class FilterEngine
 local FilterEngine = {}
 
---- Получает значение из таблицы по вложенному пути (например, "total.bitrate")
---- @private
+-- Состояние для фильтров по длительности (Duration)
+-- Структура: state[sub_id][condition_index] = { first_match_time }
+local duration_state = {}
+
+--- Получает значение из таблицы по вложенному пути
 local function get_nested_value(data, path)
     if not path or path == "" then return data end
     local current = data
@@ -46,40 +50,52 @@ local OPERATORS = {
 }
 
 --- Проверяет соответствие данных условию
---- @private
-local function check_condition(data, condition)
+local function check_condition(data, condition, sub_id, cond_idx)
     if not condition.field then return true end
     
     local value = get_nested_value(data, condition.field)
     local op = condition.op or "eq"
     local target = condition.value
+    local duration = condition.duration -- в секундах
 
     local func = OPERATORS[op]
-    if func then
-        return func(value, target)
+    local is_match = func and func(value, target) or false
+
+    -- Обработка длительности (Duration)
+    if duration and duration > 0 and sub_id then
+        if not duration_state[sub_id] then duration_state[sub_id] = {} end
+        local state = duration_state[sub_id]
+        
+        if is_match then
+            if not state[cond_idx] then
+                state[cond_idx] = os_time()
+                return false -- Еще не прошло достаточно времени
+            end
+            if (os_time() - state[cond_idx]) >= duration then
+                return true -- Условие выполняется дольше чем duration
+            end
+            return false
+        else
+            state[cond_idx] = nil -- Сброс, если условие перестало выполняться
+            return false
+        end
     end
     
-    return false
+    return is_match
 end
 
 --- Проверяет данные события на соответствие фильтрам
---- @param data table Данные события
---- @param filters table Схема фильтров
---- @return boolean Результат проверки
-function FilterEngine.match(data, filters)
+function FilterEngine.match(data, filters, sub_id)
     if not filters or next(filters) == nil then return true end
 
-    -- 1. Проверка Lua-скрипта (максимальная гибкость)
+    -- 1. Проверка Lua-скрипта
     if filters.script and type(filters.script) == "string" then
-        local env = { data = data, type = type, tostring = tostring }
+        local env = { data = data, type = type, tostring = tostring, os_time = os_time }
         local func, err = loadstring(filters.script)
         if func then
             setfenv(func, env)
             local ok, res = pcall(func)
             if ok then return res == true end
-            Logger.error(COMPONENT_NAME, "Ошибка выполнения скрипта фильтра: %s", tostring(res))
-        else
-            Logger.error(COMPONENT_NAME, "Ошибка компиляции скрипта фильтра: %s", tostring(err))
         end
         return false
     end
@@ -87,21 +103,20 @@ function FilterEngine.match(data, filters)
     -- 2. Проверка условий (conditions)
     if filters.conditions and type(filters.conditions) == "table" then
         local logic = filters.logic or "and"
-        
         if logic == "and" then
-            for _, cond in pairs(filters.conditions) do
-                if not check_condition(data, cond) then return false end
+            for i, cond in pairs(filters.conditions) do
+                if not check_condition(data, cond, sub_id, i) then return false end
             end
             return true
         elseif logic == "or" then
-            for _, cond in pairs(filters.conditions) do
-                if check_condition(data, cond) then return true end
+            for i, cond in pairs(filters.conditions) do
+                if check_condition(data, cond, sub_id, i) then return true end
             end
             return false
         end
     end
 
-    -- 3. Простая фильтрация по полям (обратная совместимость)
+    -- 3. Простая фильтрация
     for key, val in pairs(filters) do
         if key ~= "conditions" and key ~= "logic" and key ~= "script" then
             if data[key] ~= val then return false end
