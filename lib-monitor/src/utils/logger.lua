@@ -1,5 +1,6 @@
 -- 1. Стандартные Lua функции
 local ipairs = ipairs
+local os_time = os.time
 local pcall = pcall
 local select = select
 local string_format = string.format
@@ -52,7 +53,7 @@ function Logger.refresh_log_level()
 end
 
 local function refresh_cache_if_needed()
-    local now = os.time()
+    local now = os_time()
     if not cached_log_level or (now - last_config_check) > CONFIG_REFRESH_INTERVAL then
         local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
         if success and config and type(config) == "table" then
@@ -99,7 +100,7 @@ local function write_log(level_name, component, format_str, ...)
 
         if use_json and json_encode then
             local log_data = {
-                timestamp = os.time(),
+                timestamp = os_time(),
                 level = level_name,
                 component = component,
                 message = msg,
