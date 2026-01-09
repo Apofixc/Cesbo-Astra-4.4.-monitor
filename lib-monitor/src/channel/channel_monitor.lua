@@ -20,21 +20,8 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream = "Unknown" }
-local FORCE_SEND_INTERVAL = 300
 local MAX_COUNTER = 1000000000
 local MAX_ERROR_COUNT = 1000000
-local MAX_PSI_CACHE_SIZE = 50
-
--- Стандартные имена PSI таблиц (предотвращает создание новых строк при :upper())
-local PSI_NAME_MAP = {
-    pmt = "PMT",
-    sdt = "SDT",
-    nit = "NIT",
-    pat = "PAT",
-    tdt = "TDT",
-    tot = "TOT",
-    eit = "EIT",
-}
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
@@ -54,13 +41,9 @@ local ratio = Utils.ratio
 --- @field private _stats table Статистика анализа по PID
 --- @field private _stats_count number Текущее количество отслеживаемых PID
 --- @field private _rate_stat table|nil Статистика битрейта (если включено rate_stat)
---- @field private _force_timer number Таймер принудительной отправки статуса
---- @field private _check_timer number Таймер интервала проверки
 --- @field private _upstream any Объект апстрима
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
---- @field private _psi table|nil Кэш PSI данных
---- @field private _psi_count number Текущее количество таблиц в кэше PSI
 local ChannelMonitor = setmetatable({}, BaseMonitor)
 ChannelMonitor.__index = ChannelMonitor
 
@@ -127,8 +110,6 @@ function ChannelMonitor.new(config, channel_data)
 
     self._stream_json = config.stream_json or {}
     self._upstream = config.upstream
-    self._force_timer = 0
-    self._check_timer = 0
     self._last_active_id = nil
     self._cached_source = nil
     
@@ -144,8 +125,6 @@ function ChannelMonitor.new(config, channel_data)
         report.monitor = self._config.monitor
     end
 
-    self._psi = {}
-    self._psi_count = 0
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -264,29 +243,10 @@ end
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
-    local raw_psi = data.psi
-    if not raw_psi then return end
-    
-    -- Используем предопределенную карту или делаем upper()
-    local table_id = PSI_NAME_MAP[raw_psi]
-    if not table_id then
-        table_id = raw_psi:upper()
-        -- Кэшируем результат upper для этого инстанса, если это новая таблица
-        PSI_NAME_MAP[raw_psi] = table_id
-    end
+    -- Сохраняем таблицу в базовое хранилище
+    self:_process_psi_data(data)
 
-    -- Защита от переполнения кэша PSI
-    if not self._psi[table_id] then
-        if self._psi_count >= MAX_PSI_CACHE_SIZE then
-            Logger.warn(COMPONENT_NAME, "[%s] PSI cache limit reached, ignoring new table: %s", tostring(self._name), table_id)
-            return
-        end
-        self._psi_count = self._psi_count + 1
-    end
-
-    -- Сохраняем сами данные
-    self._psi[table_id] = data
-
+    local table_id = data.psi and data.psi:upper()
     if table_id == "PMT" and type(data.streams) == "table" then
         for _, stream in ipairs(data.streams) do
             local pid = stream.pid
@@ -366,18 +326,13 @@ function ChannelMonitor:process_total_data(data)
     if status.cc_errors > MAX_ERROR_COUNT then status.cc_errors = MAX_ERROR_COUNT end
     if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
 
-    self._force_timer = self._force_timer + 1
-    if self._check_timer < self._config.time_check then
-        self._check_timer = self._check_timer + 1
-        return
-    end
-    self._check_timer = 0
-
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
-    local input_changed = active_id ~= self._last_active_id
-    local is_force = self._force_timer >= FORCE_SEND_INTERVAL
-
-    if input_changed or is_force or self._current_method(status, data, self._config.rate) then
+    
+    -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
+    if self:_should_send(self._config.time_check) and 
+       (active_id ~= self._last_active_id or self._force_timer >= self._force_interval or self._current_method(status, data, self._config.rate)) 
+    then
+        self:_reset_force_timer()
         local r = self:_build_status_table(data)
         local current_json = json_encode(r)
 
@@ -399,19 +354,7 @@ function ChannelMonitor:process_total_data(data)
         status.cc_errors = 0
         status.pes_errors = 0
         self._last_active_id = active_id
-        self._force_timer = 0
     end
-end
-
---- Возвращает закэшированные PSI данные
---- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
---- @return table|nil Данные PSI или nil
-function ChannelMonitor:get_psi(table_name)
-    if not self._psi then return nil end
-    if table_name then
-        return self._psi[table_name:upper()]
-    end
-    return self._psi
 end
 
 --- Устанавливает экземпляр входного потока
@@ -523,8 +466,7 @@ function ChannelMonitor:destroy(force)
     end
 
     -- Очистка кэшей и данных
-    self._psi = nil
-    self._psi_count = nil
+    self:_clear_psi()
     self._stats = nil
     self._stats_count = nil
     self._status = nil
@@ -540,8 +482,6 @@ function ChannelMonitor:destroy(force)
     -- Обнуление идентификаторов
     self._name = nil
     self._display_name = nil
-    self._force_timer = nil
-    self._check_timer = nil
     self._last_active_id = nil
 
     Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")

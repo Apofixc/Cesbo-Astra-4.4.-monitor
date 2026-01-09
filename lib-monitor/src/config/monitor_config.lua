@@ -70,7 +70,21 @@ MonitorConfig.MaxTimeCheck = 300
 MonitorConfig.MinMethodComparison = 1
 MonitorConfig.MaxMethodComparison = 4
 MonitorConfig.HttpTimeout = 10
+MonitorConfig.ForceSendInterval = 300
 MonitorConfig.subscribers = {}
+
+--- Валидирует текущую конфигурацию
+--- @return boolean success, string|nil error_message
+function MonitorConfig.validate()
+    if type(MonitorConfig.LogLevel) ~= "string" then return false, "LogLevel must be a string" end
+    if type(MonitorConfig.LogFormat) ~= "string" then return false, "LogFormat must be a string" end
+    if type(MonitorConfig.MaxPayloadSize) ~= "number" then return false, "MaxPayloadSize must be a number" end
+    if type(MonitorConfig.CorsAllowOrigin) ~= "string" then return false, "CorsAllowOrigin must be a string" end
+    if type(MonitorConfig.ChannelMonitorLimit) ~= "number" then return false, "ChannelMonitorLimit must be a number" end
+    if type(MonitorConfig.DvbMonitorLimit) ~= "number" then return false, "DvbMonitorLimit must be a number" end
+    if type(MonitorConfig.ForceSendInterval) ~= "number" then return false, "ForceSendInterval must be a number" end
+    return true
+end
 
 --- Загружает конфигурацию из внешнего JSON файла
 local function load_from_file()

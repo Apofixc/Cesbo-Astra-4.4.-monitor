@@ -112,6 +112,15 @@ if not success_load then
     error(string.format("[Init] Failed to load modules: %s", tostring(load_error)))
 end
 
+-- Валидация глобальной конфигурации
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+if MonitorConfig and MonitorConfig.validate then
+    local ok, err = MonitorConfig.validate()
+    if not ok then
+        error(string.format("[Init] Configuration validation failed: %s", tostring(err)))
+    end
+end
+
 -- Инициализация объектов из загруженных модулей
 local Logger = ModuleManager.get_module("logger")
 local Channel = ModuleManager.get_module("channel")

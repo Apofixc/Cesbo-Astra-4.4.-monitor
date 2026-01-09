@@ -8,6 +8,10 @@
 --- @field protected _json_cache string|nil Кэш последнего отправленного JSON
 --- @field protected _reports table Пул таблиц для разных типов отчетов
 --- @field protected _current_method function|nil Прямая ссылка на метод сравнения
+--- @field protected _psi table|nil Кэш PSI данных
+--- @field protected _check_timer number Таймер интервала проверки
+--- @field protected _force_timer number Таймер принудительной отправки статуса
+--- @field protected _force_interval number Интервал принудительной отправки
 local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
@@ -46,6 +50,10 @@ function BaseMonitor.new(config, component_name)
     self._instance = nil
     self._json_cache = nil
     self._reports = {}
+    self._psi = {}
+    self._check_timer = 0
+    self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
+    self._force_timer = self._force_interval -- Сразу готов к отправке
     return self
 end
 
@@ -118,6 +126,55 @@ end
 function BaseMonitor:pause()
     self._active = false
     Logger.info(self._component_name, "[%s] Мониторинг приостановлен", tostring(self._name))
+end
+
+--- Обрабатывает входящие PSI данные и сохраняет их в кэш
+--- @protected
+--- @param data table Данные от анализатора Astra
+function BaseMonitor:_process_psi_data(data)
+    local name = data.psi
+    if name then
+        self._psi[name:upper()] = data
+    end
+end
+
+--- Возвращает закэшированные PSI данные
+--- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
+--- @return table|nil Данные PSI или nil
+function BaseMonitor:get_psi(table_name)
+    if not self._psi then return nil end
+    if table_name then
+        return self._psi[table_name:upper()]
+    end
+    return self._psi
+end
+
+--- Очищает кэш PSI данных
+--- @protected
+function BaseMonitor:_clear_psi()
+    self._psi = {}
+end
+
+--- Проверяет, прошел ли интервал времени для выполнения проверки
+--- @protected
+--- @param time_check number Интервал проверки из конфигурации
+--- @return boolean true если интервал прошел, иначе false
+function BaseMonitor:_should_send(time_check)
+    self._force_timer = self._force_timer + 1
+    
+    if self._check_timer < (time_check or 0) then
+        self._check_timer = self._check_timer + 1
+        return false
+    end
+    
+    self._check_timer = 0
+    return true
+end
+
+--- Сбрасывает таймер принудительной отправки
+--- @protected
+function BaseMonitor:_reset_force_timer()
+    self._force_timer = 0
 end
 
 --- Возобновляет мониторинг

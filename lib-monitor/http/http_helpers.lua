@@ -12,6 +12,7 @@ local string_match = string.match
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local json_encode = ModuleManager.get_global_dependency("json.encode")
@@ -41,10 +42,14 @@ function HttpHelpers.send_json(server, client, code, data)
         return true
     end
 
+    local allow_origin = (MonitorConfig and MonitorConfig.CorsAllowOrigin) or "*"
     local response_headers = {
         JSON_HEADERS[1],
         JSON_HEADERS[2],
         "Content-Length: " .. #content,
+        "Access-Control-Allow-Origin: " .. allow_origin,
+        "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers: X-Api-Key, Content-Type",
     }
 
     server:send(client, {
@@ -107,10 +112,14 @@ function HttpHelpers.send_raw_json(server, client, code, content)
         return HttpHelpers.error(server, client, 404, "Data not available in cache")
     end
 
+    local allow_origin = (MonitorConfig and MonitorConfig.CorsAllowOrigin) or "*"
     local response_headers = {
         JSON_HEADERS[1],
         JSON_HEADERS[2],
         "Content-Length: " .. #content,
+        "Access-Control-Allow-Origin: " .. allow_origin,
+        "Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers: X-Api-Key, Content-Type",
     }
 
     server:send(client, {

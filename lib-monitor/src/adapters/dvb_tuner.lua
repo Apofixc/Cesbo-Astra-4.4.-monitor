@@ -50,8 +50,6 @@ local METHOD_RATIO = 3
 --- @field private _stats table|nil Накопленная статистика для расчета качества
 --- @field private _astra_conf table|nil Рабочая конфигурация для Astra
 --- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
---- @field private _psi table|nil Таблица с PSI данными
---- @field private _psi_count number Текущее количество таблиц в кэше PSI
 --- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
 --- @field private _psi_timer any|nil Таймер сбора PSI
 local DvbTuner = setmetatable({}, BaseMonitor)
@@ -80,7 +78,7 @@ local COMPARISON_METHODS = {
 
 --- Вспомогательная функция для очистки ресурсов PSI
 --- @private
-function DvbTuner:_clear_psi()
+function DvbTuner:_clear_psi_resources()
     if self._psi_timer then
         if self._psi_timer.close then
             self._psi_timer:close()
@@ -122,8 +120,6 @@ function DvbTuner.new(conf)
     if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
     
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
-    self._check_timer = 0
-    self._force_timer = 0
     self._stats = {
         ber_sum = 0,
         unc_sum = 0,
@@ -144,8 +140,6 @@ function DvbTuner.new(conf)
         quality = -1
     }
     self._temp_analyzer = nil
-    self._psi = {}
-    self._psi_count = 0
     self._psi_timer = nil
     self._backup = nil
     self._last_status_num = -1
@@ -212,18 +206,11 @@ function DvbTuner:start()
             end
         end
 
-        self._force_timer = (self._force_timer or 0) + 1
-        if self._check_timer < self._astra_conf.time_check then
-            self._check_timer = self._check_timer + 1
-            return
-        end
-        self._check_timer = 0
-
-        local is_force = self._force_timer >= 300 -- FORCE_SEND_INTERVAL
-
-        -- Оптимизация: Сначала проверяем изменения в данных перед формированием JSON
-        if is_force or self._current_method(self._status, data, self._astra_conf.rate) then
-            self._force_timer = 0
+        -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
+        if self:_should_send(self._astra_conf.time_check) and 
+           (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate)) 
+        then
+            self:_reset_force_timer()
             local status = self._status
             status.status = data.status or -1
             status.signal = data.signal or -1
@@ -329,11 +316,6 @@ function DvbTuner:update_parameters(params)
     return true
 end
 
---- Возвращает собранные PSI данные
---- @return table Таблица с PSI данными
-function DvbTuner:get_psi()
-    return self._psi
-end
 
 --- Внутренний метод для сборки таблицы полного статуса
 --- Обновляет таблицу в пуле self._reports.dvb
@@ -384,18 +366,9 @@ function DvbTuner:psi_update()
         name = "psi_update_" .. self._name,
         join_pid = true,
         callback = function(data)
-            if not self or not data or not self._temp_analyzer then return end
+            if not data or not self._temp_analyzer then return end
             if data.psi then
-                local table_id = data.psi:upper()
-                if not self._psi[table_id] then
-                    -- Лимит на PSI в тюнере (используем константу из ChannelMonitor или 50 по умолчанию)
-                    if self._psi_count < 50 then
-                        self._psi[table_id] = data
-                        self._psi_count = self._psi_count + 1
-                    end
-                else
-                    self._psi[table_id] = data
-                end
+                self:_process_psi_data(data)
             end
         end
     })
@@ -408,7 +381,7 @@ function DvbTuner:psi_update()
         interval = 10,
         callback = function()
             if not self or not self._name then return end
-            self:_clear_psi()
+            self:_clear_psi_resources()
             Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self._name))
         end
     })
@@ -445,6 +418,7 @@ function DvbTuner:destroy(force)
     -- 1. Остановка логики мониторинга
     self._active = false
     self._state = BaseMonitor.STATE.STOPPED
+    self:_clear_psi_resources()
     self:_clear_psi()
 
     -- 2. Физическое закрытие тюнера (если требуется)
@@ -490,11 +464,8 @@ function DvbTuner:destroy(force)
     self._config = nil
     self._current_method = nil
     self._status = nil
-    self._check_timer = nil
     self._json_cache = nil
     self._stats = nil
-    self._psi = nil
-    self._psi_count = nil
     self._backup = nil
     self._reports = nil
 
