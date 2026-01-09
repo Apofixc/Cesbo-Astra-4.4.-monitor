@@ -15,6 +15,7 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
+local astra_parse_url = ModuleManager.get_global_dependency("parse_url")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Utils"
@@ -186,6 +187,18 @@ end
 --- @return string Имя хоста
 function Utils.get_server_name()
     return HOSTNAME
+end
+
+--- Разбирает медиа-адрес Astra
+--- @param url string URL для разбора
+--- @return table|nil Таблица с параметрами URL или nil при ошибке
+function Utils.parse_url(url)
+    if type(url) ~= "string" or url == "" then return nil end
+    if not astra_parse_url then
+        Logger.error(COMPONENT_NAME, "parse_url: dependency not found")
+        return nil
+    end
+    return astra_parse_url(url)
 end
 
 --- Инициализирует таблицу отчета базовыми статичными полями.

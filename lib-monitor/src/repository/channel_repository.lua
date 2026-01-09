@@ -6,6 +6,7 @@ local table_insert = table.insert
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local Utils = ModuleManager.get_module("utils")
 local BaseRepository = ModuleManager.get_module("core.base_repository")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -70,14 +71,12 @@ function ChannelRepository:find_by_adapter(adapter_name)
                 if type(input) == "table" then
                     cfg = input.config
                 elseif type(input) == "string" then
-                    -- Если это строка, пробуем распарсить её (упрощенно для DVB)
-                    if input:find("^dvb://") then
-                        local addr = input:match("^dvb://([^#?]+)")
-                        if addr == target_adapter then
-                            local name = (type(ch_data.config) == "table") and ch_data.config.name
-                            if name then result[name] = ch_data end
-                            break
-                        end
+                    -- Используем системный парсинг URL
+                    local parsed = Utils.parse_url(input)
+                    if parsed and parsed.format == "dvb" and tostring(parsed.addr) == target_adapter then
+                        local name = (type(ch_data.config) == "table") and ch_data.config.name
+                        if name then result[name] = ch_data end
+                        break
                     end
                 end
 

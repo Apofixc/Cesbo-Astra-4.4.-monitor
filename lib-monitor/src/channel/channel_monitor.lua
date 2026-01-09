@@ -52,6 +52,7 @@ local ratio = Utils.ratio
 --- @field private _stream_json table Данные об источниках потока
 --- @field private _status table Текущий статус ошибок (CC/PES)
 --- @field private _stats table Статистика анализа по PID
+--- @field private _stats_count number Текущее количество отслеживаемых PID
 --- @field private _rate_stat table|nil Статистика битрейта (если включено rate_stat)
 --- @field private _force_timer number Таймер принудительной отправки статуса
 --- @field private _check_timer number Таймер интервала проверки
@@ -59,6 +60,7 @@ local ratio = Utils.ratio
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
 --- @field private _psi table|nil Кэш PSI данных
+--- @field private _psi_count number Текущее количество таблиц в кэше PSI
 local ChannelMonitor = setmetatable({}, BaseMonitor)
 ChannelMonitor.__index = ChannelMonitor
 
@@ -143,6 +145,7 @@ function ChannelMonitor.new(config, channel_data)
     end
 
     self._psi = {}
+    self._psi_count = 0
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -151,6 +154,7 @@ function ChannelMonitor.new(config, channel_data)
         scrambled = false,
     }
     self._stats = {}
+    self._stats_count = 0
     self._rate_stat = nil
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
@@ -263,16 +267,21 @@ function ChannelMonitor:process_psi_data(data)
     local raw_psi = data.psi
     if not raw_psi then return end
     
-    -- Используем предопределенную карту или делаем upper() без сохранения в кэш
-    -- чтобы избежать утечки памяти при большом количестве уникальных имен
-    local table_id = PSI_NAME_MAP[raw_psi] or raw_psi:upper()
+    -- Используем предопределенную карту или делаем upper()
+    local table_id = PSI_NAME_MAP[raw_psi]
+    if not table_id then
+        table_id = raw_psi:upper()
+        -- Кэшируем результат upper для этого инстанса, если это новая таблица
+        PSI_NAME_MAP[raw_psi] = table_id
+    end
 
     -- Защита от переполнения кэша PSI
-    local count = 0
-    for _ in pairs(self._psi) do count = count + 1 end
-    if count >= MAX_PSI_CACHE_SIZE and not self._psi[table_id] then
-        Logger.warn(COMPONENT_NAME, "[%s] PSI cache limit reached, ignoring new table: %s", tostring(self._name), table_id)
-        return
+    if not self._psi[table_id] then
+        if self._psi_count >= MAX_PSI_CACHE_SIZE then
+            Logger.warn(COMPONENT_NAME, "[%s] PSI cache limit reached, ignoring new table: %s", tostring(self._name), table_id)
+            return
+        end
+        self._psi_count = self._psi_count + 1
     end
 
     -- Сохраняем сами данные
@@ -286,15 +295,14 @@ function ChannelMonitor:process_psi_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID
-                    local pid_count = 0
-                    for _ in pairs(self._stats) do pid_count = pid_count + 1 end
-                    if pid_count < 100 then
+                    if self._stats_count < 100 then
                         self._stats[pid] = {
                             type = type_name,
                             cc = 0,
                             pes = 0,
                             sc = 0
                         }
+                        self._stats_count = self._stats_count + 1
                     end
                 else
                     stats.type = type_name
@@ -320,9 +328,7 @@ function ChannelMonitor:process_analyze_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
-                    local pid_count = 0
-                    for _ in pairs(self._stats) do pid_count = pid_count + 1 end
-                    if pid_count < 100 then
+                    if self._stats_count < 100 then
                         stats = {
                             type = "UNKNOWN",
                             cc = cc,
@@ -330,6 +336,7 @@ function ChannelMonitor:process_analyze_data(data)
                             sc = sc
                         }
                         self._stats[pid] = stats
+                        self._stats_count = self._stats_count + 1
                     end
                 else
                     -- Защита от переполнения
@@ -440,6 +447,7 @@ end
 --- Очищает статистику анализа
 function ChannelMonitor:clear_stats()
     self._stats = {}
+    self._stats_count = 0
     self._rate_stat = nil
 end
 
@@ -516,7 +524,9 @@ function ChannelMonitor:destroy(force)
 
     -- Очистка кэшей и данных
     self._psi = nil
+    self._psi_count = nil
     self._stats = nil
+    self._stats_count = nil
     self._status = nil
     self._config = nil
     self._channel_data = nil

@@ -17,9 +17,19 @@ local ModuleManager = _G.ModuleManager
 
 -- 4. Константы и конфигурации
 local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
+
+--- @class ValidationRule
+--- @field type string Тип данных ("number"|"boolean"|"string")
+--- @field min number|nil Минимальное значение (для чисел)
+--- @field max number|nil Максимальное значение (для чисел)
+--- @field default any Значение по умолчанию
+
 --- @class MonitorConfig
 --- @field STREAM table<string, string> Карта имен потоков по их IP-адресам
---- @field LogLevel string Настройки логирования
+--- @field LogLevel string Уровень логирования ("DEBUG"|"INFO"|"WARN"|"ERROR"|"NONE")
+--- @field LogFormat string Формат логирования ("TEXT"|"JSON")
+--- @field MaxPayloadSize number Максимальный размер полезной нагрузки HTTP
+--- @field CorsAllowOrigin string Настройки CORS
 --- @field ChannelMonitorLimit number Максимальное количество одновременно активных мониторов каналов
 --- @field DvbMonitorLimit number Максимальное количество одновременно активных DVB-мониторов
 --- @field MaxMonitorNameLength number Максимальная длина имени монитора
@@ -31,7 +41,7 @@ local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @field MaxMethodComparison number Максимальное значение для метода сравнения
 --- @field HttpTimeout number Таймаут HTTP-запросов
 --- @field subscribers table<string, table[]> Список подписчиков
---- @field ValidationSchema table<string, table> Схема валидации для параметров мониторов
+--- @field ValidationSchema table<string, ValidationRule> Схема валидации для параметров мониторов
 local MonitorConfig = {}
 
 -- Значения по умолчанию
@@ -131,7 +141,7 @@ load_from_file()
 
 --- Схема валидации для параметров мониторов.
 --- Определяет правила валидации, значения по умолчанию и типы для каждого параметра.
---- @type table<string, table>
+--- @type table<string, ValidationRule>
 MonitorConfig.ValidationSchema = {
     channel_rate = {
         type = "number",
