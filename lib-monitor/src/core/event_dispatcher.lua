@@ -23,6 +23,7 @@ local math_random = math.random
 local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
 local TablePool = ModuleManager.get_module("utils.table_pool")
+local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer = ModuleManager.get_global_dependency("timer")
@@ -115,9 +116,16 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
     
     -- Обновляем LVC (если не запрещено в опциях)
+    -- Если данные являются таблицей, создаем глубокую копию для кэша,
+    -- так как оригинальная таблица может быть возвращена в пул и очищена.
     if not (options and options.no_cache) then
+        local cache_data = event_data
+        if type(event_data) == "table" and Utils then
+            cache_data = Utils.deep_copy(event_data)
+        end
+
         self._lvc[event_type] = {
-            data = event_data,
+            data = cache_data,
             timestamp = os_time()
         }
     end
