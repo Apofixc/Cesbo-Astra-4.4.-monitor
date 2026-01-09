@@ -108,9 +108,9 @@ if not ModuleManager.validate_dependencies() then
 end
 
 -- Загрузка модулей
-local success_load, load_error = ModuleManager.load_modules()
+local success_load = ModuleManager.load_modules()
 if not success_load then
-    error(string.format("[Init] Failed to load modules: %s", tostring(load_error)))
+    error("[Init] Failed to load modules. Check logs for details.")
 end
 
 -- Валидация глобальной конфигурации

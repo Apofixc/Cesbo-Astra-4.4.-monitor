@@ -220,7 +220,7 @@ end
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local r = (TablePool and TablePool.get) and TablePool.get("report") or {}
+    local r = TablePool and TablePool.get("report") or {}
     Utils.init_report(r, "Channel", self._name)
     r.display_name = self._display_name
     r.monitor = self._config.monitor
@@ -232,7 +232,7 @@ end
 --- Обработка статистики битрейта
 --- @param data table Данные статистики
 function ChannelMonitor:process_rate_stat_data(data)
-    local r = (TablePool and TablePool.get) and TablePool.get("report") or {}
+    local r = TablePool and TablePool.get("report") or {}
     Utils.init_report(r, "Channel", self._name)
     r.display_name = self._display_name
     r.monitor = self._config.monitor
@@ -347,7 +347,7 @@ function ChannelMonitor:process_total_data(data)
         self:_build_status_table(self._current_status_table, data)
         
         -- Создаем таблицу для Push-уведомления из пула
-        local r = (TablePool and TablePool.get) and TablePool.get("report") or {}
+        local r = TablePool and TablePool.get("report") or {}
         Utils.init_report(r, "Channel", self._name)
         r.display_name = self._display_name
         r.monitor = self._config.monitor

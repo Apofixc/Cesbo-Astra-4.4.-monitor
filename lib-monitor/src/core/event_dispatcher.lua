@@ -139,7 +139,13 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         table_insert(queue, event)
         if #queue > 1000 then
             local dropped_event = table_remove(queue, 1)
-            if TablePool then TablePool.release(dropped_event, "event") end
+            if dropped_event then
+                -- Если данные были из пула, возвращаем их перед удалением самого события
+                if dropped_event.is_table and dropped_event.data and TablePool then
+                    TablePool.release(dropped_event.data, "report")
+                end
+                if TablePool then TablePool.release(dropped_event, "event") end
+            end
             self.stats.dropped = self.stats.dropped + 1
         end
     end

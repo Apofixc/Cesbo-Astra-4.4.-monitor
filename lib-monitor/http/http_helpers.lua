@@ -184,22 +184,22 @@ function HttpHelpers.validate(params, schema)
         end
 
         if val ~= nil then
-        if rules.type and type(val) ~= rules.type then
-            if rules.type == "number" and (type(val) == "string" or type(val) == "boolean") then
-                val = tonumber(val)
-                if val == nil then
-                    return false, string.format("Parameter '%s' must be a number", key)
+            if rules.type and type(val) ~= rules.type then
+                if rules.type == "number" and (type(val) == "string" or type(val) == "boolean") then
+                    val = tonumber(val)
+                    if val == nil then
+                        return false, string.format("Parameter '%s' must be a number", key)
+                    end
+                    params[key] = val
+                elseif rules.type == "boolean" and type(val) == "string" then
+                    if val == "true" then val = true
+                    elseif val == "false" then val = false
+                    else return false, string.format("Parameter '%s' must be a boolean", key) end
+                    params[key] = val
+                else
+                    return false, string.format("Parameter '%s' must be a %s", key, rules.type)
                 end
-                params[key] = val
-            elseif rules.type == "boolean" and type(val) == "string" then
-                if val == "true" then val = true
-                elseif val == "false" then val = false
-                else return false, string.format("Parameter '%s' must be a boolean", key) end
-                params[key] = val
-            else
-                return false, string.format("Parameter '%s' must be a %s", key, rules.type)
             end
-        end
 
             if rules.type == "number" then
                 if rules.min and val < rules.min then

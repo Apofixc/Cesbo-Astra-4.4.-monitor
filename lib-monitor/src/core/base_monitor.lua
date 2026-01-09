@@ -24,6 +24,7 @@ local type = type
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local json_encode = ModuleManager.get_global_dependency("json.encode")
