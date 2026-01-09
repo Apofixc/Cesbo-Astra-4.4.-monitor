@@ -206,7 +206,7 @@ function EventDispatcher:start_queue_processor()
     if not timer then return end
     
     self._processor_timer = timer({
-        interval = 0.1,
+        interval = 1, -- Интервал в секундах для Astra timer
         callback = function()
             if self.active then self:process_queue() end
         end

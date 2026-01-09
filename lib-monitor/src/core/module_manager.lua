@@ -215,6 +215,9 @@ end
 --- @param name string Имя модуля.
 --- @return any|nil Загруженный модуль или nil, если модуль не найден.
 function ModuleManager.get_module(name)
+    if name == "table_pool" then
+        return loaded_modules["table_pool"]
+    end
     return loaded_modules[name]
 end
 

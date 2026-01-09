@@ -289,6 +289,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/system/clear-cache"] = { POST = SystemRoutes.clear_cache },
         ["/api/system/network/interfaces"] = { GET = SystemRoutes.get_network_interfaces },
         ["/api/system/network/hostname"] = { GET = SystemRoutes.get_hostname },
+        ["/api/system/pool-stats"] = { GET = SystemRoutes.get_pool_stats },
 
         -- Subscribers
         ["/api/subscribers"] = { GET = SubscriberRoutes.get_subscribers, POST = SubscriberRoutes.subscribe, DELETE = SubscriberRoutes.unsubscribe },

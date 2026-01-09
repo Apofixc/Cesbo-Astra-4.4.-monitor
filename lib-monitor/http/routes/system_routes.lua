@@ -11,6 +11,7 @@ local collectgarbage = collectgarbage
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+-- local TablePool = ModuleManager.get_module("table_pool") -- Загружается динамически
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local astra_version = ModuleManager.get_global_dependency("astra.version")
@@ -88,6 +89,15 @@ function SystemRoutes.get_hostname(server, client, request)
     return HttpHelpers.success(server, client, {
         hostname = utils_hostname and utils_hostname() or "unknown"
     })
+end
+
+--- Возвращает статистику использования пулов таблиц
+function SystemRoutes.get_pool_stats(server, client, request)
+    local TablePool = ModuleManager.get_module("table_pool")
+    if not TablePool or not TablePool.get_stats then
+        return HttpHelpers.error(server, client, 501, "TablePool not available")
+    end
+    return HttpHelpers.success(server, client, TablePool.get_stats())
 end
 
 return SystemRoutes

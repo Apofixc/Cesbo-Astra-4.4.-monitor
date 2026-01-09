@@ -68,13 +68,14 @@ ModuleManager.set_global_dependencies(found_astra_deps)
 -- Регистрация модулей
 ModuleManager.register_module("monitor_config", path_prefix .. "src.config.monitor_config")
 
+ModuleManager.register_module("table_pool", path_prefix .. "src.utils.table_pool", {"logger"})
 ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
 ModuleManager.register_module("utils", path_prefix .. "src.utils.utils", {"logger", "monitor_config"})
 ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine", {"logger"})
 ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber", {"logger"})
 
 ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager", {"logger", "monitor_config", "utils.filter_engine"})
-ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager"})
+ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager", "table_pool"})
 
 ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "core.event_dispatcher"})
 ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
@@ -83,7 +84,7 @@ ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tune
 ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository", {"logger", "core.base_repository"})
 ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "core.event_dispatcher"})
 
-ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "core.base_monitor"})
+ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "core.base_monitor", "table_pool"})
 ModuleManager.register_module("channel_repository", path_prefix .. "src.repository.channel_repository", {"logger", "core.base_repository"})
 ModuleManager.register_module("channel", path_prefix .. "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "core.event_dispatcher", "dvb_repository"})
 
