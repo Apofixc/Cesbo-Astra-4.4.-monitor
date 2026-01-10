@@ -136,8 +136,16 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
 
         local cache_data = event_data
-        if type(event_data) == "table" and Utils then
-            cache_data = Utils.deep_copy(event_data)
+        if type(event_data) == "table" then
+            if Utils and Utils.deep_copy then
+                cache_data = Utils.deep_copy(event_data)
+            else
+                -- Создаем простую копию если Utils недоступен
+                cache_data = {}
+                for k, v in pairs(event_data) do
+                    cache_data[k] = v
+                end
+            end
         end
 
         self._lvc[event_type] = {

@@ -27,10 +27,16 @@ local pools = {}
 --- Очищает таблицу рекурсивно
 --- @param t table Таблица для очистки
 --- @param deep boolean|nil Флаг глубокой очистки
-local function clear_table(t, deep)
+--- @param visited table|nil Защита от циклических ссылок
+local function clear_table(t, deep, visited)
+    if type(t) ~= "table" then return end
+    visited = visited or {}
+    if visited[t] then return end
+    visited[t] = true
+
     for k, v in pairs(t) do
         if deep and type(v) == "table" then
-            clear_table(v, true)
+            clear_table(v, true, visited)
         end
         t[k] = nil
     end

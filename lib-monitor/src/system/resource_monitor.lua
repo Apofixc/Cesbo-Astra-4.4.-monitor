@@ -101,7 +101,7 @@ function ResourceMonitor.check()
     ResourceMonitor._last_cpu_check = now
 
     -- Сетевые интерфейсы
-    if utils_ifaddrs then
+    if utils_ifaddrs and type(utils_ifaddrs) == "function" then
         for name, addrs in pairs(utils_ifaddrs()) do
             if addrs.ipv4 and addrs.ipv4[1] then
                 table.insert(report.network, {

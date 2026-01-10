@@ -98,7 +98,15 @@ end
 --- @return boolean Статус выполнения
 function BaseMonitor:_set_config_param(param_name, value, prefix)
     if not self._config then return false end
-    local result = Utils.validate_monitor_param(param_name, value)
+    
+    local result
+    if Utils and Utils.validate_monitor_param then
+        result = Utils.validate_monitor_param(param_name, value)
+    else
+        -- Fallback если Utils недоступен
+        result = value
+    end
+    
     if result == nil then
         Logger.error(self._component_name, "[%s] Invalid parameter value for %s: %s", 
             tostring(self._name), param_name, tostring(value))

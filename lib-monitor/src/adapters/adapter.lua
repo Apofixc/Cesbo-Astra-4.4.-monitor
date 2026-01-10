@@ -11,6 +11,8 @@ local Logger = ModuleManager.get_module("logger")
 local DvbTuner = ModuleManager.get_module("dvb_tuner")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
+local Channel = ModuleManager.get_module("channel")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- Нет прямых зависимостей
@@ -99,7 +101,10 @@ end
 --- @return table Список сохраненных конфигураций каналов
 local function stop_dependent_channels(name_adapter)
     local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository then return {} end
+    if not ChannelRepository then
+        Logger.error(COMPONENT_NAME, "ChannelRepository module not found")
+        return {}
+    end
     return ChannelRepository:stop_dependent_channels(name_adapter)
 end
 
@@ -107,7 +112,10 @@ end
 --- @param configs table Список конфигураций каналов
 local function start_dependent_channels(configs)
     local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository then return end
+    if not ChannelRepository then
+        Logger.error(COMPONENT_NAME, "ChannelRepository module not found")
+        return
+    end
     ChannelRepository:start_dependent_channels(configs)
 end
 

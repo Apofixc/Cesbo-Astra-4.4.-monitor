@@ -73,7 +73,7 @@ local function refresh_cache_if_needed()
         local config = get_monitor_config()
         if config then
             cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
-            cached_log_format = config.LogFormat
+            cached_log_format = config.LogFormat or "TEXT"
         else
             cached_log_level = cached_log_level or LOG_LEVELS.INFO
             cached_log_format = cached_log_format or "TEXT"

@@ -8,11 +8,14 @@ BaseRepository.__index = BaseRepository
 
 -- 1. Стандартные Lua функции
 local pairs = pairs
+local ipairs = ipairs
 local tostring = tostring
 local setmetatable = setmetatable
+local os_time = os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 
 --- Конструктор базового репозитория
 --- @param component_name string Имя компонента для логирования
@@ -90,7 +93,7 @@ function BaseRepository:auto_recover()
             local health = monitor:health_check()
             
             -- Проверка на "зависшие" мониторы (RUNNING, но нет обновлений > 300 сек)
-            if health.state == 2 and -- BaseMonitor.STATE.RUNNING
+            if health.state == BaseMonitor.STATE.RUNNING and
                now - (health.last_update or 0) > 300 then
                 
                 Logger.warn(self.component_name, "Attempting to recover stuck monitor: %s", name)

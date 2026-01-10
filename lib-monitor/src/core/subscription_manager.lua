@@ -42,7 +42,7 @@ local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
 local MAX_RETRIES = 5
 local RETRY_DELAY = 5
-local HTTP_TIMEOUT = 5
+local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 
 --- @class SubscriptionManager
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
