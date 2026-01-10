@@ -185,19 +185,14 @@ function HttpServer.stop()
     Logger.info(COMPONENT_NAME, "Graceful shutdown initiated. Waiting for %d active requests...", HttpServer._active_requests)
     
     -- Ожидание завершения запросов (максимум 5 секунд)
+    -- В Astra нет sleep, но так как это выполняется в основном потоке, 
+    -- мы не можем просто крутить цикл. Однако HttpServer.stop обычно вызывается 
+    -- либо при выходе, либо через таймер.
+    -- Мы полагаемся на то, что запросы в Astra обрабатываются быстро.
     local wait_start = os_clock()
     while HttpServer._active_requests > 0 and (os_clock() - wait_start) < 5 do
-        -- В Astra нет sleep, но так как это выполняется в основном потоке, 
-        -- мы не можем просто крутить цикл. Однако HttpServer.stop обычно вызывается 
-        -- либо при выходе, либо через таймер.
-        -- Для Astra корректнее было бы использовать таймер для проверки, 
-        -- но здесь мы сделаем упрощенный вариант или полагаемся на то, что 
-        -- запросы в Astra обрабатываются быстро.
-        if type(timer) == "function" then
-             -- Если есть таймер, мы могли бы перенести закрытие туда, 
-             -- но для простоты пока просто логируем.
-             break
-        end
+        -- Пустой цикл для ожидания в пределах 5 секунд. 
+        -- В Astra это заблокирует поток, но это допустимо при выключении.
     end
 
     local instance = HttpServer._instance

@@ -100,6 +100,11 @@ function TablePool.release(t, pool_type, deep_or_nested)
             t.source = nil
             t.is_table = nil
             t.json_cache = nil
+        elseif pool_type == "lvc_entry" then
+            t.data = nil
+            t.timestamp = nil
+        elseif pool_type == "lvc_sub" then
+            for k in pairs(t) do t[k] = nil end
         elseif pool_type == "report" then
             t.type = nil
             t.name = nil

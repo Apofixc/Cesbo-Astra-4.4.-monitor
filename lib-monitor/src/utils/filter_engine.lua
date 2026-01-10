@@ -27,6 +27,7 @@ local FilterEngine = {}
 local script_cache = {}
 local path_cache = {}
 local accessor_cache = {}
+local accessor_cache_count = 0
 local MAX_CACHE_SIZE = 100
 
 --- @type table<string, function> Операторы сравнения
@@ -56,10 +57,11 @@ function FilterEngine.compile_accessor(path)
     local accessor = accessor_cache[path]
     if accessor then return accessor end
 
-    -- Очистка кэша при переполнении
-    local count = 0
-    for _ in pairs(accessor_cache) do count = count + 1 end
-    if count > MAX_CACHE_SIZE then accessor_cache = {} end
+    -- Очистка кэша при переполнении (O(1) проверка)
+    if accessor_cache_count >= MAX_CACHE_SIZE then
+        accessor_cache = {}
+        accessor_cache_count = 0
+    end
 
     local parts = {}
     for part in path:gmatch("[^%.]+") do
@@ -91,6 +93,7 @@ function FilterEngine.compile_accessor(path)
     end
 
     accessor_cache[path] = accessor
+    accessor_cache_count = accessor_cache_count + 1
     return accessor
 end
 

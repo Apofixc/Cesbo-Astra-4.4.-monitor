@@ -119,6 +119,20 @@ function EventDispatcher:initialize()
     Logger.info(COMPONENT_NAME, "EventDispatcher initialized with LVC and Wildcard support")
 end
 
+--- Вспомогательная функция для очистки записи LVC и возврата таблиц в пул
+--- @private
+--- @param entry table Запись LVC
+function EventDispatcher:_release_lvc_entry(entry)
+    if not entry or type(entry.data) ~= "table" then return end
+    
+    for k, v in pairs(entry.data) do
+        if type(v) == "table" then
+            TablePool.release(v, "lvc_sub")
+        end
+    end
+    TablePool.release(entry.data, "lvc_entry")
+end
+
 --- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
 --- @param event_type string Тип события (например, "channel:error")
 --- @param event_data table|string Данные события
@@ -137,6 +151,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             if self._lvc_size >= 1000 then
                 local oldest_key = table_remove(self._lvc_keys, 1)
                 if oldest_key then
+                    local old_entry = self._lvc[oldest_key]
+                    self:_release_lvc_entry(old_entry)
                     self._lvc[oldest_key] = nil
                     self._lvc_size = self._lvc_size - 1
                 end
@@ -162,14 +178,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         -- Если в LVC уже есть данные для этого типа, возвращаем их в пул
         local old_entry = self._lvc[event_type]
-        if old_entry and type(old_entry.data) == "table" then
-            for k, v in pairs(old_entry.data) do
-                if type(v) == "table" then
-                    TablePool.release(v, "lvc_sub")
-                end
-            end
-            TablePool.release(old_entry.data, "lvc_entry")
-        end
+        self:_release_lvc_entry(old_entry)
 
         self._lvc[event_type] = {
             data = cache_data,
@@ -354,6 +363,14 @@ function EventDispatcher:shutdown()
             self:_safe_return_to_pool(event)
         end
     end
+
+    -- Очистка LVC
+    for name, entry in pairs(self._lvc) do
+        self:_release_lvc_entry(entry)
+        self._lvc[name] = nil
+    end
+    self._lvc_keys = {}
+    self._lvc_size = 0
 end
 
 return EventDispatcher
