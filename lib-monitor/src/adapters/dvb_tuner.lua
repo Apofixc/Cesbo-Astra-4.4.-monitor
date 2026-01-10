@@ -226,7 +226,7 @@ function DvbTuner:_on_astra_data(data)
     if type(data) ~= "table" then return end
 
     -- Накопление статистики для расчета качества (упрощенно)
-    if self._config.analyze and data.status and data.status > 0 then
+    if self._config.analyze and data.status and bit32.band(data.status, 0x10) ~= 0 then
         -- Защита от переполнения при длительном отсутствии изменений
         local MAX_STATS_COUNT = 1000000
         if self._stats.count < MAX_STATS_COUNT then
@@ -235,6 +235,8 @@ function DvbTuner:_on_astra_data(data)
             self._stats.count = self._stats.count + 1
         end
     end
+
+    -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(self._astra_conf.time_check) and
