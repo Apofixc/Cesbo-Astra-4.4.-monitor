@@ -25,6 +25,24 @@ local TablePool = {}
 
 local pools = {}
 
+--- Преаллокация таблиц в пуле
+--- @param pool_type string Тип пула
+--- @param count number Количество таблиц
+function TablePool.preallocate(pool_type, count)
+    local pool = pools[pool_type]
+    if not pool then
+        pool = {}
+        pools[pool_type] = pool
+    end
+
+    local current = #pool
+    if current < count then
+        for _ = 1, (count - current) do
+            table.insert(pool, {})
+        end
+    end
+end
+
 --- Очищает таблицу рекурсивно
 --- @param t table Таблица для очистки
 --- @param deep boolean|nil Флаг глубокой очистки

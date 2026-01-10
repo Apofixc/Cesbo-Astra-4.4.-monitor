@@ -163,18 +163,25 @@ local function generate_filter_code(filters)
 
         -- Формируем выражение для одного условия
         local expr
+        local target_val = type(target) == "string" and string.format("%q", target) or tostring(target)
+
         if op == "eq" then
-            expr = string.format("(data.%s == %s)", field,
-                type(target) == "string" and string.format("%q", target) or tostring(target))
+            expr = string.format("(data.%s == %s)", field, target_val)
         elseif op == "ne" then
-            expr = string.format("(data.%s ~= %s)", field,
-                type(target) == "string" and string.format("%q", target) or tostring(target))
+            expr = string.format("(data.%s ~= %s)", field, target_val)
         elseif op == "gt" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s > %s)", field, field, tostring(target))
+            expr = string.format("(type(data.%s) == 'number' and data.%s > %s)", field, field, target_val)
+        elseif op == "ge" then
+            expr = string.format("(type(data.%s) == 'number' and data.%s >= %s)", field, field, target_val)
         elseif op == "lt" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s < %s)", field, field, tostring(target))
+            expr = string.format("(type(data.%s) == 'number' and data.%s < %s)", field, field, target_val)
+        elseif op == "le" then
+            expr = string.format("(type(data.%s) == 'number' and data.%s <= %s)", field, field, target_val)
         elseif op == "contains" then
             expr = string.format("(type(data.%s) == 'string' and data.%s:find(%q, 1, true) ~= nil)",
+                field, field, tostring(target))
+        elseif op == "matches" then
+            expr = string.format("(type(data.%s) == 'string' and data.%s:match(%q) ~= nil)",
                 field, field, tostring(target))
         end
 

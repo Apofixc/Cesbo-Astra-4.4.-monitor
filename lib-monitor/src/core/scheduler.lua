@@ -22,6 +22,9 @@ local timer = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Scheduler"
 
+-- Кэшированные параметры для обслуживания памяти
+local memory_limit_kb = 50 * 1024
+
 --- @class SchedulerTask
 --- @field id string Уникальный ID задачи
 --- @field callback function Функция для выполнения
@@ -65,13 +68,25 @@ function Scheduler:initialize()
             end
         })
 
-        -- Добавляем задачу активного управления памятью
-        self:add_task("gc_maintenance", function()
-            -- Выполняем небольшой шаг сборки мусора
-            collectgarbage("step", 20)
-        end, 2)
+        -- Обновляем кэшированный лимит памяти
+        if MonitorConfig and MonitorConfig.MemoryLimitMb then
+            memory_limit_kb = MonitorConfig.MemoryLimitMb * 1024
+        end
 
-        Logger.info(COMPONENT_NAME, "Планировщик инициализирован с системным таймером Astra и обслуживанием GC")
+        -- Добавляем задачу активного управления памятью (раз в минуту)
+        self:add_task("gc_maintenance", function()
+            local mem_kb = collectgarbage("count")
+
+            if mem_kb > memory_limit_kb then
+                Logger.warn(COMPONENT_NAME, "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.", mem_kb, memory_limit_kb)
+                collectgarbage("collect")
+            else
+                -- Выполняем небольшой шаг сборки мусора
+                collectgarbage("step", 50)
+            end
+        end, 60)
+
+        Logger.info(COMPONENT_NAME, "Планировщик инициализирован с системным таймером Astra и адаптивным GC")
     else
         Logger.error(COMPONENT_NAME, "Зависимость Astra timer не найдена!")
     end

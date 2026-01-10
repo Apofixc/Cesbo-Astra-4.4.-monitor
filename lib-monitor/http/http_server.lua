@@ -304,6 +304,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/system/network/interfaces"] = { GET = SystemRoutes.get_network_interfaces },
         ["/api/system/network/hostname"] = { GET = SystemRoutes.get_hostname },
         ["/api/system/pool-stats"] = { GET = SystemRoutes.get_pool_stats },
+        ["/api/system/logs"] = { GET = SystemRoutes.get_logs },
 
         -- Subscribers
         ["/api/subscribers"] = {

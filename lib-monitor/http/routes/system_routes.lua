@@ -128,4 +128,22 @@ function SystemRoutes.get_pool_stats(server, client, request)
     return HttpHelpers.success(server, client, TablePool.get_stats())
 end
 
+--- Возвращает дамп диагностических логов из буфера
+function SystemRoutes.get_logs(server, client, request)
+    local params = HttpHelpers.get_params(request)
+    local component = params.component or "ModuleManager"
+    local limit = tonumber(params.limit) or 100
+
+    if not Logger or not Logger.get_buffer then
+        return HttpHelpers.error(server, client, 501, "Logger buffer недоступен")
+    end
+
+    local logs = Logger.get_buffer(component, limit)
+    return HttpHelpers.success(server, client, {
+        component = component,
+        count = #logs,
+        entries = logs
+    })
+end
+
 return SystemRoutes
