@@ -39,6 +39,14 @@ local OPERATORS = {
     le = function(a, b) return (type(a) == "number" and type(b) == "number") and a <= b end,
     contains = function(a, b) return (type(a) == "string" and type(b) == "string") and a:find(b, 1, true) ~= nil end,
     matches = function(a, b) return (type(a) == "string" and type(b) == "string") and a:match(b) ~= nil end,
+    ["in"] = function(a, b)
+        if type(b) == "table" then
+            for _, v in pairs(b) do if v == a then return true end end
+        elseif type(b) == "string" then
+            return b:find(tostring(a), 1, true) ~= nil
+        end
+        return false
+    end,
 }
 
 -- Состояние для фильтров по длительности (Duration)
@@ -183,6 +191,17 @@ local function generate_filter_code(filters)
         elseif op == "matches" then
             expr = string.format("(type(data.%s) == 'string' and data.%s:match(%q) ~= nil)",
                 field, field, tostring(target))
+        elseif op == "in" then
+            if type(target) == "table" then
+                local items = {}
+                for _, v in pairs(target) do
+                    table.insert(items, type(v) == "string" and string.format("[%q]=true", v) or string.format("[%s]=true", tostring(v)))
+                end
+                expr = string.format("(({%s})[data.%s] == true)", table.concat(items, ","), field)
+            elseif type(target) == "string" then
+                expr = string.format("(type(data.%s) ~= 'nil' and %q:find(tostring(data.%s), 1, true) ~= nil)",
+                    field, target, field)
+            end
         end
 
         if expr then

@@ -140,6 +140,13 @@ end
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
 
+    -- Оптимизация: Subscription-aware Emitting
+    -- Если на событие нет подписчиков и оно не кэшируется (или LVC не нужен), выходим сразу.
+    local no_cache = options and options.no_cache
+    if no_cache and not self.subscription_manager:has_subscriptions(event_type) then
+        return nil
+    end
+
     -- Обновляем LVC (если не запрещено в опциях)
     -- Если данные являются таблицей, создаем глубокую копию для кэша,
     -- так как оригинальная таблица может быть возвращена в пул и очищена.

@@ -451,6 +451,30 @@ function SubscriptionManager:unsubscribe(sub_id)
     return false
 end
 
+--- Проверяет наличие активных подписок на указанный тип события.
+--- @param event_type string Тип события
+--- @return boolean true если есть хотя бы один активный подписчик
+function SubscriptionManager:has_subscriptions(event_type)
+    -- Проверка через кэш маршрутизации (самый быстрый путь)
+    local targets = self._route_cache[event_type]
+    if targets then
+        for i = 1, #targets do
+            if targets[i].active then return true end
+        end
+        return false
+    end
+
+    -- Если в кэше нет, проверяем все паттерны
+    for pattern, subs in pairs(self.subscriptions) do
+        if self:match(pattern, event_type) then
+            for _, sub in pairs(subs) do
+                if sub.active then return true end
+            end
+        end
+    end
+    return false
+end
+
 --- Возвращает список всех активных подписок в системе.
 --- @return table<string, table> Таблица подписок
 function SubscriptionManager:get_all_subscriptions()
