@@ -304,6 +304,21 @@ end
 --- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager.
 --- @private
 function EventDispatcher:process_queue()
+    local now = os_time()
+
+    -- Периодическая очистка старых записей LVC (TTL)
+    -- Выполняется раз в минуту для снижения нагрузки
+    if now % 60 == 0 then
+        local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
+        for name, entry in pairs(self._lvc) do
+            if now - entry.timestamp > lvc_ttl then
+                self:_release_lvc_entry(entry)
+                self._lvc[name] = nil
+                self._lvc_size = self._lvc_size - 1
+            end
+        end
+    end
+
     for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
         local queue = self.event_queues[p]
         while #queue > 0 do

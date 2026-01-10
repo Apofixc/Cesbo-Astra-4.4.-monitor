@@ -9,6 +9,7 @@ local tostring = tostring
 local type = type
 local bit32 = bit32
 local pcall = pcall
+local bit32_band = bit32.band
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -226,7 +227,7 @@ function DvbTuner:_on_astra_data(data)
     if type(data) ~= "table" then return end
 
     -- Накопление статистики для расчета качества (упрощенно)
-    if self._config.analyze and data.status and bit32.band(data.status, 0x10) ~= 0 then
+    if self._config.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
         -- Защита от переполнения при длительном отсутствии изменений
         local MAX_STATS_COUNT = 1000000
         if self._stats.count < MAX_STATS_COUNT then
@@ -269,7 +270,7 @@ function DvbTuner:_on_astra_data(data)
         local s_num = data.status
         if s_num and s_num ~= self._last_status_num then
             -- Используем предрассчитанную таблицу для мгновенного получения флагов
-            local flags = STATUS_LOOKUP[bit32.band(s_num, 0x1F)]
+            local flags = STATUS_LOOKUP[bit32_band(s_num, 0x1F)]
             if flags then
                 self._current_flags = flags
                 self._last_status_num = s_num

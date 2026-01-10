@@ -93,6 +93,8 @@ MonitorConfig.ExtraDebug = false
 MonitorConfig.GcPause = 100
 MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
+MonitorConfig.LvcTtl = 3600 -- TTL для Last Value Cache в секундах
+MonitorConfig.MaxRetryQueueSize = 500 -- Лимит очереди повторов HTTP
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию

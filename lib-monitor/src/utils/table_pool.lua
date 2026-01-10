@@ -13,6 +13,7 @@ local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local Utils = ModuleManager.get_module("utils")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
@@ -106,18 +107,10 @@ function TablePool.release(t, pool_type, deep_or_nested)
         elseif pool_type == "lvc_sub" then
             for k in pairs(t) do t[k] = nil end
         elseif pool_type == "report" then
-            t.type = nil
-            t.name = nil
-            t.server = nil
-            t.timestamp = nil
-            t.on_air = nil
-            t.bitrate = nil
-            t.scrambled = nil
-            t.cc_errors = nil
-            t.pes_errors = nil
-            -- Очистка вложенных таблиц если есть
-            if type(t.analyze) == "table" then
-                for k in pairs(t.analyze) do t.analyze[k] = nil end
+            if Utils and Utils.table_clear then
+                Utils.table_clear(t)
+            else
+                for k in pairs(t) do t[k] = nil end
             end
         else
             if type(deep_or_nested) == "string" then

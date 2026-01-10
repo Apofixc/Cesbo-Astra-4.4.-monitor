@@ -64,6 +64,9 @@ local function generate_uuid()
     end))
 end
 
+-- Максимальный размер очереди повторов
+local MAX_RETRY_QUEUE_SIZE = 500
+
 --- Вспомогательная функция для получения JSON из события (Lazy JSON)
 --- @param event table Объект события
 --- @return string|nil JSON-строка
@@ -116,12 +119,16 @@ local Transport = {
                         retry_data = content
                     end
 
-                    local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
-                    local jitter = math_random(0, 2)
-                    table_insert(retry_queue, {
-                        config = config, data = retry_data, type = event_type,
-                        retries = retry_count + 1, time = os_time() + delay + jitter
-                    })
+                    if #retry_queue < MAX_RETRY_QUEUE_SIZE then
+                        local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
+                        local jitter = math_random(0, 2)
+                        table_insert(retry_queue, {
+                            config = config, data = retry_data, type = event_type,
+                            retries = retry_count + 1, time = os_time() + delay + jitter
+                        })
+                    else
+                        Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
+                    end
                 end
             end
         })
