@@ -86,11 +86,13 @@ local Transport = {
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
     --- @param retry_count? number [Текущая попытка повтора]
-    HTTP = function(config, event, event_type, retry_count)
+    --- @param event_json? string [Предварительно подготовленный JSON]
+    HTTP = function(config, event, event_type, retry_count, event_json)
         if not http_request then return false, "http_request not available" end
         
-        local content = (type(event) == "table" and event.id) and get_event_json(event) or 
-                        ((type(event) == "table") and json_encode(event) or tostring(event))
+        local content = event_json or 
+                        ((type(event) == "table" and event.id) and get_event_json(event) or 
+                        ((type(event) == "table") and json_encode(event) or tostring(event)))
         
         if not content then return false, "JSON encode failed" end
         
@@ -126,11 +128,13 @@ local Transport = {
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    WS = function(config, event, event_type)
+    --- @param event_json? string [Предварительно подготовленный JSON]
+    WS = function(config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
-            local json_data = (type(event) == "table" and event.id) and get_event_json(event) or 
-                             ((type(event) == "table") and json_encode(event) or event)
+            local json_data = event_json or 
+                             ((type(event) == "table" and event.id) and get_event_json(event) or 
+                             ((type(event) == "table") and json_encode(event) or event))
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
         end
@@ -149,9 +153,11 @@ local Transport = {
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    CONSOLE = function(config, event, event_type)
-        local message = (type(event) == "table" and event.id) and get_event_json(event) or 
-                        ((type(event) == "table") and json_encode(event) or event)
+    --- @param event_json? string [Предварительно подготовленный JSON]
+    CONSOLE = function(config, event, event_type, event_json)
+        local message = event_json or 
+                        ((type(event) == "table" and event.id) and get_event_json(event) or 
+                        ((type(event) == "table") and json_encode(event) or event))
         Logger.info("Console", "[EVENT:%s] %s", tostring(event_type), tostring(message))
         return true
     end
@@ -243,9 +249,19 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     if not transport then return nil end
 
     local sub_id = existing_id or generate_uuid()
+    local filters = sub_data.filters or {}
+    -- Предкомпиляция аксессоров для фильтров
+    if FilterEngine and filters.conditions then
+        for _, cond in pairs(filters.conditions) do
+            if cond.field then
+                cond.accessor = FilterEngine.compile_accessor(cond.field)
+            end
+        end
+    end
+
     local subscription = {
         id = sub_id, event_type = event_type, callback = sub_data.callback,
-        transport = transport, filters = sub_data.filters or {},
+        transport = transport, filters = filters,
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
         last_event_at = 0, stats = { delivered = 0, failed = 0 }
     }
@@ -294,6 +310,7 @@ function SubscriptionManager:publish_event(event)
     local now = os_time()
     local event_type = event.type
     local event_data = event.data
+    local event_json = nil -- Кэш JSON для текущей рассылки
 
     for pattern, subs in pairs(self.subscriptions) do
         if self:match(pattern, event_type) then
@@ -309,7 +326,12 @@ function SubscriptionManager:publish_event(event)
                         end
                     end
                     if should_send then
-                        local success, err = Transport[sub.transport](sub.callback, event, event_type)
+                        -- Оптимизация: кодируем JSON один раз, если транспорт его требует
+                        if sub.transport ~= "LUA_CALLBACK" and not event_json then
+                            event_json = get_event_json(event)
+                        end
+
+                        local success, err = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
                         if success then
                             delivered = delivered + 1
                             sub.stats.delivered = sub.stats.delivered + 1
@@ -338,7 +360,12 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     for _, subs in pairs(self.subscriptions) do
         local sub = subs[sub_id]
         if sub then
-            Transport[sub.transport](sub.callback, event_data, event_type)
+            -- Для одиночной отправки (LVC) готовим JSON если нужно
+            local event_json = nil
+            if sub.transport ~= "LUA_CALLBACK" then
+                event_json = (type(event_data) == "table") and json_encode(event_data) or tostring(event_data)
+            end
+            Transport[sub.transport](sub.callback, event_data, event_type, nil, event_json)
             return true
         end
     end

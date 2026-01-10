@@ -26,6 +26,7 @@ local FilterEngine = {}
 -- Кэш для скомпилированных скриптов и путей
 local script_cache = {}
 local path_cache = {}
+local accessor_cache = {}
 local MAX_CACHE_SIZE = 100
 
 --- @type table<string, function> Операторы сравнения
@@ -44,43 +45,74 @@ local OPERATORS = {
 -- Структура: state[sub_id][condition_index] = { first_match_time }
 local duration_state = {}
 
---- Извлекает значение из таблицы по вложенному пути (например, "total.bitrate").
---- @param data table Исходная таблица
---- @param path string|nil Путь к полю через точку
---- @return any|nil Значение поля или nil
-local function get_nested_value(data, path)
-    if not path or path == "" then return data end
-    
-    local parts = path_cache[path]
-    if not parts then
-        -- Очистка кэша при переполнении
-        if #path_cache > MAX_CACHE_SIZE then path_cache = {} end
+--- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным.
+--- @param path string Путь к полю через точку (например, "total.bitrate")
+--- @return function Функция-аксессор: function(data) return value end
+function FilterEngine.compile_accessor(path)
+    if not path or path == "" then
+        return function(d) return d end
+    end
 
-        parts = {}
-        for part in path:gmatch("[^%.]+") do
-            parts[#parts + 1] = part
+    local accessor = accessor_cache[path]
+    if accessor then return accessor end
+
+    -- Очистка кэша при переполнении
+    local count = 0
+    for _ in pairs(accessor_cache) do count = count + 1 end
+    if count > MAX_CACHE_SIZE then accessor_cache = {} end
+
+    local parts = {}
+    for part in path:gmatch("[^%.]+") do
+        parts[#parts + 1] = part
+    end
+
+    -- Генерация функции-аксессора
+    if #parts == 1 then
+        local key = parts[1]
+        accessor = function(d)
+            return (type(d) == "table") and d[key] or nil
         end
-        path_cache[path] = parts
+    elseif #parts == 2 then
+        local k1, k2 = parts[1], parts[2]
+        accessor = function(d)
+            if type(d) ~= "table" then return nil end
+            local v1 = d[k1]
+            return (type(v1) == "table") and v1[k2] or nil
+        end
+    else
+        accessor = function(d)
+            local current = d
+            for i = 1, #parts do
+                if type(current) ~= "table" then return nil end
+                current = current[parts[i]]
+            end
+            return current
+        end
     end
 
-    local current = data
-    for i = 1, #parts do
-        if type(current) ~= "table" then return nil end
-        current = current[parts[i]]
-    end
-    return current
+    accessor_cache[path] = accessor
+    return accessor
 end
 
 --- Проверяет соответствие данных конкретному условию с учетом оператора и длительности.
 --- @param data table Данные события
---- @param condition table Параметры условия (field, op, value, duration)
+--- @param condition table Параметры условия (field, op, value, duration, accessor)
 --- @param sub_id string|nil ID подписки (для отслеживания длительности)
 --- @param cond_idx number Индекс условия в списке
 --- @return boolean Результат проверки
 local function check_condition(data, condition, sub_id, cond_idx)
     if not condition.field then return true end
     
-    local value = get_nested_value(data, condition.field)
+    local value
+    if condition.accessor then
+        value = condition.accessor(data)
+    else
+        -- Fallback для обратной совместимости или если аксессор не скомпилирован
+        local accessor = FilterEngine.compile_accessor(condition.field)
+        condition.accessor = accessor
+        value = accessor(data)
+    end
+
     local op = condition.op or "eq"
     local target = condition.value
     local duration = condition.duration -- в секундах

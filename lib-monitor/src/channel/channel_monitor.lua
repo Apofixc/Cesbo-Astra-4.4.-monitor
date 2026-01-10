@@ -167,33 +167,8 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self or not self._active or not data then return end
-
-            local ok, err = pcall(function()
-                if data.error then
-                    self:process_error_data(data)
-                    return
-                end
-
-                if data.psi then
-                    self:process_psi_data(data)
-                    return
-                end
-
-                if data.analyze then
-                    self:process_analyze_data(data)
-                end
-
-                if data.rate_stat then
-                    self._rate_stat = data.rate_stat
-                    self:process_rate_stat_data(data.rate_stat)
-                end
-
-                if data.total then
-                    self:process_total_data(data)
-                end
-            end)
-
+            if not self._active or not data then return end
+            local ok, err = pcall(self._on_astra_data, self, data)
             if not ok then
                 Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
             end
@@ -247,6 +222,34 @@ function ChannelMonitor:process_rate_stat_data(data)
     self:publish(r, "rate_stat", true)
 end
 
+--- Обработчик данных от анализатора Astra (горячий путь)
+--- @private
+--- @param data table Данные от анализатора
+function ChannelMonitor:_on_astra_data(data)
+    if data.error then
+        self:process_error_data(data)
+        return
+    end
+
+    if data.psi then
+        self:process_psi_data(data)
+        return
+    end
+
+    if data.analyze then
+        self:process_analyze_data(data)
+    end
+
+    if data.rate_stat then
+        self._rate_stat = data.rate_stat
+        self:process_rate_stat_data(data.rate_stat)
+    end
+
+    if data.total then
+        self:process_total_data(data)
+    end
+end
+
 --- Обработка PSI данных
 --- @param data table Данные PSI
 function ChannelMonitor:process_psi_data(data)
@@ -267,12 +270,13 @@ function ChannelMonitor:process_psi_data(data)
                         Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached during PSI processing, clearing stats", tostring(self._name))
                     end
 
-                    self._stats[pid] = {
-                        type = type_name,
-                        cc = 0,
-                        pes = 0,
-                        sc = 0
-                    }
+                    stats = self:get_table_from_pool("pid_stats")
+                    stats.type = type_name
+                    stats.cc = 0
+                    stats.pes = 0
+                    stats.sc = 0
+                    
+                    self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
                 else
                     stats.type = type_name
@@ -304,12 +308,12 @@ function ChannelMonitor:process_analyze_data(data)
                         Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached, clearing stats", tostring(self._name))
                     end
                     
-                    stats = {
-                        type = "UNKNOWN",
-                        cc = cc,
-                        pes = pes,
-                        sc = sc
-                    }
+                    stats = self:get_table_from_pool("pid_stats")
+                    stats.type = "UNKNOWN"
+                    stats.cc = cc
+                    stats.pes = pes
+                    stats.sc = sc
+                    
                     self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
                 else
@@ -404,6 +408,11 @@ end
 
 --- Очищает статистику анализа
 function ChannelMonitor:clear_stats()
+    if self._stats then
+        for pid, stats in pairs(self._stats) do
+            self:return_table_to_pool(stats, "pid_stats")
+        end
+    end
     self._stats = {}
     self._stats_count = 0
     self._rate_stat = nil

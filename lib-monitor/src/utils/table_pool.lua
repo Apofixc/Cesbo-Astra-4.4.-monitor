@@ -42,6 +42,19 @@ local function clear_table(t, deep, visited)
     end
 end
 
+--- Рекурсивно возвращает вложенные таблицы в пул
+--- @param t table Таблица, содержащая вложенные таблицы
+--- @param item_pool_type string Тип пула для вложенных таблиц
+local function release_nested(t, item_pool_type)
+    if type(t) ~= "table" then return end
+    for k, v in pairs(t) do
+        if type(v) == "table" then
+            TablePool.release(v, item_pool_type)
+        end
+        t[k] = nil
+    end
+end
+
 --- Возвращает таблицу из пула указанного типа.
 --- Если пул пуст, создает новую таблицу.
 --- @param pool_type? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
@@ -65,8 +78,8 @@ end
 --- Перед возвратом таблица полностью очищается.
 --- @param t table Таблица для возврата
 --- @param pool_type string|nil Тип пула. По умолчанию "generic"
---- @param deep boolean|nil Флаг глубокой очистки. По умолчанию false
-function TablePool.release(t, pool_type, deep)
+--- @param deep_or_nested boolean|string|nil Флаг глубокой очистки (boolean) или тип пула для вложенных таблиц (string)
+function TablePool.release(t, pool_type, deep_or_nested)
     if type(t) ~= "table" then return end
     
     pool_type = pool_type or "generic"
@@ -77,7 +90,11 @@ function TablePool.release(t, pool_type, deep)
     end
 
     if #pool < MAX_POOL_SIZE then
-        clear_table(t, deep)
+        if type(deep_or_nested) == "string" then
+            release_nested(t, deep_or_nested)
+        else
+            clear_table(t, deep_or_nested)
+        end
         table_insert(pool, t)
     end
 end

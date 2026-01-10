@@ -82,6 +82,10 @@ end
 --- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди.
 --- @private
 function EventDispatcher:initialize()
+    -- Тонкая настройка Garbage Collector для инкрементальной очистки
+    collectgarbage("setpause", 100)
+    collectgarbage("setstepmul", 500)
+
     self.subscription_manager = SubscriptionManager.new()
     
     -- Кэш последних значений (Last Value Cache)
