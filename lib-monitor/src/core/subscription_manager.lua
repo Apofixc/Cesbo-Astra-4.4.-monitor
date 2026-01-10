@@ -20,6 +20,7 @@ local setmetatable = setmetatable
 local io = io
 local math_random = math.random
 local math_floor = math.floor
+local string_gsub = string.gsub
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -57,9 +58,9 @@ local retry_queue = {}
 --- @return string UUID
 local function generate_uuid()
     local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    return (string.gsub(template, '[xy]', function (c)
-        local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
-        return string.format('%x', v)
+    return (string_gsub(template, '[xy]', function (c)
+        local v = (c == 'x') and math_random(0, 0xf) or math_random(8, 0xb)
+        return string_format('%x', v)
     end))
 end
 

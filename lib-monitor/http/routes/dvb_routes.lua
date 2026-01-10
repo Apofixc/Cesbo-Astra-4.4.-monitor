@@ -10,6 +10,7 @@ local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local Adapter = ModuleManager.get_module("adapter")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
+local RoutesUtils = ModuleManager.get_module("routes_utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvbls = ModuleManager.get_global_dependency("dvbls")
@@ -41,7 +42,7 @@ end
 --- Возвращает текущие метрики конкретного DVB адаптера
 function DvbRoutes.get_adapter_data(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
@@ -54,7 +55,7 @@ end
 --- Обновляет параметры мониторинга DVB адаптера
 function DvbRoutes.update_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.update_dvb_monitor_parameters(params.name, params)
@@ -66,7 +67,7 @@ end
 --- Останавливает мониторинг DVB адаптера
 function DvbRoutes.stop_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         force = { type = "boolean", required = false }
     })
@@ -81,7 +82,7 @@ end
 --- Возвращает PSI данные DVB адаптера
 function DvbRoutes.get_adapter_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         table = { type = "string", required = false }
     })
@@ -104,7 +105,7 @@ end
 --- Запускает обновление PSI данных на адаптере
 function DvbRoutes.update_adapter_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
@@ -117,7 +118,7 @@ end
 --- Настройка адаптера на частоту и запуск мониторинга
 function DvbRoutes.tune_adapter(server, client, request)
     local data = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(data, {
+    local ok, err = RoutesUtils.validate_input(data, {
         name_adapter = { type = "string", required = true },
         tp = { type = "string", required = true }
     })
@@ -132,7 +133,7 @@ end
 --- Переключение транспондера
 function DvbRoutes.switch_transponder(server, client, request)
     local data = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(data, {
+    local ok, err = RoutesUtils.validate_input(data, {
         name = { type = "string", required = true },
         tp = { type = "string", required = true }
     })
@@ -147,7 +148,7 @@ end
 --- Приостановка мониторинга адаптера
 function DvbRoutes.pause_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.pause_dvb_monitor(params.name)
@@ -159,7 +160,7 @@ end
 --- Возобновление мониторинга адаптера
 function DvbRoutes.resume_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.resume_dvb_monitor(params.name)
@@ -171,7 +172,7 @@ end
 --- Перезапуск мониторинга адаптера
 function DvbRoutes.restart_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         force = { type = "boolean", required = false }
     })
@@ -192,7 +193,7 @@ end
 --- Возвращает детальные флаги состояния DVB адаптера (has_signal, has_lock и т.д.)
 function DvbRoutes.get_adapter_status_info(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)

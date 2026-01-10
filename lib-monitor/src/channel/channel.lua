@@ -350,7 +350,7 @@ end
 --- @return table|nil Конфигурация потока для восстановления или nil
 local function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
-    if not ch_data or not ch_data.config then
+    if not ch_data or type(ch_data) ~= "table" or not ch_data.config then
         Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data or channel not found")
         return nil
     end

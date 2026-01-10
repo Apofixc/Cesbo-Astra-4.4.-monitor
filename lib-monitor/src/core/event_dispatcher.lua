@@ -120,6 +120,21 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     -- Если данные являются таблицей, создаем глубокую копию для кэша,
     -- так как оригинальная таблица может быть возвращена в пул и очищена.
     if not (options and options.no_cache) then
+        -- Ограничить размер LVC для предотвращения утечек памяти
+        local lvc_size = 0
+        for _ in pairs(self._lvc) do lvc_size = lvc_size + 1 end
+        if lvc_size > 1000 then
+            local oldest_key
+            local oldest_time = math.huge
+            for key, entry in pairs(self._lvc) do
+                if entry.timestamp < oldest_time then
+                    oldest_time = entry.timestamp
+                    oldest_key = key
+                end
+            end
+            if oldest_key then self._lvc[oldest_key] = nil end
+        end
+
         local cache_data = event_data
         if type(event_data) == "table" and Utils then
             cache_data = Utils.deep_copy(event_data)

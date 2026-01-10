@@ -80,7 +80,7 @@ function ChannelRepository:find_by_adapter(adapter_name)
                     end
                 end
 
-                if cfg and cfg.format == "dvb" and tostring(cfg.addr) == target_adapter then
+                if type(cfg) == "table" and cfg.format == "dvb" and tostring(cfg.addr or "") == target_adapter then
                     local name = (type(ch_data.config) == "table") and ch_data.config.name
                     if name then
                         result[name] = ch_data

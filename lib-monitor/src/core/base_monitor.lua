@@ -63,7 +63,7 @@ function BaseMonitor.new(config, component_name)
     self._check_timer = 0
     self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
     self._force_timer = self._force_interval -- Сразу готов к отправке
-    self._last_update = os_time
+    self._last_update = os_time()
     self._table_pool = TablePool
     return self
 end

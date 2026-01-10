@@ -10,6 +10,7 @@ local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local Channel = ModuleManager.get_module("channel")
 local ChannelRepository = ModuleManager.get_module("channel_repository")
+local RoutesUtils = ModuleManager.get_module("routes_utils")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local find_channel = ModuleManager.get_global_dependency("find_channel")
@@ -74,7 +75,7 @@ end
 --- Возвращает детальную информацию о канале
 function ChannelRoutes.get_channel_info(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_data = find_channel(params.name)
@@ -88,7 +89,7 @@ end
 --- Возвращает список входов канала и активный вход
 function ChannelRoutes.get_channel_inputs(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_data = find_channel(params.name)
@@ -109,7 +110,7 @@ end
 --- Возвращает данные PSI/SI канала
 function ChannelRoutes.get_channel_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         table = { type = "string", required = false }
     })
@@ -133,7 +134,7 @@ end
 --- Создает новый канал (Raw Astra Channel)
 function ChannelRoutes.create_channel_raw(server, client, request)
     local data = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(data, {
+    local ok, err = RoutesUtils.validate_input(data, {
         name = { type = "string", required = true },
         input = { type = "table", required = true }
     })
@@ -149,7 +150,7 @@ end
 --- Удаляет или перезапускает канал (Raw Astra Channel)
 function ChannelRoutes.kill_channel_raw(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         reboot = { type = "boolean", required = false }
     })
@@ -178,7 +179,7 @@ end
 --- Создает поток с мониторингом
 function ChannelRoutes.create_stream(server, client, request)
     local data = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(data, {
+    local ok, err = RoutesUtils.validate_input(data, {
         name = { type = "string", required = true },
         input = { type = "table", required = true }
     })
@@ -193,7 +194,7 @@ end
 --- Удаляет поток и монитор
 function ChannelRoutes.kill_stream(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, {
+    local ok, err = RoutesUtils.validate_input(params, {
         name = { type = "string", required = true },
         reboot = { type = "boolean", required = false }
     })

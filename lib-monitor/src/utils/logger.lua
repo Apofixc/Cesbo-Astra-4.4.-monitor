@@ -182,8 +182,11 @@ local function write_log(level_name, component, format_str, ...)
         end
 
         local lower_level = level_name:lower()
-        if log and log[lower_level] then
-            log[lower_level](msg)
+        if log and type(log) == "table" and type(log[lower_level]) == "function" then
+            local ok, err = pcall(log[lower_level], msg)
+            if not ok then
+                print(string_format("[LOGGER ERROR] Failed to write to Astra log: %s", tostring(err)))
+            end
         else
             print(string_format("[%s] %s", level_name, msg))
         end

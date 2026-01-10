@@ -20,6 +20,22 @@ local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_i
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "RoutesUtils"
 
+--- Валидация входных данных
+--- @param params table Таблица параметров
+--- @param schema table Схема валидации
+--- @return boolean success, string|nil error_message
+function RoutesUtils.validate_input(params, schema)
+    for field, rules in pairs(schema) do
+        if rules.required and params[field] == nil then
+            return false, "Missing required field: " .. field
+        end
+        if params[field] and rules.type and type(params[field]) ~= rules.type then
+            return false, "Invalid type for field: " .. field
+        end
+    end
+    return true
+end
+
 --- Возвращает статистику использования ресурсов мониторинга
 function RoutesUtils.get_resource_stats(server, client, request)
     local channel_count = ChannelRepository and ChannelRepository:count() or 0
