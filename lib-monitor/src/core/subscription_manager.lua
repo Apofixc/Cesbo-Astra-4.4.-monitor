@@ -140,9 +140,10 @@ local Transport = {
     --- @param config table Параметры (callback)
     --- @param event table|string Объект события или данные
     LUA_CALLBACK = function(config, event)
-        if type(config.callback) ~= "function" then return false, "Invalid callback" end
+        local callback = type(config) == "table" and config.callback or config
+        if type(callback) ~= "function" then return false, "Invalid callback" end
         local data = (type(event) == "table" and event.id) and event.data or event
-        return pcall(config.callback, data)
+        return pcall(callback, data)
     end,
     --- Вывод события в консоль (лог Astra)
     --- @param config table Параметры транспорта
