@@ -237,8 +237,6 @@ function DvbTuner:_on_astra_data(data)
     end
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-
-    -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(self._astra_conf.time_check) and
        (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate))
     then
