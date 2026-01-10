@@ -77,12 +77,28 @@ MonitorConfig.subscribers = {}
 --- @return boolean success, string|nil error_message
 function MonitorConfig.validate()
     if type(MonitorConfig.LogLevel) ~= "string" then return false, "LogLevel must be a string" end
+    local valid_levels = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true}
+    if not valid_levels[MonitorConfig.LogLevel] then
+        return false, "Invalid LogLevel: " .. tostring(MonitorConfig.LogLevel)
+    end
+
     if type(MonitorConfig.LogFormat) ~= "string" then return false, "LogFormat must be a string" end
+    local valid_formats = {TEXT=true, JSON=true}
+    if not valid_formats[MonitorConfig.LogFormat] then
+        return false, "Invalid LogFormat: " .. tostring(MonitorConfig.LogFormat)
+    end
+
     if type(MonitorConfig.MaxPayloadSize) ~= "number" then return false, "MaxPayloadSize must be a number" end
     if type(MonitorConfig.CorsAllowOrigin) ~= "string" then return false, "CorsAllowOrigin must be a string" end
+    
     if type(MonitorConfig.ChannelMonitorLimit) ~= "number" then return false, "ChannelMonitorLimit must be a number" end
+    if MonitorConfig.ChannelMonitorLimit <= 0 then
+        return false, "ChannelMonitorLimit must be positive"
+    end
+
     if type(MonitorConfig.DvbMonitorLimit) ~= "number" then return false, "DvbMonitorLimit must be a number" end
     if type(MonitorConfig.ForceSendInterval) ~= "number" then return false, "ForceSendInterval must be a number" end
+    
     return true
 end
 

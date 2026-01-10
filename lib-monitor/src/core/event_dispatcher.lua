@@ -236,17 +236,16 @@ function EventDispatcher:process_queue()
         while #queue > 0 do
             local event = table_remove(queue, 1)
             if event then
-                -- Передаем весь объект события для поддержки ленивого JSON
+                -- Сначала публикуем событие
                 self.subscription_manager:publish_event(event)
-                
-                -- Если данные были из пула, возвращаем их
-                if event.is_table and TablePool then
-                    TablePool.release(event.data, "report")
-                end
                 
                 self.stats.processed = self.stats.processed + 1
                 
-                -- Возвращаем сам объект события в пул
+                -- Затем возвращаем таблицы в пул
+                if event.is_table and event.data and TablePool then
+                    TablePool.release(event.data, "report")
+                end
+                
                 if TablePool then
                     TablePool.release(event, "event")
                 end

@@ -419,22 +419,23 @@ function ChannelMonitor:_build_status_table(t, data)
     local source = self:get_cached_source()
     local status = self._status or {}
     
-    -- Если переданы свежие данные, используем их, иначе берем из self._status
-    local ready = data and data.on_air or status.ready or false
-    local bitrate = (data and data.total and data.total.bitrate) or status.bitrate or 0
-    local scrambled = (data and data.total and data.total.scrambled) or status.scrambled or false
+    -- Добавить проверку на nil для всех полей
+    local ready = (data and data.on_air) or (status.ready or false)
+    local bitrate = (data and data.total and data.total.bitrate) or (status.bitrate or 0)
+    local scrambled = (data and data.total and data.total.scrambled) or (status.scrambled or false)
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
 
+    -- Защита от nil
     t.status = ready
-    t.bitrate = bitrate
+    t.bitrate = bitrate or 0
     t.cc_errors = cc
     t.pes_errors = pes
     t.scrambled = scrambled
     t.ready = ready
-    t.stream = source.stream
-    t.format = source.format
-    t.addr = source.addr
+    t.stream = source and source.stream or "Unknown"
+    t.format = source and source.format or "Unknown"
+    t.addr = source and source.addr or "Unknown"
     t.timestamp = os_time()
     
     return t

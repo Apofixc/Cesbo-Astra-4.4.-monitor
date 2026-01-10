@@ -168,6 +168,11 @@ function ModuleManager.load_modules()
     
     if not load_order then
         log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
+        -- Вывести информацию о циклических зависимостях
+        for name, module_info in pairs(registered_modules) do
+            log_error(COMPONENT_NAME, "Модуль: %s, Зависимости: %s", 
+                name, table_concat(module_info.dependencies, ", "))
+        end
         return nil
     end
     

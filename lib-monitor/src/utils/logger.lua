@@ -38,6 +38,16 @@ local last_config_check = 0
 local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 
 -- 5. Инициализация объектов из загруженных модулей
+
+--- Возвращает модуль конфигурации (ленивая загрузка для избежания циклических зависимостей)
+--- @return MonitorConfig|nil
+local function get_monitor_config()
+    local success, config = pcall(function()
+        return ModuleManager.get_module("monitor_config")
+    end)
+    return (success and config and type(config) == "table") and config or nil
+end
+
 --- @class Logger
 --- @field private last_errors table<string, string> Хранилище последних ошибок по контекстам
 --- @field private context_stack table<number, string> Стек контекстов
@@ -46,17 +56,16 @@ local Logger = {}
 
 --- Обновляет кэшированный уровень логирования
 function Logger.refresh_log_level()
-    -- Используем pcall для безопасного получения модуля, чтобы избежать проблем при инициализации
-    local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
-    local level_name = (success and config and type(config) == "table") and config.LogLevel or "INFO"
+    local config = get_monitor_config()
+    local level_name = config and config.LogLevel or "INFO"
     cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
 end
 
 local function refresh_cache_if_needed()
     local now = os_time()
     if not cached_log_level or (now - last_config_check) > CONFIG_REFRESH_INTERVAL then
-        local success, config = pcall(function() return ModuleManager.get_module("monitor_config") end)
-        if success and config and type(config) == "table" then
+        local config = get_monitor_config()
+        if config then
             cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
             cached_log_format = config.LogFormat
         else
