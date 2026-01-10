@@ -159,6 +159,7 @@ function Scheduler:shutdown()
     end
     self._tasks = {}
     Logger.info(COMPONENT_NAME, "Планировщик остановлен")
+    collectgarbage()
 end
 
 return Scheduler

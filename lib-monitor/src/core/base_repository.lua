@@ -154,6 +154,7 @@ function BaseRepository:shutdown()
     for _, name in ipairs(names) do
         self:unregister(name, true)
     end
+    collectgarbage()
 end
 
 return BaseRepository

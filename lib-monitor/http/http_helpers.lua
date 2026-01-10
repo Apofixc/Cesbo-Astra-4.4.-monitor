@@ -224,7 +224,9 @@ function HttpHelpers.validate(params, schema)
                 elseif rules.type == "boolean" and type(val) == "string" then
                     if val == "true" then val = true
                     elseif val == "false" then val = false
-                    else return false, string.format("Параметр '%s' должен быть логическим значением (boolean)", key) end
+                    else
+                        return false, string.format("Параметр '%s' должен быть логическим значением (boolean)", key)
+                    end
                     params[key] = val
                 else
                     return false, string.format("Параметр '%s' должен иметь тип %s", key, rules.type)
