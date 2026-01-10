@@ -194,7 +194,7 @@ function DvbTuner:start()
     
     -- Оптимизация: используем именованный метод и передаем его в pcall напрямую
     self._astra_conf.callback = function(data)
-        if not self._active or not data then return end
+        if not self._active then return end
         local ok, err = pcall(self._on_astra_data, self, data)
         if not ok then
             Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
@@ -225,6 +225,8 @@ end
 --- @private
 --- @param data table Данные от тюнера
 function DvbTuner:_on_astra_data(data)
+    if type(data) ~= "table" then return end
+
     -- Накопление статистики для расчета качества (упрощенно)
     if self._config.analyze and data.status and data.status > 0 then
         -- Защита от переполнения при длительном отсутствии изменений

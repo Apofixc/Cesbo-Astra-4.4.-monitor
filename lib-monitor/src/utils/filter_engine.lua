@@ -101,6 +101,7 @@ end
 --- @param cond_idx number Индекс условия в списке
 --- @return boolean Результат проверки
 local function check_condition(data, condition, sub_id, cond_idx)
+    if type(data) ~= "table" then return false end
     if not condition.field then return true end
     
     local value

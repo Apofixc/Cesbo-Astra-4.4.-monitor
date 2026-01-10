@@ -103,7 +103,7 @@ end)
 initialize_phase(INIT_PHASES.CORE_MODULES, function()
     -- Регистрация модулей
     ModuleManager.register_module("monitor_config", path_prefix .. "src.config.monitor_config")
-    ModuleManager.register_module("core.scheduler", path_prefix .. "src.core.scheduler")
+    ModuleManager.register_module("core.scheduler", path_prefix .. "src.core.scheduler", {"logger"})
     ModuleManager.register_module("table_pool", path_prefix .. "src.utils.table_pool")
     ModuleManager.register_module("utils.wildcard", path_prefix .. "src.utils.wildcard")
     ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})

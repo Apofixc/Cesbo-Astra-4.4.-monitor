@@ -167,7 +167,7 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self._active or not data then return end
+            if not self._active then return end
             local ok, err = pcall(self._on_astra_data, self, data)
             if not ok then
                 Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
@@ -226,6 +226,8 @@ end
 --- @private
 --- @param data table Данные от анализатора
 function ChannelMonitor:_on_astra_data(data)
+    if type(data) ~= "table" then return end
+
     if data.error then
         self:process_error_data(data)
         return

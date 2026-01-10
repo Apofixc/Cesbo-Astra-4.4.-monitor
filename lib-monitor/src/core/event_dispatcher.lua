@@ -22,7 +22,7 @@ local math_random = math.random
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
-local TablePool = ModuleManager.get_module("utils.table_pool")
+local TablePool = ModuleManager.get_module("table_pool")
 local Utils = ModuleManager.get_module("utils")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
