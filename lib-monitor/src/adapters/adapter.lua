@@ -264,7 +264,6 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     -- 3. Запуск новых каналов с сохранением выходов (если переданы)
     if reserve_input and type(reserve_input) == "table" then
         -- Здесь мы все еще используем динамический вызов, но только для специфического сценария
-        local Channel = ModuleManager.get_module("channel")
         if Channel then
             for _, item in ipairs(reserve_input) do
                 -- Находим старый конфиг через репозиторий (он еще должен быть там в бэкапе или памяти)

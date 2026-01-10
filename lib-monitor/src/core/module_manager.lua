@@ -176,7 +176,11 @@ function ModuleManager.load_modules()
         return nil
     end
     
-    if Logger then log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) end
+    if Logger then 
+        log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) 
+    else
+        print(string_format("[%s] Порядок загрузки модулей: %s", COMPONENT_NAME, table_concat(load_order, ", ")))
+    end
     
     for _, name in ipairs(load_order) do
         -- Пропускаем уже загруженные модули

@@ -165,7 +165,7 @@ local function write_log(level_name, component, format_str, ...)
     if should_log(level) then
         local use_json = (cached_log_format == "JSON")
 
-        if use_json and json_encode then
+        if use_json then
             local log_data = {
                 timestamp = os_time(),
                 level = level_name,
@@ -173,10 +173,7 @@ local function write_log(level_name, component, format_str, ...)
                 message = msg,
                 context_id = current_context_id
             }
-            local ok, json_str = pcall(json_encode, log_data)
-            if ok then
-                msg = json_str
-            end
+            msg = json_encode(log_data)
         else
             msg = string_format("[%s] %s", component, msg)
         end
