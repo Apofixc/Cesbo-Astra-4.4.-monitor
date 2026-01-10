@@ -18,6 +18,7 @@ local setmetatable = setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
@@ -67,7 +68,14 @@ function Scheduler:initialize()
                 if self._active then self:_tick() end
             end
         })
-        Logger.info(COMPONENT_NAME, "Scheduler initialized with single Astra timer")
+
+        -- Добавляем задачу активного управления памятью
+        self:add_task("gc_maintenance", function()
+            -- Выполняем небольшой шаг сборки мусора
+            collectgarbage("step", 20) 
+        end, 2)
+
+        Logger.info(COMPONENT_NAME, "Scheduler initialized with single Astra timer and GC maintenance")
     else
         Logger.error(COMPONENT_NAME, "Astra timer dependency not found!")
     end

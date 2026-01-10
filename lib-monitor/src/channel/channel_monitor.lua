@@ -132,9 +132,6 @@ function ChannelMonitor.new(config, channel_data)
     self._rate_stat = nil
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
-    -- Регистрация в планировщике
-    self:_register_in_scheduler()
-
     return self
 end
 
@@ -471,9 +468,6 @@ function ChannelMonitor:destroy(force)
 
     self._active = false
     self._state = BaseMonitor.STATE.STOPPED
-
-    -- Удаление из планировщика
-    self:_unregister_from_scheduler()
 
     if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО (astra-api-usage.md)

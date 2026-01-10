@@ -147,19 +147,28 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local cache_data = event_data
         if type(event_data) == "table" then
-            -- Оптимизация: "Умное" копирование для стандартных отчетов
-            -- Избегаем рекурсивного deep_copy для известных структур
-            cache_data = {}
+            -- Оптимизация: "Умное" копирование с использованием пула
+            cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
                 if type(v) == "table" then
-                    -- Копируем вложенные таблицы (например, 'analyze' или 'cpu')
-                    local sub = {}
+                    local sub = TablePool.get("lvc_sub")
                     for sk, sv in pairs(v) do sub[sk] = sv end
                     cache_data[k] = sub
                 else
                     cache_data[k] = v
                 end
             end
+        end
+
+        -- Если в LVC уже есть данные для этого типа, возвращаем их в пул
+        local old_entry = self._lvc[event_type]
+        if old_entry and type(old_entry.data) == "table" then
+            for k, v in pairs(old_entry.data) do
+                if type(v) == "table" then
+                    TablePool.release(v, "lvc_sub")
+                end
+            end
+            TablePool.release(old_entry.data, "lvc_entry")
         end
 
         self._lvc[event_type] = {

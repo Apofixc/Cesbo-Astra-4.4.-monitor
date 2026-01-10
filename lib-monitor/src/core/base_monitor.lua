@@ -260,32 +260,6 @@ function BaseMonitor:_should_send(time_check)
     return true
 end
 
---- Метод для выполнения проверки состояния.
---- Должен быть реализован в подклассах.
-function BaseMonitor:check()
-    -- Заглушка
-end
-
---- Регистрирует монитор в планировщике для периодических проверок.
---- @protected
-function BaseMonitor:_register_in_scheduler()
-    if not Scheduler then return end
-    local scheduler = Scheduler.get_instance()
-    local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
-    
-    scheduler:add_task("monitor_" .. self._name, function()
-        if self._active and self.check then
-            self:check()
-        end
-    end, interval)
-end
-
---- Удаляет монитор из планировщика.
---- @protected
-function BaseMonitor:_unregister_from_scheduler()
-    if not Scheduler then return end
-    Scheduler.get_instance():remove_task("monitor_" .. self._name)
-end
 
 --- Сбрасывает таймер принудительной отправки
 --- @protected
