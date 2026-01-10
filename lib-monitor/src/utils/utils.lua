@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local math_abs = math.abs
 local math_max = math.max
+local math_min = math.min
 local pairs = pairs
 local tostring = tostring
 local type = type

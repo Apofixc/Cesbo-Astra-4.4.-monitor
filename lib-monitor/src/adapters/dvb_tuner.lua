@@ -1,6 +1,7 @@
 -- 1. Стандартные Lua функции
 local collectgarbage = collectgarbage
 local math_max = math.max
+local math_min = math.min
 local os_time = os.time
 local pairs = pairs
 local setmetatable = setmetatable
