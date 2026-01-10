@@ -90,10 +90,36 @@ function TablePool.release(t, pool_type, deep_or_nested)
     end
 
     if #pool < MAX_POOL_SIZE then
-        if type(deep_or_nested) == "string" then
-            release_nested(t, deep_or_nested)
+        -- Оптимизация: Быстрая очистка для известных типов
+        if pool_type == "event" then
+            t.id = nil
+            t.type = nil
+            t.data = nil
+            t.priority = nil
+            t.timestamp = nil
+            t.source = nil
+            t.is_table = nil
+            t.json_cache = nil
+        elseif pool_type == "report" then
+            t.type = nil
+            t.name = nil
+            t.server = nil
+            t.timestamp = nil
+            t.on_air = nil
+            t.bitrate = nil
+            t.scrambled = nil
+            t.cc_errors = nil
+            t.pes_errors = nil
+            -- Очистка вложенных таблиц если есть
+            if type(t.analyze) == "table" then
+                for k in pairs(t.analyze) do t.analyze[k] = nil end
+            end
         else
-            clear_table(t, deep_or_nested)
+            if type(deep_or_nested) == "string" then
+                release_nested(t, deep_or_nested)
+            else
+                clear_table(t, deep_or_nested)
+            end
         end
         table_insert(pool, t)
     end

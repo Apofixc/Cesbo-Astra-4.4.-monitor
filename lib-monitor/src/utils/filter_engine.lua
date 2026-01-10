@@ -143,6 +143,46 @@ local function check_condition(data, condition, sub_id, cond_idx)
     return is_match
 end
 
+--- Генерирует Lua-код для проверки набора условий.
+--- @private
+--- @param filters table Схема фильтров
+--- @return string|nil Lua-код функции
+local function generate_filter_code(filters)
+    if not filters.conditions or #filters.conditions == 0 then return nil end
+    
+    local logic = filters.logic or "and"
+    local code_parts = {}
+    
+    for i, cond in ipairs(filters.conditions) do
+        local op = cond.op or "eq"
+        local field = cond.field
+        local target = cond.value
+        
+        -- Формируем выражение для одного условия
+        local expr
+        if op == "eq" then
+            expr = string.format("(data.%s == %s)", field, type(target) == "string" and string.format("%q", target) or tostring(target))
+        elseif op == "ne" then
+            expr = string.format("(data.%s ~= %s)", field, type(target) == "string" and string.format("%q", target) or tostring(target))
+        elseif op == "gt" then
+            expr = string.format("(type(data.%s) == 'number' and data.%s > %s)", field, field, tostring(target))
+        elseif op == "lt" then
+            expr = string.format("(type(data.%s) == 'number' and data.%s < %s)", field, field, tostring(target))
+        elseif op == "contains" then
+            expr = string.format("(type(data.%s) == 'string' and data.%s:find(%q, 1, true) ~= nil)", field, field, tostring(target))
+        end
+        
+        if expr then
+            table.insert(code_parts, expr)
+        end
+    end
+    
+    if #code_parts == 0 then return nil end
+    
+    local joiner = (logic == "or") and " or " or " and "
+    return "return function(data) return " .. table.concat(code_parts, joiner) .. " end"
+end
+
 --- Проверяет данные события на соответствие набору фильтров.
 --- Поддерживает Fast Path (если фильтры пусты), Lua-скрипты и логические группы условий.
 --- @param data table Данные события
@@ -151,6 +191,33 @@ end
 --- @return boolean Результат проверки
 function FilterEngine.match(data, filters, sub_id)
     if not filters or next(filters) == nil then return true end
+
+    -- Оптимизация: JIT-компиляция условий в функцию
+    if filters.conditions and not filters.script and not filters._compiled_func then
+        -- Если есть условия с длительностью, JIT не используем (нужно состояние)
+        local has_duration = false
+        for _, c in ipairs(filters.conditions) do
+            if c.duration and c.duration > 0 then has_duration = true; break end
+        end
+        
+        if not has_duration then
+            local code = generate_filter_code(filters)
+            if code then
+                local factory, err = load(code, "=(filter_jit)", "t", { type = type, table = table })
+                if factory then
+                    local ok, func = pcall(factory)
+                    if ok and type(func) == "function" then
+                        filters._compiled_func = func
+                    end
+                end
+            end
+        end
+    end
+
+    if filters._compiled_func then
+        local ok, res = pcall(filters._compiled_func, data)
+        return ok and res == true
+    end
 
     -- 1. Проверка Lua-скрипта
     if filters.script and type(filters.script) == "string" then

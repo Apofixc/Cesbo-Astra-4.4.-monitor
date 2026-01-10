@@ -148,11 +148,17 @@ local function write_log(level_name, component, format_str, ...)
     local level = LOG_LEVELS[level_name]
     local is_error = (level_name == "ERROR")
     
+    -- Оптимизация: Проверяем уровень ДО формирования строки
     if not should_log(level) and not (is_error and current_context_id) then
         return
     end
 
-    local msg = (select("#", ...) > 0) and string_format(format_str, ...) or format_str
+    local msg
+    if select("#", ...) > 0 then
+        msg = string_format(format_str, ...)
+    else
+        msg = format_str
+    end
     
     if is_error and current_context_id then
         last_errors[current_context_id] = msg

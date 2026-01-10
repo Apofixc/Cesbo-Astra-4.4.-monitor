@@ -31,6 +31,15 @@ function Wildcard.compile(pattern)
         end
     end
 
+    -- Оптимизация: Быстрая проверка префикса для масок вида "prefix:*"
+    if pattern:match("^[^%*]+%*$") then
+        local prefix = pattern:sub(1, -2)
+        return function(name)
+            if not name or type(name) ~= "string" then return false end
+            return name:sub(1, #prefix) == prefix
+        end
+    end
+
     -- Превращаем маску в регулярное выражение Lua
     -- Экранируем спецсимволы Lua и заменяем * на .*
     local regex = pattern:gsub("([%^%$%(%)%%%.%[%]%+%-%?])", "%%%1"):gsub("%*", ".*")
