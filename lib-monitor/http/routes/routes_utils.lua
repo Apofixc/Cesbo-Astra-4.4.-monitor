@@ -27,10 +27,10 @@ local COMPONENT_NAME = "RoutesUtils"
 function RoutesUtils.validate_input(params, schema)
     for field, rules in pairs(schema) do
         if rules.required and params[field] == nil then
-            return false, "Missing required field: " .. field
+            return false, "Отсутствует обязательное поле: " .. field
         end
         if params[field] and rules.type and type(params[field]) ~= rules.type then
-            return false, "Invalid type for field: " .. field
+            return false, "Некорректный тип поля: " .. field
         end
     end
     return true
@@ -97,7 +97,7 @@ function RoutesUtils.get_monitor_errors(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     return HttpHelpers.success(server, client, {
         name = params.name,
@@ -165,7 +165,7 @@ end
 
 --- Очистка неактивных ресурсов (заглушка)
 function RoutesUtils.cleanup(server, client, request)
-    return HttpHelpers.success(server, client, { message = "Disabled for safety", cleaned_count = 0 })
+    return HttpHelpers.success(server, client, { message = "Отключено в целях безопасности", cleaned_count = 0 })
 end
 
 --- Возвращает информацию об API

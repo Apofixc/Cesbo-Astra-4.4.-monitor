@@ -53,7 +53,7 @@ end
 function BaseRepository:unregister(name, force)
     local instance = self.monitors[name]
     if not instance then
-        Logger.error(self.component_name, "unregister: Объект '%s' не найден", name)
+        Logger.error(self.component_name, "unregister: объект '%s' не найден", name)
         return nil
     end
 
@@ -62,7 +62,7 @@ function BaseRepository:unregister(name, force)
     if config then
         self.monitors[name] = nil
         self.count_active = self.count_active - 1
-        Logger.debug(self.component_name, "Объект '%s' удален и остановлен (force: %s).", name, tostring(force))
+        Logger.debug(self.component_name, "Объект '%s' удален и остановлен (принудительно: %s).", name, tostring(force))
         return config
     end
 
@@ -96,7 +96,7 @@ function BaseRepository:auto_recover()
             if health.state == BaseMonitor.STATE.RUNNING and
                now - (health.last_update or 0) > 300 then
 
-                Logger.warn(self.component_name, "Attempting to recover stuck monitor: %s", name)
+                Logger.warn(self.component_name, "Попытка восстановления зависшего монитора: %s", name)
 
                 -- 1. Останавливаем и получаем конфиг
                 local config = self:unregister(name, true)
@@ -107,14 +107,14 @@ function BaseRepository:auto_recover()
                     if new_monitor and new_monitor.start and new_monitor:start() then
                         self:register(name, new_monitor, class)
                         recovered = recovered + 1
-                        Logger.info(self.component_name, "Monitor %s successfully recovered", name)
+                        Logger.info(self.component_name, "Монитор %s успешно восстановлен", name)
                     else
                         failed = failed + 1
-                        Logger.error(self.component_name, "Failed to restart monitor %s during recovery", name)
+                        Logger.error(self.component_name, "Не удалось перезапустить монитор %s при восстановлении", name)
                     end
                 else
                     failed = failed + 1
-                    Logger.error(self.component_name, "Cannot recover monitor %s: config or class missing", name)
+                    Logger.error(self.component_name, "Не удалось восстановить монитор %s: отсутствует конфиг или класс", name)
                 end
             end
         end
@@ -145,7 +145,7 @@ end
 --- Останавливает и удаляет все объекты в репозитории.
 --- Используется при завершении работы системы.
 function BaseRepository:shutdown()
-    Logger.info(self.component_name, "Shutting down repository: stopping %d monitors", self.count_active)
+    Logger.info(self.component_name, "Остановка репозитория: завершение работы %d мониторов", self.count_active)
     local names = {}
     for name in pairs(self.monitors) do
         table.insert(names, name)

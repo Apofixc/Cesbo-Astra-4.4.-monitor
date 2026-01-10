@@ -47,9 +47,9 @@ function SubscriberRoutes.subscribe(server, client, request)
         throttle_ms = data.throttle_ms
     })
 
-    if not sub_id then return HttpHelpers.error(server, client, 500, "Failed to subscribe") end
+    if not sub_id then return HttpHelpers.error(server, client, 500, "Не удалось подписаться") end
 
-    return HttpHelpers.success(server, client, { message = "Subscribed", id = sub_id })
+    return HttpHelpers.success(server, client, { message = "Подписка оформлена", id = sub_id })
 end
 
 --- Удаляет существующую подписку по её уникальному ID.
@@ -67,9 +67,9 @@ function SubscriberRoutes.unsubscribe(server, client, request)
 
     local dispatcher = EventDispatcher.get_instance()
     local success = dispatcher.subscription_manager:unsubscribe(data.id)
-    if not success then return HttpHelpers.error(server, client, 404, "Subscription not found") end
+    if not success then return HttpHelpers.error(server, client, 404, "Подписка не найдена") end
 
-    return HttpHelpers.success(server, client, { message = "Unsubscribed" })
+    return HttpHelpers.success(server, client, { message = "Подписка удалена" })
 end
 
 return SubscriberRoutes

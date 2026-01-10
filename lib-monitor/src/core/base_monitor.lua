@@ -107,7 +107,7 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     end
 
     if result == nil then
-        Logger.error(self._component_name, "[%s] Invalid parameter value for %s: %s",
+        Logger.error(self._component_name, "[%s] Некорректное значение параметра для %s: %s",
             tostring(self._name), param_name, tostring(value))
         return false
     end
@@ -279,7 +279,7 @@ end
 --- @return boolean Статус выполнения
 function BaseMonitor:resume()
     if self._state == BaseMonitor.STATE.STOPPED then
-        Logger.error(self._component_name, "[%s] Cannot resume: monitor already stopped", tostring(self._name))
+        Logger.error(self._component_name, "[%s] Не удалось возобновить: монитор остановлен", tostring(self._name))
         return false
     end
     self._active = true

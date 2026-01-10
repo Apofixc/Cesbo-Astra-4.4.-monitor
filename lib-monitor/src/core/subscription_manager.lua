@@ -88,13 +88,13 @@ local Transport = {
     --- @param retry_count? number [Текущая попытка повтора]
     --- @param event_json? string [Предварительно подготовленный JSON]
     HTTP = function(config, event, event_type, retry_count, event_json)
-        if not http_request then return false, "http_request not available" end
+        if not http_request then return false, "http_request недоступен" end
 
         local content = event_json or
                         ((type(event) == "table" and event.id) and get_event_json(event) or
                         ((type(event) == "table") and json_encode(event) or tostring(event)))
 
-        if not content then return false, "JSON encode failed" end
+        if not content then return false, "ошибка кодирования JSON" end
 
         retry_count = retry_count or 0
 
@@ -141,14 +141,14 @@ local Transport = {
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
         end
-        return false, "WsSubscriber not available"
+        return false, "WsSubscriber недоступен"
     end,
     --- Доставка через вызов Lua функции
     --- @param config table Параметры (callback)
     --- @param event table|string Объект события или данные
     LUA_CALLBACK = function(config, event)
         local callback = type(config) == "table" and config.callback or config
-        if type(callback) ~= "function" then return false, "Invalid callback" end
+        if type(callback) ~= "function" then return false, "некорректный callback" end
         local data = (type(event) == "table" and event.id) and event.data or event
         return pcall(callback, data)
     end,
@@ -161,7 +161,7 @@ local Transport = {
         local message = event_json or
                         ((type(event) == "table" and event.id) and get_event_json(event) or
                         ((type(event) == "table") and json_encode(event) or event))
-        Logger.info("Console", "[EVENT:%s] %s", tostring(event_type), tostring(message))
+        Logger.info("Консоль", "[СОБЫТИЕ:%s] %s", tostring(event_type), tostring(message))
         return true
     end
 }

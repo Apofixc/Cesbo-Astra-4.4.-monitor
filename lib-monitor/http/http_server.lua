@@ -58,7 +58,7 @@ local function payload_limit_middleware(handler)
         local max_size = (MonitorConfig and MonitorConfig.MaxPayloadSize) or MAX_PAYLOAD_SIZE
         local content_length = tonumber(request.headers and request.headers["content-length"]) or 0
         if content_length > max_size then
-            Logger.warn(COMPONENT_NAME, "Payload too large from %s (%d bytes)", tostring(request.addr), content_length)
+            Logger.warn(COMPONENT_NAME, "Слишком большой объем данных от %s (%d байт)", tostring(request.addr), content_length)
             return HttpHelpers.error(server, client, 413, "Payload Too Large")
         end
         return handler(server, client, request)
@@ -106,7 +106,7 @@ local function logger_middleware(handler, path)
     return function(server, client, request)
         if not request then return nil end
         if HttpServer._is_stopping then
-            return HttpHelpers.error(server, client, 503, "Server is shutting down")
+            return HttpHelpers.error(server, client, 503, "Сервер останавливается")
         end
 
         HttpServer._active_requests = HttpServer._active_requests + 1
@@ -148,7 +148,7 @@ local function make_resource_handler(methods, path)
 
         local handler = methods[request.method]
         if not handler then
-            return HttpHelpers.error(server, client, 405, "Method Not Allowed")
+            return HttpHelpers.error(server, client, 405, "Метод не поддерживается")
         end
 
         -- Глобальный перехват ошибок
@@ -157,8 +157,8 @@ local function make_resource_handler(methods, path)
         end)
 
         if not ok then
-            Logger.error(COMPONENT_NAME, "Panic in handler %s: %s", tostring(path), tostring(success))
-            return HttpHelpers.error(server, client, 500, "Critical Server Error")
+            Logger.error(COMPONENT_NAME, "Критическая ошибка в обработчике %s: %s", tostring(path), tostring(success))
+            return HttpHelpers.error(server, client, 500, "Критическая ошибка сервера")
         end
 
         if not success then
@@ -182,7 +182,7 @@ function HttpServer.stop()
     end
 
     HttpServer._is_stopping = true
-    Logger.info(COMPONENT_NAME, "Graceful shutdown initiated. Waiting for %d active requests...",
+    Logger.info(COMPONENT_NAME, "Запущена плавная остановка. Ожидание завершения %d активных запросов...",
         HttpServer._active_requests)
 
     -- Ожидание завершения запросов (максимум 5 секунд)
@@ -208,7 +208,7 @@ function HttpServer.stop()
     collectgarbage("collect")
     collectgarbage("collect")
 
-    Logger.info(COMPONENT_NAME, "HTTP Server stopped and port should be free")
+    Logger.info(COMPONENT_NAME, "HTTP сервер остановлен, порт должен быть свободен")
 end
 
 --- Возвращает статистику производительности API
@@ -245,7 +245,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
             end
         else
             Logger.error(COMPONENT_NAME,
-                "Не удалось запустить сервер: порт %d занят. Используйте force_free=true для освобождения",
+                "Не удалось запустить сервер: порт %d занят. Используйте параметр force_free=true для освобождения",
                 port)
             return false
         end
@@ -357,11 +357,11 @@ function HttpServer.start(addr, port, retry_count, force_free)
                 if HttpServer._instance then pcall(HttpServer._instance.close, HttpServer._instance) end
             end
         })
-        Logger.info(COMPONENT_NAME, "HTTP Server started on %s:%s", addr, tostring(port))
+        Logger.info(COMPONENT_NAME, "HTTP сервер запущен на %s:%s", addr, tostring(port))
         return true
     else
         if retry_count < RESTART_RETRY_COUNT then
-            Logger.warn(COMPONENT_NAME, "Failed to bind port %s (attempt %d/%d). Retrying...",
+            Logger.warn(COMPONENT_NAME, "Не удалось занять порт %s (попытка %d/%d). Повтор...",
                 tostring(port), retry_count + 1, RESTART_RETRY_COUNT)
             if timer then
                 timer({
@@ -371,7 +371,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
                 return true
             end
         end
-        Logger.error(COMPONENT_NAME, "Failed to start HTTP Server: %s", tostring(result))
+        Logger.error(COMPONENT_NAME, "Не удалось запустить HTTP сервер: %s", tostring(result))
         return false
     end
 end

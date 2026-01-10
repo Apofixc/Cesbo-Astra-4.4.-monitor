@@ -37,7 +37,7 @@ Utils._performance_stats = {}
 --- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
-        Logger.error(COMPONENT_NAME, "get_stream_name: Invalid ip_address")
+        Logger.error(COMPONENT_NAME, "get_stream_name: некорректный ip_address")
         return nil
     end
 
@@ -151,7 +151,7 @@ end
 function Utils.validate_monitor_param(name, value)
     local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[name]
     if not schema then
-        Logger.error(COMPONENT_NAME, "validate_monitor_param: Unknown parameter '%s'", name)
+        Logger.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name)
         return nil
     end
 
@@ -161,7 +161,7 @@ function Utils.validate_monitor_param(name, value)
 
     if type(value) ~= schema.type then
         Logger.error(COMPONENT_NAME,
-            "validate_monitor_param: Invalid type for '%s' (expected %s, got %s). Using default.",
+            "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s). Используется значение по умолчанию.",
             name, schema.type, type(value))
         return schema.default
     end
@@ -169,13 +169,13 @@ function Utils.validate_monitor_param(name, value)
     if schema.type == "number" then
         if schema.min and value < schema.min then
             Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: Value for '%s' is too small (%s < %s). Using default.",
+                "validate_monitor_param: значение для '%s' слишком мало (%s < %s). Используется значение по умолчанию.",
                 name, tostring(value), tostring(schema.min))
             return schema.default
         end
         if schema.max and value > schema.max then
             Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: Value for '%s' is too large (%s > %s). Using default.",
+                "validate_monitor_param: значение для '%s' слишком велико (%s > %s). Используется значение по умолчанию.",
                 name, tostring(value), tostring(schema.max))
             return schema.default
         end
@@ -215,7 +215,7 @@ end
 function Utils.parse_url(url)
     if type(url) ~= "string" or url == "" then return nil end
     if not astra_parse_url then
-        Logger.error(COMPONENT_NAME, "parse_url: dependency not found")
+        Logger.error(COMPONENT_NAME, "parse_url: зависимость не найдена")
         return nil
     end
     return astra_parse_url(url)

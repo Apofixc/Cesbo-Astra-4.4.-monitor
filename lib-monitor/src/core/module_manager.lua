@@ -73,7 +73,7 @@ end
 --- @return boolean Статус выполнения
 function ModuleManager.register_module(name, path, dependencies)
     if not name or type(name) ~= "string" then
-        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
+        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с некорректным именем.")
         return false
     end
 
@@ -93,7 +93,7 @@ function ModuleManager.register_module(name, path, dependencies)
             if type(dep) == "string" and dep ~= "" then
                 table_insert(valid_dependencies, dep)
             else
-                log_error(COMPONENT_NAME, "Модуль '%s': игнорируем невалидную зависимость.", name)
+                log_error(COMPONENT_NAME, "Модуль '%s': игнорируем некорректную зависимость.", name)
             end
         end
     end
@@ -308,7 +308,7 @@ end
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
         log_error(COMPONENT_NAME,
-            "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица).")
+            "Попытка установить глобальные зависимости с некорректным аргументом (ожидалась таблица).")
         return false
     end
     for path, obj in pairs(deps) do

@@ -76,11 +76,11 @@ function SystemRoutes.reload(server, client, request)
             interval = delay,
             callback = function(self) self:close(); if astra_reload then astra_reload() end end
         })
-        return HttpHelpers.success(server, client, { message = "Astra reload scheduled in " .. delay .. "s" })
+        return HttpHelpers.success(server, client, { message = "Перезагрузка Astra запланирована через " .. delay .. " сек" })
     end
 
     if astra_reload then astra_reload() end
-    return HttpHelpers.success(server, client, { message = "Astra reloading" })
+    return HttpHelpers.success(server, client, { message = "Перезагрузка Astra" })
 end
 
 --- Останавливает Astra
@@ -90,20 +90,20 @@ function SystemRoutes.exit(server, client, request)
 
     if timer_obj then
         timer_obj({ interval = delay, callback = function(self) self:close(); if astra_exit then astra_exit() end end })
-        return HttpHelpers.success(server, client, { message = "Astra exit scheduled in " .. delay .. "s" })
+        return HttpHelpers.success(server, client, { message = "Выход из Astra запланирован через " .. delay .. " сек" })
     end
 
     if astra_exit then astra_exit() end
-    return HttpHelpers.success(server, client, { message = "Astra exiting" })
+    return HttpHelpers.success(server, client, { message = "Выход из Astra" })
 end
 
 --- Очищает кэш системных метрик
 function SystemRoutes.clear_cache(server, client, request)
     if ResourceMonitor and ResourceMonitor.check then
         ResourceMonitor.check()
-        return HttpHelpers.success(server, client, { message = "Metrics updated" })
+        return HttpHelpers.success(server, client, { message = "Метрики обновлены" })
     end
-    return HttpHelpers.error(server, client, 501, "Not available")
+    return HttpHelpers.error(server, client, 501, "Недоступно")
 end
 
 --- Возвращает список всех сетевых интерфейсов сервера
@@ -123,7 +123,7 @@ end
 function SystemRoutes.get_pool_stats(server, client, request)
     local TablePool = ModuleManager.get_module("table_pool")
     if not TablePool or not TablePool.get_stats then
-        return HttpHelpers.error(server, client, 501, "TablePool not available")
+        return HttpHelpers.error(server, client, 501, "TablePool недоступен")
     end
     return HttpHelpers.success(server, client, TablePool.get_stats())
 end

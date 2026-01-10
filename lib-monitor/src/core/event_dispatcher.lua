@@ -113,7 +113,7 @@ function EventDispatcher:initialize()
     self.active = true
     self:start_queue_processor()
 
-    Logger.info(COMPONENT_NAME, "EventDispatcher initialized with LVC and Wildcard support")
+    Logger.info(COMPONENT_NAME, "Диспетчер событий инициализирован с поддержкой LVC и масок (Wildcards)")
 end
 
 --- Вспомогательная функция для очистки записи LVC и возврата таблиц в пул
@@ -228,7 +228,7 @@ function EventDispatcher:emit_safe(event_type, event_data, priority, options)
     end)
 
     if not ok then
-        Logger.error(COMPONENT_NAME, "Event emit failed: %s", tostring(result))
+        Logger.error(COMPONENT_NAME, "Ошибка публикации события: %s", tostring(result))
         return nil
     end
 
@@ -314,8 +314,8 @@ function EventDispatcher:process_queue()
                 end)
 
                 if not ok then
-                    Logger.error(COMPONENT_NAME, "Failed to process event %s: %s",
-                        event.id or "unknown", tostring(err))
+                    Logger.error(COMPONENT_NAME, "Не удалось обработать событие %s: %s",
+                        event.id or "неизвестно", tostring(err))
                 else
                     self.stats.processed = self.stats.processed + 1
                 end
@@ -342,14 +342,14 @@ function EventDispatcher:_safe_return_to_pool(event)
     end)
 
     if not ok then
-        Logger.warn(COMPONENT_NAME, "Failed to return event to pool: %s", tostring(err))
+        Logger.warn(COMPONENT_NAME, "Не удалось вернуть событие в пул: %s", tostring(err))
     end
 end
 
 --- Останавливает диспетчер событий и очищает очереди.
 function EventDispatcher:shutdown()
     self.active = false
-    Logger.info(COMPONENT_NAME, "Shutting down EventDispatcher...")
+    Logger.info(COMPONENT_NAME, "Остановка диспетчера событий...")
 
     if Scheduler then
         Scheduler.get_instance():remove_task("event_dispatcher_queue")

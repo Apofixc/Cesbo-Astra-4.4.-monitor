@@ -58,7 +58,7 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     if ch_obj._json_cache then return HttpHelpers.send_raw_json(server, client, 200, ch_obj._json_cache) end
     return HttpHelpers.success(server, client, ch_obj:get_status_table())
@@ -74,9 +74,9 @@ function MonitorRoutes.create_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Channel.make_monitor(data)
-    if not success then return false, result_or_err or "Failed to create" end
+    if not success then return false, result_or_err or "Не удалось создать" end
 
-    return HttpHelpers.success(server, client, { message = "Monitor created" })
+    return HttpHelpers.success(server, client, { message = "Монитор создан" })
 end
 
 --- Удаляет монитор (без удаления канала)
@@ -89,7 +89,7 @@ function MonitorRoutes.kill_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local config = Channel.kill_monitor(params.name)
-    if not config then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not config then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     if params.reboot then
         if timer then
@@ -100,7 +100,7 @@ function MonitorRoutes.kill_monitor(server, client, request)
     end
 
     return HttpHelpers.success(server, client, {
-        message = params.reboot and "Monitor rebooting" or "Monitor killed",
+        message = params.reboot and "Перезагрузка монитора" or "Монитор удален",
         config = config
     })
 end
@@ -112,9 +112,9 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Channel.update_monitor_parameters(params.name, params)
-    if not success then return false, result_err or "Failed to update" end
+    if not success then return false, result_err or "Не удалось обновить" end
 
-    return HttpHelpers.success(server, client, { message = "Monitor updated" })
+    return HttpHelpers.success(server, client, { message = "Монитор обновлен" })
 end
 
 --- Приостановка мониторинга канала
@@ -124,9 +124,9 @@ function MonitorRoutes.pause_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Channel.pause_monitor(params.name)
-    if not success then return false, result_err or "Failed to pause" end
+    if not success then return false, result_err or "Не удалось приостановить" end
 
-    return HttpHelpers.success(server, client, { message = "Monitoring paused" })
+    return HttpHelpers.success(server, client, { message = "Мониторинг приостановлен" })
 end
 
 --- Возобновление мониторинга канала
@@ -136,9 +136,9 @@ function MonitorRoutes.resume_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Channel.resume_monitor(params.name)
-    if not success then return false, result_err or "Failed to resume" end
+    if not success then return false, result_err or "Не удалось возобновить" end
 
-    return HttpHelpers.success(server, client, { message = "Monitoring resumed" })
+    return HttpHelpers.success(server, client, { message = "Мониторинг возобновлен" })
 end
 
 --- Получение статистики по PID
@@ -148,7 +148,7 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     return HttpHelpers.success(server, client, ch_obj:get_stats())
 end
@@ -160,7 +160,7 @@ function MonitorRoutes.get_monitor_rate_stat(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     return HttpHelpers.success(server, client, ch_obj:get_rate_stat() or {})
 end
@@ -172,10 +172,10 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Monitor not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
     ch_obj:clear_stats()
-    return HttpHelpers.success(server, client, { message = "Stats cleared" })
+    return HttpHelpers.success(server, client, { message = "Статистика очищена" })
 end
 
 return MonitorRoutes

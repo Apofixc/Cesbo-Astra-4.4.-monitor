@@ -87,7 +87,7 @@ function ChannelMonitor.new(config, channel_data)
     end
 
     if not config.upstream then
-        Logger.error(COMPONENT_NAME, "new: upstream обязателен в конфигурации")
+        Logger.error(COMPONENT_NAME, "new: параметр upstream обязателен в конфигурации")
         return nil
     end
 
@@ -143,7 +143,7 @@ function ChannelMonitor:start()
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, "[%s] start: Некорректный метод сравнения %s",
+        Logger.error(COMPONENT_NAME, "[%s] start: некорректный метод сравнения %s",
             self._name, tostring(self._config.method_comparison))
         return nil
     end
@@ -171,7 +171,7 @@ function ChannelMonitor:start()
             if not self._active then return end
             local ok, err = pcall(self._on_astra_data, self, data)
             if not ok then
-                Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
+                Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
             end
         end
     })
@@ -271,7 +271,7 @@ function ChannelMonitor:process_psi_data(data)
                     if self._stats_count >= 100 then
                         self:clear_stats()
                         Logger.warn(COMPONENT_NAME,
-                            "[%s] PID stats limit reached during PSI processing, clearing stats",
+                            "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
                             tostring(self._name))
                     end
 
@@ -310,7 +310,7 @@ function ChannelMonitor:process_analyze_data(data)
                     -- Если лимит превышен, сбрасываем статистику для очистки места
                     if self._stats_count >= 100 then
                         self:clear_stats()
-                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached, clearing stats",
+                        Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
                             tostring(self._name))
                     end
 

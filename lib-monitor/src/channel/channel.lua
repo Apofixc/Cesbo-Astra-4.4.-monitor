@@ -199,23 +199,23 @@ end
 --- @return any|nil Экземпляр монитора Astra или nil
 local function make_monitor(config)
     if ChannelRepository:count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
-        Logger.error(COMPONENT_NAME, "make_monitor: monitor limit reached")
+        Logger.error(COMPONENT_NAME, "make_monitor: лимит мониторов исчерпан")
         return nil
     end
 
     local name = config.name
     if not name then
-        Logger.error(COMPONENT_NAME, "make_monitor: monitor name is required")
+        Logger.error(COMPONENT_NAME, "make_monitor: имя монитора обязательно")
         return nil
     end
 
     if ChannelRepository:find(name) then
-        Logger.error(COMPONENT_NAME, "make_monitor: Monitor '%s' already exists", name)
+        Logger.error(COMPONENT_NAME, "make_monitor: монитор '%s' уже существует", name)
         return nil
     end
 
     if not Utils.validate_monitor_name(name) then
-        Logger.error(COMPONENT_NAME, "make_monitor: Invalid monitor name '%s'", tostring(config.name))
+        Logger.error(COMPONENT_NAME, "make_monitor: некорректное имя монитора '%s'", tostring(config.name))
         return nil
     end
 
@@ -246,13 +246,13 @@ local function make_monitor(config)
         if not is_handled and not upstream then
             local url_cfg = parse_url(config.monitor)
             if not url_cfg then
-                Logger.error(COMPONENT_NAME, "make_monitor: invalid monitor address '%s'", tostring(config.monitor))
+                Logger.error(COMPONENT_NAME, "make_monitor: некорректный адрес монитора '%s'", tostring(config.monitor))
                 return nil
             end
             url_cfg.name = name
             input_instance = init_input(url_cfg)
             if not input_instance then
-                Logger.error(COMPONENT_NAME, "make_monitor: init_input failed")
+                Logger.error(COMPONENT_NAME, "make_monitor: ошибка init_input")
                 return nil
             end
             upstream = input_instance.tail
@@ -266,7 +266,7 @@ local function make_monitor(config)
     local monitor = ChannelMonitor.new(config, ch_data)
     if not monitor then
         if input_instance then kill_input(input_instance) end
-        Logger.error(COMPONENT_NAME, "make_monitor: failed to create ChannelMonitor instance for '%s'", name)
+        Logger.error(COMPONENT_NAME, "make_monitor: не удалось создать экземпляр ChannelMonitor для '%s'", name)
         return nil
     end
 
@@ -301,7 +301,7 @@ end
 local function make_stream(conf)
     local channel_data = make_channel(conf)
     if not channel_data then
-        Logger.error(COMPONENT_NAME, "make_stream: make_channel failed for '%s'", tostring(conf.name))
+        Logger.error(COMPONENT_NAME, "make_stream: ошибка make_channel для '%s'", tostring(conf.name))
         return nil
     end
 
@@ -312,7 +312,7 @@ local function make_stream(conf)
 
     local handler = monitor_type_handlers[monitor_type]
     if not handler then
-        Logger.error(COMPONENT_NAME, "make_stream: unknown monitor type '%s' for stream '%s'", monitor_type, conf.name)
+        Logger.error(COMPONENT_NAME, "make_stream: неизвестный тип монитора '%s' для потока '%s'", monitor_type, conf.name)
         kill_channel(channel_data)
         return nil
     end
@@ -339,7 +339,7 @@ local function make_stream(conf)
     }
 
     if not make_monitor(monitor_config) then
-        Logger.error(COMPONENT_NAME, "make_stream: make_monitor не удался для '%s', удаляем канал", conf.name)
+        Logger.error(COMPONENT_NAME, "make_stream: ошибка make_monitor для '%s', удаляем канал", conf.name)
         kill_channel(channel_data)
         return nil
     end
@@ -353,7 +353,7 @@ end
 local function kill_stream(channel_data)
     local ch_data = type(channel_data) == "table" and channel_data or find_channel(tostring(channel_data))
     if not ch_data or type(ch_data) ~= "table" or not ch_data.config then
-        Logger.error(COMPONENT_NAME, "kill_stream: invalid channel_data or channel not found")
+        Logger.error(COMPONENT_NAME, "kill_stream: некорректные данные канала или канал не найден")
         return nil
     end
     local name = ch_data.config.name
@@ -390,7 +390,7 @@ local function update_monitor_parameters(name, params)
     if monitor then
         return monitor:update_parameters(params)
     end
-    Logger.error(COMPONENT_NAME, "update_monitor_parameters: monitor '%s' not found", tostring(name))
+    Logger.error(COMPONENT_NAME, "update_monitor_parameters: монитор '%s' не найден", tostring(name))
     return false
 end
 

@@ -80,7 +80,7 @@ function ChannelRoutes.get_channel_info(server, client, request)
 
     local ch_data = find_channel(params.name)
     if not ch_data or not ch_data.config then
-        return HttpHelpers.error(server, client, 404, "Channel not found")
+        return HttpHelpers.error(server, client, 404, "Канал не найден")
     end
 
     return HttpHelpers.success(server, client, ch_data.config)
@@ -117,12 +117,12 @@ function ChannelRoutes.get_channel_psi(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Channel not found") end
+    if not ch_obj then return HttpHelpers.error(server, client, 404, "Канал не найден") end
 
     local psi = ch_obj:get_psi() or {}
     if params.table then
         local table_data = psi[params.table:upper()]
-        if not table_data then return HttpHelpers.error(server, client, 404, "PSI table not found") end
+        if not table_data then return HttpHelpers.error(server, client, 404, "Таблица PSI не найдена") end
         return HttpHelpers.success(server, client, table_data)
     end
 
@@ -141,10 +141,10 @@ function ChannelRoutes.create_channel_raw(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     if not make_channel(data) then
-        return false, "Failed to create channel in Astra core"
+        return false, "Не удалось создать канал в ядре Astra"
     end
 
-    return HttpHelpers.success(server, client, { message = "Channel created" })
+    return HttpHelpers.success(server, client, { message = "Канал создан" })
 end
 
 --- Удаляет или перезапускает канал (Raw Astra Channel)
@@ -157,7 +157,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_data = find_channel(params.name)
-    if not ch_data then return HttpHelpers.error(server, client, 404, "Channel not found") end
+    if not ch_data then return HttpHelpers.error(server, client, 404, "Канал не найден") end
 
     local config = ch_data.config
     kill_channel(ch_data)
@@ -171,7 +171,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
     end
 
     return HttpHelpers.success(server, client, {
-        message = params.reboot and "Channel rebooting" or "Channel killed",
+        message = params.reboot and "Перезагрузка канала" or "Канал удален",
         config = config
     })
 end
@@ -186,9 +186,9 @@ function ChannelRoutes.create_stream(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result = Channel.make_stream(data)
-    if not success then return false, result or "Failed to create stream" end
+    if not success then return false, result or "Не удалось создать поток" end
 
-    return HttpHelpers.success(server, client, { message = "Stream and monitor created" })
+    return HttpHelpers.success(server, client, { message = "Поток и монитор созданы" })
 end
 
 --- Удаляет поток и монитор
@@ -201,7 +201,7 @@ function ChannelRoutes.kill_stream(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local config = Channel.kill_stream(params.name)
-    if not config then return HttpHelpers.error(server, client, 404, "Stream not found") end
+    if not config then return HttpHelpers.error(server, client, 404, "Поток не найден") end
 
     if params.reboot then
         if timer then
@@ -212,7 +212,7 @@ function ChannelRoutes.kill_stream(server, client, request)
     end
 
     return HttpHelpers.success(server, client, {
-        message = params.reboot and "Stream rebooting" or "Stream and monitor killed",
+        message = params.reboot and "Перезагрузка потока" or "Поток и монитор удалены",
         config = config
     })
 end

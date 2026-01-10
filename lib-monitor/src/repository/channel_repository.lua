@@ -56,7 +56,7 @@ function ChannelRepository:find_by_adapter(adapter_name)
     local result = {}
 
     if not channel_list then
-        Logger.error(COMPONENT_NAME, "find_by_adapter: channel_list dependency not found")
+        Logger.error(COMPONENT_NAME, "find_by_adapter: зависимость channel_list не найдена")
         return result
     end
 

@@ -194,7 +194,7 @@ local function write_log(level_name, component, format_str, ...)
         if log and type(log) == "table" and type(log[lower_level]) == "function" then
             local ok, err = pcall(log[lower_level], msg)
             if not ok then
-                print(string_format("[LOGGER ERROR] Failed to write to Astra log: %s", tostring(err)))
+                print(string_format("[ОШИБКА ЛОГГЕРА] Не удалось записать в лог Astra: %s", tostring(err)))
             end
         else
             print(string_format("[%s] %s", level_name, msg))
@@ -258,7 +258,7 @@ function Logger.with_error(func, ...)
     if not ok then
         -- Ошибка выполнения (crash)
         local err = results[2]
-        Logger.error("Logger", "Runtime error: %s", tostring(err))
+        Logger.error("Logger", "Ошибка выполнения: %s", tostring(err))
         last_errors[context_id] = nil
         return false, tostring(err)
     end
@@ -267,7 +267,7 @@ function Logger.with_error(func, ...)
     local success = results[2]
     if not success then
         -- Извлекаем ошибку, которая была сохранена для ЭТОГО контекста
-        local err = last_errors[context_id] or "Unknown error"
+        local err = last_errors[context_id] or "Неизвестная ошибка"
         last_errors[context_id] = nil
         return false, err
     end

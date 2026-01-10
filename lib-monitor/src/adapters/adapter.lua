@@ -30,12 +30,12 @@ local Adapter = {}
 --- @return boolean Статус выполнения
 local function dvb_tuner_monitor(conf)
     if not conf or not conf.name_adapter then
-        Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: name_adapter is required")
+        Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: параметр name_adapter обязателен")
         return false
     end
 
     if DvbRepository:find(conf.name_adapter) then
-        Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: tuner '%s' already exists", conf.name_adapter)
+        Logger.error(COMPONENT_NAME, "dvb_tuner_monitor: тюнер '%s' уже существует", conf.name_adapter)
         return false
     end
 
@@ -50,7 +50,7 @@ local function dvb_tuner_monitor(conf)
         _G[conf.name_adapter] = instance
         return true
     else
-        Logger.error(COMPONENT_NAME, string_format("dvb_tuner_monitor: failed to start tuner '%s'", conf.name_adapter))
+        Logger.error(COMPONENT_NAME, string_format("dvb_tuner_monitor: не удалось запустить тюнер '%s'", conf.name_adapter))
         return false
     end
 end
@@ -71,7 +71,7 @@ local function update_dvb_monitor_parameters(name_adapter, params)
     if tuner then
         return tuner:update_parameters(params)
     end
-    Logger.error(COMPONENT_NAME, "update_dvb_monitor_parameters: tuner '%s' not found", name_adapter)
+    Logger.error(COMPONENT_NAME, "update_dvb_monitor_parameters: тюнер '%s' не найден", name_adapter)
     return false
 end
 
@@ -91,7 +91,7 @@ local function stop_dvb_monitor(name_adapter, force)
         _G[name_adapter] = nil
         return config
     end
-    Logger.error(COMPONENT_NAME, "stop_dvb_monitor: tuner '%s' not found or busy", name_adapter)
+    Logger.error(COMPONENT_NAME, "stop_dvb_monitor: тюнер '%s' не найден или занят", name_adapter)
     return nil
 end
 
@@ -101,7 +101,7 @@ end
 local function stop_dependent_channels(name_adapter)
     local ChannelRepository = ModuleManager.get_module("channel_repository")
     if not ChannelRepository then
-        Logger.error(COMPONENT_NAME, "ChannelRepository module not found")
+        Logger.error(COMPONENT_NAME, "Модуль ChannelRepository не найден")
         return {}
     end
     return ChannelRepository:stop_dependent_channels(name_adapter)
@@ -112,7 +112,7 @@ end
 local function start_dependent_channels(configs)
     local ChannelRepository = ModuleManager.get_module("channel_repository")
     if not ChannelRepository then
-        Logger.error(COMPONENT_NAME, "ChannelRepository module not found")
+        Logger.error(COMPONENT_NAME, "Модуль ChannelRepository не найден")
         return
     end
     ChannelRepository:start_dependent_channels(configs)
@@ -126,7 +126,7 @@ end
 local function restart_dvb_monitor(name_adapter, new_params, force)
     local tuner = DvbRepository:find(name_adapter)
     if not tuner then
-        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: tuner '%s' not found", name_adapter)
+        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: тюнер '%s' не найден", name_adapter)
         return false
     end
 
@@ -169,7 +169,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     end
 
     if not perform_restart(new_conf) then
-        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to restart '%s'. Rolling back...", name_adapter)
+        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: не удалось перезапустить '%s'. Откат...", name_adapter)
         perform_restart(old_conf)
         if not force and EventDispatcher then
             EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
@@ -193,7 +193,7 @@ local function pause_dvb_monitor(name_adapter)
     if tuner then
         return tuner:pause()
     end
-    Logger.error(COMPONENT_NAME, "pause_dvb_monitor: tuner '%s' not found", tostring(name_adapter))
+    Logger.error(COMPONENT_NAME, "pause_dvb_monitor: тюнер '%s' не найден", tostring(name_adapter))
     return false
 end
 
@@ -205,7 +205,7 @@ local function resume_dvb_monitor(name_adapter)
     if tuner then
         return tuner:resume()
     end
-    Logger.error(COMPONENT_NAME, "resume_dvb_monitor: tuner '%s' not found", tostring(name_adapter))
+    Logger.error(COMPONENT_NAME, "resume_dvb_monitor: тюнер '%s' не найден", tostring(name_adapter))
     return false
 end
 
@@ -217,7 +217,7 @@ local function update_dvb_psi(name_adapter)
     if tuner then
         return tuner:psi_update()
     end
-    Logger.error(COMPONENT_NAME, "update_dvb_psi: tuner '%s' not found", tostring(name_adapter))
+    Logger.error(COMPONENT_NAME, "update_dvb_psi: тюнер '%s' не найден", tostring(name_adapter))
     return false
 end
 
@@ -229,7 +229,7 @@ local function get_dvb_psi(name_adapter)
     if tuner then
         return tuner:get_psi()
     end
-    Logger.error(COMPONENT_NAME, "get_dvb_psi: tuner '%s' not found", tostring(name_adapter))
+    Logger.error(COMPONENT_NAME, "get_dvb_psi: тюнер '%s' не найден", tostring(name_adapter))
     return nil
 end
 
@@ -284,7 +284,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
         EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
-    Logger.info(COMPONENT_NAME, "Transponder switched on adapter '%s'", name_adapter)
+    Logger.info(COMPONENT_NAME, "Транспондер переключен на адаптере '%s'", name_adapter)
     return { tuner_params = old_tuner_params }
 end
 

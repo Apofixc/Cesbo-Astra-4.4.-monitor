@@ -36,7 +36,7 @@ end
 
 --- Запуск сканирования адаптеров (заглушка)
 function DvbRoutes.scan_adapters(server, client, request)
-    return HttpHelpers.error(server, client, 501, "Scan not implemented")
+    return HttpHelpers.error(server, client, 501, "Сканирование не реализовано")
 end
 
 --- Возвращает текущие метрики конкретного DVB адаптера
@@ -46,7 +46,7 @@ function DvbRoutes.get_adapter_data(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
-    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
+    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Адаптер не найден") end
 
     if dvb_obj._json_cache then return HttpHelpers.send_raw_json(server, client, 200, dvb_obj._json_cache) end
     return HttpHelpers.success(server, client, dvb_obj:get_status_table())
@@ -59,9 +59,9 @@ function DvbRoutes.update_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.update_dvb_monitor_parameters(params.name, params)
-    if not success then return false, result_err or "Failed to update" end
+    if not success then return false, result_err or "Не удалось обновить" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter monitor updated" })
+    return HttpHelpers.success(server, client, { message = "Мониторинг адаптера обновлен" })
 end
 
 --- Останавливает мониторинг DVB адаптера
@@ -74,9 +74,9 @@ function DvbRoutes.stop_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.stop_dvb_monitor(params.name, params.force == true)
-    if not success then return false, result_or_err or "Failed to stop" end
+    if not success then return false, result_or_err or "Не удалось остановить" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter stopped", config = result_or_err })
+    return HttpHelpers.success(server, client, { message = "Адаптер остановлен", config = result_or_err })
 end
 
 --- Возвращает PSI данные DVB адаптера
@@ -89,12 +89,12 @@ function DvbRoutes.get_adapter_psi(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
-    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
+    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Адаптер не найден") end
 
     local psi = dvb_obj:get_psi() or {}
     if params.table then
         local table_data = psi[params.table:upper()]
-        if not table_data then return HttpHelpers.error(server, client, 404, "PSI table not found") end
+        if not table_data then return HttpHelpers.error(server, client, 404, "Таблица PSI не найдена") end
         return HttpHelpers.success(server, client, table_data)
     end
 
@@ -109,10 +109,10 @@ function DvbRoutes.update_adapter_psi(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
-    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
+    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Адаптер не найден") end
 
     dvb_obj:psi_update()
-    return HttpHelpers.success(server, client, { message = "PSI update started" })
+    return HttpHelpers.success(server, client, { message = "Обновление PSI запущено" })
 end
 
 --- Настройка адаптера на частоту и запуск мониторинга
@@ -125,9 +125,9 @@ function DvbRoutes.tune_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.dvb_tuner_monitor(data)
-    if not success then return false, result_or_err or "Failed to tune" end
+    if not success then return false, result_or_err or "Не удалось настроить тюнер" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter tuning started" })
+    return HttpHelpers.success(server, client, { message = "Настройка адаптера запущена" })
 end
 
 --- Переключение транспондера
@@ -140,9 +140,9 @@ function DvbRoutes.switch_transponder(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.switch_transponder(data.name, data, data.reserve_input)
-    if not success then return false, result_or_err or "Failed to switch" end
+    if not success then return false, result_or_err or "Не удалось переключить" end
 
-    return HttpHelpers.success(server, client, { message = "Transponder switched", backup = result_or_err })
+    return HttpHelpers.success(server, client, { message = "Транспондер переключен", backup = result_or_err })
 end
 
 --- Приостановка мониторинга адаптера
@@ -152,9 +152,9 @@ function DvbRoutes.pause_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.pause_dvb_monitor(params.name)
-    if not success then return false, result_err or "Failed to pause" end
+    if not success then return false, result_err or "Не удалось приостановить" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter paused" })
+    return HttpHelpers.success(server, client, { message = "Мониторинг адаптера приостановлен" })
 end
 
 --- Возобновление мониторинга адаптера
@@ -164,9 +164,9 @@ function DvbRoutes.resume_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.resume_dvb_monitor(params.name)
-    if not success then return false, result_err or "Failed to resume" end
+    if not success then return false, result_err or "Не удалось возобновить" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter resumed" })
+    return HttpHelpers.success(server, client, { message = "Мониторинг адаптера возобновлен" })
 end
 
 --- Перезапуск мониторинга адаптера
@@ -179,9 +179,9 @@ function DvbRoutes.restart_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.restart_dvb_monitor(params.name, params, params.force == true)
-    if not success then return false, result_err or "Failed to restart" end
+    if not success then return false, result_err or "Не удалось перезапустить" end
 
-    return HttpHelpers.success(server, client, { message = "Adapter restarted" })
+    return HttpHelpers.success(server, client, { message = "Адаптер перезапущен" })
 end
 
 --- Возвращает список всех физических адаптеров
@@ -197,7 +197,7 @@ function DvbRoutes.get_adapter_status_info(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dvb_obj = DvbRepository and DvbRepository:find(params.name)
-    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Adapter not found") end
+    if not dvb_obj then return HttpHelpers.error(server, client, 404, "Адаптер не найден") end
 
     return HttpHelpers.success(server, client, dvb_obj:get_status_flags())
 end

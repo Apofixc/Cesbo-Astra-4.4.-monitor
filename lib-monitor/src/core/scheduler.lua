@@ -71,9 +71,9 @@ function Scheduler:initialize()
             collectgarbage("step", 20)
         end, 2)
 
-        Logger.info(COMPONENT_NAME, "Scheduler initialized with single Astra timer and GC maintenance")
+        Logger.info(COMPONENT_NAME, "Планировщик инициализирован с системным таймером Astra и обслуживанием GC")
     else
-        Logger.error(COMPONENT_NAME, "Astra timer dependency not found!")
+        Logger.error(COMPONENT_NAME, "Зависимость Astra timer не найдена!")
     end
 end
 
@@ -103,7 +103,7 @@ function Scheduler:add_task(id, callback, interval, options)
     }
 
     self._task_count = self._task_count + 1
-    Logger.debug(COMPONENT_NAME, "Task added: %s (interval: %ds)", id, interval_val)
+    Logger.debug(COMPONENT_NAME, "Задача добавлена: %s (интервал: %d сек)", id, interval_val)
 end
 
 --- Удаляет задачу из планировщика
@@ -112,7 +112,7 @@ function Scheduler:remove_task(id)
     if self._tasks[id] then
         self._tasks[id] = nil
         self._task_count = self._task_count - 1
-        Logger.debug(COMPONENT_NAME, "Task removed: %s", id)
+        Logger.debug(COMPONENT_NAME, "Задача удалена: %s", id)
     end
 end
 
@@ -141,7 +141,7 @@ function Scheduler:_tick()
         if task.active and now >= task.next_run then
             local ok, err = pcall(task.callback)
             if not ok then
-                Logger.error(COMPONENT_NAME, "Error in task %s: %s", id, tostring(err))
+                Logger.error(COMPONENT_NAME, "Ошибка в задаче %s: %s", id, tostring(err))
             end
 
             task.last_run = now
@@ -158,7 +158,7 @@ function Scheduler:shutdown()
         self._timer = nil
     end
     self._tasks = {}
-    Logger.info(COMPONENT_NAME, "Scheduler shutdown")
+    Logger.info(COMPONENT_NAME, "Планировщик остановлен")
 end
 
 return Scheduler

@@ -41,7 +41,7 @@ local JSON_HEADERS = {
 function HttpHelpers.send_json(server, client, code, data)
     local ok, content = pcall(json_encode, data or {})
     if not ok then
-        Logger.error(COMPONENT_NAME, "Failed to encode JSON response: %s", tostring(content))
+        Logger.error(COMPONENT_NAME, "Не удалось закодировать JSON ответ: %s", tostring(content))
         server:abort(client, 500)
         return true
     end
@@ -83,7 +83,7 @@ function HttpHelpers.check_rate_limit(request)
 
     data.count = data.count + 1
     if data.count > max_req then
-        Logger.warn(COMPONENT_NAME, "Rate limit exceeded for %s (%d/%d)", ip, data.count, max_req)
+        Logger.warn(COMPONENT_NAME, "Превышен лимит запросов для %s (%d/%d)", ip, data.count, max_req)
         return false
     end
 
@@ -103,7 +103,7 @@ function HttpHelpers.check_auth(server, client, request)
     local provided_key = headers and (headers["x-api-key"] or headers["X-Api-Key"])
 
     if provided_key ~= expected_key then
-        HttpHelpers.error(server, client, 401, "Unauthorized: Invalid or missing X-Api-Key")
+        HttpHelpers.error(server, client, 401, "Доступ запрещен: неверный или отсутствует X-Api-Key")
         return false
     end
     return true
@@ -139,7 +139,7 @@ end
 --- @return boolean Всегда true
 function HttpHelpers.send_raw_json(server, client, code, content)
     if not content then
-        return HttpHelpers.error(server, client, 404, "Data not available in cache")
+        return HttpHelpers.error(server, client, 404, "Данные недоступны в кэше")
     end
 
     local allow_origin = (MonitorConfig and MonitorConfig.CorsAllowOrigin) or "*"
@@ -203,14 +203,14 @@ end
 --- @param schema table Схема валидации
 --- @return boolean success, string|nil error_message
 function HttpHelpers.validate(params, schema)
-    if not params then return false, "No parameters provided" end
+    if not params then return false, "Параметры не предоставлены" end
     if not schema then return true end
 
     for key, rules in pairs(schema) do
         local val = params[key]
 
         if rules.required and val == nil then
-            return false, string.format("Parameter '%s' is required", key)
+            return false, string.format("Параметр '%s' обязателен", key)
         end
 
         if val ~= nil then
@@ -218,31 +218,31 @@ function HttpHelpers.validate(params, schema)
                 if rules.type == "number" and (type(val) == "string" or type(val) == "boolean") then
                     val = tonumber(val)
                     if val == nil then
-                        return false, string.format("Parameter '%s' must be a number", key)
+                        return false, string.format("Параметр '%s' должен быть числом", key)
                     end
                     params[key] = val
                 elseif rules.type == "boolean" and type(val) == "string" then
                     if val == "true" then val = true
                     elseif val == "false" then val = false
-                    else return false, string.format("Parameter '%s' must be a boolean", key) end
+                    else return false, string.format("Параметр '%s' должен быть логическим значением (boolean)", key) end
                     params[key] = val
                 else
-                    return false, string.format("Parameter '%s' must be a %s", key, rules.type)
+                    return false, string.format("Параметр '%s' должен иметь тип %s", key, rules.type)
                 end
             end
 
             if rules.type == "number" then
                 if rules.min and val < rules.min then
-                    return false, string.format("Parameter '%s' is too small (min: %s)", key, tostring(rules.min))
+                    return false, string.format("Параметр '%s' слишком мал (минимум: %s)", key, tostring(rules.min))
                 end
                 if rules.max and val > rules.max then
-                    return false, string.format("Parameter '%s' is too large (max: %s)", key, tostring(rules.max))
+                    return false, string.format("Параметр '%s' слишком велик (максимум: %s)", key, tostring(rules.max))
                 end
             end
 
             if rules.type == "string" and rules.pattern then
                 if not string_match(val, rules.pattern) then
-                    return false, string.format("Parameter '%s' has invalid format", key)
+                    return false, string.format("Параметр '%s' имеет неверный формат", key)
                 end
             end
 
@@ -255,7 +255,7 @@ function HttpHelpers.validate(params, schema)
                     end
                 end
                 if not found then
-                    return false, string.format("Parameter '%s' has invalid value", key)
+                    return false, string.format("Параметр '%s' имеет недопустимое значение", key)
                 end
             end
         end

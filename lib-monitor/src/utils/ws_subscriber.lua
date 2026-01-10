@@ -36,7 +36,7 @@ function WsSubscriber.on_message(server, client, request)
     if request == "ping" then server:send(client, "pong") return end
     if not clients[client] then
         clients[client] = true
-        server:send(client, '{"event":"sys:connected","data":"Welcome"}')
+        server:send(client, '{"event":"sys:connected","data":"Добро пожаловать"}')
     end
 end
 

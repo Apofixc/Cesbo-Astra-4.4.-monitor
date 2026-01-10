@@ -182,7 +182,7 @@ function DvbTuner:start()
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, string_format("start: Некорректный метод сравнения %s",
+        Logger.error(COMPONENT_NAME, string_format("start: некорректный метод сравнения %s",
             tostring(self._config.method_comparison)))
         return nil
     end
@@ -195,7 +195,7 @@ function DvbTuner:start()
         if not self._active then return end
         local ok, err = pcall(self._on_astra_data, self, data)
         if not ok then
-            Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
+            Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
         end
     end
 
@@ -213,7 +213,7 @@ function DvbTuner:start()
     if self._instance and type(self._instance.__options) == "table" then
         local opts = self._instance.__options
         opts.channels = (opts.channels or 0) + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", tostring(self._name), opts.channels)
+        Logger.debug(COMPONENT_NAME, "[%s] Счетчик каналов тюнера увеличен: %d", tostring(self._name), opts.channels)
     end
 
     return self._instance
@@ -397,7 +397,7 @@ function DvbTuner:psi_update()
         if not self or not self._name then return end
         self:_clear_psi_resources()
         scheduler:remove_task("psi_update_" .. self._name)
-        Logger.info(COMPONENT_NAME, "[%s] PSI update finished", tostring(self._name))
+        Logger.info(COMPONENT_NAME, "[%s] Обновление PSI завершено", tostring(self._name))
     end, 10)
 
     return true
