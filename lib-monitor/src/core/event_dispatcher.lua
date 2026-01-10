@@ -35,6 +35,8 @@ local COMPONENT_NAME = "EventDispatcher"
 --- @class EventDispatcher
 --- @field public subscription_manager SubscriptionManager Менеджер подписок
 --- @field private _lvc table<string, table> Кэш последних значений (Last Value Cache)
+--- @field private _lvc_keys table<number, string> Очередь ключей для FIFO вытеснения из LVC
+--- @field private _lvc_size number Текущий размер LVC
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
 --- @field private stats table Статистика диспетчера
 --- @field private active boolean Флаг активности обработки
@@ -90,6 +92,8 @@ function EventDispatcher:initialize()
     
     -- Кэш последних значений (Last Value Cache)
     self._lvc = {}
+    self._lvc_keys = {}
+    self._lvc_size = 0
     
     self.event_queues = {
         [self.PRIORITIES.CRITICAL] = {},
@@ -124,19 +128,17 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     -- Если данные являются таблицей, создаем глубокую копию для кэша,
     -- так как оригинальная таблица может быть возвращена в пул и очищена.
     if not (options and options.no_cache) then
-        -- Ограничить размер LVC для предотвращения утечек памяти
-        local lvc_size = 0
-        for _ in pairs(self._lvc) do lvc_size = lvc_size + 1 end
-        if lvc_size > 1000 then
-            local oldest_key
-            local oldest_time = math.huge
-            for key, entry in pairs(self._lvc) do
-                if entry.timestamp < oldest_time then
-                    oldest_time = entry.timestamp
-                    oldest_key = key
+        -- Ограничить размер LVC для предотвращения утечек памяти (O(1) вытеснение)
+        if not self._lvc[event_type] then
+            if self._lvc_size >= 1000 then
+                local oldest_key = table_remove(self._lvc_keys, 1)
+                if oldest_key then
+                    self._lvc[oldest_key] = nil
+                    self._lvc_size = self._lvc_size - 1
                 end
             end
-            if oldest_key then self._lvc[oldest_key] = nil end
+            table_insert(self._lvc_keys, event_type)
+            self._lvc_size = self._lvc_size + 1
         end
 
         local cache_data = event_data

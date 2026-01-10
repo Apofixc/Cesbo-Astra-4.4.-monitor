@@ -48,6 +48,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
 --- @field private stats table Глобальная статистика подписок
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
+--- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации event_type -> list_of_subscriptions
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
@@ -171,6 +172,7 @@ function SubscriptionManager.new()
     self.subscriptions = {} -- [event_type][subscription_id] = sub_data
     self.stats = { total = 0, delivered = 0, failed = 0 }
     self._matchers = {} -- [pattern] = function
+    self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
     self:load()
     self:start_retry_processor()
     return self
@@ -276,6 +278,9 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
     
+    -- Сброс кэша маршрутизации при изменении подписок
+    self._route_cache = {}
+    
     if not existing_id then self:save() end
     return sub_id
 end
@@ -312,35 +317,46 @@ function SubscriptionManager:publish_event(event)
     local event_data = event.data
     local event_json = nil -- Кэш JSON для текущей рассылки
 
-    for pattern, subs in pairs(self.subscriptions) do
-        if self:match(pattern, event_type) then
-            for id, sub in pairs(subs) do
-                if sub.active then
-                    local should_send = true
-                    if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
-                        should_send = false
-                    end
-                    if should_send and sub.filters and next(sub.filters) ~= nil then
-                        if FilterEngine and not FilterEngine.match(event_data, sub.filters, id) then
-                            should_send = false
-                        end
-                    end
-                    if should_send then
-                        -- Оптимизация: кодируем JSON один раз, если транспорт его требует
-                        if sub.transport ~= "LUA_CALLBACK" and not event_json then
-                            event_json = get_event_json(event)
-                        end
+    -- Оптимизация: Fast Path через кэш маршрутизации
+    local targets = self._route_cache[event_type]
+    if not targets then
+        targets = {}
+        for pattern, subs in pairs(self.subscriptions) do
+            if self:match(pattern, event_type) then
+                for _, sub in pairs(subs) do
+                    table_insert(targets, sub)
+                end
+            end
+        end
+        self._route_cache[event_type] = targets
+    end
 
-                        local success, err = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
-                        if success then
-                            delivered = delivered + 1
-                            sub.stats.delivered = sub.stats.delivered + 1
-                            sub.last_event_at = now
-                        else
-                            failed = failed + 1
-                            sub.stats.failed = sub.stats.failed + 1
-                        end
-                    end
+    for i = 1, #targets do
+        local sub = targets[i]
+        if sub.active then
+            local should_send = true
+            if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
+                should_send = false
+            end
+            if should_send and sub.filters and next(sub.filters) ~= nil then
+                if FilterEngine and not FilterEngine.match(event_data, sub.filters, sub.id) then
+                    should_send = false
+                end
+            end
+            if should_send then
+                -- Оптимизация: кодируем JSON один раз, если транспорт его требует
+                if sub.transport ~= "LUA_CALLBACK" and not event_json then
+                    event_json = get_event_json(event)
+                end
+
+                local success, err = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
+                if success then
+                    delivered = delivered + 1
+                    sub.stats.delivered = sub.stats.delivered + 1
+                    sub.last_event_at = now
+                else
+                    failed = failed + 1
+                    sub.stats.failed = sub.stats.failed + 1
                 end
             end
         end
@@ -399,6 +415,9 @@ function SubscriptionManager:unsubscribe(sub_id)
                 self.subscriptions[event_type] = nil
                 self._matchers[event_type] = nil
             end
+            
+            -- Сброс кэша маршрутизации при изменении подписок
+            self._route_cache = {}
             
             self:save()
             return true
