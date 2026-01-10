@@ -106,7 +106,7 @@ end
 local function check_condition(data, condition, sub_id, cond_idx)
     if type(data) ~= "table" then return false end
     if not condition.field then return true end
-    
+
     local value
     if condition.accessor then
         value = condition.accessor(data)
@@ -128,7 +128,7 @@ local function check_condition(data, condition, sub_id, cond_idx)
     if duration and duration > 0 and sub_id then
         if not duration_state[sub_id] then duration_state[sub_id] = {} end
         local state = duration_state[sub_id]
-        
+
         if is_match then
             if not state[cond_idx] then
                 state[cond_idx] = os_time()
@@ -143,7 +143,7 @@ local function check_condition(data, condition, sub_id, cond_idx)
             return false
         end
     end
-    
+
     return is_match
 end
 
@@ -153,36 +153,39 @@ end
 --- @return string|nil Lua-код функции
 local function generate_filter_code(filters)
     if not filters.conditions or #filters.conditions == 0 then return nil end
-    
+
     local logic = filters.logic or "and"
     local code_parts = {}
-    
+
     for i, cond in ipairs(filters.conditions) do
         local op = cond.op or "eq"
         local field = cond.field
         local target = cond.value
-        
+
         -- Формируем выражение для одного условия
         local expr
         if op == "eq" then
-            expr = string.format("(data.%s == %s)", field, type(target) == "string" and string.format("%q", target) or tostring(target))
+            expr = string.format("(data.%s == %s)", field,
+                type(target) == "string" and string.format("%q", target) or tostring(target))
         elseif op == "ne" then
-            expr = string.format("(data.%s ~= %s)", field, type(target) == "string" and string.format("%q", target) or tostring(target))
+            expr = string.format("(data.%s ~= %s)", field,
+                type(target) == "string" and string.format("%q", target) or tostring(target))
         elseif op == "gt" then
             expr = string.format("(type(data.%s) == 'number' and data.%s > %s)", field, field, tostring(target))
         elseif op == "lt" then
             expr = string.format("(type(data.%s) == 'number' and data.%s < %s)", field, field, tostring(target))
         elseif op == "contains" then
-            expr = string.format("(type(data.%s) == 'string' and data.%s:find(%q, 1, true) ~= nil)", field, field, tostring(target))
+            expr = string.format("(type(data.%s) == 'string' and data.%s:find(%q, 1, true) ~= nil)",
+                field, field, tostring(target))
         end
-        
+
         if expr then
             table.insert(code_parts, expr)
         end
     end
-    
+
     if #code_parts == 0 then return nil end
-    
+
     local joiner = (logic == "or") and " or " or " and "
     return "return function(data) return " .. table.concat(code_parts, joiner) .. " end"
 end
@@ -203,7 +206,7 @@ function FilterEngine.match(data, filters, sub_id)
         for _, c in ipairs(filters.conditions) do
             if c.duration and c.duration > 0 then has_duration = true; break end
         end
-        
+
         if not has_duration then
             local code = generate_filter_code(filters)
             if code then
@@ -240,7 +243,7 @@ function FilterEngine.match(data, filters, sub_id)
                 return false
             end
         end
-        
+
         local ok, res = pcall(func)
         return ok and res == true
     end

@@ -22,7 +22,7 @@ local COMPONENT_NAME = "MonitorRoutes"
 function MonitorRoutes.get_monitors(server, client, request)
     local monitors = {}
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
-    
+
     for name, ch_obj in pairs(active_channels) do
         table_insert(monitors, {
             name = name,
@@ -38,7 +38,7 @@ end
 function MonitorRoutes.get_monitors_status(server, client, request)
     local total, ok_count, error_count, total_cc_errors = 0, 0, 0, 0
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
-    
+
     for _, ch_obj in pairs(active_channels) do
         total = total + 1
         local status = ch_obj._status or {}
@@ -90,7 +90,7 @@ function MonitorRoutes.kill_monitor(server, client, request)
 
     local config = Channel.kill_monitor(params.name)
     if not config then return HttpHelpers.error(server, client, 404, "Monitor not found") end
-    
+
     if params.reboot then
         if timer then
             timer({ interval = 1, callback = function(self) self:close(); Channel.make_monitor(config) end })
@@ -99,7 +99,7 @@ function MonitorRoutes.kill_monitor(server, client, request)
         end
     end
 
-    return HttpHelpers.success(server, client, { 
+    return HttpHelpers.success(server, client, {
         message = params.reboot and "Monitor rebooting" or "Monitor killed",
         config = config
     })

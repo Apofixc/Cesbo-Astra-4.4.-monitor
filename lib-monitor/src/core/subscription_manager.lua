@@ -48,7 +48,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
 --- @field private stats table Глобальная статистика подписок
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
---- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации event_type -> list_of_subscriptions
+--- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации
 --- @field private _save_pending boolean Флаг отложенного сохранения
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
@@ -72,7 +72,7 @@ end
 local function get_event_json(event)
     if not event then return nil end
     if event.json_cache then return event.json_cache end
-    
+
     if type(event.data) == "string" then
         event.json_cache = event.data
     else
@@ -91,20 +91,23 @@ local Transport = {
     --- @param event_json? string [Предварительно подготовленный JSON]
     HTTP = function(config, event, event_type, retry_count, event_json)
         if not http_request then return false, "http_request not available" end
-        
-        local content = event_json or 
-                        ((type(event) == "table" and event.id) and get_event_json(event) or 
+
+        local content = event_json or
+                        ((type(event) == "table" and event.id) and get_event_json(event) or
                         ((type(event) == "table") and json_encode(event) or tostring(event)))
-        
+
         if not content then return false, "JSON encode failed" end
-        
+
         retry_count = retry_count or 0
-        
+
         http_request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
             timeout = HTTP_TIMEOUT,
-            headers = { USER_AGENT, "Host: " .. config.host .. ":" .. config.port, CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close" },
+            headers = {
+                USER_AGENT, "Host: " .. config.host .. ":" .. config.port,
+                CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close"
+            },
             callback = function(s, r)
                 if not s and retry_count < MAX_RETRIES then
                     -- Для ретрая делаем копию данных, если это была таблица из пула
@@ -134,8 +137,8 @@ local Transport = {
     WS = function(config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
-            local json_data = event_json or 
-                             ((type(event) == "table" and event.id) and get_event_json(event) or 
+            local json_data = event_json or
+                             ((type(event) == "table" and event.id) and get_event_json(event) or
                              ((type(event) == "table") and json_encode(event) or event))
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
@@ -157,8 +160,8 @@ local Transport = {
     --- @param event_type string Тип события
     --- @param event_json? string [Предварительно подготовленный JSON]
     CONSOLE = function(config, event, event_type, event_json)
-        local message = event_json or 
-                        ((type(event) == "table" and event.id) and get_event_json(event) or 
+        local message = event_json or
+                        ((type(event) == "table" and event.id) and get_event_json(event) or
                         ((type(event) == "table") and json_encode(event) or event))
         Logger.info("Console", "[EVENT:%s] %s", tostring(event_type), tostring(message))
         return true
@@ -185,13 +188,13 @@ end
 function SubscriptionManager:start_retry_processor()
     local Scheduler = ModuleManager.get_module("core.scheduler")
     if not Scheduler then return end
-    
+
     local scheduler = Scheduler.get_instance()
-    
+
     -- Задача для повторов и сохранения (раз в секунду)
     scheduler:add_task("subscription_manager_maintenance", function()
         local now = os_time()
-        
+
         -- 1. Обработка повторов
         for i = #retry_queue, 1, -1 do
             local item = retry_queue[i]
@@ -200,7 +203,7 @@ function SubscriptionManager:start_retry_processor()
                 Transport.HTTP(item.config, item.data, item.type, item.retries)
             end
         end
-        
+
         -- 2. Отложенное сохранение (Debounced Save)
         if self._save_pending then
             self:save_now()
@@ -285,8 +288,8 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         last_event_at = 0, stats = { delivered = 0, failed = 0 }
     }
 
-    if not self.subscriptions[event_type] then 
-        self.subscriptions[event_type] = {} 
+    if not self.subscriptions[event_type] then
+        self.subscriptions[event_type] = {}
         -- Предкомпиляция маски
         if Wildcard then
             self._matchers[event_type] = Wildcard.compile(event_type)
@@ -294,10 +297,10 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     end
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
-    
+
     -- Сброс кэша маршрутизации при изменении подписок
     self._route_cache = {}
-    
+
     if not existing_id then self:save() end
     return sub_id
 end
@@ -426,16 +429,16 @@ function SubscriptionManager:unsubscribe(sub_id)
         if subs[sub_id] then
             subs[sub_id] = nil
             self.stats.total = self.stats.total - 1
-            
+
             -- Если подписок на этот тип больше нет, удаляем матчер
             if not next(subs) then
                 self.subscriptions[event_type] = nil
                 self._matchers[event_type] = nil
             end
-            
+
             -- Сброс кэша маршрутизации при изменении подписок
             self._route_cache = {}
-            
+
             self:save()
             return true
         end

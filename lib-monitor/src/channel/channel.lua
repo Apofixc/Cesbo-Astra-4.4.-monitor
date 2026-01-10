@@ -37,7 +37,9 @@ local monitor_type_handlers = {
     [MONITOR_TYPE_INPUT] = function(conf, channel_data)
         local input_data = channel_data.input and channel_data.input[1]
         if not input_data then
-            Logger.error(COMPONENT_NAME, "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.", conf.name)
+            Logger.error(COMPONENT_NAME,
+                "Отсутствуют входные данные для типа монитора 'input' в потоке '%s'.",
+                conf.name)
             return nil
         end
 
@@ -155,7 +157,7 @@ local format_handlers = {
 --- @param monitor_url string|nil URL монитора для режима fallback
 local function prepare_stream_json(ch_data, monitor_url)
     local stream_json = {}
-    
+
     -- Если есть данные канала, формируем из них
     if ch_data and type(ch_data.input) == "table" then
         for key, input in ipairs(ch_data.input) do
@@ -355,7 +357,7 @@ local function kill_stream(channel_data)
         return nil
     end
     local name = ch_data.config.name
-    
+
     if not kill_monitor(name) then
         Logger.warn(COMPONENT_NAME, "kill_stream: монитор '%s' не был активен или не удалось остановить", name)
     end
@@ -429,7 +431,9 @@ end
 local function on_adapter_after_restart(adapter_name)
     local configs = restart_configs[adapter_name]
     if configs and #configs > 0 then
-        Logger.info(COMPONENT_NAME, "Обработка завершения рестарта адаптера '%s': запуск %d каналов", adapter_name, #configs)
+        Logger.info(COMPONENT_NAME,
+            "Обработка завершения рестарта адаптера '%s': запуск %d каналов",
+            adapter_name, #configs)
         ChannelRepository:start_dependent_channels(configs)
     end
     restart_configs[adapter_name] = nil

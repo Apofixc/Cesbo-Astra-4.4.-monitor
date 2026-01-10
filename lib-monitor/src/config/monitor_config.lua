@@ -112,7 +112,7 @@ function MonitorConfig.validate()
 
     if type(MonitorConfig.MaxPayloadSize) ~= "number" then return false, "MaxPayloadSize must be a number" end
     if type(MonitorConfig.CorsAllowOrigin) ~= "string" then return false, "CorsAllowOrigin must be a string" end
-    
+
     if type(MonitorConfig.ChannelMonitorLimit) ~= "number" then return false, "ChannelMonitorLimit must be a number" end
     if MonitorConfig.ChannelMonitorLimit <= 0 then
         return false, "ChannelMonitorLimit must be positive"
@@ -121,7 +121,7 @@ function MonitorConfig.validate()
     if type(MonitorConfig.DvbMonitorLimit) ~= "number" then return false, "DvbMonitorLimit must be a number" end
     if type(MonitorConfig.ForceSendInterval) ~= "number" then return false, "ForceSendInterval must be a number" end
     if type(MonitorConfig.LogBufferSize) ~= "number" then return false, "LogBufferSize must be a number" end
-    
+
     return true
 end
 
@@ -135,11 +135,11 @@ function MonitorConfig.get_cached(key, generator)
         MonitorConfig._cache = {} -- Очистка кэша по TTL
         MonitorConfig._cache_timestamp = now
     end
-    
+
     if MonitorConfig._cache[key] == nil then
         MonitorConfig._cache[key] = generator()
     end
-    
+
     return MonitorConfig._cache[key]
 end
 

@@ -81,7 +81,7 @@ end
 --- @param deep_or_nested boolean|string|nil Флаг глубокой очистки (boolean) или тип пула для вложенных таблиц (string)
 function TablePool.release(t, pool_type, deep_or_nested)
     if type(t) ~= "table" then return end
-    
+
     pool_type = pool_type or "generic"
     local pool = pools[pool_type]
     if not pool then

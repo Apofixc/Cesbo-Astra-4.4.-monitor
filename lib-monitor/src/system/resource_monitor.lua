@@ -37,7 +37,7 @@ end
 --- @return table
 function ResourceMonitor.check()
     local now = os_time()
-    
+
     -- Чтение /proc/self/status
     local status = {}
     local f_status = io_open(PROC_STATUS, "r")
@@ -58,13 +58,13 @@ function ResourceMonitor.check()
     if f_stat then
         local content = f_stat:read("*a")
         f_stat:close()
-        
+
         -- Оптимизированный парсинг: utime и stime - это 14-й и 15-й параметры
         local count = 0
         for val in content:gmatch("[^%s]+") do
             count = count + 1
             if count == 14 then utime = tonumber(val) or 0
-            elseif count == 15 then 
+            elseif count == 15 then
                 stime = tonumber(val) or 0
                 break -- Дальше парсить не нужно
             end
@@ -97,7 +97,7 @@ function ResourceMonitor.check()
             report.cpu.usage = report.cpu.user + report.cpu.system
         end
     end
-    
+
     ResourceMonitor._last_utime = utime
     ResourceMonitor._last_stime = stime
     ResourceMonitor._last_cpu_check = now
@@ -128,7 +128,7 @@ end
 function ResourceMonitor.start()
     local scheduler = Scheduler.get_instance()
     local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
-    
+
     scheduler:add_task("resource_monitor", function()
         ResourceMonitor.check()
     end, interval)

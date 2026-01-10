@@ -93,29 +93,29 @@ function EventDispatcher:initialize()
     collectgarbage("setstepmul", gc_stepmul)
 
     self.subscription_manager = SubscriptionManager.new()
-    
+
     -- Кэш последних значений (Last Value Cache)
     self._lvc = {}
     self._lvc_keys = {}
     self._lvc_size = 0
-    
+
     self.event_queues = {
         [self.PRIORITIES.CRITICAL] = {},
         [self.PRIORITIES.HIGH] = {},
         [self.PRIORITIES.MEDIUM] = {},
         [self.PRIORITIES.LOW] = {}
     }
-    
+
     self.stats = {
         emitted = 0,
         processed = 0,
         dropped = 0,
         last_reset = os_time()
     }
-    
+
     self.active = true
     self:start_queue_processor()
-    
+
     Logger.info(COMPONENT_NAME, "EventDispatcher initialized with LVC and Wildcard support")
 end
 
@@ -124,7 +124,7 @@ end
 --- @param entry table Запись LVC
 function EventDispatcher:_release_lvc_entry(entry)
     if not entry or type(entry.data) ~= "table" then return end
-    
+
     for k, v in pairs(entry.data) do
         if type(v) == "table" then
             TablePool.release(v, "lvc_sub")
@@ -137,11 +137,12 @@ end
 --- @param event_type string Тип события (например, "channel:error")
 --- @param event_data table|string Данные события
 --- @param priority? number [Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).]
---- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC), is_table (данные из пула).]
+--- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC),
+--- is_table (данные из пула).]
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
-    
+
     -- Обновляем LVC (если не запрещено в опциях)
     -- Если данные являются таблицей, создаем глубокую копию для кэша,
     -- так как оригинальная таблица может быть возвращена в пул и очищена.
@@ -188,7 +189,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
     local p = priority or self.PRIORITIES.MEDIUM
     local event = TablePool and TablePool.get("event") or {}
-    
+
     event.id = generate_event_id()
     event.type = event_type
     event.data = event_data
@@ -197,7 +198,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     event.source = (options and options.source) or "unknown"
     event.is_table = options and options.is_table or (type(event_data) == "table")
     event.json_cache = nil -- Кэш для ленивой сериализации
-    
+
     local queue = self.event_queues[p]
     if queue then
         table_insert(queue, event)
@@ -213,7 +214,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             self.stats.dropped = self.stats.dropped + 1
         end
     end
-    
+
     self.stats.emitted = self.stats.emitted + 1
     return event.id
 end
@@ -228,12 +229,12 @@ function EventDispatcher:emit_safe(event_type, event_data, priority, options)
     local ok, result = pcall(function()
         return self:emit(event_type, event_data, priority, options)
     end)
-    
+
     if not ok then
         Logger.error(COMPONENT_NAME, "Event emit failed: %s", tostring(result))
         return nil
     end
-    
+
     return result
 end
 
@@ -243,7 +244,7 @@ end
 --- @return table<string, table> Таблица последних событий, где ключ - точное имя события
 function EventDispatcher:get_last_values(event_type)
     local result = {}
-    
+
     -- Используем SubscriptionManager для сопоставления масок
     for name, entry in pairs(self._lvc) do
         if self.subscription_manager:match(event_type, name) then
@@ -268,10 +269,11 @@ end
 --- @param event_type string Тип события или маска (например, "adapter:*")
 --- @param callback function|table Функция-обработчик или конфигурация транспорта
 --- @param filters? table [Схема фильтрации (условия, операторы или Lua-скрипт)]
---- @param options? table [Дополнительные опции: throttle_ms (ограничение частоты), send_lvc (отправить последнее состояние сразу)]
+--- @param options? table [Дополнительные опции: throttle_ms (ограничение частоты),
+--- send_lvc (отправить последнее состояние сразу)]
 --- @return string|nil ID подписки (UUID)
 function EventDispatcher:subscribe(event_type, callback, filters, options)
-    local sub_id = self.subscription_manager:subscribe(event_type, { 
+    local sub_id = self.subscription_manager:subscribe(event_type, {
         callback = callback,
         filters = filters,
         throttle_ms = options and options.throttle_ms
@@ -293,10 +295,10 @@ end
 --- @private
 function EventDispatcher:start_queue_processor()
     if not Scheduler then return end
-    
+
     local scheduler = Scheduler.get_instance()
     local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
-    
+
     scheduler:add_task("event_dispatcher_queue", function()
         if self.active then self:process_queue() end
     end, interval)
@@ -313,14 +315,14 @@ function EventDispatcher:process_queue()
                 local ok, err = pcall(function()
                     self.subscription_manager:publish_event(event)
                 end)
-                
+
                 if not ok then
-                    Logger.error(COMPONENT_NAME, "Failed to process event %s: %s", 
+                    Logger.error(COMPONENT_NAME, "Failed to process event %s: %s",
                         event.id or "unknown", tostring(err))
                 else
                     self.stats.processed = self.stats.processed + 1
                 end
-                
+
                 -- Возврат в пул
                 self:_safe_return_to_pool(event)
             end
@@ -336,12 +338,12 @@ function EventDispatcher:_safe_return_to_pool(event)
         if event.is_table and event.data and TablePool then
             TablePool.release(event.data, "report")
         end
-        
+
         if TablePool then
             TablePool.release(event, "event")
         end
     end)
-    
+
     if not ok then
         Logger.warn(COMPONENT_NAME, "Failed to return event to pool: %s", tostring(err))
     end
@@ -351,11 +353,11 @@ end
 function EventDispatcher:shutdown()
     self.active = false
     Logger.info(COMPONENT_NAME, "Shutting down EventDispatcher...")
-    
+
     if Scheduler then
         Scheduler.get_instance():remove_task("event_dispatcher_queue")
     end
-    
+
     -- Очистка очередей
     for p, queue in pairs(self.event_queues) do
         while #queue > 0 do

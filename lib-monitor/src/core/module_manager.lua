@@ -54,7 +54,7 @@ local function init_logger()
     if not Logger then
         local module_info = registered_modules["logger"]
         if not module_info then return end
-        
+
         -- Использовать require вместо ModuleManager.get_module для избежания рекурсии
         local success, logger_module = pcall(require, module_info.path)
         if success and logger_module then
@@ -76,16 +76,16 @@ function ModuleManager.register_module(name, path, dependencies)
         log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с невалидным именем.")
         return false
     end
-    
+
     if not path or type(path) ~= "string" then
         log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
         return false
     end
-    
+
     if registered_modules[name] then
         log_debug(COMPONENT_NAME, "Модуль '%s' уже зарегистрирован. Обновление информации.", name)
     end
-    
+
     -- Валидация зависимостей
     local valid_dependencies = {}
     if dependencies and type(dependencies) == "table" then
@@ -97,13 +97,13 @@ function ModuleManager.register_module(name, path, dependencies)
             end
         end
     end
-    
+
     registered_modules[name] = {
         path = path,
         dependencies = valid_dependencies
     }
-    
-    log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.", 
+
+    log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.",
              name, table_concat(valid_dependencies, ", "))
     return true
 end
@@ -115,41 +115,41 @@ local function topological_sort()
     local load_order = {}
     local visited = {}
     local temp_visited = {}
-    
+
     local function visit(name)
         if not registered_modules[name] then
             local msg = string_format("Попытка загрузить незарегистрированный модуль: %s.", name)
             log_error(COMPONENT_NAME, msg)
             return false
         end
-        
+
         if visited[name] then
             return true
         end
-        
+
         if temp_visited[name] then
             local msg = string_format("Обнаружена циклическая зависимость с участием модуля: %s.", name)
             log_error(COMPONENT_NAME, msg)
             return false
         end
-        
+
         temp_visited[name] = true
-        
+
         local module_info = registered_modules[name]
         for _, dep_name in ipairs(module_info.dependencies) do
             if not visit(dep_name) then
                 return false
             end
         end
-        
+
         temp_visited[name] = nil
         visited[name] = true
-        
+
         -- Добавляем в порядке завершения (зависимости идут перед модулями, которые от них зависят)
         table_insert(load_order, name)
         return true
     end
-    
+
     for name, _ in pairs(registered_modules) do
         if not visited[name] then
             if not visit(name) then
@@ -157,7 +157,7 @@ local function topological_sort()
             end
         end
     end
-    
+
     return load_order
 end
 
@@ -165,23 +165,23 @@ end
 --- @return table|nil Список имен загруженных модулей или nil
 function ModuleManager.load_modules()
     local load_order = topological_sort()
-    
+
     if not load_order then
         log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
         -- Вывести информацию о циклических зависимостях
         for name, module_info in pairs(registered_modules) do
-            log_error(COMPONENT_NAME, "Модуль: %s, Зависимости: %s", 
+            log_error(COMPONENT_NAME, "Модуль: %s, Зависимости: %s",
                 name, table_concat(module_info.dependencies, ", "))
         end
         return nil
     end
-    
-    if Logger then 
-        log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", ")) 
+
+    if Logger then
+        log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
     else
         print(string_format("[%s] Порядок загрузки модулей: %s", COMPONENT_NAME, table_concat(load_order, ", ")))
     end
-    
+
     for _, name in ipairs(load_order) do
         -- Пропускаем уже загруженные модули
         if loaded_modules[name] then
@@ -189,11 +189,12 @@ function ModuleManager.load_modules()
         else
             local module_info = registered_modules[name]
             if Logger then log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path) end
-            
+
             local success, module_or_err = pcall(require, module_info.path)
-            
+
             if not success then
-                local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.", name, module_info.path, tostring(module_or_err))
+                local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.",
+                    name, module_info.path, tostring(module_or_err))
                 if Logger then
                     log_error(COMPONENT_NAME, err_msg)
                 else
@@ -201,14 +202,14 @@ function ModuleManager.load_modules()
                 end
                 return nil
             end
-            
+
             if module_or_err == nil then
                 log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
                 return nil
             end
-            
+
             local module = module_or_err
-            
+
             loaded_modules[name] = module
 
             if name == "logger" and not Logger then
@@ -218,7 +219,7 @@ function ModuleManager.load_modules()
             if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name) end
         end
     end
-    
+
     log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
     return load_order
 end
@@ -234,7 +235,7 @@ end
 --- @return boolean Статус выполнения
 function ModuleManager.validate_dependencies()
     local all_dependencies_met = true
-    
+
     for name, module_info in pairs(registered_modules) do
         for _, dep_name in ipairs(module_info.dependencies) do
             if not registered_modules[dep_name] then
@@ -243,18 +244,18 @@ function ModuleManager.validate_dependencies()
             end
         end
     end
-    
+
     if not all_dependencies_met then
         log_error(COMPONENT_NAME, "Обнаружены незарегистрированные внутренние зависимости.")
         return false
     end
-    
+
     log_debug(COMPONENT_NAME, "Все внутренние зависимости зарегистрированных модулей удовлетворены.")
     return true
 end
 
 --- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
---- @param path_str string Строка, представляющая путь к переменной/функции (например, "find_channel" или utils.version).
+--- @param path_str string Строка, представляющая путь к переменной/функции (например, "find_channel").
 --- @return any|nil Найденный объект или nil
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
@@ -265,9 +266,9 @@ function ModuleManager.check_nested_dependency(path_str)
     if nested_dependency_cache[path_str] ~= nil then
         return nested_dependency_cache[path_str]
     end
-    
+
     local current_scope = _G
-    
+
     for part in string_gmatch(path_str, "[^.]+") do
         if type(current_scope) ~= "table" or current_scope[part] == nil then
             log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена.", path_str)
@@ -275,9 +276,9 @@ function ModuleManager.check_nested_dependency(path_str)
         end
         current_scope = current_scope[part]
     end
-    
+
     nested_dependency_cache[path_str] = current_scope
-    
+
     log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
     return current_scope
 end
@@ -306,7 +307,8 @@ end
 --- @return boolean Статус выполнения
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
-        log_error(COMPONENT_NAME, "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица).")
+        log_error(COMPONENT_NAME,
+            "Попытка установить глобальные зависимости с невалидным аргументом (ожидалась таблица).")
         return false
     end
     for path, obj in pairs(deps) do

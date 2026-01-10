@@ -93,9 +93,9 @@ local function cors_middleware(handler)
             })
             return true
         end
-        
+
         -- Для обычных запросов перехватываем отправку, чтобы добавить заголовок (упрощенно)
-        -- В Astra мы не можем легко обернуть server:send, поэтому просто полагаемся на то, 
+        -- В Astra мы не можем легко обернуть server:send, поэтому просто полагаемся на то,
         -- что роутеры используют HttpHelpers, но для надежности добавим логику здесь если нужно.
         return handler(server, client, request)
     end
@@ -111,26 +111,26 @@ local function logger_middleware(handler, path)
 
         HttpServer._active_requests = HttpServer._active_requests + 1
         local start_time = os_clock()
-        
+
         if not HttpServer._stats.routes[path] then
             HttpServer._stats.routes[path] = { count = 0, total_time = 0, errors = 0 }
         end
         local route_stats = HttpServer._stats.routes[path]
-        
+
         local success, result = handler(server, client, request)
-        
+
         local duration = os_clock() - start_time
         HttpServer._stats.total_requests = HttpServer._stats.total_requests + 1
         HttpServer._active_requests = HttpServer._active_requests - 1
-        
+
         route_stats.count = route_stats.count + 1
         route_stats.total_time = route_stats.total_time + duration
-        
+
         if not success then
             HttpServer._stats.total_errors = HttpServer._stats.total_errors + 1
             route_stats.errors = route_stats.errors + 1
         end
-        
+
         return success, result
     end
 end
@@ -167,7 +167,7 @@ local function make_resource_handler(methods, path)
             end
             return true
         end
-        
+
         return true
     end
 
@@ -182,16 +182,17 @@ function HttpServer.stop()
     end
 
     HttpServer._is_stopping = true
-    Logger.info(COMPONENT_NAME, "Graceful shutdown initiated. Waiting for %d active requests...", HttpServer._active_requests)
-    
+    Logger.info(COMPONENT_NAME, "Graceful shutdown initiated. Waiting for %d active requests...",
+        HttpServer._active_requests)
+
     -- Ожидание завершения запросов (максимум 5 секунд)
-    -- В Astra нет sleep, но так как это выполняется в основном потоке, 
-    -- мы не можем просто крутить цикл. Однако HttpServer.stop обычно вызывается 
+    -- В Astra нет sleep, но так как это выполняется в основном потоке,
+    -- мы не можем просто крутить цикл. Однако HttpServer.stop обычно вызывается
     -- либо при выходе, либо через таймер.
     -- Мы полагаемся на то, что запросы в Astra обрабатываются быстро.
     local wait_start = os_clock()
     while HttpServer._active_requests > 0 and (os_clock() - wait_start) < 5 do
-        -- Пустой цикл для ожидания в пределах 5 секунд. 
+        -- Пустой цикл для ожидания в пределах 5 секунд.
         -- В Astra это заблокирует поток, но это допустимо при выключении.
     end
 
@@ -206,7 +207,7 @@ function HttpServer.stop()
 
     collectgarbage("collect")
     collectgarbage("collect")
-    
+
     Logger.info(COMPONENT_NAME, "HTTP Server stopped and port should be free")
 end
 
@@ -238,11 +239,14 @@ function HttpServer.start(addr, port, retry_count, force_free)
         Logger.warn(COMPONENT_NAME, "Порт %d уже занят", port)
         if force_free then
             if not Utils.free_port(port) then
-                Logger.error(COMPONENT_NAME, "Не удалось запустить сервер: порт %d занят и не может быть освобожден", port)
+                Logger.error(COMPONENT_NAME,
+                    "Не удалось запустить сервер: порт %d занят и не может быть освобожден", port)
                 return false
             end
         else
-            Logger.error(COMPONENT_NAME, "Не удалось запустить сервер: порт %d занят. Используйте force_free=true для принудительного освобождения", port)
+            Logger.error(COMPONENT_NAME,
+                "Не удалось запустить сервер: порт %d занят. Используйте force_free=true для освобождения",
+                port)
             return false
         end
     end
@@ -253,8 +257,8 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/dvb/adapters/data"] = { GET = DvbRoutes.get_adapter_data },
         ["/api/monitors/status"] = { GET = MonitorRoutes.get_monitors_status },
         ["/api/system/health"] = { GET = SystemRoutes.get_health },
-        ["/api/system/api-stats"] = { 
-            GET = function(s, c, r) return HttpHelpers.success(s, c, HttpServer.get_stats()) end 
+        ["/api/system/api-stats"] = {
+            GET = function(s, c, r) return HttpHelpers.success(s, c, HttpServer.get_stats()) end
         },
 
         -- Channels
@@ -302,7 +306,11 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/system/pool-stats"] = { GET = SystemRoutes.get_pool_stats },
 
         -- Subscribers
-        ["/api/subscribers"] = { GET = SubscriberRoutes.get_subscribers, POST = SubscriberRoutes.subscribe, DELETE = SubscriberRoutes.unsubscribe },
+        ["/api/subscribers"] = {
+            GET = SubscriberRoutes.get_subscribers,
+            POST = SubscriberRoutes.subscribe,
+            DELETE = SubscriberRoutes.unsubscribe
+        },
 
         -- WebSocket
         ["/api/ws"] = http_websocket and http_websocket({ callback = WsSubscriber.on_message }) or nil,
@@ -323,14 +331,14 @@ function HttpServer.start(addr, port, retry_count, force_free)
         "/api/monitors/data", "/api/dvb/adapters/data", "/api/monitors/status",
         "/api/system/health", "/api/system/api-stats"
     }
-    
+
     for _, path in ipairs(priority_order) do
         if resources[path] then
             table_insert(routes, { path, make_resource_handler(resources[path], path) })
             resources[path] = nil
         end
     end
-    
+
     for path, methods in pairs(resources) do
         table_insert(routes, { path, make_resource_handler(methods, path) })
     end
@@ -353,7 +361,8 @@ function HttpServer.start(addr, port, retry_count, force_free)
         return true
     else
         if retry_count < RESTART_RETRY_COUNT then
-            Logger.warn(COMPONENT_NAME, "Failed to bind port %s (attempt %d/%d). Retrying...", tostring(port), retry_count + 1, RESTART_RETRY_COUNT)
+            Logger.warn(COMPONENT_NAME, "Failed to bind port %s (attempt %d/%d). Retrying...",
+                tostring(port), retry_count + 1, RESTART_RETRY_COUNT)
             if timer then
                 timer({
                     interval = RESTART_RETRY_DELAY,

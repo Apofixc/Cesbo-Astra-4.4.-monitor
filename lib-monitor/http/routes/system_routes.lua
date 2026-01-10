@@ -40,15 +40,15 @@ end
 function SystemRoutes.get_health(server, client, request)
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
     local HttpServer = ModuleManager.get_module("http_server")
-    
+
     -- Добавляем мониторинг памяти Lua
     report.lua_mem_kb = collectgarbage("count")
-    
+
     local status = "healthy"
     if report.cpu and report.cpu.usage and report.cpu.usage > 80 then
         status = "warning"
     end
-    
+
     local response = {
         status = status,
         bind_address = HttpServer and HttpServer._bind_addr or "unknown",
@@ -70,12 +70,15 @@ end
 function SystemRoutes.reload(server, client, request)
     local params = HttpHelpers.get_params(request)
     local delay = tonumber(params.delay) or 1
-    
+
     if timer_obj then
-        timer_obj({ interval = delay, callback = function(self) self:close(); if astra_reload then astra_reload() end end })
+        timer_obj({
+            interval = delay,
+            callback = function(self) self:close(); if astra_reload then astra_reload() end end
+        })
         return HttpHelpers.success(server, client, { message = "Astra reload scheduled in " .. delay .. "s" })
     end
-    
+
     if astra_reload then astra_reload() end
     return HttpHelpers.success(server, client, { message = "Astra reloading" })
 end
@@ -84,12 +87,12 @@ end
 function SystemRoutes.exit(server, client, request)
     local params = HttpHelpers.get_params(request)
     local delay = tonumber(params.delay) or 1
-    
+
     if timer_obj then
         timer_obj({ interval = delay, callback = function(self) self:close(); if astra_exit then astra_exit() end end })
         return HttpHelpers.success(server, client, { message = "Astra exit scheduled in " .. delay .. "s" })
     end
-    
+
     if astra_exit then astra_exit() end
     return HttpHelpers.success(server, client, { message = "Astra exiting" })
 end

@@ -43,7 +43,7 @@ local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 --- @return MonitorConfig|nil
 local function get_monitor_config()
     if MonitorConfig then return MonitorConfig end
-    
+
     local success, config = pcall(ModuleManager.get_module, "monitor_config")
     if success and config and type(config) == "table" then
         MonitorConfig = config
@@ -76,7 +76,7 @@ local function refresh_cache_if_needed()
     if (now - last_config_check) < CONFIG_REFRESH_INTERVAL and cached_log_level then
         return
     end
-    
+
     local config = get_monitor_config()
     if config then
         cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
@@ -106,7 +106,7 @@ function Logger.buffer_log(level, component, message, context_id)
     if not Logger._context_buffer[component] then
         Logger._context_buffer[component] = {}
     end
-    
+
     local buffer = Logger._context_buffer[component]
     local entry = {
         timestamp = os_time(),
@@ -114,9 +114,9 @@ function Logger.buffer_log(level, component, message, context_id)
         message = message,
         context_id = context_id
     }
-    
+
     table_insert(buffer, entry)
-    
+
     -- Ограничение размера буфера (FIFO)
     if #buffer > Logger._buffer_size then
         table_remove(buffer, 1)
@@ -130,7 +130,7 @@ end
 function Logger.get_buffer(component, limit)
     local buffer = Logger._context_buffer[component]
     if not buffer then return {} end
-    
+
     if limit and #buffer > limit then
         local result = {}
         for i = #buffer - limit + 1, #buffer do
@@ -138,7 +138,7 @@ function Logger.get_buffer(component, limit)
         end
         return result
     end
-    
+
     return buffer
 end
 
@@ -147,7 +147,7 @@ end
 local function write_log(level_name, component, format_str, ...)
     local level = LOG_LEVELS[level_name]
     local is_error = (level_name == "ERROR")
-    
+
     -- Оптимизация: Проверяем уровень ДО формирования строки
     if not should_log(level) and not (is_error and current_context_id) then
         return
@@ -159,7 +159,7 @@ local function write_log(level_name, component, format_str, ...)
     else
         msg = format_str
     end
-    
+
     if is_error and current_context_id then
         last_errors[current_context_id] = msg
         for _, id in ipairs(context_stack) do
@@ -243,17 +243,17 @@ end
 function Logger.with_error(func, ...)
     context_counter = context_counter + 1
     local context_id = tostring(context_counter) -- Уникальный ID для этого вызова
-    
+
     if current_context_id then
         table_insert(context_stack, current_context_id)
     end
     current_context_id = context_id
-    
+
     local results = { pcall(func, ...) }
-    
+
     -- Восстанавливаем контекст
     current_context_id = table_remove(context_stack)
-    
+
     local ok = results[1]
     if not ok then
         -- Ошибка выполнения (crash)
@@ -262,7 +262,7 @@ function Logger.with_error(func, ...)
         last_errors[context_id] = nil
         return false, tostring(err)
     end
-    
+
     -- Успешное выполнение функции, проверяем результат
     local success = results[2]
     if not success then
@@ -271,7 +271,7 @@ function Logger.with_error(func, ...)
         last_errors[context_id] = nil
         return false, err
     end
-    
+
     -- Успех
     last_errors[context_id] = nil
     return unpack(results, 2)

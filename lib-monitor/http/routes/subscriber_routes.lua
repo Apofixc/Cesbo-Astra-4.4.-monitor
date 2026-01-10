@@ -46,7 +46,7 @@ function SubscriberRoutes.subscribe(server, client, request)
         filters = data.filters,
         throttle_ms = data.throttle_ms
     })
-    
+
     if not sub_id then return HttpHelpers.error(server, client, 500, "Failed to subscribe") end
 
     return HttpHelpers.success(server, client, { message = "Subscribed", id = sub_id })

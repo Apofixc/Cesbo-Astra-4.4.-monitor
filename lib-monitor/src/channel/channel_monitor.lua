@@ -113,7 +113,7 @@ function ChannelMonitor.new(config, channel_data)
     self._upstream = config.upstream
     self._last_active_id = nil
     self._cached_source = nil
-    
+
     -- Таблица для Pull-запросов (всегда актуальное состояние)
     self._current_status_table = {}
     Utils.init_report(self._current_status_table, "Channel", self._name)
@@ -144,12 +144,14 @@ function ChannelMonitor:start()
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, "[%s] start: Некорректный метод сравнения %s", self._name, tostring(self._config.method_comparison))
+        Logger.error(COMPONENT_NAME, "[%s] start: Некорректный метод сравнения %s",
+            self._name, tostring(self._config.method_comparison))
         return nil
     end
 
     if not self._upstream or type(self._upstream.stream) ~= "function" then
-        Logger.error(COMPONENT_NAME, "[%s] start: upstream некорректен или отсутствует метод stream()", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] start: upstream некорректен или отсутствует метод stream()",
+            tostring(self._name))
         return nil
     end
 
@@ -269,7 +271,9 @@ function ChannelMonitor:process_psi_data(data)
                     -- Лимит на количество отслеживаемых PID
                     if self._stats_count >= 100 then
                         self:clear_stats()
-                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached during PSI processing, clearing stats", tostring(self._name))
+                        Logger.warn(COMPONENT_NAME,
+                            "[%s] PID stats limit reached during PSI processing, clearing stats",
+                            tostring(self._name))
                     end
 
                     stats = self:get_table_from_pool("pid_stats")
@@ -277,7 +281,7 @@ function ChannelMonitor:process_psi_data(data)
                     stats.cc = 0
                     stats.pes = 0
                     stats.sc = 0
-                    
+
                     self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
                 else
@@ -307,15 +311,16 @@ function ChannelMonitor:process_analyze_data(data)
                     -- Если лимит превышен, сбрасываем статистику для очистки места
                     if self._stats_count >= 100 then
                         self:clear_stats()
-                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached, clearing stats", tostring(self._name))
+                        Logger.warn(COMPONENT_NAME, "[%s] PID stats limit reached, clearing stats",
+                            tostring(self._name))
                     end
-                    
+
                     stats = self:get_table_from_pool("pid_stats")
                     stats.type = "UNKNOWN"
                     stats.cc = cc
                     stats.pes = pes
                     stats.sc = sc
-                    
+
                     self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
                 else
@@ -334,11 +339,11 @@ end
 function ChannelMonitor:process_total_data(data)
     local total = data.total
     if not total then return end
-    
+
     local status = self._status
     local cc_inc = total.cc_errors or 0
     local pes_inc = total.pes_errors or 0
-    
+
     status.cc_errors = status.cc_errors + cc_inc
     status.pes_errors = status.pes_errors + pes_inc
 
@@ -347,17 +352,18 @@ function ChannelMonitor:process_total_data(data)
     if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
 
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
-    
+
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-    if self:_should_send(self._config.time_check) and 
-       (active_id ~= self._last_active_id or self._force_timer >= self._force_interval or self._current_method(status, data, self._config.rate)) 
+    if self:_should_send(self._config.time_check) and
+       (active_id ~= self._last_active_id or self._force_timer >= self._force_interval or
+        self._current_method(status, data, self._config.rate))
     then
         self:_reset_force_timer()
         self:_clear_json_cache()
-        
+
         -- Обновляем таблицу для Pull-запросов
         self:_build_status_table(self._current_status_table, data)
-        
+
         -- Создаем таблицу для Push-уведомления из пула
         local r = self:get_table_from_pool("report")
         Utils.init_report(r, "Channel", self._name)
@@ -428,7 +434,7 @@ end
 function ChannelMonitor:_build_status_table(t, data)
     local source = self:get_cached_source()
     local status = self._status or {}
-    
+
     -- Добавить проверку на nil для всех полей
     local ready = (data and data.on_air) or (status.ready or false)
     local bitrate = (data and data.total and data.total.bitrate) or (status.bitrate or 0)
@@ -447,7 +453,7 @@ function ChannelMonitor:_build_status_table(t, data)
     t.format = source and source.format or "Unknown"
     t.addr = source and source.addr or "Unknown"
     t.timestamp = os_time()
-    
+
     return t
 end
 
@@ -558,7 +564,8 @@ function ChannelMonitor:update_parameters(params)
     end
 
     if has_errors then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: не удалось обновить некоторые параметры", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] update_parameters: не удалось обновить некоторые параметры",
+            tostring(self._name))
         return false
     end
 

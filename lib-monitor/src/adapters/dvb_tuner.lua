@@ -63,17 +63,17 @@ local ratio = Utils.ratio
 local COMPARISON_METHODS = {
     [METHOD_ALWAYS] = function() return true end,
     [METHOD_STRICT] = function(prev, curr)
-        return (prev.status or -1) ~= (curr.status or -1) or 
-               (prev.signal or -1) ~= (curr.signal or -1) or 
-               (prev.snr or -1) ~= (curr.snr or -1) or 
-               (prev.ber or -1) ~= (curr.ber or -1) or 
+        return (prev.status or -1) ~= (curr.status or -1) or
+               (prev.signal or -1) ~= (curr.signal or -1) or
+               (prev.snr or -1) ~= (curr.snr or -1) or
+               (prev.ber or -1) ~= (curr.ber or -1) or
                (prev.unc or -1) ~= (curr.unc or -1)
     end,
     [METHOD_RATIO] = function(prev, curr, rate)
-        return (prev.status or -1) ~= (curr.status or -1) or 
-               ratio(prev.signal or 0, curr.signal or 0) > rate or 
-               ratio(prev.snr or 0, curr.snr or 0) > rate or 
-               (prev.ber or -1) ~= (curr.ber or -1) or 
+        return (prev.status or -1) ~= (curr.status or -1) or
+               ratio(prev.signal or 0, curr.signal or 0) > rate or
+               ratio(prev.snr or 0, curr.snr or 0) > rate or
+               (prev.ber or -1) ~= (curr.ber or -1) or
                (prev.unc or -1) ~= (curr.unc or -1)
     end
 }
@@ -121,7 +121,7 @@ function DvbTuner.new(conf)
     if not self:_set_config_param("dvb_time_check", conf.time_check, "dvb_") then return nil end
     if not self:_set_config_param("dvb_method_comparison", conf.method_comparison, "dvb_") then return nil end
     if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
-    
+
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
     self._stats = {
         ber_sum = 0,
@@ -185,13 +185,14 @@ function DvbTuner:start()
     end
 
     if not self._current_method then
-        Logger.error(COMPONENT_NAME, string_format("start: Некорректный метод сравнения %s", tostring(self._config.method_comparison)))
+        Logger.error(COMPONENT_NAME, string_format("start: Некорректный метод сравнения %s",
+            tostring(self._config.method_comparison)))
         return nil
     end
 
     -- Создаем рабочую копию конфига для Astra
     self._astra_conf = Utils.table_copy(self._config)
-    
+
     -- Оптимизация: используем именованный метод и передаем его в pcall напрямую
     self._astra_conf.callback = function(data)
         if not self._active then return end
@@ -239,8 +240,8 @@ function DvbTuner:_on_astra_data(data)
     end
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-    if self:_should_send(self._astra_conf.time_check) and 
-       (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate)) 
+    if self:_should_send(self._astra_conf.time_check) and
+       (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate))
     then
         self:_reset_force_timer()
         self:_clear_json_cache()
@@ -251,7 +252,7 @@ function DvbTuner:_on_astra_data(data)
         status.snr = data.snr or -1
         status.ber = data.ber or -1
         status.unc = data.unc or -1
-        
+
         -- Расчет качества (quality) на основе ошибок
         if self._config.analyze and self._stats.count > 0 then
             local avg_ber = self._stats.ber_sum / self._stats.count
@@ -346,7 +347,7 @@ function DvbTuner:_build_status_table(t)
     t.ber = status.ber or 0
     t.unc = status.unc or 0
     t.quality = status.quality or 0
-    
+
     t.timestamp = os_time()
     return t
 end
@@ -421,7 +422,8 @@ function DvbTuner:destroy(force)
     -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
     -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
     if channels > 1 and not force then
-        Logger.warn(COMPONENT_NAME, "[%s] destroy: адаптер занят (%d канала), удаление отменено", 
+        Logger.warn(COMPONENT_NAME,
+            "[%s] destroy: адаптер занят (%d канала), удаление отменено",
             tostring(self._name), channels)
         return nil
     end
@@ -452,7 +454,9 @@ function DvbTuner:destroy(force)
             if adapter ~= nil then
                 local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
                 dvb_input_instance_list[instance_id] = nil
-                Logger.debug(COMPONENT_NAME, "Удален тюнер '%s' из внутреннего списка Astra (id: %s)", tostring(self._name), instance_id)
+                Logger.debug(COMPONENT_NAME,
+                "Удален тюнер '%s' из внутреннего списка Astra (id: %s)",
+                    tostring(self._name), instance_id)
             end
         end
 
@@ -461,7 +465,7 @@ function DvbTuner:destroy(force)
             self._instance:close()
         end
         Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))
-        
+
         self._instance = nil
     end
 

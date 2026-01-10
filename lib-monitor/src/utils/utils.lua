@@ -52,7 +52,7 @@ end
 --- @return number Отношение (от 0 до 1)
 function Utils.ratio(old, new)
     if old == new then return 0 end
-    
+
     local abs_old = math_abs(old)
     local abs_new = math_abs(new)
     local max_abs = math_max(abs_old, abs_new)
@@ -113,7 +113,7 @@ function Utils.deep_copy(t, cache)
 
     local copy = {}
     cache[t] = copy
-    
+
     for k, v in pairs(t) do
         if type(v) == "table" then
             copy[k] = Utils.deep_copy(v, cache)
@@ -132,15 +132,15 @@ end
 function Utils.shallow_compare(t1, t2)
     if t1 == t2 then return true end
     if type(t1) ~= "table" or type(t2) ~= "table" then return false end
-    
+
     for k, v in pairs(t1) do
         if t2[k] ~= v then return false end
     end
-    
+
     for k in pairs(t2) do
         if t1[k] == nil then return false end
     end
-    
+
     return true
 end
 
@@ -161,19 +161,22 @@ function Utils.validate_monitor_param(name, value)
     end
 
     if type(value) ~= schema.type then
-        Logger.error(COMPONENT_NAME, "validate_monitor_param: Invalid type for '%s' (expected %s, got %s). Using default.", 
+        Logger.error(COMPONENT_NAME,
+            "validate_monitor_param: Invalid type for '%s' (expected %s, got %s). Using default.",
             name, schema.type, type(value))
         return schema.default
     end
 
     if schema.type == "number" then
         if schema.min and value < schema.min then
-            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too small (%s < %s). Using default.", 
+            Logger.error(COMPONENT_NAME,
+                "validate_monitor_param: Value for '%s' is too small (%s < %s). Using default.",
                 name, tostring(value), tostring(schema.min))
             return schema.default
         end
         if schema.max and value > schema.max then
-            Logger.error(COMPONENT_NAME, "validate_monitor_param: Value for '%s' is too large (%s > %s). Using default.", 
+            Logger.error(COMPONENT_NAME,
+                "validate_monitor_param: Value for '%s' is too large (%s > %s). Using default.",
                 name, tostring(value), tostring(schema.max))
             return schema.default
         end
@@ -249,10 +252,10 @@ end
 function Utils.free_port(port)
     if not port then return false end
     if not Utils.is_port_busy(port) then return true end
-    
+
     Logger.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port)
     os_execute(string_format("fuser -k %d/tcp >/dev/null 2>&1", port))
-    
+
     -- Ожидание освобождения (до 2 секунд)
     local start = os_clock()
     while os_clock() - start < 2 do
@@ -261,7 +264,7 @@ function Utils.free_port(port)
             return true
         end
     end
-    
+
     local busy = Utils.is_port_busy(port)
     if busy then
         Logger.error(COMPONENT_NAME, "Не удалось освободить порт %d", port)
@@ -287,9 +290,9 @@ function Utils.measure_time(name, func, ...)
     local start_time = os_clock()
     local results = { pcall(func, ...) }
     local end_time = os_clock()
-    
+
     local duration = end_time - start_time
-    
+
     if not Utils._performance_stats[name] then
         Utils._performance_stats[name] = {
             count = 0,
@@ -299,20 +302,20 @@ function Utils.measure_time(name, func, ...)
             min_time = math_huge
         }
     end
-    
+
     local stats = Utils._performance_stats[name]
     stats.count = stats.count + 1
     stats.total_time = stats.total_time + duration
     stats.avg_time = stats.total_time / stats.count
     stats.max_time = math_max(stats.max_time, duration)
     stats.min_time = math_min(stats.min_time, duration)
-    
+
     local ok = results[1]
     if not ok then
         -- Если функция упала, пробрасываем ошибку дальше после записи статистики
         error(results[2])
     end
-    
+
     return unpack(results, 2)
 end
 

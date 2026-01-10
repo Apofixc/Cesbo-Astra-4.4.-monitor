@@ -56,7 +56,7 @@ function ChannelRoutes.get_channels_stats(server, client, request)
     local with_errors = 0
 
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
-    
+
     for _, ch_obj in pairs(active_channels) do
         local status = ch_obj._status or {}
         if status.ready then online = online + 1 else offline = offline + 1 end
@@ -98,7 +98,7 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
     end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    
+
     return HttpHelpers.success(server, client, {
         name = params.name,
         inputs = ch_data.config.input or {},
@@ -161,7 +161,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
 
     local config = ch_data.config
     kill_channel(ch_data)
-    
+
     if params.reboot and config then
         if timer then
             timer({ interval = 1, callback = function(self) self:close(); make_channel(config) end })
@@ -170,7 +170,7 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
         end
     end
 
-    return HttpHelpers.success(server, client, { 
+    return HttpHelpers.success(server, client, {
         message = params.reboot and "Channel rebooting" or "Channel killed",
         config = config
     })
@@ -202,7 +202,7 @@ function ChannelRoutes.kill_stream(server, client, request)
 
     local config = Channel.kill_stream(params.name)
     if not config then return HttpHelpers.error(server, client, 404, "Stream not found") end
-    
+
     if params.reboot then
         if timer then
             timer({ interval = 1, callback = function(self) self:close(); Channel.make_stream(config) end })
@@ -211,7 +211,7 @@ function ChannelRoutes.kill_stream(server, client, request)
         end
     end
 
-    return HttpHelpers.success(server, client, { 
+    return HttpHelpers.success(server, client, {
         message = params.reboot and "Stream rebooting" or "Stream and monitor killed",
         config = config
     })

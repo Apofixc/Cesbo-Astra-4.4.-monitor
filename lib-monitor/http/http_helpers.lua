@@ -69,24 +69,24 @@ end
 --- @return boolean true если лимит не превышен
 function HttpHelpers.check_rate_limit(request)
     if not request or not request.addr then return true end
-    
+
     local ip = request.addr
     local now = os_time()
     local window = (MonitorConfig and MonitorConfig.RateLimitWindow) or 60
     local max_req = (MonitorConfig and MonitorConfig.RateLimitMaxRequests) or 100
-    
+
     local data = _rate_limit_data[ip]
     if not data or now >= data.reset_at then
         _rate_limit_data[ip] = { count = 1, reset_at = now + window }
         return true
     end
-    
+
     data.count = data.count + 1
     if data.count > max_req then
         Logger.warn(COMPONENT_NAME, "Rate limit exceeded for %s (%d/%d)", ip, data.count, max_req)
         return false
     end
-    
+
     return true
 end
 
@@ -97,7 +97,7 @@ end
 --- @return boolean true если ключ валиден
 function HttpHelpers.check_auth(server, client, request)
     if not request then return false end
-    
+
     local expected_key = os_getenv("ASTRA_API_KEY") or DEFAULT_API_KEY
     local headers = request.headers
     local provided_key = headers and (headers["x-api-key"] or headers["X-Api-Key"])
@@ -165,7 +165,7 @@ end
 --- @return table|nil Декодированные данные или nil
 function HttpHelpers.get_json_body(request)
     if not request or not request.content or request.content == "" then return nil end
-    
+
     local headers = request.headers
     local ct = headers and (headers["content-type"] or headers["Content-Type"])
     if ct and not string_find(ct, "application/json") then return nil end
@@ -181,20 +181,20 @@ end
 function HttpHelpers.get_params(request)
     if not request then return {} end
     local params = {}
-    
+
     if request.query then
         for k, v in pairs(request.query) do
             params[k] = v
         end
     end
-    
+
     local body = HttpHelpers.get_json_body(request)
     if body and type(body) == "table" then
         for k, v in pairs(body) do
             params[k] = v
         end
     end
-    
+
     return params
 end
 

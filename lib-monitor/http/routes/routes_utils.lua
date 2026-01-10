@@ -40,17 +40,27 @@ end
 function RoutesUtils.get_resource_stats(server, client, request)
     local channel_count = ChannelRepository and ChannelRepository:count() or 0
     local adapter_count = DvbRepository and DvbRepository:count() or 0
-    
+
     local astra_channels, astra_adapters = 0, 0
     if channel_list then for _ in pairs(channel_list) do astra_channels = astra_channels + 1 end end
-    if dvb_input_instance_list then for _ in pairs(dvb_input_instance_list) do astra_adapters = astra_adapters + 1 end end
+    if dvb_input_instance_list then
+        for _ in pairs(dvb_input_instance_list) do astra_adapters = astra_adapters + 1 end
+    end
 
     local limit = MonitorConfig.ChannelMonitorLimit or 200
     local dvb_limit = MonitorConfig.DvbMonitorLimit or 20
 
     return HttpHelpers.success(server, client, {
-        monitors = { active = channel_count, total_capacity = limit, usage_percent = (channel_count / limit) * 100 },
-        dvb_monitors = { active = adapter_count, total_capacity = dvb_limit, usage_percent = (adapter_count / dvb_limit) * 100 },
+        monitors = {
+            active = channel_count,
+            total_capacity = limit,
+            usage_percent = (channel_count / limit) * 100
+        },
+        dvb_monitors = {
+            active = adapter_count,
+            total_capacity = dvb_limit,
+            usage_percent = (adapter_count / dvb_limit) * 100
+        },
         system = { total_astra_channels = astra_channels, total_astra_adapters = astra_adapters }
     })
 end
@@ -137,11 +147,17 @@ function RoutesUtils.get_all_objects(server, client, request)
     local active_adapters = DvbRepository and DvbRepository:get_all() or {}
 
     for name, ch_obj in pairs(active_channels) do
-        table_insert(objects, { id = name, name = name, type = "channel_monitor", display_name = ch_obj._display_name, active = true, state = ch_obj._state })
+        table_insert(objects, {
+            id = name, name = name, type = "channel_monitor",
+            display_name = ch_obj._display_name, active = true, state = ch_obj._state
+        })
     end
 
     for name, dvb_obj in pairs(active_adapters) do
-        table_insert(objects, { id = name, name = name, type = "dvb_monitor", adapter_name = name, active = true, state = dvb_obj._state, source = dvb_obj._config.tp })
+        table_insert(objects, {
+            id = name, name = name, type = "dvb_monitor",
+            adapter_name = name, active = true, state = dvb_obj._state, source = dvb_obj._config.tp
+        })
     end
 
     return HttpHelpers.success(server, client, { total = #objects, objects = objects })
@@ -158,7 +174,10 @@ function RoutesUtils.get_api_info(server, client, request)
         api_version = "1.1.0",
         library_version = "2.3.2",
         supported_methods = {"GET", "POST", "PATCH", "DELETE"},
-        endpoints = { channels = "/api/channels", streams = "/api/streams", monitors = "/api/monitors", dvb = "/api/dvb", system = "/api/system", subscribers = "/api/subscribers", utils = "/api/utils" }
+        endpoints = {
+            channels = "/api/channels", streams = "/api/streams", monitors = "/api/monitors",
+            dvb = "/api/dvb", system = "/api/system", subscribers = "/api/subscribers", utils = "/api/utils"
+        }
     })
 end
 

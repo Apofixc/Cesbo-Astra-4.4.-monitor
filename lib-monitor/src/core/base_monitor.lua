@@ -100,7 +100,7 @@ end
 --- @return boolean Статус выполнения
 function BaseMonitor:_set_config_param(param_name, value, prefix)
     if not self._config then return false end
-    
+
     local result
     if Utils and Utils.validate_monitor_param then
         result = Utils.validate_monitor_param(param_name, value)
@@ -108,13 +108,13 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
         -- Fallback если Utils недоступен
         result = value
     end
-    
+
     if result == nil then
-        Logger.error(self._component_name, "[%s] Invalid parameter value for %s: %s", 
+        Logger.error(self._component_name, "[%s] Invalid parameter value for %s: %s",
             tostring(self._name), param_name, tostring(value))
         return false
     end
-    
+
     local cache_id = prefix .. param_name
     local key = CONFIG_KEY_CACHE[cache_id]
     if not key then
@@ -126,7 +126,7 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
         end
         CONFIG_KEY_CACHE[cache_id] = key
     end
-    
+
     self._config[key] = result
     return true
 end
@@ -140,7 +140,7 @@ end
 function BaseMonitor:publish(data, event_type, is_table)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
     if dispatcher then
-        dispatcher:emit_safe(event_type, data, nil, { 
+        dispatcher:emit_safe(event_type, data, nil, {
             is_table = is_table,
             source = self._name
         })
@@ -159,16 +159,16 @@ end
 --- @return string|nil JSON-строка
 function BaseMonitor:get_status_json()
     if self._json_cache then return self._json_cache end
-    
+
     local data = self:get_status_table()
     if not data then return nil end
-    
+
     if json_encode then
         self._json_cache = json_encode(data)
     else
         self._json_cache = tostring(data)
     end
-    
+
     return self._json_cache
 end
 
@@ -250,12 +250,12 @@ end
 --- @return boolean true если интервал прошел, иначе false
 function BaseMonitor:_should_send(time_check)
     self._force_timer = self._force_timer + 1
-    
+
     if self._check_timer < (time_check or 0) then
         self._check_timer = self._check_timer + 1
         return false
     end
-    
+
     self._check_timer = 0
     return true
 end

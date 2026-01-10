@@ -78,7 +78,7 @@ function BaseRepository:auto_recover()
     local recovered = 0
     local failed = 0
     local now = os_time()
-    
+
     -- Создаем список имен для итерации, так как unregister/register меняют таблицу
     local names = {}
     for name in pairs(self.monitors) do
@@ -88,19 +88,19 @@ function BaseRepository:auto_recover()
     for _, name in ipairs(names) do
         local monitor = self.monitors[name]
         local class = self.classes[name]
-        
+
         if monitor and monitor.health_check and class then
             local health = monitor:health_check()
-            
+
             -- Проверка на "зависшие" мониторы (RUNNING, но нет обновлений > 300 сек)
             if health.state == BaseMonitor.STATE.RUNNING and
                now - (health.last_update or 0) > 300 then
-                
+
                 Logger.warn(self.component_name, "Attempting to recover stuck monitor: %s", name)
-                
+
                 -- 1. Останавливаем и получаем конфиг
                 local config = self:unregister(name, true)
-                
+
                 -- 2. Пытаемся создать и запустить новый экземпляр
                 if config and class.new then
                     local new_monitor = class.new(config)
@@ -119,7 +119,7 @@ function BaseRepository:auto_recover()
             end
         end
     end
-    
+
     return recovered, failed
 end
 
@@ -150,7 +150,7 @@ function BaseRepository:shutdown()
     for name in pairs(self.monitors) do
         table.insert(names, name)
     end
-    
+
     for _, name in ipairs(names) do
         self:unregister(name, true)
     end

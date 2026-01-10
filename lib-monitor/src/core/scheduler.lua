@@ -59,7 +59,7 @@ function Scheduler:initialize()
     self._tasks = {}
     self._active = true
     self._task_count = 0
-    
+
     -- Запуск основного цикла (раз в секунду)
     if timer then
         self._timer = timer({
@@ -72,7 +72,7 @@ function Scheduler:initialize()
         -- Добавляем задачу активного управления памятью
         self:add_task("gc_maintenance", function()
             -- Выполняем небольшой шаг сборки мусора
-            collectgarbage("step", 20) 
+            collectgarbage("step", 20)
         end, 2)
 
         Logger.info(COMPONENT_NAME, "Scheduler initialized with single Astra timer and GC maintenance")
@@ -88,7 +88,7 @@ end
 --- @param options? table [Дополнительные опции: immediate (запустить сразу)]
 function Scheduler:add_task(id, callback, interval, options)
     if not id or type(callback) ~= "function" then return end
-    
+
     local now = os_time()
     local interval_val = interval or 1
     if interval_val < 1 then interval_val = 1 end
@@ -96,7 +96,7 @@ function Scheduler:add_task(id, callback, interval, options)
     -- Балансировка нагрузки: добавляем небольшой случайный сдвиг для новых задач,
     -- чтобы они не стартовали одновременно.
     local jitter = (options and options.immediate) and 0 or (self._task_count % interval_val)
-    
+
     self._tasks[id] = {
         id = id,
         callback = callback,
@@ -105,7 +105,7 @@ function Scheduler:add_task(id, callback, interval, options)
         next_run = now + jitter,
         active = true
     }
-    
+
     self._task_count = self._task_count + 1
     Logger.debug(COMPONENT_NAME, "Task added: %s (interval: %ds)", id, interval_val)
 end
@@ -129,8 +129,8 @@ end
 --- Возобновляет выполнение задачи
 --- @param id string ID задачи
 function Scheduler:resume_task(id)
-    if self._tasks[id] then 
-        self._tasks[id].active = true 
+    if self._tasks[id] then
+        self._tasks[id].active = true
         self._tasks[id].next_run = os_time() -- Запустить при следующем тике
     end
 end
@@ -139,7 +139,7 @@ end
 --- @private
 function Scheduler:_tick()
     local now = os_time()
-    
+
     -- Собираем задачи, готовые к выполнению
     for id, task in pairs(self._tasks) do
         if task.active and now >= task.next_run then
@@ -147,7 +147,7 @@ function Scheduler:_tick()
             if not ok then
                 Logger.error(COMPONENT_NAME, "Error in task %s: %s", id, tostring(err))
             end
-            
+
             task.last_run = now
             task.next_run = now + task.interval
         end

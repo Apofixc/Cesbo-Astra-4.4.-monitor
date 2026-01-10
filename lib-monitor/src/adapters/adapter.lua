@@ -155,12 +155,12 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     local function perform_restart(conf)
         if not stop_dvb_monitor(name_adapter, force) then return false end
         if not Adapter.dvb_tuner_monitor(conf) then return false end
-        
+
         local new_tuner = DvbRepository:find(name_adapter)
         if new_tuner then
             -- Сохраняем бэкап в новый объект
             new_tuner:set_backup(old_conf, {})
-            
+
             local instance = new_tuner:get_instance()
             if force and instance and instance.__options then
                 instance.__options.channels = old_channels_count
@@ -247,7 +247,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     if not tuner then return nil end
 
     local old_tuner_params = Utils.table_copy(tuner:get_config())
-    
+
     -- 1. Уведомление о начале переключения (каналы остановятся сами)
     if EventDispatcher then
         EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
@@ -270,7 +270,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
                 local ChannelRepository = ModuleManager.get_module("channel_repository")
                 local old_ch = ChannelRepository and ChannelRepository:find(item.name)
                 local old_conf = old_ch and old_ch:get_config()
-                
+
                 if old_conf and item.input then
                     local final_conf = Utils.table_copy(old_conf)
                     final_conf.input = item.input
