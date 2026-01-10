@@ -36,15 +36,15 @@ local current_phase = INIT_PHASES.DEPENDENCIES
 --- @return boolean success Статус выполнения
 local function initialize_phase(phase, func)
     if phase ~= current_phase then
-        error(string_format("Invalid initialization phase: expected %d, got %d", 
+        error(string_format("Invalid initialization phase: expected %d, got %d",
               current_phase, phase))
     end
-    
+
     local success, err = pcall(func)
     if not success then
         error(string_format("Phase %d initialization failed: %s", phase, tostring(err)))
     end
-    
+
     current_phase = current_phase + 1
     return success
 end
@@ -83,7 +83,7 @@ initialize_phase(INIT_PHASES.DEPENDENCIES, function()
 
     for _, dep_path in ipairs(global_dependencies_to_check) do
         local obj = ModuleManager.check_nested_dependency(dep_path)
-        
+
         if obj == nil then
             print(string_format("[Init] Critical dependency missing: %s", dep_path))
             all_astra_deps_found = false
@@ -113,14 +113,18 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
 
     -- Ядро системы
     ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
-    ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "monitor_config", "core.scheduler"})
-    ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager", {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard", "core.scheduler"})
-    ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager", "table_pool", "utils", "utils.wildcard", "core.scheduler"})
-    
-    ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor", {"logger", "core.scheduler", "monitor_config"})
+    ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor",
+        {"logger", "utils", "monitor_config", "core.scheduler"})
+    ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager",
+        {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard", "core.scheduler"})
+    ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher",
+        {"logger", "core.subscription_manager", "table_pool", "utils", "utils.wildcard", "core.scheduler"})
+
+    ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor",
+        {"logger", "core.scheduler", "monitor_config"})
 
     -- Валидация и загрузка базовых модулей
-    if not ModuleManager.validate_dependencies() then 
+    if not ModuleManager.validate_dependencies() then
         error("[Init] Module dependency validation failed.")
     end
 
@@ -140,13 +144,20 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
 end)
 
 initialize_phase(INIT_PHASES.ADAPTERS, function()
-    ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner", {"logger", "utils", "monitor_config", "core.base_monitor"})
-    ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository", {"logger", "core.base_repository"})
-    ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter", {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "core.event_dispatcher"})
+    ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner",
+        {"logger", "utils", "monitor_config", "core.base_monitor"})
+    ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository",
+        {"logger", "core.base_repository"})
+    ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter",
+        {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "core.event_dispatcher"})
 
-    ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor", {"logger", "utils", "monitor_config", "core.base_monitor", "table_pool"})
-    ModuleManager.register_module("channel_repository", path_prefix .. "src.repository.channel_repository", {"logger", "core.base_repository"})
-    ModuleManager.register_module("channel", path_prefix .. "src.channel.channel", {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "core.event_dispatcher", "dvb_repository"})
+    ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor",
+        {"logger", "utils", "monitor_config", "core.base_monitor", "table_pool"})
+    ModuleManager.register_module("channel_repository", path_prefix .. "src.repository.channel_repository",
+        {"logger", "core.base_repository"})
+    ModuleManager.register_module("channel", path_prefix .. "src.channel.channel",
+        {"logger", "utils", "monitor_config", "channel_monitor", "channel_repository", "core.event_dispatcher",
+        "dvb_repository"})
 
     if not ModuleManager.load_modules() then
         error("[Init] Failed to load adapter modules.")
@@ -156,14 +167,21 @@ end)
 
 initialize_phase(INIT_PHASES.HTTP, function()
     ModuleManager.register_module("http_helpers", path_prefix .. "http.http_helpers", {"logger"})
-    ModuleManager.register_module("channel_routes", path_prefix .. "http.routes.channel_routes", {"logger", "http_helpers", "channel", "channel_repository"})
-    ModuleManager.register_module("dvb_routes", path_prefix .. "http.routes.dvb_routes", {"logger", "http_helpers", "adapter", "dvb_repository"})
-    ModuleManager.register_module("monitor_routes", path_prefix .. "http.routes.monitor_routes", {"logger", "http_helpers", "channel"})
-    ModuleManager.register_module("system_routes", path_prefix .. "http.routes.system_routes", {"logger", "http_helpers", "resource_monitor"})
-    ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes", {"logger", "http_helpers", "core.event_dispatcher"})
-    ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils", {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
+    ModuleManager.register_module("channel_routes", path_prefix .. "http.routes.channel_routes",
+        {"logger", "http_helpers", "channel", "channel_repository"})
+    ModuleManager.register_module("dvb_routes", path_prefix .. "http.routes.dvb_routes",
+        {"logger", "http_helpers", "adapter", "dvb_repository"})
+    ModuleManager.register_module("monitor_routes", path_prefix .. "http.routes.monitor_routes",
+        {"logger", "http_helpers", "channel"})
+    ModuleManager.register_module("system_routes", path_prefix .. "http.routes.system_routes",
+        {"logger", "http_helpers", "resource_monitor"})
+    ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes",
+        {"logger", "http_helpers", "core.event_dispatcher"})
+    ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils",
+        {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
     ModuleManager.register_module("http_server", path_prefix .. "http.http_server", {
-        "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes", "routes_utils", "ws_subscriber"
+        "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes",
+        "routes_utils", "ws_subscriber"
     })
 
     if not ModuleManager.load_modules() then
@@ -227,14 +245,14 @@ end
 function graceful_shutdown()
     local Logger = ModuleManager.get_module("logger")
     if Logger then Logger.info("Init", "Starting graceful shutdown...") end
-    
+
     -- Получаем список имен и сортируем их в обратном порядке для детерминированного завершения
     local names = {}
     for name in pairs(shutdown_handlers) do
         table.insert(names, name)
     end
     table.sort(names, function(a, b) return a > b end)
-    
+
     for _, name in ipairs(names) do
         if Logger then Logger.debug("Init", "Executing shutdown handler: %s", name) end
         local ok, err = pcall(shutdown_handlers[name])
@@ -242,7 +260,7 @@ function graceful_shutdown()
             Logger.error("Init", "Shutdown handler '%s' failed: %s", name, tostring(err))
         end
     end
-    
+
     if Logger then Logger.info("Init", "Graceful shutdown completed") end
     collectgarbage()
 end
@@ -258,11 +276,11 @@ end)
 add_shutdown_handler("20_repositories", function()
     local ChannelRepository = ModuleManager.get_module("channel_repository")
     local DvbRepository = ModuleManager.get_module("dvb_repository")
-    
+
     if ChannelRepository and ChannelRepository.shutdown then
         ChannelRepository:shutdown()
     end
-    
+
     if DvbRepository and DvbRepository.shutdown then
         DvbRepository:shutdown()
     end
