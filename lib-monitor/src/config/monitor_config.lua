@@ -47,6 +47,9 @@ local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @field HttpTimeout number Таймаут HTTP-запросов
 --- @field LogBufferSize number Размер буфера логов (0 - выключено)
 --- @field ExtraDebug boolean Флаг расширенной отладки (для dev-окружения)
+--- @field GcPause number Параметр GC setpause (по умолчанию 100)
+--- @field GcStepMul number Параметр GC setstepmul (по умолчанию 500)
+--- @field SchedulerInterval number Интервал тика планировщика в секундах
 --- @field subscribers table<string, table[]> Список подписчиков
 --- @field ValidationSchema table<string, ValidationRule> Схема валидации для параметров мониторов
 local MonitorConfig = {}
@@ -87,6 +90,9 @@ MonitorConfig.RateLimitMaxRequests = 100 -- запросов на окно
 MonitorConfig.ForceSendInterval = 300
 MonitorConfig.LogBufferSize = 0 -- По умолчанию выключено
 MonitorConfig.ExtraDebug = false
+MonitorConfig.GcPause = 100
+MonitorConfig.GcStepMul = 500
+MonitorConfig.SchedulerInterval = 1
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию

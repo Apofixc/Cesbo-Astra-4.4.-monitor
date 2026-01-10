@@ -49,6 +49,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 --- @field private stats table Глобальная статистика подписок
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
 --- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации event_type -> list_of_subscriptions
+--- @field private _save_pending boolean Флаг отложенного сохранения
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
@@ -173,34 +174,50 @@ function SubscriptionManager.new()
     self.stats = { total = 0, delivered = 0, failed = 0 }
     self._matchers = {} -- [pattern] = function
     self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
+    self._save_pending = false
     self:load()
     self:start_retry_processor()
     return self
 end
 
---- Запускает фоновый процесс обработки очереди повторных попыток отправки HTTP-уведомлений.
+--- Запускает фоновый процесс обработки очереди повторных попыток и отложенного сохранения.
 --- @private
 function SubscriptionManager:start_retry_processor()
-    if not timer then return end
-    timer({
-        interval = 1,
-        callback = function()
-            local now = os_time()
-            for i = #retry_queue, 1, -1 do
-                local item = retry_queue[i]
-                if now >= item.time then
-                    table_remove(retry_queue, i)
-                    Transport.HTTP(item.config, item.data, item.type, item.retries)
-                end
+    local Scheduler = ModuleManager.get_module("core.scheduler")
+    if not Scheduler then return end
+    
+    local scheduler = Scheduler.get_instance()
+    
+    -- Задача для повторов и сохранения (раз в секунду)
+    scheduler:add_task("subscription_manager_maintenance", function()
+        local now = os_time()
+        
+        -- 1. Обработка повторов
+        for i = #retry_queue, 1, -1 do
+            local item = retry_queue[i]
+            if now >= item.time then
+                table_remove(retry_queue, i)
+                Transport.HTTP(item.config, item.data, item.type, item.retries)
             end
         end
-    })
+        
+        -- 2. Отложенное сохранение (Debounced Save)
+        if self._save_pending then
+            self:save_now()
+        end
+    end, 1)
 end
 
---- Сохраняет текущие активные подписки в JSON файл.
+--- Планирует сохранение подписок (отложенная запись).
+function SubscriptionManager:save()
+    self._save_pending = true
+end
+
+--- Немедленно сохраняет текущие активные подписки в JSON файл.
 --- Lua-коллбэки игнорируются при сохранении.
 --- @return boolean Статус выполнения
-function SubscriptionManager:save()
+function SubscriptionManager:save_now()
+    self._save_pending = false
     local data_to_save = {}
     for event_type, subs in pairs(self.subscriptions) do
         data_to_save[event_type] = {}

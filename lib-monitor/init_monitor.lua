@@ -103,6 +103,7 @@ end)
 initialize_phase(INIT_PHASES.CORE_MODULES, function()
     -- Регистрация модулей
     ModuleManager.register_module("monitor_config", path_prefix .. "src.config.monitor_config")
+    ModuleManager.register_module("core.scheduler", path_prefix .. "src.core.scheduler")
     ModuleManager.register_module("table_pool", path_prefix .. "src.utils.table_pool")
     ModuleManager.register_module("utils.wildcard", path_prefix .. "src.utils.wildcard")
     ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
@@ -112,11 +113,11 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
 
     -- Ядро системы
     ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
-    ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "monitor_config"})
-    ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager", {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard"})
-    ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager", "table_pool", "utils", "utils.wildcard"})
+    ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor", {"logger", "utils", "monitor_config", "core.scheduler"})
+    ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager", {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard", "core.scheduler"})
+    ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher", {"logger", "core.subscription_manager", "table_pool", "utils", "utils.wildcard", "core.scheduler"})
     
-    ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor", {"logger"})
+    ModuleManager.register_module("resource_monitor", path_prefix .. "src.system.resource_monitor", {"logger", "core.scheduler", "monitor_config"})
 
     -- Валидация и загрузка базовых модулей
     if not ModuleManager.validate_dependencies() then 

@@ -10,6 +10,8 @@ local pairs = pairs
 
 -- 2. Глобальные зависимости Astra
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
+local Scheduler = ModuleManager.get_module("core.scheduler")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- Внутреннее состояние
 ResourceMonitor._pid = nil
@@ -122,10 +124,29 @@ function ResourceMonitor.get_report()
     return ResourceMonitor.check()
 end
 
+--- Запускает периодический мониторинг ресурсов через планировщик
+function ResourceMonitor.start()
+    local scheduler = Scheduler.get_instance()
+    local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
+    
+    scheduler:add_task("resource_monitor", function()
+        ResourceMonitor.check()
+    end, interval)
+end
+
+--- Останавливает мониторинг ресурсов
+function ResourceMonitor.stop()
+    local scheduler = Scheduler.get_instance()
+    scheduler:remove_task("resource_monitor")
+end
+
 --- Заглушка для совместимости
 --- @return boolean
 function ResourceMonitor.is_running()
     return true
 end
+
+-- Автоматический запуск при загрузке модуля
+ResourceMonitor.start()
 
 return ResourceMonitor

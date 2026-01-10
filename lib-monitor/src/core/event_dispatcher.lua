@@ -25,9 +25,11 @@ local SubscriptionManager = ModuleManager.get_module("core.subscription_manager"
 local TablePool = ModuleManager.get_module("utils.table_pool")
 local Utils = ModuleManager.get_module("utils")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
-local timer = ModuleManager.get_global_dependency("timer")
+-- (Используем Scheduler вместо прямого обращения к timer)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "EventDispatcher"
@@ -85,8 +87,10 @@ end
 --- @private
 function EventDispatcher:initialize()
     -- Тонкая настройка Garbage Collector для инкрементальной очистки
-    collectgarbage("setpause", 100)
-    collectgarbage("setstepmul", 500)
+    local gc_pause = (MonitorConfig and MonitorConfig.GcPause) or 100
+    local gc_stepmul = (MonitorConfig and MonitorConfig.GcStepMul) or 500
+    collectgarbage("setpause", gc_pause)
+    collectgarbage("setstepmul", gc_stepmul)
 
     self.subscription_manager = SubscriptionManager.new()
     
@@ -143,12 +147,16 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local cache_data = event_data
         if type(event_data) == "table" then
-            if Utils and Utils.deep_copy then
-                cache_data = Utils.deep_copy(event_data)
-            else
-                -- Создаем простую копию если Utils недоступен
-                cache_data = {}
-                for k, v in pairs(event_data) do
+            -- Оптимизация: "Умное" копирование для стандартных отчетов
+            -- Избегаем рекурсивного deep_copy для известных структур
+            cache_data = {}
+            for k, v in pairs(event_data) do
+                if type(v) == "table" then
+                    -- Копируем вложенные таблицы (например, 'analyze' или 'cpu')
+                    local sub = {}
+                    for sk, sv in pairs(v) do sub[sk] = sv end
+                    cache_data[k] = sub
+                else
                     cache_data[k] = v
                 end
             end
@@ -263,17 +271,17 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     return sub_id
 end
 
---- Запускает фоновый таймер для обработки очереди событий.
+--- Запускает фоновый таймер для обработки очереди событий через планировщик.
 --- @private
 function EventDispatcher:start_queue_processor()
-    if not timer then return end
+    if not Scheduler then return end
     
-    self._processor_timer = timer({
-        interval = 1, -- Интервал в секундах для Astra timer
-        callback = function()
-            if self.active then self:process_queue() end
-        end
-    })
+    local scheduler = Scheduler.get_instance()
+    local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
+    
+    scheduler:add_task("event_dispatcher_queue", function()
+        if self.active then self:process_queue() end
+    end, interval)
 end
 
 --- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager.
@@ -326,11 +334,8 @@ function EventDispatcher:shutdown()
     self.active = false
     Logger.info(COMPONENT_NAME, "Shutting down EventDispatcher...")
     
-    if self._processor_timer then
-        if self._processor_timer.close then
-            self._processor_timer:close()
-        end
-        self._processor_timer = nil
+    if Scheduler then
+        Scheduler.get_instance():remove_task("event_dispatcher_queue")
     end
     
     -- Очистка очередей

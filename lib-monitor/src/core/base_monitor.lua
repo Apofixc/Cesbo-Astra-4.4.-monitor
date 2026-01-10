@@ -22,6 +22,7 @@ local setmetatable = setmetatable
 local tostring = tostring
 local type = type
 local os_time = os.time
+local pairs = pairs
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -29,6 +30,7 @@ local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local TablePool = ModuleManager.get_module("utils.table_pool")
+local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
 local json_encode = ModuleManager.get_global_dependency("json.encode")
@@ -116,7 +118,12 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     local cache_id = prefix .. param_name
     local key = CONFIG_KEY_CACHE[cache_id]
     if not key then
-        key = param_name:gsub(prefix, "")
+        -- Оптимизация: используем string.sub если префикс в начале, это быстрее gsub
+        if param_name:sub(1, #prefix) == prefix then
+            key = param_name:sub(#prefix + 1)
+        else
+            key = param_name:gsub(prefix, "")
+        end
         CONFIG_KEY_CACHE[cache_id] = key
     end
     
@@ -235,7 +242,9 @@ function BaseMonitor:_clear_psi()
     self._psi = {}
 end
 
---- Проверяет, прошел ли интервал времени для выполнения проверки
+--- Проверяет, прошел ли интервал времени для выполнения проверки.
+--- В новой версии используется внешнее управление через планировщик,
+--- поэтому метод просто инкрементирует внутренние счетчики.
 --- @protected
 --- @param time_check number Интервал проверки из конфигурации
 --- @return boolean true если интервал прошел, иначе false
@@ -249,6 +258,33 @@ function BaseMonitor:_should_send(time_check)
     
     self._check_timer = 0
     return true
+end
+
+--- Метод для выполнения проверки состояния.
+--- Должен быть реализован в подклассах.
+function BaseMonitor:check()
+    -- Заглушка
+end
+
+--- Регистрирует монитор в планировщике для периодических проверок.
+--- @protected
+function BaseMonitor:_register_in_scheduler()
+    if not Scheduler then return end
+    local scheduler = Scheduler.get_instance()
+    local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
+    
+    scheduler:add_task("monitor_" .. self._name, function()
+        if self._active and self.check then
+            self:check()
+        end
+    end, interval)
+end
+
+--- Удаляет монитор из планировщика.
+--- @protected
+function BaseMonitor:_unregister_from_scheduler()
+    if not Scheduler then return end
+    Scheduler.get_instance():remove_task("monitor_" .. self._name)
 end
 
 --- Сбрасывает таймер принудительной отправки
