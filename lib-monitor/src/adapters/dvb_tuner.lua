@@ -147,9 +147,6 @@ function DvbTuner.new(conf)
     self._backup = nil
     self._last_status_num = -1
     self._current_flags = STATUS_LOOKUP[0]
-    
-    -- Регистрация в планировщике
-    self:_register_in_scheduler()
 
     -- Таблица для Pull-запросов (всегда актуальное состояние)
     self._current_status_table = {}
@@ -406,33 +403,6 @@ function DvbTuner:psi_update()
     return true
 end
 
---- Метод для периодической проверки (вызывается планировщиком)
-function DvbTuner:check()
-    if not self._active then return end
-
-    -- Проверка необходимости принудительной отправки (force_send)
-    -- Если данных долго нет, _should_send все равно инкрементирует таймеры
-    if self._force_timer >= self._force_interval then
-        self:_reset_force_timer()
-        self:_clear_json_cache()
-
-        -- Обновляем таблицу для Pull-запросов
-        self:_build_status_table(self._current_status_table)
-
-        -- Создаем таблицу для Push-уведомления из пула
-        local r = self:get_table_from_pool("report")
-        Utils.init_report(r, "dvb", self._name)
-        r.name_adapter = self._name
-        r.format = self._config.type or ""
-        r.modulation = self._config.modulation or ""
-        r.source = self._config.tp or self._config.frequency
-        self:_build_status_table(r)
-
-        -- Публикуем таблицу
-        self:publish(r, "dvb", true)
-    end
-end
-
 --- Полностью останавливает мониторинг тюнера и уничтожает объект.
 --- Освобождает ресурсы и возвращает оригинальную конфигурацию.
 --- @param force boolean Принудительная остановка (игнорировать счетчик каналов)
@@ -441,9 +411,6 @@ function DvbTuner:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
         return nil
     end
-
-    -- Удаление из планировщика
-    self:_unregister_from_scheduler()
 
     local original_config = self._config and Utils.table_copy(self._config) or nil
     local opts = self._instance and self._instance.__options
