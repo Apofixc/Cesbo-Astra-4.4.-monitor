@@ -126,6 +126,7 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
     if not ModuleManager.load_modules() then
         error("[Init] Failed to load core modules.")
     end
+    collectgarbage()
 
     -- Валидация глобальной конфигурации
     local MonitorConfig = ModuleManager.get_module("monitor_config")
@@ -149,6 +150,7 @@ initialize_phase(INIT_PHASES.ADAPTERS, function()
     if not ModuleManager.load_modules() then
         error("[Init] Failed to load adapter modules.")
     end
+    collectgarbage()
 end)
 
 initialize_phase(INIT_PHASES.HTTP, function()
@@ -166,6 +168,7 @@ initialize_phase(INIT_PHASES.HTTP, function()
     if not ModuleManager.load_modules() then
         error("[Init] Failed to load HTTP modules.")
     end
+    collectgarbage()
 end)
 
 initialize_phase(INIT_PHASES.FINAL, function()
@@ -206,6 +209,7 @@ initialize_phase(INIT_PHASES.FINAL, function()
     if Logger then
         Logger.info("Init", "Библиотека lib-monitor успешно инициализирована")
     end
+    collectgarbage()
 end)
 
 local shutdown_handlers = {}
@@ -239,6 +243,7 @@ function graceful_shutdown()
     end
     
     if Logger then Logger.info("Init", "Graceful shutdown completed") end
+    collectgarbage()
 end
 
 -- Регистрация базовых обработчиков

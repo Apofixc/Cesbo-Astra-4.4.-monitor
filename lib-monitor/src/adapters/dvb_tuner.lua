@@ -88,7 +88,8 @@ function DvbTuner:_clear_psi_resources()
         self._psi_timer = nil
     end
     if self._temp_analyzer then
-        if self._temp_analyzer.__options then
+        -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
+        if type(self._temp_analyzer.__options) == "table" then
             self._temp_analyzer.__options.callback = nil
         end
         if self._temp_analyzer.close then
@@ -278,8 +279,8 @@ function DvbTuner:start()
     self._active = true
 
     -- Безопасное управление счетчиком каналов Astra
-    local opts = self._instance and self._instance.__options
-    if type(opts) == "table" then
+    if self._instance and type(self._instance.__options) == "table" then
+        local opts = self._instance.__options
         opts.channels = (opts.channels or 0) + 1
         Logger.debug(COMPONENT_NAME, "[%s] Tuner channels counter incremented: %d", tostring(self._name), opts.channels)
     end

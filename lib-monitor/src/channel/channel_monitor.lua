@@ -461,10 +461,9 @@ function ChannelMonitor:destroy(force)
     self._state = BaseMonitor.STATE.STOPPED
 
     if self._instance then
-        -- Очищаем callback во внутренней таблице параметров Astra
-        local opts = self._instance.__options
-        if type(opts) == "table" then
-            opts.callback = nil
+        -- Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО (astra-api-usage.md)
+        if type(self._instance.__options) == "table" then
+            self._instance.__options.callback = nil
         end
 
         -- Физическое закрытие инстанса Astra

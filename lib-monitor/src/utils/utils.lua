@@ -51,6 +51,8 @@ end
 --- @param new number Новое значение
 --- @return number Отношение (от 0 до 1)
 function Utils.ratio(old, new)
+    if old == new then return 0 end
+    
     local abs_old = math_abs(old)
     local abs_new = math_abs(new)
     local max_abs = math_max(abs_old, abs_new)

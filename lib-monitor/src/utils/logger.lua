@@ -10,7 +10,7 @@ local tostring = tostring
 local unpack = table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
--- local MonitorConfig = ModuleManager.get_module("monitor_config") -- Загружается динамически в get_current_level
+local MonitorConfig = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local log = ModuleManager.get_global_dependency("log")
@@ -42,10 +42,14 @@ local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 --- Возвращает модуль конфигурации (ленивая загрузка для избежания циклических зависимостей)
 --- @return MonitorConfig|nil
 local function get_monitor_config()
-    local success, config = pcall(function()
-        return ModuleManager.get_module("monitor_config")
-    end)
-    return (success and config and type(config) == "table") and config or nil
+    if MonitorConfig then return MonitorConfig end
+    
+    local success, config = pcall(ModuleManager.get_module, "monitor_config")
+    if success and config and type(config) == "table" then
+        MonitorConfig = config
+        return MonitorConfig
+    end
+    return nil
 end
 
 --- @class Logger
@@ -69,17 +73,19 @@ end
 
 local function refresh_cache_if_needed()
     local now = os_time()
-    if not cached_log_level or (now - last_config_check) > CONFIG_REFRESH_INTERVAL then
-        local config = get_monitor_config()
-        if config then
-            cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
-            cached_log_format = config.LogFormat or "TEXT"
-        else
-            cached_log_level = cached_log_level or LOG_LEVELS.INFO
-            cached_log_format = cached_log_format or "TEXT"
-        end
-        last_config_check = now
+    if (now - last_config_check) < CONFIG_REFRESH_INTERVAL and cached_log_level then
+        return
     end
+    
+    local config = get_monitor_config()
+    if config then
+        cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
+        cached_log_format = config.LogFormat or "TEXT"
+    else
+        cached_log_level = cached_log_level or LOG_LEVELS.INFO
+        cached_log_format = cached_log_format or "TEXT"
+    end
+    last_config_check = now
 end
 
 local function get_current_level()
