@@ -14,7 +14,6 @@ local pcall = pcall
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
-local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -249,7 +248,7 @@ function DvbTuner:start()
                 self:_build_status_table(self._current_status_table)
 
                 -- Создаем таблицу для Push-уведомления из пула
-                local r = TablePool.get("report")
+                local r = self:get_table_from_pool("report")
                 Utils.init_report(r, "dvb", self._name)
                 r.name_adapter = self._name
                 r.format = self._config.type or ""

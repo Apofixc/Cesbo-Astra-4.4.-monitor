@@ -52,7 +52,13 @@ end
 --- @field private last_errors table<string, string> Хранилище последних ошибок по контекстам
 --- @field private context_stack table<number, string> Стек контекстов
 --- @field private current_context_id string|nil Текущий идентификатор контекста
+--- @field _context_buffer table<string, table> Буфер логов для диагностики
+--- @field _buffer_size number Максимальный размер буфера
 local Logger = {}
+
+-- Буфер логов для диагностики
+Logger._context_buffer = {}
+Logger._buffer_size = 1000
 
 --- Обновляет кэшированный уровень логирования
 function Logger.refresh_log_level()
@@ -85,6 +91,51 @@ local function should_log(level)
     return level >= get_current_level()
 end
 
+--- Добавляет запись в кольцевой буфер логов
+--- @param level string Уровень лога
+--- @param component string Имя компонента
+--- @param message string Текст сообщения
+--- @param context_id? string ID контекста
+function Logger.buffer_log(level, component, message, context_id)
+    if not Logger._context_buffer[component] then
+        Logger._context_buffer[component] = {}
+    end
+    
+    local buffer = Logger._context_buffer[component]
+    local entry = {
+        timestamp = os_time(),
+        level = level,
+        message = message,
+        context_id = context_id
+    }
+    
+    table_insert(buffer, entry)
+    
+    -- Ограничение размера буфера (FIFO)
+    if #buffer > Logger._buffer_size then
+        table_remove(buffer, 1)
+    end
+end
+
+--- Возвращает содержимое буфера логов
+--- @param component string Имя компонента
+--- @param limit? number Лимит записей
+--- @return table Список записей
+function Logger.get_buffer(component, limit)
+    local buffer = Logger._context_buffer[component]
+    if not buffer then return {} end
+    
+    if limit and #buffer > limit then
+        local result = {}
+        for i = #buffer - limit + 1, #buffer do
+            table_insert(result, buffer[i])
+        end
+        return result
+    end
+    
+    return buffer
+end
+
 --- Внутренняя функция для записи лога
 --- @private
 local function write_log(level_name, component, format_str, ...)
@@ -102,6 +153,13 @@ local function write_log(level_name, component, format_str, ...)
         for _, id in ipairs(context_stack) do
             last_errors[id] = msg
         end
+    end
+
+    -- Буферизация (если включена в конфиге)
+    local config = get_monitor_config()
+    if config and config.LogBufferSize and config.LogBufferSize > 0 then
+        Logger._buffer_size = config.LogBufferSize
+        Logger.buffer_log(level_name, component, msg, current_context_id)
     end
 
     if should_log(level) then

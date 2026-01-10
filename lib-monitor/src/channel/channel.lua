@@ -271,7 +271,7 @@ local function make_monitor(config)
     local monitor_instance = monitor:start()
     if monitor_instance then
         monitor:set_input_instance(input_instance)
-        ChannelRepository:register(name, monitor)
+        ChannelRepository:register(name, monitor, ChannelMonitor)
         Logger.info(COMPONENT_NAME, "Монитор '%s' успешно запущен", name)
         return monitor_instance
     else

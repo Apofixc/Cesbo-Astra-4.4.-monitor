@@ -7,7 +7,12 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
--- Нет стандартных Lua функций в этом модуле
+local os_time = os.time
+local pairs = pairs
+local type = type
+local tostring = tostring
+local pcall = pcall
+local io_open = io.open
 
 -- 2. Функции из ModuleManager.get_module()
 local ModuleManager = _G.ModuleManager
@@ -40,9 +45,16 @@ local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @field MinMethodComparison number Минимальное значение для метода сравнения
 --- @field MaxMethodComparison number Максимальное значение для метода сравнения
 --- @field HttpTimeout number Таймаут HTTP-запросов
+--- @field LogBufferSize number Размер буфера логов (0 - выключено)
+--- @field ExtraDebug boolean Флаг расширенной отладки (для dev-окружения)
 --- @field subscribers table<string, table[]> Список подписчиков
 --- @field ValidationSchema table<string, ValidationRule> Схема валидации для параметров мониторов
 local MonitorConfig = {}
+
+-- Внутреннее состояние кэша
+MonitorConfig._cache = {}
+MonitorConfig._cache_ttl = 60 -- секунд
+MonitorConfig._cache_timestamp = 0
 
 -- Значения по умолчанию
 MonitorConfig.STREAM = {
@@ -71,6 +83,8 @@ MonitorConfig.MinMethodComparison = 1
 MonitorConfig.MaxMethodComparison = 4
 MonitorConfig.HttpTimeout = 10
 MonitorConfig.ForceSendInterval = 300
+MonitorConfig.LogBufferSize = 0 -- По умолчанию выключено
+MonitorConfig.ExtraDebug = false
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию
@@ -98,8 +112,56 @@ function MonitorConfig.validate()
 
     if type(MonitorConfig.DvbMonitorLimit) ~= "number" then return false, "DvbMonitorLimit must be a number" end
     if type(MonitorConfig.ForceSendInterval) ~= "number" then return false, "ForceSendInterval must be a number" end
+    if type(MonitorConfig.LogBufferSize) ~= "number" then return false, "LogBufferSize must be a number" end
     
     return true
+end
+
+--- Возвращает значение из кэша или генерирует новое.
+--- @param key string Уникальный ключ кэша
+--- @param generator function Функция для генерации значения при промахе кэша
+--- @return any Значение из кэша
+function MonitorConfig.get_cached(key, generator)
+    local now = os_time()
+    if MonitorConfig._cache_timestamp + MonitorConfig._cache_ttl < now then
+        MonitorConfig._cache = {} -- Очистка кэша по TTL
+        MonitorConfig._cache_timestamp = now
+    end
+    
+    if MonitorConfig._cache[key] == nil then
+        MonitorConfig._cache[key] = generator()
+    end
+    
+    return MonitorConfig._cache[key]
+end
+
+--- Возвращает имя потока по IP с использованием кэширования.
+--- @param ip string IP-адрес потока
+--- @return string Имя потока или IP
+function MonitorConfig.get_stream_name_cached(ip)
+    return MonitorConfig.get_cached("stream_" .. ip, function()
+        return MonitorConfig.STREAM[ip] or ip
+    end)
+end
+
+--- Возвращает текущее окружение системы.
+--- @return string "development" или "production"
+function MonitorConfig.get_environment()
+    local env_file = io_open("/opt/astra/environment", "r")
+    if env_file then
+        local content = env_file:read("*all")
+        env_file:close()
+        if content then
+            return content:gsub("%s+", ""):lower()
+        end
+    end
+    return "production"
+end
+
+--- Проверяет, является ли текущее окружение средой разработки.
+--- @return boolean true если разработка, иначе false
+function MonitorConfig.is_development()
+    return MonitorConfig.get_environment() == "development"
 end
 
 --- Загружает конфигурацию из внешнего JSON файла
@@ -165,6 +227,12 @@ end
 
 -- Вызов загрузки при инициализации модуля
 load_from_file()
+
+-- Настройка окружения
+if MonitorConfig.is_development() then
+    MonitorConfig.ExtraDebug = true
+    MonitorConfig.LogLevel = "DEBUG"
+end
 
 -- 5. Инициализация объектов из загруженных модулей
 -- Нет объектов для инициализации в этом модуле

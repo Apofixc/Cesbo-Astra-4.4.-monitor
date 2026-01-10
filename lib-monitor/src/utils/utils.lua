@@ -8,6 +8,10 @@ local string_format = string.format
 local io_popen = io.popen
 local os_execute = os.execute
 local os_clock = os.clock
+local math_huge = math.huge
+local pcall = pcall
+local unpack = table.unpack
+local select = select
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -24,6 +28,9 @@ local HOSTNAME = utils_hostname and utils_hostname() or "unknown"
 -- 5. Инициализация объектов из загруженных модулей
 --- @class Utils
 local Utils = {}
+
+-- Внутреннее состояние для статистики производительности
+Utils._performance_stats = {}
 
 --- Возвращает имя потока по IP-адресу
 --- @param ip_address string IP-адрес потока
@@ -263,9 +270,53 @@ end
 --- @param t table Таблица для очистки
 function Utils.table_clear(t)
     if type(t) ~= "table" then return end
-    for k in pairs(t) do
+    for k, v in pairs(t) do
         t[k] = nil
     end
+end
+
+--- Измеряет время выполнения функции и сохраняет статистику.
+--- @param name string Уникальное имя операции
+--- @param func function Функция для выполнения
+--- @param ... any Аргументы функции
+--- @return any ... Результаты выполнения функции
+function Utils.measure_time(name, func, ...)
+    local start_time = os_clock()
+    local results = { pcall(func, ...) }
+    local end_time = os_clock()
+    
+    local duration = end_time - start_time
+    
+    if not Utils._performance_stats[name] then
+        Utils._performance_stats[name] = {
+            count = 0,
+            total_time = 0,
+            avg_time = 0,
+            max_time = 0,
+            min_time = math_huge
+        }
+    end
+    
+    local stats = Utils._performance_stats[name]
+    stats.count = stats.count + 1
+    stats.total_time = stats.total_time + duration
+    stats.avg_time = stats.total_time / stats.count
+    stats.max_time = math_max(stats.max_time, duration)
+    stats.min_time = math_min(stats.min_time, duration)
+    
+    local ok = results[1]
+    if not ok then
+        -- Если функция упала, пробрасываем ошибку дальше после записи статистики
+        error(results[2])
+    end
+    
+    return unpack(results, 2)
+end
+
+--- Возвращает копию накопленной статистики производительности.
+--- @return table Статистика производительности
+function Utils.get_performance_stats()
+    return Utils.deep_copy(Utils._performance_stats)
 end
 
 return Utils

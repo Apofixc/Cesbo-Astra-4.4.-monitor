@@ -12,6 +12,8 @@
 --- @field protected _check_timer number Таймер интервала проверки
 --- @field protected _force_timer number Таймер принудительной отправки статуса
 --- @field protected _force_interval number Интервал принудительной отправки
+--- @field protected _last_update number Время последнего обновления данных
+--- @field protected _table_pool table|nil Прямая ссылка на TablePool (для удобства)
 local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
@@ -19,6 +21,7 @@ BaseMonitor.__index = BaseMonitor
 local setmetatable = setmetatable
 local tostring = tostring
 local type = type
+local os_time = os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -60,7 +63,31 @@ function BaseMonitor.new(config, component_name)
     self._check_timer = 0
     self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
     self._force_timer = self._force_interval -- Сразу готов к отправке
+    self._last_update = os_time
+    self._table_pool = TablePool
     return self
+end
+
+--- Возвращает таблицу из пула указанного типа.
+--- Если пул пуст, создает новую таблицу.
+--- @param type_name? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
+--- @return table Свободная таблица
+function BaseMonitor:get_table_from_pool(type_name)
+    if self._table_pool then
+        return self._table_pool.get(type_name)
+    end
+    return {}
+end
+
+--- Возвращает таблицу в пул для повторного использования.
+--- Перед возвратом таблица полностью очищается.
+--- @param t table Таблица для возврата
+--- @param type_name? string [Тип пула. По умолчанию "generic"]
+--- @param deep? boolean [Флаг глубокой очистки. По умолчанию false]
+function BaseMonitor:return_table_to_pool(t, type_name, deep)
+    if self._table_pool then
+        self._table_pool.release(t, type_name, deep)
+    end
 end
 
 --- Вспомогательная функция для установки параметра конфигурации
@@ -91,13 +118,14 @@ end
 
 --- Публикует данные через EventDispatcher.
 --- Теперь принимает таблицу и поддерживает ленивую сериализацию.
+--- Использует emit_safe для предотвращения сбоев монитора при ошибках в шине событий.
 --- @param data table|string Данные события
 --- @param event_type string Тип события
 --- @param is_table? boolean [Флаг, что данные из пула таблиц]
 function BaseMonitor:publish(data, event_type, is_table)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
     if dispatcher then
-        dispatcher:emit(event_type, data, nil, { 
+        dispatcher:emit_safe(event_type, data, nil, { 
             is_table = is_table,
             source = self._name
         })
@@ -219,6 +247,17 @@ end
 --- @protected
 function BaseMonitor:_reset_force_timer()
     self._force_timer = 0
+    self._last_update = os_time()
+end
+
+--- Возвращает данные о состоянии здоровья монитора
+--- @return table Данные о состоянии (state, active, last_update)
+function BaseMonitor:health_check()
+    return {
+        state = self._state,
+        active = self._active,
+        last_update = self._last_update
+    }
 end
 
 --- Возобновляет мониторинг

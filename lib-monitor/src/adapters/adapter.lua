@@ -45,7 +45,7 @@ local function dvb_tuner_monitor(conf)
 
     local instance = tuner:start()
     if instance then
-        DvbRepository:register(conf.name_adapter, tuner)
+        DvbRepository:register(conf.name_adapter, tuner, DvbTuner)
         _G[conf.name_adapter] = instance
         return true
     else

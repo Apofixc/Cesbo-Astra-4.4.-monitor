@@ -163,6 +163,25 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     return event.id
 end
 
+--- Публикует событие в систему с защитой от ошибок (pcall).
+--- @param event_type string Тип события
+--- @param event_data table|string Данные события
+--- @param priority? number Приоритет
+--- @param options? table Дополнительные параметры
+--- @return string|nil ID созданного события или nil при ошибке
+function EventDispatcher:emit_safe(event_type, event_data, priority, options)
+    local ok, result = pcall(function()
+        return self:emit(event_type, event_data, priority, options)
+    end)
+    
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Event emit failed: %s", tostring(result))
+        return nil
+    end
+    
+    return result
+end
+
 --- Возвращает последние известные значения (LVC) для указанного типа события.
 --- Поддерживает маски (wildcards), например "channel:*".
 --- @param event_type string Тип события или маска
@@ -236,20 +255,60 @@ function EventDispatcher:process_queue()
         while #queue > 0 do
             local event = table_remove(queue, 1)
             if event then
-                -- Сначала публикуем событие
-                self.subscription_manager:publish_event(event)
+                local ok, err = pcall(function()
+                    self.subscription_manager:publish_event(event)
+                end)
                 
-                self.stats.processed = self.stats.processed + 1
-                
-                -- Затем возвращаем таблицы в пул
-                if event.is_table and event.data and TablePool then
-                    TablePool.release(event.data, "report")
+                if not ok then
+                    Logger.error(COMPONENT_NAME, "Failed to process event %s: %s", 
+                        event.id or "unknown", tostring(err))
+                else
+                    self.stats.processed = self.stats.processed + 1
                 end
                 
-                if TablePool then
-                    TablePool.release(event, "event")
-                end
+                -- Возврат в пул
+                self:_safe_return_to_pool(event)
             end
+        end
+    end
+end
+
+--- Безопасно возвращает таблицы события в пул.
+--- @private
+--- @param event table Объект события
+function EventDispatcher:_safe_return_to_pool(event)
+    local ok, err = pcall(function()
+        if event.is_table and event.data and TablePool then
+            TablePool.release(event.data, "report")
+        end
+        
+        if TablePool then
+            TablePool.release(event, "event")
+        end
+    end)
+    
+    if not ok then
+        Logger.warn(COMPONENT_NAME, "Failed to return event to pool: %s", tostring(err))
+    end
+end
+
+--- Останавливает диспетчер событий и очищает очереди.
+function EventDispatcher:shutdown()
+    self.active = false
+    Logger.info(COMPONENT_NAME, "Shutting down EventDispatcher...")
+    
+    if self._processor_timer then
+        if self._processor_timer.close then
+            self._processor_timer:close()
+        end
+        self._processor_timer = nil
+    end
+    
+    -- Очистка очередей
+    for p, queue in pairs(self.event_queues) do
+        while #queue > 0 do
+            local event = table_remove(queue, 1)
+            self:_safe_return_to_pool(event)
         end
     end
 end
