@@ -18,6 +18,8 @@ local os_time = os.time
 local pcall = pcall
 local setmetatable = setmetatable
 local io = io
+local math_random = math.random
+local math_floor = math.floor
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -37,7 +39,7 @@ local COMPONENT_NAME = "SubscriptionManager"
 local USER_AGENT = "User-Agent: Astra v." .. (astra_version or "unknown")
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
-local MAX_RETRIES = 3
+local MAX_RETRIES = 5
 local RETRY_DELAY = 5
 local HTTP_TIMEOUT = 5
 
@@ -108,9 +110,11 @@ local Transport = {
                         retry_data = content
                     end
 
+                    local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
+                    local jitter = math_random(0, 2)
                     table_insert(retry_queue, {
                         config = config, data = retry_data, type = event_type,
-                        retries = retry_count + 1, time = os_time() + RETRY_DELAY
+                        retries = retry_count + 1, time = os_time() + delay + jitter
                     })
                 end
             end

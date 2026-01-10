@@ -11,6 +11,8 @@ local collectgarbage = collectgarbage
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+local ChannelRepository = ModuleManager.get_module("repository.channel_repository")
+local DvbRepository = ModuleManager.get_module("repository.dvb_repository")
 -- local TablePool = ModuleManager.get_module("table_pool") -- Загружается динамически
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -24,18 +26,41 @@ local timer_obj = ModuleManager.get_global_dependency("timer")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SystemRoutes"
 
+--- Форматирует время в человекочитаемый вид
+--- @param seconds number
+--- @return string
+local function format_uptime(seconds)
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor((seconds % 86400) / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    return string.format("%dd %02dh %02dm", days, hours, minutes)
+end
+
 --- Проверяет состояние сервера и возвращает метрики ресурсов процесса
 function SystemRoutes.get_health(server, client, request)
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
+    local HttpServer = ModuleManager.get_module("http_server")
     
     -- Добавляем мониторинг памяти Lua
     report.lua_mem_kb = collectgarbage("count")
     
+    local status = "healthy"
+    if report.cpu and report.cpu.usage and report.cpu.usage > 80 then
+        status = "warning"
+    end
+    
     local response = {
-        status = "healthy",
+        status = status,
+        bind_address = HttpServer and HttpServer._bind_addr or "unknown",
+        bind_port = HttpServer and HttpServer._bind_port or 0,
         astra_version = astra_version or "unknown",
         server_time = os_date("%Y-%m-%d %H:%M:%S"),
         timestamp = os_time(),
+        uptime_human = format_uptime(report.uptime or 0),
+        stats = {
+            active_channels = ChannelRepository and ChannelRepository:count() or 0,
+            active_adapters = DvbRepository and DvbRepository:count() or 0,
+        },
         resources = report
     }
     return HttpHelpers.success(server, client, response)

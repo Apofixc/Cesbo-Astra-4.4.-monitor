@@ -43,6 +43,8 @@ HttpServer._instance = nil
 HttpServer._sentinel = nil
 HttpServer._is_stopping = false
 HttpServer._active_requests = 0
+HttpServer._bind_addr = nil
+HttpServer._bind_port = nil
 HttpServer._stats = {
     total_requests = 0,
     total_errors = 0,
@@ -58,6 +60,16 @@ local function payload_limit_middleware(handler)
         if content_length > max_size then
             Logger.warn(COMPONENT_NAME, "Payload too large from %s (%d bytes)", tostring(request.addr), content_length)
             return HttpHelpers.error(server, client, 413, "Payload Too Large")
+        end
+        return handler(server, client, request)
+    end
+end
+
+--- Middleware: Ограничение частоты запросов (Rate Limiting)
+local function rate_limit_middleware(handler)
+    return function(server, client, request)
+        if not HttpHelpers.check_rate_limit(request) then
+            return HttpHelpers.error(server, client, 429, "Too Many Requests")
         end
         return handler(server, client, request)
     end
@@ -159,8 +171,8 @@ local function make_resource_handler(methods, path)
         return true
     end
 
-    -- Цепочка Middleware: Logger -> CORS -> Payload Limit -> Core
-    return logger_middleware(cors_middleware(payload_limit_middleware(core_handler)), path)
+    -- Цепочка Middleware: Logger -> Rate Limit -> CORS -> Payload Limit -> Core
+    return logger_middleware(rate_limit_middleware(cors_middleware(payload_limit_middleware(core_handler))), path)
 end
 
 --- Останавливает HTTP сервер и гарантированно освобождает порт
@@ -222,6 +234,9 @@ function HttpServer.start(addr, port, retry_count, force_free)
     addr = addr or DEFAULT_ADDR
     port = port or DEFAULT_PORT
     retry_count = retry_count or 0
+
+    HttpServer._bind_addr = addr
+    HttpServer._bind_port = port
 
     -- Проверка занятости порта
     if Utils and Utils.is_port_busy(port) then
