@@ -16,7 +16,6 @@ local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
 local kill_input = ModuleManager.get_global_dependency("kill_input")
-local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"

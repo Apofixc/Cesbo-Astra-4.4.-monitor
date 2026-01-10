@@ -1,7 +1,6 @@
 -- 1. Стандартные Lua функции
 local collectgarbage = collectgarbage
 local math_max = math.max
-local math_min = math.min
 local os_time = os.time
 local pairs = pairs
 local setmetatable = setmetatable
@@ -18,10 +17,8 @@ local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
-local json_encode = ModuleManager.get_global_dependency("json.encode")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local analyze = ModuleManager.get_global_dependency("analyze")
-local timer = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"

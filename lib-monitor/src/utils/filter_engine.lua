@@ -25,7 +25,6 @@ local FilterEngine = {}
 
 -- Кэш для скомпилированных скриптов и путей
 local script_cache = {}
-local path_cache = {}
 local accessor_cache = {}
 local accessor_cache_count = 0
 local MAX_CACHE_SIZE = 100
@@ -210,7 +209,7 @@ function FilterEngine.match(data, filters, sub_id)
         if not has_duration then
             local code = generate_filter_code(filters)
             if code then
-                local factory, err = load(code, "=(filter_jit)", "t", { type = type, table = table })
+                local factory, _ = load(code, "=(filter_jit)", "t", { type = type, table = table })
                 if factory then
                     local ok, func = pcall(factory)
                     if ok and type(func) == "function" then

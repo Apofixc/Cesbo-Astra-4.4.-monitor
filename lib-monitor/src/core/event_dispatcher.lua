@@ -10,7 +10,6 @@
 local type = type
 local tostring = tostring
 local string_format = string.format
-local ipairs = ipairs
 local pairs = pairs
 local table_insert = table.insert
 local table_remove = table.remove
@@ -23,8 +22,6 @@ local math_random = math.random
 local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
 local TablePool = ModuleManager.get_module("table_pool")
-local Utils = ModuleManager.get_module("utils")
-local Wildcard = ModuleManager.get_module("utils.wildcard")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 

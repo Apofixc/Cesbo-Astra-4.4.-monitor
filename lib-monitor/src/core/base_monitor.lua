@@ -20,9 +20,7 @@ BaseMonitor.__index = BaseMonitor
 -- 1. Стандартные Lua функции
 local setmetatable = setmetatable
 local tostring = tostring
-local type = type
 local os_time = os.time
-local pairs = pairs
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -30,7 +28,6 @@ local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local TablePool = ModuleManager.get_module("utils.table_pool")
-local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
 local json_encode = ModuleManager.get_global_dependency("json.encode")

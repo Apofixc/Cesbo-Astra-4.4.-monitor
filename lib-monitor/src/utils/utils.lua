@@ -12,7 +12,6 @@ local os_clock = os.clock
 local math_huge = math.huge
 local pcall = pcall
 local unpack = table.unpack
-local select = select
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

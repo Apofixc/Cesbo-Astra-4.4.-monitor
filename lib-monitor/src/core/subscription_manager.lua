@@ -10,7 +10,6 @@
 local type = type
 local tostring = tostring
 local string_format = string.format
-local ipairs = ipairs
 local pairs = pairs
 local table_insert = table.insert
 local table_remove = table.remove
@@ -33,7 +32,6 @@ local http_request = ModuleManager.get_global_dependency("http_request")
 local astra_version = ModuleManager.get_global_dependency("astra.version")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
 local json_decode = ModuleManager.get_global_dependency("json.decode")
-local timer = ModuleManager.get_global_dependency("timer")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriptionManager"
@@ -369,7 +367,7 @@ function SubscriptionManager:publish_event(event)
                     event_json = get_event_json(event)
                 end
 
-                local success, err = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
+                local success, _ = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
                 if success then
                     delivered = delivered + 1
                     sub.stats.delivered = sub.stats.delivered + 1

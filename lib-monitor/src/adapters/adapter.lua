@@ -2,7 +2,6 @@
 local ipairs = ipairs
 local pairs = pairs
 local string_format = string.format
-local table_insert = table.insert
 local tostring = tostring
 local type = type
 

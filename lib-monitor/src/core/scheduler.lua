@@ -8,17 +8,13 @@
 
 -- 1. Стандартные Lua функции
 local pairs = pairs
-local ipairs = ipairs
 local type = type
 local os_time = os.time
-local table_insert = table.insert
-local table_remove = table.remove
 local pcall = pcall
 local setmetatable = setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
