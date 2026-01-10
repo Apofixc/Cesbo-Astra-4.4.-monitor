@@ -81,8 +81,12 @@ local monitor_type_handlers = {
             local cfg = output.config
             if type(cfg) == "userdata" then
                 -- Если это userdata, пробуем получить доступ к __options
-                local opts = cfg.__options
-                if type(opts) == "table" and opts.monitor then
+                local ok, opts = pcall(function(u)
+                    --- @cast u any
+                    return u.__options
+                end, cfg)
+
+                if ok and type(opts) == "table" and opts.monitor then
                     key = index
                     break
                 end
