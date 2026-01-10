@@ -8,6 +8,7 @@ local string_format = string.format
 local tostring = tostring
 local type = type
 local bit32 = bit32
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -192,71 +193,77 @@ function DvbTuner:start()
     self._astra_conf.callback = function(data)
         if not self or not self._active or not data then return end
         
-        -- Накопление статистики для расчета качества (упрощенно)
-        if self._config.analyze and data.status and data.status > 0 then
-            -- Защита от переполнения при длительном отсутствии изменений
-            local MAX_STATS_COUNT = 1000000
-            if self._stats.count < MAX_STATS_COUNT then
-                self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)
-                self._stats.unc_sum = self._stats.unc_sum + (data.unc or 0)
-                self._stats.count = self._stats.count + 1
+        local ok, err = pcall(function()
+            -- Накопление статистики для расчета качества (упрощенно)
+            if self._config.analyze and data.status and data.status > 0 then
+                -- Защита от переполнения при длительном отсутствии изменений
+                local MAX_STATS_COUNT = 1000000
+                if self._stats.count < MAX_STATS_COUNT then
+                    self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)
+                    self._stats.unc_sum = self._stats.unc_sum + (data.unc or 0)
+                    self._stats.count = self._stats.count + 1
+                end
             end
-        end
 
-        -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-        if self:_should_send(self._astra_conf.time_check) and 
-           (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate)) 
-        then
-            self:_reset_force_timer()
-            self:_clear_json_cache()
+            -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
+            if self:_should_send(self._astra_conf.time_check) and 
+               (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate)) 
+            then
+                self:_reset_force_timer()
+                self:_clear_json_cache()
 
-            local status = self._status
-            status.status = data.status or -1
-            status.signal = data.signal or -1
-            status.snr = data.snr or -1
-            status.ber = data.ber or -1
-            status.unc = data.unc or -1
-            
-            -- Расчет качества (quality) на основе ошибок
-            if self._config.analyze and self._stats.count > 0 then
-                local avg_ber = self._stats.ber_sum / self._stats.count
-                if avg_ber > 0 or self._stats.unc_sum > 0 then
-                    status.quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
+                local status = self._status
+                status.status = data.status or -1
+                status.signal = data.signal or -1
+                status.snr = data.snr or -1
+                status.ber = data.ber or -1
+                status.unc = data.unc or -1
+                
+                -- Расчет качества (quality) на основе ошибок
+                if self._config.analyze and self._stats.count > 0 then
+                    local avg_ber = self._stats.ber_sum / self._stats.count
+                    if avg_ber > 0 or self._stats.unc_sum > 0 then
+                        status.quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
+                    else
+                        status.quality = 100
+                    end
+                    -- Сброс статистики после отправки
+                    self._stats.ber_sum = 0
+                    self._stats.unc_sum = 0
+                    self._stats.count = 0
                 else
-                    status.quality = 100
+                    status.quality = -1
                 end
-                -- Сброс статистики после отправки
-                self._stats.ber_sum = 0
-                self._stats.unc_sum = 0
-                self._stats.count = 0
-            else
-                status.quality = -1
-            end
 
-            local s_num = data.status
-            if s_num and s_num ~= self._last_status_num then
-                -- Используем предрассчитанную таблицу для мгновенного получения флагов
-                local flags = STATUS_LOOKUP[bit32.band(s_num, 0x1F)]
-                if flags then
-                    self._current_flags = flags
-                    self._last_status_num = s_num
+                local s_num = data.status
+                if s_num and s_num ~= self._last_status_num then
+                    -- Используем предрассчитанную таблицу для мгновенного получения флагов
+                    local flags = STATUS_LOOKUP[bit32.band(s_num, 0x1F)]
+                    if flags then
+                        self._current_flags = flags
+                        self._last_status_num = s_num
+                    end
                 end
+
+                -- Обновляем таблицу для Pull-запросов
+                self:_build_status_table(self._current_status_table)
+
+                -- Создаем таблицу для Push-уведомления из пула
+                local r = TablePool.get("report")
+                Utils.init_report(r, "dvb", self._name)
+                r.name_adapter = self._name
+                r.format = self._config.type or ""
+                r.modulation = self._config.modulation or ""
+                r.source = self._config.tp or self._config.frequency
+                self:_build_status_table(r)
+
+                -- Публикуем таблицу
+                self:publish(r, "dvb", true)
             end
+        end)
 
-            -- Обновляем таблицу для Pull-запросов
-            self:_build_status_table(self._current_status_table)
-
-            -- Создаем таблицу для Push-уведомления из пула
-            local r = TablePool.get("report")
-            Utils.init_report(r, "dvb", self._name)
-            r.name_adapter = self._name
-            r.format = self._config.type or ""
-            r.modulation = self._config.modulation or ""
-            r.source = self._config.tp or self._config.frequency
-            self:_build_status_table(r)
-
-            -- Публикуем таблицу
-            self:publish(r, "dvb", true)
+        if not ok then
+            Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
         end
     end
 

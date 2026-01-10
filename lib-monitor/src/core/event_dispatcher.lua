@@ -24,6 +24,7 @@ local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
 local TablePool = ModuleManager.get_module("utils.table_pool")
 local Utils = ModuleManager.get_module("utils")
+local Wildcard = ModuleManager.get_module("utils.wildcard")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local timer = ModuleManager.get_global_dependency("timer")
@@ -178,7 +179,7 @@ function EventDispatcher:get_last_values(event_type)
     return result
 end
 
---- Алиас для совместимости со старым EventBus.
+--- Публикует событие (алиас для emit).
 --- @param event_type string Тип события
 --- @param ... any Аргументы события
 --- @return string|nil ID события

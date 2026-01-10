@@ -432,9 +432,9 @@ local function on_adapter_after_restart(adapter_name)
 end
 
 -- Подписка на события
-if EventBus then
-    EventBus.subscribe(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, on_adapter_before_restart)
-    EventBus.subscribe(EventBus.EVENTS.ADAPTER_AFTER_RESTART, on_adapter_after_restart)
+if EventDispatcher then
+    EventDispatcher.subscribe(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, on_adapter_before_restart)
+    EventDispatcher.subscribe(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, on_adapter_after_restart)
 end
 
 -- Экспорт в таблицу модуля для ModuleManager

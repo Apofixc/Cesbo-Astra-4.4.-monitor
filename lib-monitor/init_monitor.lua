@@ -131,7 +131,7 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- Инициализация глобального диспетчера событий
 if EventDispatcher then
-    _G.EventBus = EventDispatcher.get_instance()
+    _G.EventDispatcher = EventDispatcher.get_instance()
 end
 
 -- Экспорт основных функций в глобальную область видимости для обратной совместимости

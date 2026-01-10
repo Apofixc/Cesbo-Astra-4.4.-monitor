@@ -39,6 +39,7 @@ local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
 local MAX_RETRIES = 3
 local RETRY_DELAY = 5
+local HTTP_TIMEOUT = 5
 
 --- @class SubscriptionManager
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
@@ -95,6 +96,7 @@ local Transport = {
         http_request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
+            timeout = HTTP_TIMEOUT,
             headers = { USER_AGENT, "Host: " .. config.host .. ":" .. config.port, CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close" },
             callback = function(s, r)
                 if not s and retry_count < MAX_RETRIES then

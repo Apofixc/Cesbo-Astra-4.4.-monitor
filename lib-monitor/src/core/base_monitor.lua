@@ -25,6 +25,7 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra
 local json_encode = ModuleManager.get_global_dependency("json.encode")
@@ -37,6 +38,7 @@ BaseMonitor.STATE = {
 }
 
 -- Кэш для ключей конфигурации (предотвращает лишние аллокации строк в gsub)
+-- Ключ: prefix .. param_name
 local CONFIG_KEY_CACHE = {}
 
 --- Конструктор базового монитора
@@ -76,17 +78,18 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
         return false
     end
     
-    local key = CONFIG_KEY_CACHE[param_name]
+    local cache_id = prefix .. param_name
+    local key = CONFIG_KEY_CACHE[cache_id]
     if not key then
         key = param_name:gsub(prefix, "")
-        CONFIG_KEY_CACHE[param_name] = key
+        CONFIG_KEY_CACHE[cache_id] = key
     end
     
     self._config[key] = result
     return true
 end
 
---- Публикует данные через EventBus.
+--- Публикует данные через EventDispatcher.
 --- Теперь принимает таблицу и поддерживает ленивую сериализацию.
 --- @param data table|string Данные события
 --- @param event_type string Тип события

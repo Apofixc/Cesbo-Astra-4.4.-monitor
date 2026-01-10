@@ -191,8 +191,8 @@ lib-monitor/
 
 ### Функции для управления данными мониторинга (подписки):
 
-*   `EventBus:subscribe(event_type, sub_data)`: Программное добавление подписки. `sub_data` может содержать `callback`, `filters` и `throttle_ms`.
-*   `EventBus.subscription_manager:unsubscribe(sub_id)`: Программное удаление подписки по её ID.
+*   `EventDispatcher:subscribe(event_type, sub_data)`: Программное добавление подписки. `sub_data` может содержать `callback`, `filters` и `throttle_ms`.
+*   `EventDispatcher.subscription_manager:unsubscribe(sub_id)`: Программное удаление подписки по её ID.
 
 ### Продвинутое использование (ООП API):
 

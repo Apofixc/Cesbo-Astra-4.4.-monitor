@@ -6,6 +6,7 @@ local setmetatable = setmetatable
 local tostring = tostring
 local type = type
 local collectgarbage = collectgarbage
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -167,29 +168,35 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self._active or not data then return end
+            if not self or not self._active or not data then return end
 
-            if data.error then
-                self:process_error_data(data)
-                return
-            end
+            local ok, err = pcall(function()
+                if data.error then
+                    self:process_error_data(data)
+                    return
+                end
 
-            if data.psi then
-                self:process_psi_data(data)
-                return
-            end
+                if data.psi then
+                    self:process_psi_data(data)
+                    return
+                end
 
-            if data.analyze then
-                self:process_analyze_data(data)
-            end
+                if data.analyze then
+                    self:process_analyze_data(data)
+                end
 
-            if data.rate_stat then
-                self._rate_stat = data.rate_stat
-                self:process_rate_stat_data(data.rate_stat)
-            end
+                if data.rate_stat then
+                    self._rate_stat = data.rate_stat
+                    self:process_rate_stat_data(data.rate_stat)
+                end
 
-            if data.total then
-                self:process_total_data(data)
+                if data.total then
+                    self:process_total_data(data)
+                end
+            end)
+
+            if not ok then
+                Logger.error(COMPONENT_NAME, "[%s] Callback error: %s", tostring(self._name), tostring(err))
             end
         end
     })

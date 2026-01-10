@@ -131,8 +131,8 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     end
 
     -- 2. Уведомление о начале рестарта (для остановки каналов)
-    if not force and EventBus then
-        EventBus.publish(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
+    if not force and EventDispatcher then
+        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
     local old_channels_count = 0
@@ -164,15 +164,15 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
     if not perform_restart(new_conf) then
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: failed to restart '%s'. Rolling back...", name_adapter)
         perform_restart(old_conf)
-        if not force and EventBus then
-            EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+        if not force and EventDispatcher then
+            EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
         end
         return false
     end
 
     -- 4. Уведомление о завершении рестарта (для запуска каналов)
-    if not force and EventBus then
-        EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+    if not force and EventDispatcher then
+        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
     return true
@@ -241,15 +241,15 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     local old_tuner_params = Utils.table_copy(tuner:get_config())
     
     -- 1. Уведомление о начале переключения (каналы остановятся сами)
-    if EventBus then
-        EventBus.publish(EventBus.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
+    if EventDispatcher then
+        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
     -- 2. Перенастройка тюнера
     if not restart_dvb_monitor(name_adapter, new_tuner_params, true) then
         -- В случае ошибки возвращаем старый конфиг
         restart_dvb_monitor(name_adapter, old_tuner_params, true)
-        if EventBus then EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter) end
+        if EventDispatcher then EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter) end
         return nil
     end
 
@@ -274,8 +274,8 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
     end
 
     -- 4. Уведомление о завершении (остальные каналы запустятся сами)
-    if EventBus then
-        EventBus.publish(EventBus.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+    if EventDispatcher then
+        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
     Logger.info(COMPONENT_NAME, "Transponder switched on adapter '%s'", name_adapter)

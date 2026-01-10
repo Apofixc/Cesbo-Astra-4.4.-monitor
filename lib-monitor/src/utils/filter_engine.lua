@@ -26,6 +26,7 @@ local FilterEngine = {}
 -- Кэш для скомпилированных скриптов и путей
 local script_cache = {}
 local path_cache = {}
+local MAX_CACHE_SIZE = 100
 
 --- @type table<string, function> Операторы сравнения
 local OPERATORS = {
@@ -52,6 +53,9 @@ local function get_nested_value(data, path)
     
     local parts = path_cache[path]
     if not parts then
+        -- Очистка кэша при переполнении
+        if #path_cache > MAX_CACHE_SIZE then path_cache = {} end
+
         parts = {}
         for part in path:gmatch("[^%.]+") do
             parts[#parts + 1] = part
@@ -120,6 +124,9 @@ function FilterEngine.match(data, filters, sub_id)
     if filters.script and type(filters.script) == "string" then
         local func = script_cache[filters.script]
         if not func then
+            -- Очистка кэша при переполнении
+            if #script_cache > MAX_CACHE_SIZE then script_cache = {} end
+
             local env = { data = data, type = type, tostring = tostring, os_time = os_time }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
