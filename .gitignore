@@ -214,6 +214,7 @@ cesbo-astra/scripts/examples/http/file_server.lua
 cesbo-astra/scripts/examples/http/request.lua
 cesbo-astra/scripts/examples/http/websocket.lua
 lib-monitor/README_туц.md
+lib-monitor/test/*
 lib-monitor/test/test_event_dispatcher.lua
 lib-monitor/test/test_table_pool.lua
 lib-monitor/test/benchmark/bare_load.lua
@@ -233,3 +234,16 @@ lib-monitor/test/integration/test_events.lua
 lib-monitor/test/integration/test_full.lua
 lib-monitor/test/unit/test_event_dispatcher.lua
 lib-monitor/test/unit/test_table_pool.lua
+lib-monitor/test/unit/test_base_monitor.lua
+lib-monitor/test/unit/test_base_repository.lua
+lib-monitor/test/unit/test_channel_monitor.lua
+lib-monitor/test/unit/test_channel_repository.lua
+lib-monitor/test/unit/test_dvb_repository.lua
+lib-monitor/test/unit/test_dvb_tuner.lua
+lib-monitor/test/unit/test_filter_engine.lua
+lib-monitor/test/unit/test_module_manager.lua
+lib-monitor/test/unit/test_resource_monitor.lua
+lib-monitor/test/unit/test_subscription_manager.lua
+lib-monitor/test/unit/test_utils.lua
+lib-monitor/test/unit/test_wildcard.lua
+lib-monitor/test/unit/test_ws_subscriber.lua
