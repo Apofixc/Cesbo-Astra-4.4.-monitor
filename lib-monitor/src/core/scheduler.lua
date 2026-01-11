@@ -84,6 +84,11 @@ function Scheduler:initialize()
                 -- Выполняем небольшой шаг сборки мусора
                 collectgarbage("step", 50)
             end
+
+            -- Сброс накопленных логов (Batch Logging)
+            if Logger and Logger.flush then
+                Logger.flush()
+            end
         end, 60)
 
         Logger.info(COMPONENT_NAME, "Планировщик инициализирован с системным таймером Astra и адаптивным GC")

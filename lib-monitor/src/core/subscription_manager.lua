@@ -48,6 +48,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
 --- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации
 --- @field private _save_pending boolean Флаг отложенного сохранения
+--- @field private _batch_queues table<string, table> Очереди для пакетной отправки
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
@@ -183,6 +184,7 @@ function SubscriptionManager.new()
     self._matchers = {} -- [pattern] = function
     self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
     self._save_pending = false
+    self._batch_queues = {} -- [sub_id] = { events = {}, last_flush = T }
     self:load()
     self:start_retry_processor()
     return self
@@ -200,7 +202,17 @@ function SubscriptionManager:start_retry_processor()
     scheduler:add_task("subscription_manager_maintenance", function()
         local now = os_time()
 
-        -- 1. Обработка повторов
+        -- 1. Пакетная отправка (Batch Flush)
+        if MonitorConfig and MonitorConfig.BatchEnabled then
+            local interval = MonitorConfig.BatchFlushInterval or 0.5
+            for sub_id, queue in pairs(self._batch_queues) do
+                if #queue.events > 0 and (now - queue.last_flush) >= interval then
+                    self:flush_batch(sub_id)
+                end
+            end
+        end
+
+        -- 2. Обработка повторов
         for i = #retry_queue, 1, -1 do
             local item = retry_queue[i]
             if now >= item.time then
@@ -369,19 +381,28 @@ function SubscriptionManager:publish_event(event)
                 end
             end
             if should_send then
-                -- Оптимизация: кодируем JSON один раз, если транспорт его требует
-                if sub.transport ~= "LUA_CALLBACK" and not event_json then
-                    event_json = get_event_json(event)
-                end
-
-                local success, _ = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
-                if success then
-                    delivered = delivered + 1
-                    sub.stats.delivered = sub.stats.delivered + 1
-                    sub.last_event_at = now
+                -- Пакетная отправка (Batching)
+                if MonitorConfig and MonitorConfig.BatchEnabled and
+                   (sub.transport == "HTTP" or sub.transport == "WS") and
+                   sub.batch_mode ~= "single"
+                then
+                    self:add_to_batch(sub, event)
+                    delivered = delivered + 1 -- Считаем как доставленное в очередь
                 else
-                    failed = failed + 1
-                    sub.stats.failed = sub.stats.failed + 1
+                    -- Обычная немедленная отправка
+                    if sub.transport ~= "LUA_CALLBACK" and not event_json then
+                        event_json = get_event_json(event)
+                    end
+
+                    local success, _ = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
+                    if success then
+                        delivered = delivered + 1
+                        sub.stats.delivered = sub.stats.delivered + 1
+                        sub.last_event_at = now
+                    else
+                        failed = failed + 1
+                        sub.stats.failed = sub.stats.failed + 1
+                    end
                 end
             end
         end
@@ -426,10 +447,60 @@ function SubscriptionManager:detect_transport(cfg)
     return nil
 end
 
+--- Добавляет событие в пакетную очередь подписчика.
+--- @param sub table Объект подписки
+--- @param event table Объект события
+function SubscriptionManager:add_to_batch(sub, event)
+    local sub_id = sub.id
+    if not self._batch_queues[sub_id] then
+        self._batch_queues[sub_id] = { events = {}, last_flush = os_time() }
+    end
+
+    local queue = self._batch_queues[sub_id]
+    table_insert(queue.events, event.data) -- Сохраняем только данные для экономии памяти
+
+    local max_size = MonitorConfig and MonitorConfig.BatchMaxSize or 50
+    if #queue.events >= max_size then
+        self:flush_batch(sub_id)
+    end
+end
+
+--- Принудительно отправляет накопленную пачку событий.
+--- @param sub_id string ID подписки
+function SubscriptionManager:flush_batch(sub_id)
+    local queue = self._batch_queues[sub_id]
+    if not queue or #queue.events == 0 then return end
+
+    -- Находим объект подписки
+    local sub = nil
+    for _, subs in pairs(self.subscriptions) do
+        if subs[sub_id] then sub = subs[sub_id]; break end
+    end
+    if not sub then self._batch_queues[sub_id] = nil; return end
+
+    local events = queue.events
+    queue.events = {}
+    queue.last_flush = os_time()
+
+    -- Smart Packaging: если 1 элемент - шлем объект, если > 1 - массив
+    local payload = events
+    if #events == 1 and sub.batch_mode ~= "array" then
+        payload = events[1]
+    end
+
+    local event_json = json_encode(payload)
+    if event_json then
+        Transport[sub.transport](sub.callback, payload, sub.event_type, nil, event_json)
+        sub.stats.delivered = sub.stats.delivered + #events
+        sub.last_event_at = queue.last_flush
+    end
+end
+
 --- Удаляет подписку по её ID и сохраняет изменения в файл.
 --- @param sub_id string ID подписки
 --- @return boolean Статус выполнения
 function SubscriptionManager:unsubscribe(sub_id)
+    self._batch_queues[sub_id] = nil
     for event_type, subs in pairs(self.subscriptions) do
         if subs[sub_id] then
             subs[sub_id] = nil

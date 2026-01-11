@@ -31,6 +31,10 @@ local context_stack = {}
 local current_context_id = nil
 local context_counter = 0
 
+-- Очередь для пакетной записи логов
+local log_queue = {}
+local MAX_LOG_QUEUE_SIZE = 200
+
 -- Кэширование уровня логирования и конфига
 local cached_log_level = nil
 local cached_log_format = nil
@@ -142,6 +146,23 @@ function Logger.get_buffer(component, limit)
     return buffer
 end
 
+--- Сбрасывает накопленные логи в системный лог Astra
+function Logger.flush()
+    if #log_queue == 0 then return end
+
+    local current_queue = log_queue
+    log_queue = {}
+
+    for _, item in ipairs(current_queue) do
+        local lower_level = item.level:lower()
+        if log and type(log) == "table" and type(log[lower_level]) == "function" then
+            pcall(log[lower_level], item.msg)
+        else
+            print(string_format("[%s] %s", item.level, item.msg))
+        end
+    end
+end
+
 --- Внутренняя функция для записи лога
 --- @private
 local function write_log(level_name, component, format_str, ...)
@@ -190,14 +211,26 @@ local function write_log(level_name, component, format_str, ...)
             msg = string_format("[%s] %s", component, msg)
         end
 
-        local lower_level = level_name:lower()
-        if log and type(log) == "table" and type(log[lower_level]) == "function" then
-            local ok, err = pcall(log[lower_level], msg)
-            if not ok then
-                print(string_format("[ОШИБКА ЛОГГЕРА] Не удалось записать в лог Astra: %s", tostring(err)))
+        -- Пакетная запись (Batch Logging)
+        if config and config.LogBatchEnabled and config.LogBufferSize and config.LogBufferSize > 0 then
+            if #log_queue < MAX_LOG_QUEUE_SIZE then
+                table_insert(log_queue, { level = level_name, msg = msg })
+            else
+                -- Если очередь переполнена, сбрасываем немедленно
+                Logger.flush()
+                table_insert(log_queue, { level = level_name, msg = msg })
             end
         else
-            print(string_format("[%s] %s", level_name, msg))
+            -- Обычная немедленная запись
+            local lower_level = level_name:lower()
+            if log and type(log) == "table" and type(log[lower_level]) == "function" then
+                local ok, err = pcall(log[lower_level], msg)
+                if not ok then
+                    print(string_format("[ОШИБКА ЛОГГЕРА] Не удалось записать в лог Astra: %s", tostring(err)))
+                end
+            else
+                print(string_format("[%s] %s", level_name, msg))
+            end
         end
     end
 end

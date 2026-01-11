@@ -73,6 +73,7 @@ MonitorConfig.STREAM = {
 }
 MonitorConfig.LogLevel = "INFO"
 MonitorConfig.LogFormat = "TEXT"
+MonitorConfig.LogBatchEnabled = false -- Пакетное логирование (выключено по умолчанию)
 MonitorConfig.MaxPayloadSize = 1024 * 1024 -- 1MB
 MonitorConfig.CorsAllowOrigin = "*"
 MonitorConfig.ChannelMonitorLimit = 200
@@ -95,6 +96,9 @@ MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
 MonitorConfig.LvcTtl = 3600 -- TTL для Last Value Cache в секундах
 MonitorConfig.MaxRetryQueueSize = 500 -- Лимит очереди повторов HTTP
+MonitorConfig.BatchEnabled = true -- Включить пакетную отправку событий
+MonitorConfig.BatchFlushInterval = 0.5 -- Интервал сброса буфера в секундах
+MonitorConfig.BatchMaxSize = 50 -- Максимальный размер пачки событий
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию
@@ -123,6 +127,9 @@ function MonitorConfig.validate()
     if type(MonitorConfig.DvbMonitorLimit) ~= "number" then return false, "DvbMonitorLimit must be a number" end
     if type(MonitorConfig.ForceSendInterval) ~= "number" then return false, "ForceSendInterval must be a number" end
     if type(MonitorConfig.LogBufferSize) ~= "number" then return false, "LogBufferSize must be a number" end
+    if MonitorConfig.LogBatchEnabled ~= nil and type(MonitorConfig.LogBatchEnabled) ~= "boolean" then
+        return false, "LogBatchEnabled must be a boolean"
+    end
 
     return true
 end
