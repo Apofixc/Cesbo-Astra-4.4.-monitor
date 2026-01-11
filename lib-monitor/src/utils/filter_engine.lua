@@ -104,6 +104,14 @@ function FilterEngine.compile_accessor(path)
     return accessor
 end
 
+--- Очищает состояние фильтров для указанной подписки.
+--- @param sub_id string ID подписки
+function FilterEngine.clear_state(sub_id)
+    if sub_id and duration_state[sub_id] then
+        duration_state[sub_id] = nil
+    end
+end
+
 --- Проверяет соответствие данных конкретному условию с учетом оператора и длительности.
 --- @param data table Данные события
 --- @param condition table Параметры условия (field, op, value, duration, accessor)
@@ -174,22 +182,22 @@ local function generate_filter_code(filters)
         local target_val = type(target) == "string" and string.format("%q", target) or tostring(target)
 
         if op == "eq" then
-            expr = string.format("(data.%s == %s)", field, target_val)
+            expr = string.format("(data[%q] == %s)", field, target_val)
         elseif op == "ne" then
-            expr = string.format("(data.%s ~= %s)", field, target_val)
+            expr = string.format("(data[%q] ~= %s)", field, target_val)
         elseif op == "gt" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s > %s)", field, field, target_val)
+            expr = string.format("(type(data[%q]) == 'number' and data[%q] > %s)", field, field, target_val)
         elseif op == "ge" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s >= %s)", field, field, target_val)
+            expr = string.format("(type(data[%q]) == 'number' and data[%q] >= %s)", field, field, target_val)
         elseif op == "lt" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s < %s)", field, field, target_val)
+            expr = string.format("(type(data[%q]) == 'number' and data[%q] < %s)", field, field, target_val)
         elseif op == "le" then
-            expr = string.format("(type(data.%s) == 'number' and data.%s <= %s)", field, field, target_val)
+            expr = string.format("(type(data[%q]) == 'number' and data[%q] <= %s)", field, field, target_val)
         elseif op == "contains" then
-            expr = string.format("(type(data.%s) == 'string' and data.%s:find(%q, 1, true) ~= nil)",
+            expr = string.format("(type(data[%q]) == 'string' and data[%q]:find(%q, 1, true) ~= nil)",
                 field, field, tostring(target))
         elseif op == "matches" then
-            expr = string.format("(type(data.%s) == 'string' and data.%s:match(%q) ~= nil)",
+            expr = string.format("(type(data[%q]) == 'string' and data[%q]:match(%q) ~= nil)",
                 field, field, tostring(target))
         elseif op == "in" then
             if type(target) == "table" then
@@ -197,9 +205,9 @@ local function generate_filter_code(filters)
                 for _, v in pairs(target) do
                     table.insert(items, type(v) == "string" and string.format("[%q]=true", v) or string.format("[%s]=true", tostring(v)))
                 end
-                expr = string.format("(({%s})[data.%s] == true)", table.concat(items, ","), field)
+                expr = string.format("(({%s})[data[%q]] == true)", table.concat(items, ","), field)
             elseif type(target) == "string" then
-                expr = string.format("(type(data.%s) ~= 'nil' and %q:find(tostring(data.%s), 1, true) ~= nil)",
+                expr = string.format("(type(data[%q]) ~= 'nil' and %q:find(tostring(data[%q]), 1, true) ~= nil)",
                     field, target, field)
             end
         end

@@ -141,6 +141,18 @@ function TablePool.release(t, pool_type, deep_or_nested)
     end
 end
 
+--- Полностью очищает все пулы таблиц.
+--- Используется для освобождения памяти при достижении лимитов.
+function TablePool.clear_all()
+    for name, pool in pairs(pools) do
+        for i = 1, #pool do
+            pool[i] = nil
+        end
+        pools[name] = {}
+    end
+    Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
+end
+
 --- Возвращает статистику использования пулов
 --- @return table Статистика (тип -> количество свободных таблиц)
 function TablePool.get_stats()

@@ -234,6 +234,7 @@ function SubscriptionManager:save()
 end
 
 --- Немедленно сохраняет текущие активные подписки в JSON файл.
+--- Использует атомарную запись через временный файл.
 --- Lua-коллбэки игнорируются при сохранении.
 --- @return boolean Статус выполнения
 function SubscriptionManager:save_now()
@@ -253,10 +254,23 @@ function SubscriptionManager:save_now()
             end
         end
     end
-    local f = io.open(STORAGE_PATH, "w")
+
+    local content = json_encode(data_to_save)
+    if not content then return false end
+
+    -- Атомарная запись через временный файл
+    local tmp_path = STORAGE_PATH .. ".tmp"
+    local f = io.open(tmp_path, "w")
     if f then
-        f:write(json_encode(data_to_save))
+        f:write(content)
         f:close()
+        -- В Astra/Linux os.rename атомарен
+        local ok, err = os.rename(tmp_path, STORAGE_PATH)
+        if not ok then
+            Logger.error(COMPONENT_NAME, "Ошибка атомарного сохранения: %s", tostring(err))
+            os.remove(tmp_path)
+            return false
+        end
         return true
     end
     return false
@@ -515,6 +529,12 @@ end
 --- @return boolean Статус выполнения
 function SubscriptionManager:unsubscribe(sub_id)
     self._batch_queues[sub_id] = nil
+
+    -- Очистка состояния фильтров (FilterEngine)
+    if FilterEngine and FilterEngine.clear_state then
+        FilterEngine.clear_state(sub_id)
+    end
+
     for event_type, subs in pairs(self.subscriptions) do
         if subs[sub_id] then
             subs[sub_id] = nil

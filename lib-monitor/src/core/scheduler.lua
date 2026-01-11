@@ -16,6 +16,7 @@ local setmetatable = _G.setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
@@ -80,6 +81,12 @@ function Scheduler:initialize()
 
             if mem_kb > memory_limit_kb then
                 Logger.warn(COMPONENT_NAME, "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.", mem_kb, memory_limit_kb)
+
+                -- Очистка пулов таблиц перед GC для максимального эффекта
+                if TablePool and TablePool.clear_all then
+                    TablePool.clear_all()
+                end
+
                 collectgarbage("collect")
             else
                 -- Выполняем небольшой шаг сборки мусора
