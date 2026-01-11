@@ -246,6 +246,7 @@ function SubscriptionManager:save_now()
                 data_to_save[event_type][id] = {
                     callback = sub.callback,
                     filters = sub.filters,
+                    batch_mode = sub.batch_mode,
                     throttle_ms = sub.throttle_ms,
                     active = sub.active
                 }
@@ -301,6 +302,8 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     local subscription = {
         id = sub_id, event_type = event_type, callback = sub_data.callback,
         transport = transport, filters = filters,
+        batch_mode = sub_data.batch_mode,
+        -- throttle_ms: 0 - выключено, >0 - минимальный интервал между событиями
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
         last_event_at = 0, stats = { delivered = 0, failed = 0 }
     }

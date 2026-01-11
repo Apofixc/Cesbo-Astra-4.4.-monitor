@@ -44,6 +44,7 @@ function SubscriberRoutes.subscribe(server, client, request)
     local sub_id = dispatcher.subscription_manager:subscribe(data.event_type, {
         callback = data.callback,
         filters = data.filters,
+        batch_mode = data.batch_mode,
         throttle_ms = data.throttle_ms
     })
 
