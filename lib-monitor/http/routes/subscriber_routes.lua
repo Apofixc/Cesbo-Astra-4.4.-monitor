@@ -36,15 +36,17 @@ function SubscriberRoutes.subscribe(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {
         event_type = { type = "string", required = true },
-        callback = { type = "table", required = true }
+        callback = { type = "table", required = true },
+        batch_mode = { type = "string", values = { "single", "array" } },
+        send_lvc = { type = "boolean" },
+        throttle_ms = { type = "number", min = 0 }
     })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local dispatcher = EventDispatcher.get_instance()
-    local sub_id = dispatcher.subscription_manager:subscribe(data.event_type, {
-        callback = data.callback,
-        filters = data.filters,
+    local sub_id = dispatcher:subscribe(data.event_type, data.callback, data.filters, {
         batch_mode = data.batch_mode,
+        send_lvc = data.send_lvc,
         throttle_ms = data.throttle_ms
     })
 

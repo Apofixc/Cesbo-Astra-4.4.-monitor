@@ -280,6 +280,7 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     local sub_id = self.subscription_manager:subscribe(event_type, {
         callback = callback,
         filters = filters,
+        batch_mode = options and options.batch_mode,
         throttle_ms = options and options.throttle_ms
     })
 

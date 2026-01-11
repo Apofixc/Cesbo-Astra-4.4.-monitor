@@ -99,6 +99,7 @@ MonitorConfig.MaxRetryQueueSize = 500 -- Лимит очереди повтор�
 MonitorConfig.BatchEnabled = true -- Включить пакетную отправку событий
 MonitorConfig.BatchFlushInterval = 0.5 -- Интервал сброса буфера в секундах
 MonitorConfig.BatchMaxSize = 50 -- Максимальный размер пачки событий
+MonitorConfig.DefaultBatchMode = "single" -- Режим по умолчанию ("single" или "array")
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию
@@ -129,6 +130,11 @@ function MonitorConfig.validate()
     if type(MonitorConfig.LogBufferSize) ~= "number" then return false, "LogBufferSize must be a number" end
     if MonitorConfig.LogBatchEnabled ~= nil and type(MonitorConfig.LogBatchEnabled) ~= "boolean" then
         return false, "LogBatchEnabled must be a boolean"
+    end
+
+    if type(MonitorConfig.DefaultBatchMode) ~= "string" then return false, "DefaultBatchMode must be a string" end
+    if MonitorConfig.DefaultBatchMode ~= "single" and MonitorConfig.DefaultBatchMode ~= "array" then
+        return false, "Invalid DefaultBatchMode: " .. tostring(MonitorConfig.DefaultBatchMode)
     end
 
     return true

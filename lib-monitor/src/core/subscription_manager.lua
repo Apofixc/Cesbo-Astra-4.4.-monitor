@@ -290,6 +290,8 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
 
     local sub_id = existing_id or generate_uuid()
     local filters = sub_data.filters or {}
+    local default_batch_mode = (MonitorConfig and MonitorConfig.DefaultBatchMode) or "single"
+
     -- Предкомпиляция аксессоров для фильтров
     if FilterEngine and filters.conditions then
         for _, cond in pairs(filters.conditions) do
@@ -302,7 +304,7 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     local subscription = {
         id = sub_id, event_type = event_type, callback = sub_data.callback,
         transport = transport, filters = filters,
-        batch_mode = sub_data.batch_mode,
+        batch_mode = sub_data.batch_mode or default_batch_mode,
         -- throttle_ms: 0 - выключено, >0 - минимальный интервал между событиями
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
         last_event_at = 0, stats = { delivered = 0, failed = 0 }
@@ -425,12 +427,18 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     for _, subs in pairs(self.subscriptions) do
         local sub = subs[sub_id]
         if sub then
+            -- Smart Packaging для LVC: если режим array, оборачиваем в массив
+            local payload = event_data
+            if sub.batch_mode == "array" then
+                payload = { event_data }
+            end
+
             -- Для одиночной отправки (LVC) готовим JSON если нужно
             local event_json = nil
             if sub.transport ~= "LUA_CALLBACK" then
-                event_json = (type(event_data) == "table") and json_encode(event_data) or tostring(event_data)
+                event_json = (type(payload) == "table") and json_encode(payload) or tostring(payload)
             end
-            Transport[sub.transport](sub.callback, event_data, event_type, nil, event_json)
+            Transport[sub.transport](sub.callback, payload, event_type, nil, event_json)
             return true
         end
     end
@@ -462,8 +470,11 @@ function SubscriptionManager:add_to_batch(sub, event)
     local queue = self._batch_queues[sub_id]
     table_insert(queue.events, event.data) -- Сохраняем только данные для экономии памяти
 
+    -- Smart Flush: немедленный сброс для критических событий (Priority 1-2)
+    local is_high_priority = event.priority and event.priority <= 2
     local max_size = MonitorConfig and MonitorConfig.BatchMaxSize or 50
-    if #queue.events >= max_size then
+
+    if is_high_priority or #queue.events >= max_size then
         self:flush_batch(sub_id)
     end
 end
