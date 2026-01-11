@@ -167,18 +167,18 @@ end)
 
 initialize_phase(INIT_PHASES.HTTP, function()
     ModuleManager.register_module("http_helpers", path_prefix .. "http.http_helpers", {"logger"})
+    ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils",
+        {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
     ModuleManager.register_module("channel_routes", path_prefix .. "http.routes.channel_routes",
-        {"logger", "http_helpers", "channel", "channel_repository"})
+        {"logger", "http_helpers", "channel", "channel_repository", "routes_utils"})
     ModuleManager.register_module("dvb_routes", path_prefix .. "http.routes.dvb_routes",
-        {"logger", "http_helpers", "adapter", "dvb_repository"})
+        {"logger", "http_helpers", "adapter", "dvb_repository", "routes_utils"})
     ModuleManager.register_module("monitor_routes", path_prefix .. "http.routes.monitor_routes",
-        {"logger", "http_helpers", "channel"})
+        {"logger", "http_helpers", "channel", "routes_utils"})
     ModuleManager.register_module("system_routes", path_prefix .. "http.routes.system_routes",
         {"logger", "http_helpers", "resource_monitor"})
     ModuleManager.register_module("subscriber_routes", path_prefix .. "http.routes.subscriber_routes",
         {"logger", "http_helpers", "core.event_dispatcher"})
-    ModuleManager.register_module("routes_utils", path_prefix .. "http.routes.routes_utils",
-        {"logger", "http_helpers", "channel_repository", "dvb_repository", "monitor_config"})
     ModuleManager.register_module("http_server", path_prefix .. "http.http_server", {
         "logger", "channel_routes", "monitor_routes", "dvb_routes", "system_routes", "subscriber_routes",
         "routes_utils", "ws_subscriber"
