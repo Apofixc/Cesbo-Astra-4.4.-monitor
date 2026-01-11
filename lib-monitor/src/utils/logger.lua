@@ -277,15 +277,25 @@ function Logger.with_error(func, ...)
     context_counter = context_counter + 1
     local context_id = tostring(context_counter) -- Уникальный ID для этого вызова
 
-    if current_context_id then
-        table_insert(context_stack, current_context_id)
+    local prev_context_id = current_context_id
+    if prev_context_id then
+        table_insert(context_stack, prev_context_id)
     end
     current_context_id = context_id
 
     local results = { pcall(func, ...) }
 
-    -- Восстанавливаем контекст
-    current_context_id = table_remove(context_stack)
+    -- Восстанавливаем контекст (защита от повреждения стека)
+    current_context_id = prev_context_id
+    if prev_context_id then
+        -- Удаляем последний элемент из стека, так как мы его восстановили
+        for i = #context_stack, 1, -1 do
+            if context_stack[i] == prev_context_id then
+                table_remove(context_stack, i)
+                break
+            end
+        end
+    end
 
     local ok = results[1]
     if not ok then

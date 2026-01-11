@@ -10,6 +10,7 @@
 local pairs = _G.pairs
 local type = _G.type
 local os_time = _G.os.time
+local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 
@@ -159,9 +160,17 @@ function Scheduler:_tick()
     -- Собираем задачи, готовые к выполнению
     for id, task in pairs(self._tasks) do
         if task.active and now >= task.next_run then
+            local start_clock = os_clock()
             local ok, err = pcall(task.callback)
+            local duration = os_clock() - start_clock
+
             if not ok then
                 Logger.error(COMPONENT_NAME, "Ошибка в задаче %s: %s", id, tostring(err))
+            end
+
+            -- Проверка времени выполнения (Load Balancing / Performance Monitoring)
+            if duration > 0.1 then -- 100ms
+                Logger.warn(COMPONENT_NAME, "Задача %s выполнялась слишком долго: %.3f сек", id, duration)
             end
 
             task.last_run = now

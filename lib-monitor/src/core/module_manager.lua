@@ -164,6 +164,16 @@ end
 --- Загружает все зарегистрированные модули в правильном порядке, разрешая зависимости.
 --- @return table|nil Список имен загруженных модулей или nil
 function ModuleManager.load_modules()
+    -- Проверка версии Lua (согласно lua-version.md)
+    if _VERSION ~= "Lua 5.2" then
+        local msg = string_format("Неподдерживаемая версия Lua: %s. Ожидается Lua 5.2.", _VERSION)
+        if Logger then
+            log_error(COMPONENT_NAME, msg)
+        else
+            print(string_format("[%s][ERROR] %s", COMPONENT_NAME, msg))
+        end
+    end
+
     local load_order = topological_sort()
 
     if not load_order then
