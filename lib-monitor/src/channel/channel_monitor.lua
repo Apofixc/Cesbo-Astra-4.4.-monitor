@@ -1,12 +1,12 @@
 -- 1. Стандартные Lua функции
-local ipairs = ipairs
-local pairs = pairs
-local os_time = os.time
-local setmetatable = setmetatable
-local tostring = tostring
-local type = type
-local collectgarbage = collectgarbage
-local pcall = pcall
+local ipairs = _G.ipairs
+local pairs = _G.pairs
+local os_time = _G.os.time
+local setmetatable = _G.setmetatable
+local tostring = _G.tostring
+local type = _G.type
+local collectgarbage = _G.collectgarbage
+local pcall = _G.pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

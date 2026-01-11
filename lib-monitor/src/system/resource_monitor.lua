@@ -2,11 +2,11 @@
 local ResourceMonitor = {}
 
 -- 1. Стандартные Lua функции
-local os_time = os.time
-local tonumber = tonumber
-local io_open = io.open
-local collectgarbage = collectgarbage
-local pairs = pairs
+local os_time = _G.os.time
+local tonumber = _G.tonumber
+local io_open = _G.io.open
+local collectgarbage = _G.collectgarbage
+local pairs = _G.pairs
 
 -- 2. Глобальные зависимости Astra
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")

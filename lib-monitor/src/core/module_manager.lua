@@ -6,10 +6,10 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, pairs, ipairs, tostring, pcall = type, pairs, ipairs, tostring, pcall
-local table_concat, table_insert = table.concat, table.insert
-local string_gmatch = string.gmatch
-local string_format = string.format
+local type, pairs, ipairs, tostring, pcall = _G.type, _G.pairs, _G.ipairs, _G.tostring, _G.pcall
+local table_concat, table_insert = _G.table.concat, _G.table.insert
+local string_gmatch = _G.string.gmatch
+local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
 -- Logger будет загружен позже, чтобы избежать циклической зависимости при инициализации ModuleManager

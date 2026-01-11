@@ -7,11 +7,11 @@ local BaseRepository = {}
 BaseRepository.__index = BaseRepository
 
 -- 1. Стандартные Lua функции
-local os_time = os.time
-local pairs = pairs
-local ipairs = ipairs
-local tostring = tostring
-local setmetatable = setmetatable
+local os_time = _G.os.time
+local pairs = _G.pairs
+local ipairs = _G.ipairs
+local tostring = _G.tostring
+local setmetatable = _G.setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

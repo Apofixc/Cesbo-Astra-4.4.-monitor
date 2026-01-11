@@ -1,8 +1,8 @@
 -- 1. Стандартные Lua функции
-local pairs = pairs
-local ipairs = ipairs
-local tostring = tostring
-local table_insert = table.insert
+local pairs = _G.pairs
+local ipairs = _G.ipairs
+local tostring = _G.tostring
+local table_insert = _G.table.insert
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

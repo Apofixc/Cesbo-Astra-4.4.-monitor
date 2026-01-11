@@ -7,11 +7,11 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local pairs = pairs
-local type = type
-local os_time = os.time
-local pcall = pcall
-local setmetatable = setmetatable
+local pairs = _G.pairs
+local type = _G.type
+local os_time = _G.os.time
+local pcall = _G.pcall
+local setmetatable = _G.setmetatable
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

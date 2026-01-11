@@ -1,9 +1,9 @@
 -- 1. Стандартные Lua функции
-local ipairs = ipairs
-local string_lower = string.lower
-local tostring = tostring
-local type = type
-local string_format = string.format
+local ipairs = _G.ipairs
+local string_lower = _G.string.lower
+local tostring = _G.tostring
+local type = _G.type
+local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local ChannelMonitor = ModuleManager.get_module("channel_monitor")

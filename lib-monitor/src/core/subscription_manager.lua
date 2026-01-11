@@ -7,19 +7,19 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type = type
-local tostring = tostring
-local string_format = string.format
-local pairs = pairs
-local table_insert = table.insert
-local table_remove = table.remove
-local os_time = os.time
-local pcall = pcall
-local setmetatable = setmetatable
-local io = io
-local math_random = math.random
-local math_floor = math.floor
-local string_gsub = string.gsub
+local type = _G.type
+local tostring = _G.tostring
+local string_format = _G.string.format
+local pairs = _G.pairs
+local table_insert = _G.table.insert
+local table_remove = _G.table.remove
+local os_time = _G.os.time
+local pcall = _G.pcall
+local setmetatable = _G.setmetatable
+local io = _G.io
+local math_random = _G.math.random
+local math_floor = _G.math.floor
+local string_gsub = _G.string.gsub
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")

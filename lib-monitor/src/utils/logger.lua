@@ -1,13 +1,13 @@
 -- 1. Стандартные Lua функции
-local ipairs = ipairs
-local os_time = os.time
-local pcall = pcall
-local select = select
-local string_format = string.format
-local table_insert = table.insert
-local table_remove = table.remove
-local tostring = tostring
-local unpack = table.unpack
+local ipairs = _G.ipairs
+local os_time = _G.os.time
+local pcall = _G.pcall
+local select = _G.select
+local string_format = _G.string.format
+local table_insert = _G.table.insert
+local table_remove = _G.table.remove
+local tostring = _G.tostring
+local unpack = _G.table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
 local MonitorConfig = nil -- Кэшируется при первом обращении

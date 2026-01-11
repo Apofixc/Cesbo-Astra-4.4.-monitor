@@ -7,12 +7,12 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local os_time = os.time
-local pairs = pairs
-local type = type
-local tostring = tostring
-local pcall = pcall
-local io_open = io.open
+local os_time = _G.os.time
+local pairs = _G.pairs
+local type = _G.type
+local tostring = _G.tostring
+local pcall = _G.pcall
+local io_open = _G.io.open
 
 -- 2. Функции из ModuleManager.get_module()
 local ModuleManager = _G.ModuleManager
