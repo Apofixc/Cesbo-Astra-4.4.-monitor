@@ -207,6 +207,24 @@ function BaseMonitor:get_state()
     return self._state
 end
 
+--- Полностью очищает базовое состояние монитора.
+--- Вызывается в конце методов destroy наследников.
+function BaseMonitor:destroy()
+    self._active = false
+    self._state = BaseMonitor.STATE.STOPPED
+    self._instance = nil
+    self._config = nil
+    self._name = nil
+    self._component_name = nil
+    self._json_cache = nil
+    self._current_method = nil
+    self._psi = nil
+    self._check_timer = nil
+    self._force_timer = nil
+    self._force_interval = nil
+    self._last_update = nil
+    self._table_pool = nil
+end
 
 --- Приостанавливает мониторинг
 function BaseMonitor:pause()

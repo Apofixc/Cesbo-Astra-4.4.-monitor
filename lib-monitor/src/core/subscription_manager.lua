@@ -553,6 +553,28 @@ function SubscriptionManager:flush_batch(sub_id)
     end
 end
 
+--- Останавливает менеджер подписок, сбрасывает батчи и удаляет задачи из планировщика.
+function SubscriptionManager:shutdown()
+    local Scheduler = ModuleManager.get_module("core.scheduler")
+    if Scheduler then
+        Scheduler.get_instance():remove_task("subscription_manager_maintenance")
+    end
+
+    -- Сброс всех накопленных батчей перед выходом
+    if MonitorConfig and MonitorConfig.BatchEnabled then
+        for sub_id, _ in pairs(self._batch_queues) do
+            self:flush_batch(sub_id)
+        end
+    end
+
+    -- Финальное сохранение, если оно требовалось
+    if self._save_pending then
+        self:save_now()
+    end
+
+    Logger.info(COMPONENT_NAME, "Менеджер подписок остановлен")
+end
+
 --- Удаляет подписку по её ID и сохраняет изменения в файл.
 --- @param sub_id string ID подписки
 --- @return boolean Статус выполнения

@@ -62,6 +62,7 @@ function BaseRepository:unregister(name, force)
     local config = instance.destroy and instance:destroy(force)
     if config then
         self.monitors[name] = nil
+        self.classes[name] = nil
         self.count_active = self.count_active - 1
         Logger.debug(self.component_name, "Объект '%s' удален и остановлен (принудительно: %s).", name, tostring(force))
         return config

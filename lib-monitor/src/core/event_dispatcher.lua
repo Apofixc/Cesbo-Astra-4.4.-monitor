@@ -390,6 +390,11 @@ function EventDispatcher:shutdown()
         Scheduler.get_instance():remove_task("event_dispatcher_queue")
     end
 
+    -- Остановка менеджера подписок (сброс батчей и сохранение)
+    if self.subscription_manager then
+        self.subscription_manager:shutdown()
+    end
+
     -- Очистка очередей
     for p, queue in pairs(self.event_queues) do
         while #queue > 0 do

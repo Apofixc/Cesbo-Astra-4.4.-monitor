@@ -479,10 +479,13 @@ function ChannelMonitor:destroy(force)
         return nil
     end
 
+    -- 0. Немедленная остановка обработки (предохранитель для callback)
+    self._active = false
+
     local original_config = self._config and Utils.table_copy(self._config) or nil
 
-    self._active = false
-    self._state = BaseMonitor.STATE.STOPPED
+    -- 1. Очистка специфических ресурсов
+    self:clear_stats()
 
     if self._instance then
         -- Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО (astra-api-usage.md)
@@ -494,33 +497,29 @@ function ChannelMonitor:destroy(force)
         if self._instance.close then
             self._instance:close()
         end
-        self._instance = nil
     end
 
     if self._input_instance then
         -- kill_input самостоятельно очищает callback и ресурсы
         kill_input(self._input_instance)
-        self._input_instance = nil
     end
 
-    -- Очистка кэшей и данных
-    self:_clear_psi()
-    self._stats = nil
-    self._stats_count = nil
-    self._status = nil
-    self._config = nil
+    -- 2. Обнуление специфических полей
+    self._input_instance = nil
     self._channel_data = nil
     self._stream_json = nil
+    self._status = nil
+    self._stats = nil
+    self._stats_count = nil
+    self._rate_stat = nil
     self._upstream = nil
-    self._cached_source = nil
-    self._current_status_table = nil
-    self._json_cache = nil
-    self._current_method = nil
-
-    -- Обнуление идентификаторов
-    self._name = nil
-    self._display_name = nil
     self._last_active_id = nil
+    self._cached_source = nil
+    self._display_name = nil
+    self._current_status_table = nil
+
+    -- 3. Базовая очистка и смена состояния
+    BaseMonitor.destroy(self)
 
     Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")
     collectgarbage()

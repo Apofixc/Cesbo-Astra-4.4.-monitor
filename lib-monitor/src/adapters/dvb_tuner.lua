@@ -432,9 +432,7 @@ function DvbTuner:destroy(force)
 
     -- 1. Остановка логики мониторинга
     self._active = false
-    self._state = BaseMonitor.STATE.STOPPED
     self:_clear_psi_resources()
-    self:_clear_psi()
 
     -- 2. Физическое закрытие тюнера (если требуется)
     if self._instance then
@@ -461,25 +459,23 @@ function DvbTuner:destroy(force)
             self._instance:close()
         end
         Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))
-
-        self._instance = nil
     end
 
-    -- Очищаем callback в рабочей конфигурации
+    -- 3. Обнуление специфических полей
     if self._astra_conf then
         self._astra_conf.callback = nil
         self._astra_conf = nil
     end
 
-    -- 3. Полная очистка полей объекта
-    self._name = nil
-    self._config = nil
-    self._current_method = nil
     self._status = nil
-    self._json_cache = nil
+    self._current_flags = nil
+    self._last_status_num = nil
     self._stats = nil
     self._backup = nil
     self._current_status_table = nil
+
+    -- 4. Базовая очистка и смена состояния
+    BaseMonitor.destroy(self)
 
     Logger.debug(COMPONENT_NAME, "Объект тюнера уничтожен")
     collectgarbage()
