@@ -356,7 +356,7 @@ function ChannelMonitor:process_total_data(data)
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(self._config.time_check) and
-       (active_id ~= self._last_active_id or self._force_timer >= self._force_interval or
+       (active_id ~= self._last_active_id or self:_is_force() or
         self._current_method(status, data, self._config.rate))
     then
         self:_reset_force_timer()

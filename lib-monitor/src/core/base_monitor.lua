@@ -276,6 +276,13 @@ function BaseMonitor:_should_send(time_check)
 end
 
 
+--- Проверяет, пора ли выполнять принудительную отправку данных
+--- @protected
+--- @return boolean true если пора, иначе false
+function BaseMonitor:_is_force()
+    return self._force_timer >= self._force_interval
+end
+
 --- Сбрасывает таймер принудительной отправки
 --- @protected
 function BaseMonitor:_reset_force_timer()
