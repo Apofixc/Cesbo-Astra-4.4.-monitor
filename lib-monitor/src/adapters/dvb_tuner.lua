@@ -15,6 +15,7 @@ local bit32_band = bit32.band
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -370,7 +371,7 @@ end
 --- Запускает сбор PSI таблиц на 10 секунд
 --- @return boolean Статус запуска процесса
 function DvbTuner:psi_update()
-    if not self._instance or self._temp_analyzer or self._psi_timer then
+    if not self._instance or self._temp_analyzer then
         return false
     end
 
@@ -433,6 +434,12 @@ function DvbTuner:destroy(force)
     -- 1. Остановка логики мониторинга
     self._active = false
     self:_clear_psi_resources()
+
+    -- Очистка задачи планировщика, если она была запущена через psi_update
+    local scheduler = Scheduler and Scheduler.get_instance()
+    if scheduler then
+        scheduler:remove_task("psi_update_" .. self._name)
+    end
 
     -- 2. Физическое закрытие тюнера (если требуется)
     if self._instance then
