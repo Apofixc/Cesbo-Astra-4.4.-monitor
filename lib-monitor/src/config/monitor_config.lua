@@ -94,6 +94,10 @@ MonitorConfig.ExtraDebug = false
 MonitorConfig.GcPause = 100
 MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
+MonitorConfig.AutoRecoverInterval = 300 -- Интервал авто-восстановления в репозитории (сек)
+MonitorConfig.PidStatsLimit = 100 -- Лимит отслеживаемых PID в ChannelMonitor
+MonitorConfig.MaxCounterValue = 1000000000 -- Максимальное значение счетчиков (защита от переполнения)
+MonitorConfig.MaxErrorCount = 1000000 -- Максимальное значение ошибок (защита от переполнения)
 MonitorConfig.LvcTtl = 3600 -- TTL для Last Value Cache в секундах
 MonitorConfig.MaxRetryQueueSize = 500 -- Лимит очереди повторов HTTP
 MonitorConfig.BatchEnabled = true -- Включить пакетную отправку событий
@@ -133,6 +137,11 @@ function MonitorConfig.validate()
     if MonitorConfig.LogBatchEnabled ~= nil and type(MonitorConfig.LogBatchEnabled) ~= "boolean" then
         return false, "LogBatchEnabled must be a boolean"
     end
+
+    if type(MonitorConfig.AutoRecoverInterval) ~= "number" then return false, "AutoRecoverInterval must be a number" end
+    if type(MonitorConfig.PidStatsLimit) ~= "number" then return false, "PidStatsLimit must be a number" end
+    if type(MonitorConfig.MaxCounterValue) ~= "number" then return false, "MaxCounterValue must be a number" end
+    if type(MonitorConfig.MaxErrorCount) ~= "number" then return false, "MaxErrorCount must be a number" end
 
     if type(MonitorConfig.DefaultBatchMode) ~= "string" then return false, "DefaultBatchMode must be a string" end
     if MonitorConfig.DefaultBatchMode ~= "single" and MonitorConfig.DefaultBatchMode ~= "array" then

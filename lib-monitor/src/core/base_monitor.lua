@@ -56,6 +56,7 @@ function BaseMonitor.new(config, component_name)
     self._state = BaseMonitor.STATE.IDLE
     self._instance = nil
     self._json_cache = nil
+    self._current_method = nil
     self._psi = {}
     self._check_timer = 0
     self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
@@ -241,8 +242,6 @@ function BaseMonitor:_clear_psi()
 end
 
 --- Проверяет, прошел ли интервал времени для выполнения проверки.
---- В новой версии используется внешнее управление через планировщик,
---- поэтому метод просто инкрементирует внутренние счетчики.
 --- @protected
 --- @param time_check number Интервал проверки из конфигурации
 --- @return boolean true если интервал прошел, иначе false

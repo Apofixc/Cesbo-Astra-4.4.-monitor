@@ -12,6 +12,7 @@ local pcall = _G.pcall
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local analyze = ModuleManager.get_global_dependency("analyze")
@@ -20,8 +21,9 @@ local kill_input = ModuleManager.get_global_dependency("kill_input")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream = "Unknown" }
-local MAX_COUNTER = 1000000000
-local MAX_ERROR_COUNT = 1000000
+local MAX_COUNTER = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000000
+local MAX_ERROR_COUNT = (MonitorConfig and MonitorConfig.MaxErrorCount) or 1000000
+local PID_LIMIT = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
@@ -268,7 +270,7 @@ function ChannelMonitor:process_psi_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID
-                    if self._stats_count >= 100 then
+                    if self._stats_count >= PID_LIMIT then
                         self:clear_stats()
                         Logger.warn(COMPONENT_NAME,
                             "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
@@ -308,7 +310,7 @@ function ChannelMonitor:process_analyze_data(data)
                 if not stats then
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
                     -- Если лимит превышен, сбрасываем статистику для очистки места
-                    if self._stats_count >= 100 then
+                    if self._stats_count >= PID_LIMIT then
                         self:clear_stats()
                         Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
                             tostring(self._name))

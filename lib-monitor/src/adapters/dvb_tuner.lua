@@ -51,7 +51,6 @@ local METHOD_RATIO = 3
 --- @field private _astra_conf table|nil Рабочая конфигурация для Astra
 --- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
---- @field private _psi_timer any|nil Таймер сбора PSI
 local DvbTuner = setmetatable({}, BaseMonitor)
 DvbTuner.__index = DvbTuner
 
@@ -79,12 +78,6 @@ local COMPARISON_METHODS = {
 --- Вспомогательная функция для очистки ресурсов PSI
 --- @private
 function DvbTuner:_clear_psi_resources()
-    if self._psi_timer then
-        if self._psi_timer.close then
-            self._psi_timer:close()
-        end
-        self._psi_timer = nil
-    end
     if self._temp_analyzer then
         -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
         if type(self._temp_analyzer.__options) == "table" then
@@ -141,7 +134,6 @@ function DvbTuner.new(conf)
         quality = -1
     }
     self._temp_analyzer = nil
-    self._psi_timer = nil
     self._backup = nil
     self._last_status_num = -1
     self._current_flags = STATUS_LOOKUP[0]

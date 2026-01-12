@@ -16,6 +16,7 @@ local setmetatable = _G.setmetatable
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 --- Конструктор базового репозитория
 --- @param component_name string Имя компонента для логирования
@@ -85,6 +86,7 @@ function BaseRepository:auto_recover()
         names[#names + 1] = name
     end
 
+    local recover_interval = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
     for _, name in ipairs(names) do
         local monitor = self.monitors[name]
         local class = self.classes[name]
@@ -92,9 +94,9 @@ function BaseRepository:auto_recover()
         if monitor and monitor.health_check and class then
             local health = monitor:health_check()
 
-            -- Проверка на "зависшие" мониторы (RUNNING, но нет обновлений > 300 сек)
+            -- Проверка на "зависшие" мониторы (RUNNING, но нет обновлений)
             if health.state == BaseMonitor.STATE.RUNNING and
-               now - (health.last_update or 0) > 300 then
+               now - (health.last_update or 0) > recover_interval then
 
                 Logger.warn(self.component_name, "Попытка восстановления зависшего монитора: %s", name)
 
