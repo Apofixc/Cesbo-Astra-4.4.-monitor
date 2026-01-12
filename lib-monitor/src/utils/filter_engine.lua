@@ -25,6 +25,7 @@ local FilterEngine = {}
 
 -- Кэш для скомпилированных скриптов и путей
 local script_cache = {}
+local script_cache_count = 0
 local accessor_cache = {}
 local accessor_cache_count = 0
 local MAX_CACHE_SIZE = 100
@@ -263,14 +264,18 @@ function FilterEngine.match(data, filters, sub_id)
     if filters.script and type(filters.script) == "string" then
         local func = script_cache[filters.script]
         if not func then
-            -- Очистка кэша при переполнении
-            if #script_cache > MAX_CACHE_SIZE then script_cache = {} end
+            -- Очистка кэша при переполнении (O(1) проверка)
+            if script_cache_count >= MAX_CACHE_SIZE then
+                script_cache = {}
+                script_cache_count = 0
+            end
 
             local env = { data = data, type = type, tostring = tostring, os_time = os_time }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
             if func then
                 script_cache[filters.script] = func
+                script_cache_count = script_cache_count + 1
             else
                 Logger.error(COMPONENT_NAME, "Ошибка компиляции скрипта фильтра: %s", tostring(err))
                 return false

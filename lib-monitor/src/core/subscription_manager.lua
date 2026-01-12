@@ -41,6 +41,7 @@ local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
 local MAX_RETRIES = 5
 local RETRY_DELAY = 5
 local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
+local MAX_ROUTE_CACHE_SIZE = 1000
 
 --- @class SubscriptionManager
 --- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
@@ -376,6 +377,13 @@ function SubscriptionManager:publish_event(event)
     -- Оптимизация: Fast Path через кэш маршрутизации
     local targets = self._route_cache[event_type]
     if not targets then
+        -- Ограничение размера кэша для предотвращения утечек памяти
+        local cache_count = 0
+        for _ in pairs(self._route_cache) do cache_count = cache_count + 1 end
+        if cache_count >= MAX_ROUTE_CACHE_SIZE then
+            self._route_cache = {}
+        end
+
         targets = {}
         for pattern, subs in pairs(self.subscriptions) do
             if self:match(pattern, event_type) then
