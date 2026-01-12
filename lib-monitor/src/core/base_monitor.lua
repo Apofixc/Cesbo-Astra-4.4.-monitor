@@ -6,7 +6,6 @@
 --- @field protected _state number Текущее состояние (IDLE, RUNNING, STOPPED)
 --- @field protected _instance any|nil Экземпляр Astra (анализатор или тюнер)
 --- @field protected _json_cache string|nil Кэш последнего отправленного JSON
---- @field protected _reports table Пул таблиц для разных типов отчетов
 --- @field protected _current_method function|nil Прямая ссылка на метод сравнения
 --- @field protected _psi table|nil Кэш PSI данных
 --- @field protected _check_timer number Таймер интервала проверки
@@ -57,7 +56,6 @@ function BaseMonitor.new(config, component_name)
     self._state = BaseMonitor.STATE.IDLE
     self._instance = nil
     self._json_cache = nil
-    self._reports = {}
     self._psi = {}
     self._check_timer = 0
     self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
@@ -139,7 +137,8 @@ function BaseMonitor:publish(data, event_type, is_table)
     if dispatcher then
         dispatcher:emit_safe(event_type, data, nil, {
             is_table = is_table,
-            source = self._name
+            source = self._name,
+            json_cache = self._json_cache -- Передаем горячий кэш, если он есть
         })
     end
 end
@@ -151,8 +150,20 @@ function BaseMonitor:get_status_table()
     return nil
 end
 
+--- Обновляет JSON-кэш на основе предоставленных данных.
+--- @protected
+--- @param data table Данные для сериализации
+function BaseMonitor:_refresh_cache(data)
+    if not data then return end
+    if json_encode then
+        self._json_cache = json_encode(data)
+    else
+        self._json_cache = tostring(data)
+    end
+end
+
 --- Возвращает актуальные данные в виде JSON-строки.
---- Реализует ленивое кэширование.
+--- Гарантирует возврат актуальной строки (из кэша или создав её).
 --- @return string|nil JSON-строка
 function BaseMonitor:get_status_json()
     if self._json_cache then return self._json_cache end
@@ -160,12 +171,7 @@ function BaseMonitor:get_status_json()
     local data = self:get_status_table()
     if not data then return nil end
 
-    if json_encode then
-        self._json_cache = json_encode(data)
-    else
-        self._json_cache = tostring(data)
-    end
-
+    self:_refresh_cache(data)
     return self._json_cache
 end
 
@@ -200,11 +206,6 @@ function BaseMonitor:get_state()
     return self._state
 end
 
---- Возвращает кэш последнего отправленного JSON
---- @return string|nil JSON-статус из кэша
-function BaseMonitor:get_json_cache()
-    return self._json_cache
-end
 
 --- Приостанавливает мониторинг
 function BaseMonitor:pause()

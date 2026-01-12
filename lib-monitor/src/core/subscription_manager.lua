@@ -485,6 +485,8 @@ function SubscriptionManager:detect_transport(cfg)
 end
 
 --- Добавляет событие в пакетную очередь подписчика.
+--- Оптимизация: сохраняем уже готовую JSON-строку для предотвращения повреждения данных
+--- и ускорения финальной сборки батча.
 --- @param sub table Объект подписки
 --- @param event table Объект события
 function SubscriptionManager:add_to_batch(sub, event)
@@ -494,7 +496,12 @@ function SubscriptionManager:add_to_batch(sub, event)
     end
 
     local queue = self._batch_queues[sub_id]
-    table_insert(queue.events, event.data) -- Сохраняем только данные для экономии памяти
+    
+    -- Получаем JSON события (используем кэш, если он есть)
+    local event_json = get_event_json(event)
+    if event_json then
+        table_insert(queue.events, event_json)
+    end
 
     -- Smart Flush: немедленный сброс для критических событий (Priority 1-2)
     local is_high_priority = event.priority and event.priority <= 2
@@ -506,6 +513,7 @@ function SubscriptionManager:add_to_batch(sub, event)
 end
 
 --- Принудительно отправляет накопленную пачку событий.
+--- Оптимизация: сборка батча через table.concat без повторного json.encode.
 --- @param sub_id string ID подписки
 function SubscriptionManager:flush_batch(sub_id)
     local queue = self._batch_queues[sub_id]
@@ -518,20 +526,29 @@ function SubscriptionManager:flush_batch(sub_id)
     end
     if not sub then self._batch_queues[sub_id] = nil; return end
 
-    local events = queue.events
+    local events_json = queue.events
+    local count = #events_json
     queue.events = {}
     queue.last_flush = os_time()
 
-    -- Smart Packaging: если 1 элемент - шлем объект, если > 1 - массив
-    local payload = events
-    if #events == 1 and sub.batch_mode ~= "array" then
-        payload = events[1]
+    -- Сборка финального JSON
+    local final_json
+    if count == 1 and sub.batch_mode ~= "array" then
+        final_json = events_json[1]
+    else
+        final_json = "[" .. table.concat(events_json, ",") .. "]"
     end
 
-    local event_json = json_encode(payload)
-    if event_json then
-        Transport[sub.transport](sub.callback, payload, sub.event_type, nil, event_json)
-        sub.stats.delivered = sub.stats.delivered + #events
+    -- Отправляем готовую строку. Транспорт HTTP/WS поддерживает передачу event_json.
+    -- Для LUA_CALLBACK придется декодировать обратно, но батчинг обычно используется для внешних систем.
+    local payload = final_json
+    if sub.transport == "LUA_CALLBACK" then
+        payload = json_decode(final_json)
+    end
+
+    local success, _ = Transport[sub.transport](sub.callback, payload, sub.event_type, nil, final_json)
+    if success then
+        sub.stats.delivered = sub.stats.delivered + count
         sub.last_event_at = queue.last_flush
     end
 end

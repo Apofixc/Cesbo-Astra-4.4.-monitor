@@ -123,7 +123,10 @@ function TablePool.release(t, pool_type, deep_or_nested)
         elseif pool_type == "lvc_entry" then
             t.data = nil
             t.timestamp = nil
-        elseif pool_type == "lvc_sub" or pool_type == "report" or pool_type == "generic" then
+        elseif pool_type == "report" then
+            -- Для отчетов используем глубокую очистку, так как они могут содержать вложенные данные
+            clear_table(t, true)
+        elseif pool_type == "lvc_sub" or pool_type == "generic" then
             if Utils and Utils.table_clear then
                 Utils.table_clear(t)
             else

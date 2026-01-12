@@ -60,7 +60,12 @@ function MonitorRoutes.get_monitor_data(server, client, request)
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
     if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
 
-    if ch_obj._json_cache then return HttpHelpers.send_raw_json(server, client, 200, ch_obj._json_cache) end
+    -- Оптимизация: используем горячий JSON-кэш монитора для мгновенного ответа
+    local json_data = ch_obj:get_status_json()
+    if json_data then
+        return HttpHelpers.send_raw_json(server, client, 200, json_data)
+    end
+
     return HttpHelpers.success(server, client, ch_obj:get_status_table())
 end
 

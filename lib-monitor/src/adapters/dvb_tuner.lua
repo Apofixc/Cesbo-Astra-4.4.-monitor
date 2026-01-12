@@ -242,7 +242,6 @@ function DvbTuner:_on_astra_data(data)
        (self._force_timer >= self._force_interval or self._current_method(self._status, data, self._astra_conf.rate))
     then
         self:_reset_force_timer()
-        self:_clear_json_cache()
 
         local status = self._status
         status.status = data.status or -1
@@ -277,19 +276,26 @@ function DvbTuner:_on_astra_data(data)
             end
         end
 
-        -- Обновляем таблицу для Pull-запросов
+        -- Обновляем Master State (таблица для Pull-запросов)
         self:_build_status_table(self._current_status_table)
 
-        -- Создаем таблицу для Push-уведомления из пула
+        -- Немедленно обновляем горячий JSON-кэш
+        self:_refresh_cache(self._current_status_table)
+
+        -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
         local r = self:get_table_from_pool("report")
         Utils.init_report(r, "dvb", self._name)
         r.name_adapter = self._name
         r.format = self._config.type or ""
         r.modulation = self._config.modulation or ""
         r.source = self._config.tp or self._config.frequency
-        self:_build_status_table(r)
 
-        -- Публикуем таблицу
+        -- Копируем данные из Master State
+        for k, v in pairs(self._current_status_table) do
+            r[k] = v
+        end
+
+        -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "dvb", true)
     end
 end

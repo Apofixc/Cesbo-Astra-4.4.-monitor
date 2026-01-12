@@ -358,19 +358,25 @@ function ChannelMonitor:process_total_data(data)
         self._current_method(status, data, self._config.rate))
     then
         self:_reset_force_timer()
-        self:_clear_json_cache()
 
-        -- Обновляем таблицу для Pull-запросов
+        -- Обновляем Master State (таблица для Pull-запросов)
         self:_build_status_table(self._current_status_table, data)
 
-        -- Создаем таблицу для Push-уведомления из пула
+        -- Немедленно обновляем горячий JSON-кэш
+        self:_refresh_cache(self._current_status_table)
+
+        -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
         local r = self:get_table_from_pool("report")
         Utils.init_report(r, "Channel", self._name)
         r.display_name = self._display_name
         r.monitor = self._config.monitor
-        self:_build_status_table(r, data)
 
-        -- Публикуем таблицу (EventDispatcher сам решит, когда делать encode)
+        -- Копируем данные из Master State
+        for k, v in pairs(self._current_status_table) do
+            r[k] = v
+        end
+
+        -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "channels", true)
 
         -- Обновление состояния для следующего сравнения
