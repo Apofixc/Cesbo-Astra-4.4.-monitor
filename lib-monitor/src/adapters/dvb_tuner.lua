@@ -1,5 +1,4 @@
 -- 1. Стандартные Lua функции
-local collectgarbage = collectgarbage
 local math_max = math.max
 local os_time = os.time
 local pairs = pairs
@@ -284,9 +283,7 @@ function DvbTuner:_on_astra_data(data)
         r.source = self._config.tp or self._config.frequency
 
         -- Копируем данные из Master State
-        for k, v in pairs(self._current_status_table) do
-            r[k] = v
-        end
+        Utils.table_merge(r, self._current_status_table)
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "dvb", true)
@@ -485,7 +482,6 @@ function DvbTuner:destroy(force)
     BaseMonitor.destroy(self)
 
     Logger.debug(COMPONENT_NAME, "Объект тюнера уничтожен")
-    collectgarbage()
     return original_config
 end
 

@@ -20,6 +20,7 @@ BaseMonitor.__index = BaseMonitor
 local setmetatable = setmetatable
 local tostring = tostring
 local os_time = os.time
+local collectgarbage = collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -224,6 +225,10 @@ function BaseMonitor:destroy()
     self._force_interval = nil
     self._last_update = nil
     self._table_pool = nil
+
+    -- Согласно astra-api-usage.md: ручное управление памятью обязательно
+    -- после остановки монитора или закрытия тяжелых модулей.
+    collectgarbage()
 end
 
 --- Приостанавливает мониторинг

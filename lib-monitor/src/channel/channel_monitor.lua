@@ -5,7 +5,6 @@ local os_time = _G.os.time
 local setmetatable = _G.setmetatable
 local tostring = _G.tostring
 local type = _G.type
-local collectgarbage = _G.collectgarbage
 local pcall = _G.pcall
 
 -- 2. Функции из ModuleManager.get_module()
@@ -374,9 +373,7 @@ function ChannelMonitor:process_total_data(data)
         r.monitor = self._config.monitor
 
         -- Копируем данные из Master State
-        for k, v in pairs(self._current_status_table) do
-            r[k] = v
-        end
+        Utils.table_merge(r, self._current_status_table)
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "channels", true)
@@ -522,7 +519,6 @@ function ChannelMonitor:destroy(force)
     BaseMonitor.destroy(self)
 
     Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")
-    collectgarbage()
     return original_config
 end
 

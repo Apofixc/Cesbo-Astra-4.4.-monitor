@@ -77,6 +77,16 @@ function Utils.table_copy(t)
     return copy
 end
 
+--- Копирует все поля из одной таблицы в другую (поверхностное слияние)
+--- @param dst table Целевая таблица
+--- @param src table Исходная таблица
+function Utils.table_merge(dst, src)
+    if type(dst) ~= "table" or type(src) ~= "table" then return end
+    for k, v in pairs(src) do
+        dst[k] = v
+    end
+end
+
 --- Разделяет строку по разделителю (аналог string.split из Astra)
 --- @param s string Исходная строка
 --- @param d string Разделитель
