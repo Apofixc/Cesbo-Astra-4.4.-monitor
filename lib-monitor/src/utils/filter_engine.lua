@@ -178,38 +178,60 @@ local function generate_filter_code(filters)
         local field = cond.field
         local target = cond.value
 
+        -- Поддержка вложенных полей (например, "total.bitrate")
+        local field_expr
+        if field:find("%.") then
+            local parts = {}
+            local current = "data"
+            local checks = {}
+            for part in field:gmatch("[^%.]+") do
+                current = string.format("%s[%q]", current, part)
+                table.insert(parts, current)
+            end
+            -- Проверка существования всех уровней вложенности
+            for j = 1, #parts - 1 do
+                table.insert(checks, string.format("type(%s) == 'table'", parts[j]))
+            end
+            field_expr = parts[#parts]
+            if #checks > 0 then
+                field_expr = string.format("(%s and %s)", table.concat(checks, " and "), field_expr)
+            end
+        else
+            field_expr = string.format("data[%q]", field)
+        end
+
         -- Формируем выражение для одного условия
         local expr
         local target_val = type(target) == "string" and string.format("%q", target) or tostring(target)
 
         if op == "eq" then
-            expr = string.format("(data[%q] == %s)", field, target_val)
+            expr = string.format("(%s == %s)", field_expr, target_val)
         elseif op == "ne" then
-            expr = string.format("(data[%q] ~= %s)", field, target_val)
+            expr = string.format("(%s ~= %s)", field_expr, target_val)
         elseif op == "gt" then
-            expr = string.format("(type(data[%q]) == 'number' and data[%q] > %s)", field, field, target_val)
+            expr = string.format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
         elseif op == "ge" then
-            expr = string.format("(type(data[%q]) == 'number' and data[%q] >= %s)", field, field, target_val)
+            expr = string.format("(type(%s) == 'number' and %s >= %s)", field_expr, field_expr, target_val)
         elseif op == "lt" then
-            expr = string.format("(type(data[%q]) == 'number' and data[%q] < %s)", field, field, target_val)
+            expr = string.format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
         elseif op == "le" then
-            expr = string.format("(type(data[%q]) == 'number' and data[%q] <= %s)", field, field, target_val)
+            expr = string.format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
         elseif op == "contains" then
-            expr = string.format("(type(data[%q]) == 'string' and data[%q]:find(%q, 1, true) ~= nil)",
-                field, field, tostring(target))
+            expr = string.format("(type(%s) == 'string' and %s:find(%q, 1, true) ~= nil)",
+                field_expr, field_expr, tostring(target))
         elseif op == "matches" then
-            expr = string.format("(type(data[%q]) == 'string' and data[%q]:match(%q) ~= nil)",
-                field, field, tostring(target))
+            expr = string.format("(type(%s) == 'string' and %s:match(%q) ~= nil)",
+                field_expr, field_expr, tostring(target))
         elseif op == "in" then
             if type(target) == "table" then
                 local items = {}
                 for _, v in pairs(target) do
                     table.insert(items, type(v) == "string" and string.format("[%q]=true", v) or string.format("[%s]=true", tostring(v)))
                 end
-                expr = string.format("(({%s})[data[%q]] == true)", table.concat(items, ","), field)
+                expr = string.format("(({%s})[%s] == true)", table.concat(items, ","), field_expr)
             elseif type(target) == "string" then
-                expr = string.format("(type(data[%q]) ~= 'nil' and %q:find(tostring(data[%q]), 1, true) ~= nil)",
-                    field, target, field)
+                expr = string.format("(type(%s) ~= 'nil' and %q:find(tostring(%s), 1, true) ~= nil)",
+                    field_expr, target, field_expr)
             end
         end
 

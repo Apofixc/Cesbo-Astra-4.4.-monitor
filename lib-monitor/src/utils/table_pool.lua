@@ -17,7 +17,8 @@ local Utils = ModuleManager.get_module("utils")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
-local MAX_POOL_SIZE = 100 -- Максимальное количество таблиц в пуле одного типа
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+local MAX_POOL_SIZE = (MonitorConfig and MonitorConfig.MaxPoolSize) or 100 -- Максимальное количество таблиц в пуле одного типа
 
 --- @class TablePool
 --- @field private pools table<string, table<number, table>> Хранилище пулов по типам
@@ -122,9 +123,7 @@ function TablePool.release(t, pool_type, deep_or_nested)
         elseif pool_type == "lvc_entry" then
             t.data = nil
             t.timestamp = nil
-        elseif pool_type == "lvc_sub" then
-            for k in pairs(t) do t[k] = nil end
-        elseif pool_type == "report" then
+        elseif pool_type == "lvc_sub" or pool_type == "report" or pool_type == "generic" then
             if Utils and Utils.table_clear then
                 Utils.table_clear(t)
             else

@@ -66,8 +66,10 @@ EventDispatcher.EVENTS = {
 }
 
 -- Генерация уникального ID события
+local _event_counter = 0
 local function generate_event_id()
-    return string_format("evt_%d_%d", os_time(), math_random(10000, 99999))
+    _event_counter = _event_counter + 1
+    return "evt_" .. _event_counter
 end
 
 --- Возвращает единственный экземпляр EventDispatcher (Singleton)
@@ -329,6 +331,9 @@ function EventDispatcher:process_queue()
         end
     end
 
+    local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or 100
+    local processed_in_batch = 0
+
     for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
         local queue = self.event_queues[p]
         while #queue > 0 do
@@ -347,6 +352,11 @@ function EventDispatcher:process_queue()
 
                 -- Возврат в пул
                 self:_safe_return_to_pool(event)
+            end
+
+            processed_in_batch = processed_in_batch + 1
+            if processed_in_batch >= limit then
+                return -- Прерываем обработку до следующего тика
             end
         end
     end

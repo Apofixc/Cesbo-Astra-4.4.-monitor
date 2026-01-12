@@ -100,6 +100,8 @@ MonitorConfig.BatchEnabled = true -- Включить пакетную отпр�
 MonitorConfig.BatchFlushInterval = 0.5 -- Интервал сброса буфера в секундах
 MonitorConfig.BatchMaxSize = 50 -- Максимальный размер пачки событий
 MonitorConfig.DefaultBatchMode = "single" -- Режим по умолчанию ("single" или "array")
+MonitorConfig.MaxPoolSize = 100 -- Максимальный размер пула таблиц
+MonitorConfig.EventBatchLimit = 100 -- Лимит событий за один проход очереди
 MonitorConfig.subscribers = {}
 
 --- Валидирует текущую конфигурацию

@@ -335,8 +335,12 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
 
-    -- Сброс кэша маршрутизации при изменении подписок
-    self._route_cache = {}
+    -- Оптимизация: Гранулярный сброс кэша маршрутизации
+    if event_type:find("*") then
+        self._route_cache = {}
+    else
+        self._route_cache[event_type] = nil
+    end
 
     if not existing_id then self:save() end
     return sub_id
@@ -554,8 +558,14 @@ function SubscriptionManager:unsubscribe(sub_id)
                 self._matchers[event_type] = nil
             end
 
-            -- Сброс кэша маршрутизации при изменении подписок
-            self._route_cache = {}
+            -- Оптимизация: Гранулярный сброс кэша маршрутизации
+            -- Вместо полной очистки сбрасываем только затронутый тип события
+            -- и все типы, если это была маска (для простоты)
+            if event_type:find("*") then
+                self._route_cache = {}
+            else
+                self._route_cache[event_type] = nil
+            end
 
             self:save()
             return true
