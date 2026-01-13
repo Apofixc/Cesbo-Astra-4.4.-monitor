@@ -141,8 +141,9 @@ function TablePool.release(t, pool_type, deep_or_nested)
         elseif pool_type == "lvc_wrapper" then
             t.data = nil
             t.timestamp = nil
-        elseif pool_type == "report" then
+        elseif pool_type == "report" and type(deep_or_nested) ~= "string" then
             -- Для отчетов используем глубокую очистку, так как они могут содержать вложенные данные
+            -- Но если передан тип вложенного пула, идем в общую логику release_nested
             clear_table(t, true)
         elseif pool_type == "lvc_entry" or pool_type == "lvc_sub" or pool_type == "generic" or pool_type == "batch_queue" then
             if Utils and Utils.table_clear then
@@ -170,6 +171,8 @@ function TablePool.clear_all()
         end
         pools[name] = {}
     end
+    -- Согласно astra-api-usage.md: ручное управление памятью обязательно
+    collectgarbage()
     Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
 end
 
