@@ -70,11 +70,34 @@ local function do_clear_table(t, deep, depth)
     end
 end
 
+--- Внутренняя функция преаллокации таблиц.
+--- @param pool_type string Тип пула
+--- @param count number Количество таблиц
+local function do_preallocate(pool_type, count)
+    local pool = pools[pool_type]
+    local limit = limits[pool_type]
+    local current = #pool
+    if count > limit then count = limit end
+
+    if current < count then
+        local s = stats[pool_type]
+        for _ = 1, (count - current) do
+            local t = {
+                __in_pool = pool_type,
+                __pool_type = pool_type
+            }
+            pool[#pool + 1] = t
+            if s then s.created = s.created + 1 end
+        end
+    end
+end
+
 --- Регистрирует новый тип пула.
 --- @param pool_type string Уникальное имя типа (например, "report")
 --- @param cleaner? function Опциональная функция кастомной очистки
 --- @param max_size? number Максимальный размер пула (по умолчанию 100)
-function TablePool.register_type(pool_type, cleaner, max_size)
+--- @param preallocate_count? number Количество таблиц для преаллокации
+function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count)
     if type(pool_type) ~= "string" or pools[pool_type] then return end
 
     pools[pool_type] = {}
@@ -87,6 +110,10 @@ function TablePool.register_type(pool_type, cleaner, max_size)
         limit = MonitorConfig.PoolLimits[pool_type] or limit
     end
     limits[pool_type] = limit or DEFAULT_MAX_POOL_SIZE
+
+    if type(preallocate_count) == "number" and preallocate_count > 0 then
+        do_preallocate(pool_type, preallocate_count)
+    end
 end
 
 --- Вспомогательная функция для получения или создания пула
@@ -97,27 +124,6 @@ local function get_or_create_pool(pool_type)
         pool = pools[pool_type]
     end
     return pool
-end
-
---- Преаллокация таблиц для минимизации задержек при старте.
---- @param pool_type string Тип пула
---- @param count number Количество таблиц
-function TablePool.preallocate(pool_type, count)
-    if type(pool_type) ~= "string" or type(count) ~= "number" then return end
-
-    local pool = get_or_create_pool(pool_type)
-    local limit = limits[pool_type]
-    local current = #pool
-    if count > limit then count = limit end
-
-    if current < count then
-        local s = stats[pool_type]
-        for _ = 1, (count - current) do
-            local t = { __in_pool = pool_type }
-            pool[#pool + 1] = t
-            if s then s.created = s.created + 1 end
-        end
-    end
 end
 
 --- Возвращает чистую таблицу из пула.

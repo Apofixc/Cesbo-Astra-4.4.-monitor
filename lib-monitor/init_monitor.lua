@@ -229,13 +229,6 @@ initialize_phase(INIT_PHASES.FINAL, function()
         Logger.info("Init", "Библиотека lib-monitor успешно инициализирована")
     end
 
-    -- Преаллокация пулов для быстрого старта
-    if TablePool then
-        TablePool.preallocate("report", 20)
-        TablePool.preallocate("event", 20)
-        TablePool.preallocate("pid_stats", 50)
-    end
-
     collectgarbage()
 end)
 
