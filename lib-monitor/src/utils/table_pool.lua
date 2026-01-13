@@ -14,7 +14,6 @@ local collectgarbage = collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local Utils = ModuleManager.get_module("utils")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
@@ -71,64 +70,6 @@ local function release_nested(t, item_pool_type)
         t[k] = nil
     end
 end
-
--- Регистрация стандартных очистителей
-cleaners["event"] = function(t)
-    t.id = nil
-    t.type = nil
-    t.data = nil
-    t.priority = nil
-    t.timestamp = nil
-    t.source = nil
-    t.source_monitor = nil
-    t.is_table = nil
-    t.json_cache = nil
-end
-
-cleaners["pid_stats"] = function(t)
-    t.type = nil
-    t.cc = nil
-    t.pes = nil
-    t.sc = nil
-end
-
-cleaners["log_entry"] = function(t)
-    t.timestamp = nil
-    t.level = nil
-    t.message = nil
-    t.context_id = nil
-    t.msg = nil
-end
-
-cleaners["retry_item"] = function(t)
-    t.config = nil
-    t.data = nil
-    t.type = nil
-    t.retries = nil
-    t.time = nil
-end
-
-cleaners["lvc_wrapper"] = function(t)
-    t.data = nil
-    t.timestamp = nil
-end
-
-cleaners["report"] = function(t)
-    clear_table(t, true)
-end
-
-local function generic_cleaner(t)
-    if Utils and Utils.table_clear then
-        Utils.table_clear(t)
-    else
-        for k in pairs(t) do t[k] = nil end
-    end
-end
-
-cleaners["lvc_entry"] = generic_cleaner
-cleaners["lvc_sub"] = generic_cleaner
-cleaners["generic"] = generic_cleaner
-cleaners["batch_queue"] = generic_cleaner
 
 --- Регистрирует новый тип пула с кастомным очистителем и лимитом
 --- @param pool_type string Тип пула
@@ -234,7 +175,8 @@ function TablePool.release(t, pool_type, deep_or_nested)
                 cleaner(t, deep_or_nested)
             end
         else
-            -- Fallback логика
+            -- Fallback логика (теперь с предупреждением, так как регистрация обязательна)
+            Logger.error(COMPONENT_NAME, "Тип пула '%s' не зарегистрирован! Используется медленная очистка.", pool_type)
             if type(deep_or_nested) == "string" then
                 release_nested(t, deep_or_nested)
             else

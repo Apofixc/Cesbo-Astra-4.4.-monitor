@@ -318,4 +318,12 @@ function BaseMonitor:resume()
     return true
 end
 
+-- Регистрация пулов при загрузке модуля
+local tp = ModuleManager.get_module("table_pool")
+if tp then
+    tp.register_type("generic", function(t)
+        for k in pairs(t) do t[k] = nil end
+    end)
+end
+
 return BaseMonitor

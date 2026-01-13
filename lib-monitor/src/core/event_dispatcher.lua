@@ -414,4 +414,33 @@ function EventDispatcher:shutdown()
     self._lvc_size = 0
 end
 
+-- Регистрация пулов при загрузке модуля
+local tp = ModuleManager.get_module("table_pool")
+if tp then
+    tp.register_type("event", function(t)
+        t.id = nil
+        t.type = nil
+        t.data = nil
+        t.priority = nil
+        t.timestamp = nil
+        t.source = nil
+        t.source_monitor = nil
+        t.is_table = nil
+        t.json_cache = nil
+    end)
+
+    tp.register_type("lvc_entry", function(t)
+        for k in pairs(t) do t[k] = nil end
+    end)
+
+    tp.register_type("lvc_sub", function(t)
+        for k in pairs(t) do t[k] = nil end
+    end)
+
+    tp.register_type("lvc_wrapper", function(t)
+        t.data = nil
+        t.timestamp = nil
+    end)
+end
+
 return EventDispatcher

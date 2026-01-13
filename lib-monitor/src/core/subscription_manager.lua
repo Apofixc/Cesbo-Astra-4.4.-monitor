@@ -678,4 +678,23 @@ function SubscriptionManager:get_all_subscriptions()
     return res
 end
 
+-- Регистрация пулов при загрузке модуля
+local tp = ModuleManager.get_module("table_pool")
+if tp then
+    tp.register_type("retry_item", function(t)
+        t.config = nil
+        t.data = nil
+        t.type = nil
+        t.retries = nil
+        t.time = nil
+    end)
+
+    tp.register_type("batch_queue", function(t)
+        t.events = t.events or {}
+        -- Очищаем массив событий, если он есть
+        for i = 1, #t.events do t.events[i] = nil end
+        t.last_flush = nil
+    end)
+end
+
 return SubscriptionManager

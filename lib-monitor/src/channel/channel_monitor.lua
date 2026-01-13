@@ -575,4 +575,33 @@ function ChannelMonitor:update_parameters(params)
     return true
 end
 
+-- Регистрация пулов при загрузке модуля
+local tp = ModuleManager.get_module("table_pool")
+if tp then
+    tp.register_type("report", function(t, deep)
+        if deep then
+            local function clear_table(tbl, visited)
+                if type(tbl) ~= "table" then return end
+                visited = visited or {}
+                if visited[tbl] then return end
+                visited[tbl] = true
+                for k, v in pairs(tbl) do
+                    if type(v) == "table" then clear_table(v, visited) end
+                    tbl[k] = nil
+                end
+            end
+            clear_table(t)
+        else
+            for k in pairs(t) do t[k] = nil end
+        end
+    end)
+
+    tp.register_type("pid_stats", function(t)
+        t.type = nil
+        t.cc = nil
+        t.pes = nil
+        t.sc = nil
+    end)
+end
+
 return ChannelMonitor

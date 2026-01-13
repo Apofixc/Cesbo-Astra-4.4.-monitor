@@ -348,4 +348,16 @@ function Logger.with_error(func, ...)
     return unpack(results, 2)
 end
 
+-- Регистрация пулов при загрузке модуля
+local tp = ModuleManager.get_module("table_pool")
+if tp then
+    tp.register_type("log_entry", function(t)
+        t.timestamp = nil
+        t.level = nil
+        t.message = nil
+        t.context_id = nil
+        t.msg = nil
+    end)
+end
+
 return Logger
