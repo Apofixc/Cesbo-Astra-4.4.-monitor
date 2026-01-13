@@ -16,6 +16,7 @@ local collectgarbage = collectgarbage
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
@@ -31,10 +32,11 @@ local cleaners = {} -- Кастомные функции очистки: type ->
 local limits = {}   -- Лимиты размеров: type -> number
 local stats = {}    -- Статистика использования: type -> { hits, misses, created }
 
--- Конфигурация адаптивности
-local ADAPTIVE_THRESHOLD = 0.2 -- Порог промахов (20%) для расширения
-local ADAPTIVE_STEP = 0.25      -- Шаг изменения лимита (25%)
-local MIN_LIMIT = 10            -- Минимальный лимит
+-- Конфигурация адаптивности (приоритет: MonitorConfig -> значения по умолчанию)
+local ADAPTIVE_THRESHOLD = (MonitorConfig and MonitorConfig.PoolAdaptiveThreshold) or 0.2
+local ADAPTIVE_STEP = (MonitorConfig and MonitorConfig.PoolAdaptiveStep) or 0.25
+local MIN_LIMIT = (MonitorConfig and MonitorConfig.PoolMinLimit) or 10
+local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInterval) or 300
 
 -- Режим отладки для проверки чистоты возвращаемых таблиц
 local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
@@ -111,6 +113,18 @@ end
 --- @param preallocate_count? number Количество таблиц для преаллокации
 function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count)
     if type(pool_type) ~= "string" or pools[pool_type] then return end
+
+    -- Автоматический запуск обслуживания при первой регистрации пула
+    if MonitorConfig and not MonitorConfig.PoolMaintenanceStarted and Scheduler then
+        local s = Scheduler.get_instance()
+        if s then
+            s:add_task("table_pool_maintenance", function()
+                TablePool.maintain()
+            end, MAINTENANCE_INTERVAL)
+            MonitorConfig.PoolMaintenanceStarted = true
+            Logger.debug(COMPONENT_NAME, "Автоматическое обслуживание пулов запущено (интервал: %d сек)", MAINTENANCE_INTERVAL)
+        end
+    end
 
     pools[pool_type] = {}
 
