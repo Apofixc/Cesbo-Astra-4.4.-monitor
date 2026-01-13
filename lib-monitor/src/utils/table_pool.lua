@@ -129,11 +129,11 @@ TablePool.register_type("event", function(t)
     t.message = nil
 end)
 
-TablePool.register_type("report", function(t, nested_type)
-    if type(nested_type) == "string" then
-        release_nested(t, nested_type)
+TablePool.register_type("report", function(t, deep_or_nested)
+    if type(deep_or_nested) == "string" then
+        release_nested(t, deep_or_nested)
     else
-        clear_table(t)
+        clear_table(t, deep_or_nested)
     end
 end)
 
@@ -223,21 +223,23 @@ function TablePool.release(t, pool_type, deep_or_nested)
         init_stats(pool_type)
     end
 
+    -- Очистка выполняется ВСЕГДА, даже если пул полон.
+    -- Это критично для высвобождения вложенных таблиц обратно в их пулы.
+    local cleaner = cleaners[pool_type]
+    if cleaner then
+        cleaner(t, deep_or_nested)
+    else
+        -- Fallback логика
+        if type(deep_or_nested) == "string" then
+            release_nested(t, deep_or_nested)
+        else
+            clear_table(t, deep_or_nested)
+        end
+    end
+
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
 
     if #pool < limit then
-        local cleaner = cleaners[pool_type]
-        if cleaner then
-            cleaner(t, deep_or_nested)
-        else
-            -- Fallback логика
-            if type(deep_or_nested) == "string" then
-                release_nested(t, deep_or_nested)
-            else
-                clear_table(t, deep_or_nested)
-            end
-        end
-        
         t.__in_pool = pool_type -- Ставим метку перед возвратом в пул
 
         -- Валидация чистоты таблицы в режиме отладки

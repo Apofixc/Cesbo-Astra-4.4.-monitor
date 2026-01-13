@@ -171,11 +171,21 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         local cache_data = event_data
         if type(event_data) == "table" then
             -- Оптимизация: "Умное" копирование с использованием пула
+            -- Поддерживает до 2-х уровней вложенности (например, report_sys -> cpu -> usage)
             cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
                 if type(v) == "table" then
                     local sub = TablePool.get("lvc_sub")
-                    for sk, sv in pairs(v) do sub[sk] = sv end
+                    for sk, sv in pairs(v) do
+                        if type(sv) == "table" then
+                            -- Третий уровень вложенности (например, network[i])
+                            local sub2 = TablePool.get("lvc_sub")
+                            for ssk, ssv in pairs(sv) do sub2[ssk] = ssv end
+                            sub[sk] = sub2
+                        else
+                            sub[sk] = sv
+                        end
+                    end
                     cache_data[k] = sub
                 else
                     cache_data[k] = v
@@ -436,39 +446,55 @@ if tp then
         t.json_cache = nil
     end)
 
-    tp.register_type("lvc_entry", function(t)
+    tp.register_type("lvc_entry", function(t, nested_type)
         -- lvc_entry используется для кэширования данных событий (report_channel, report_dvb и т.д.)
-        -- Мы обнуляем все возможные поля отчетов для безопасности
-        t.type = nil
-        t.name = nil
-        t.display_name = nil
-        t.monitor = nil
-        t.status = nil
-        t.bitrate = nil
-        t.cc_errors = nil
-        t.pes_errors = nil
-        t.scrambled = nil
-        t.ready = nil
-        t.rate_stat = nil
-        t.stream = nil
-        t.format = nil
-        t.addr = nil
-        t.error = nil
-        t.name_adapter = nil
-        t.modulation = nil
-        t.source = nil
-        t.signal = nil
-        t.snr = nil
-        t.ber = nil
-        t.unc = nil
-        t.quality = nil
-        t.timestamp = nil
-        -- Для ResourceMonitor
-        t.pid = nil
-        t.uptime = nil
-        t.cpu = nil
-        t.memory = nil
-        t.network = nil
+        if type(nested_type) == "string" then
+            -- Если указан тип вложенных таблиц, возвращаем их в пул
+            local k = next(t)
+            while k ~= nil do
+                local v = t[k]
+                if type(v) == "table" then
+                    -- Рекурсивно возвращаем вложенные таблицы (поддержка 2-х уровней)
+                    tp.release(v, nested_type, nested_type)
+                end
+                t[k] = nil
+                k = next(t)
+            end
+        else
+            -- Стандартная очистка полей для плоских отчетов
+            t.type = nil
+            t.name = nil
+            t.display_name = nil
+            t.monitor = nil
+            t.status = nil
+            t.bitrate = nil
+            t.cc_errors = nil
+            t.pes_errors = nil
+            t.scrambled = nil
+            t.ready = nil
+            t.rate_stat = nil
+            t.stream = nil
+            t.format = nil
+            t.addr = nil
+            t.error = nil
+            t.name_adapter = nil
+            t.modulation = nil
+            t.source = nil
+            t.signal = nil
+            t.snr = nil
+            t.ber = nil
+            t.unc = nil
+            t.quality = nil
+            t.timestamp = nil
+            -- Для ResourceMonitor
+            t.pid = nil
+            t.uptime = nil
+            t.cpu = nil
+            t.memory = nil
+            t.network = nil
+            -- Очистка любых других полей, которые могли попасть
+            for k in pairs(t) do t[k] = nil end
+        end
     end)
 
     tp.register_type("lvc_sub", function(t)

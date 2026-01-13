@@ -493,6 +493,7 @@ if tp then
         t.type = nil
         t.name = nil
         t.name_adapter = nil
+        t.server = nil
         t.format = nil
         t.modulation = nil
         t.source = nil

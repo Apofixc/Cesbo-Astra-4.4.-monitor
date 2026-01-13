@@ -558,6 +558,7 @@ if tp then
         t.name = nil
         t.display_name = nil
         t.monitor = nil
+        t.server = nil
         t.status = nil
         t.bitrate = nil
         t.cc_errors = nil
@@ -576,6 +577,7 @@ if tp then
         t.name = nil
         t.display_name = nil
         t.monitor = nil
+        t.server = nil
         t.error = nil
         t.timestamp = nil
     end)
