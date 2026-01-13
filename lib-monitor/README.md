@@ -598,19 +598,6 @@ end
 }
 ```
 
-**GET `/api/monitors/rate_stat`**
-*   **Описание**: Получает статистику по битрейту.
-*   **Параметры**: `name` (имя монитора).
-*   **Примеры вызова**:
-    *   **Query String**: `/api/monitors/rate_stat?name=TV3`
-    *   **JSON Body**: `/api/monitors/rate_stat` + `{"name": "TV3"}`
-*   **JSON-ответ**:
-```json
-{
-  "bitrate": [12000, 12500, 12300]
-}
-```
-
 ### DVB Routes (`/api/dvb`)
 
 **GET `/api/dvb/adapters`**

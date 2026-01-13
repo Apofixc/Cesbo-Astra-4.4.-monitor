@@ -158,18 +158,6 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
     return HttpHelpers.success(server, client, ch_obj:get_stats())
 end
 
---- Получение статистики по битрейту
-function MonitorRoutes.get_monitor_rate_stat(server, client, request)
-    local params = HttpHelpers.get_params(request)
-    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
-    if not ok then return HttpHelpers.error(server, client, 400, err) end
-
-    local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
-
-    return HttpHelpers.success(server, client, ch_obj:get_rate_stat() or {})
-end
-
 --- Очистка статистики по PID и битрейту
 function MonitorRoutes.clear_monitor_pids(server, client, request)
     local params = HttpHelpers.get_params(request)

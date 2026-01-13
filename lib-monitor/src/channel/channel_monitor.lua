@@ -41,7 +41,6 @@ local ratio = Utils.ratio
 --- @field private _status table Текущий статус ошибок (CC/PES)
 --- @field private _stats table Статистика анализа по PID
 --- @field private _stats_count number Текущее количество отслеживаемых PID
---- @field private _rate_stat table|nil Статистика битрейта (если включено rate_stat)
 --- @field private _upstream any Объект апстрима
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
@@ -129,7 +128,6 @@ function ChannelMonitor.new(config, channel_data)
     }
     self._stats = {}
     self._stats_count = 0
-    self._rate_stat = nil
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
     return self
@@ -212,18 +210,6 @@ function ChannelMonitor:process_error_data(data)
     self:publish(r, "error", true)
 end
 
---- Обработка статистики битрейта
---- @param data table Данные статистики
-function ChannelMonitor:process_rate_stat_data(data)
-    local r = self:get_table_from_pool("report")
-    Utils.init_report(r, "Channel", self._name)
-    r.display_name = self._display_name
-    r.monitor = self._config.monitor
-    r.rate_stat = data
-    r.timestamp = os_time()
-    self:publish(r, "rate_stat", true)
-end
-
 --- Обработчик данных от анализатора Astra (горячий путь)
 --- @private
 --- @param data table Данные от анализатора
@@ -242,11 +228,6 @@ function ChannelMonitor:_on_astra_data(data)
 
     if data.analyze then
         self:process_analyze_data(data)
-    end
-
-    if data.rate_stat then
-        self._rate_stat = data.rate_stat
-        self:process_rate_stat_data(data.rate_stat)
     end
 
     if data.total then
@@ -413,12 +394,6 @@ function ChannelMonitor:get_stats()
     return stats
 end
 
---- Возвращает статистику битрейта (rate_stat)
---- @return table|nil Статистика битрейта
-function ChannelMonitor:get_rate_stat()
-    return self._rate_stat
-end
-
 --- Очищает статистику анализа
 function ChannelMonitor:clear_stats()
     if self._stats then
@@ -428,7 +403,6 @@ function ChannelMonitor:clear_stats()
     end
     self._stats = {}
     self._stats_count = 0
-    self._rate_stat = nil
 end
 
 --- Внутренний метод для сборки таблицы полного статуса.
@@ -446,6 +420,7 @@ function ChannelMonitor:_build_status_table(t, data)
     local scrambled = (data and data.total and data.total.scrambled) or (status.scrambled or false)
     local cc = status.cc_errors or 0
     local pes = status.pes_errors or 0
+    local rate_stat = data and data.rate_stat or nil
 
     -- Защита от nil
     t.status = ready
@@ -454,6 +429,7 @@ function ChannelMonitor:_build_status_table(t, data)
     t.pes_errors = pes
     t.scrambled = scrambled
     t.ready = ready
+    t.rate_stat = rate_stat
     t.stream = source and source.stream or "Unknown"
     t.format = source and source.format or "Unknown"
     t.addr = source and source.addr or "Unknown"
@@ -509,7 +485,6 @@ function ChannelMonitor:destroy(force)
     self._status = nil
     self._stats = nil
     self._stats_count = nil
-    self._rate_stat = nil
     self._upstream = nil
     self._last_active_id = nil
     self._cached_source = nil

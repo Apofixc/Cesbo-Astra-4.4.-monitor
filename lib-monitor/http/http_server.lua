@@ -280,7 +280,6 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/monitors/pause"] = { POST = MonitorRoutes.pause_monitor },
         ["/api/monitors/resume"] = { POST = MonitorRoutes.resume_monitor },
         ["/api/monitors/pids"] = { GET = MonitorRoutes.get_monitor_pids, DELETE = MonitorRoutes.clear_monitor_pids },
-        ["/api/monitors/rate_stat"] = { GET = MonitorRoutes.get_monitor_rate_stat },
 
         -- DVB Adapters
         ["/api/dvb/adapters"] = { GET = DvbRoutes.get_adapters },
