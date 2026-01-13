@@ -370,7 +370,14 @@ end
 function EventDispatcher:_safe_return_to_pool(event)
     local ok, err = pcall(function()
         if event.is_table and event.data and TablePool then
-            TablePool.release(event.data, "report")
+            -- Определяем тип отчета для корректного возврата в пул
+            local report_type = "report"
+            if event.type == "channels" then report_type = "report_channel"
+            elseif event.type == "error" then report_type = "report_error"
+            elseif event.type == "dvb" then report_type = "report_dvb"
+            elseif event.type == "sys" then report_type = "report_sys"
+            end
+            TablePool.release(event.data, report_type)
         end
 
         if TablePool then
@@ -430,10 +437,42 @@ if tp then
     end)
 
     tp.register_type("lvc_entry", function(t)
-        for k in pairs(t) do t[k] = nil end
+        -- lvc_entry используется для кэширования данных событий (report_channel, report_dvb и т.д.)
+        -- Мы обнуляем все возможные поля отчетов для безопасности
+        t.type = nil
+        t.name = nil
+        t.display_name = nil
+        t.monitor = nil
+        t.status = nil
+        t.bitrate = nil
+        t.cc_errors = nil
+        t.pes_errors = nil
+        t.scrambled = nil
+        t.ready = nil
+        t.rate_stat = nil
+        t.stream = nil
+        t.format = nil
+        t.addr = nil
+        t.error = nil
+        t.name_adapter = nil
+        t.modulation = nil
+        t.source = nil
+        t.signal = nil
+        t.snr = nil
+        t.ber = nil
+        t.unc = nil
+        t.quality = nil
+        t.timestamp = nil
+        -- Для ResourceMonitor
+        t.pid = nil
+        t.uptime = nil
+        t.cpu = nil
+        t.memory = nil
+        t.network = nil
     end)
 
     tp.register_type("lvc_sub", function(t)
+        -- lvc_sub используется для вложенных таблиц в LVC
         for k in pairs(t) do t[k] = nil end
     end)
 

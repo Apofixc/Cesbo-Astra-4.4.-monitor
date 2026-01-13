@@ -201,7 +201,7 @@ end
 --- Обработка ошибок потока
 --- @param data table Данные ошибки
 function ChannelMonitor:process_error_data(data)
-    local r = self:get_table_from_pool("report")
+    local r = self:get_table_from_pool("report_error")
     Utils.init_report(r, "Channel", self._name)
     r.display_name = self._display_name
     r.monitor = self._config.monitor
@@ -349,7 +349,7 @@ function ChannelMonitor:process_total_data(data)
         self:_clear_json_cache()
 
         -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
-        local r = self:get_table_from_pool("report")
+        local r = self:get_table_from_pool("report_channel")
         Utils.init_report(r, "Channel", self._name)
         r.display_name = self._display_name
         r.monitor = self._config.monitor
@@ -553,22 +553,31 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("report", function(t, deep)
-        if deep then
-            local function clear_table(tbl, visited)
-                if type(tbl) ~= "table" then return end
-                visited = visited or {}
-                if visited[tbl] then return end
-                visited[tbl] = true
-                for k, v in pairs(tbl) do
-                    if type(v) == "table" then clear_table(v, visited) end
-                    tbl[k] = nil
-                end
-            end
-            clear_table(t)
-        else
-            for k in pairs(t) do t[k] = nil end
-        end
+    tp.register_type("report_channel", function(t)
+        t.type = nil
+        t.name = nil
+        t.display_name = nil
+        t.monitor = nil
+        t.status = nil
+        t.bitrate = nil
+        t.cc_errors = nil
+        t.pes_errors = nil
+        t.scrambled = nil
+        t.ready = nil
+        t.rate_stat = nil
+        t.stream = nil
+        t.format = nil
+        t.addr = nil
+        t.timestamp = nil
+    end)
+
+    tp.register_type("report_error", function(t)
+        t.type = nil
+        t.name = nil
+        t.display_name = nil
+        t.monitor = nil
+        t.error = nil
+        t.timestamp = nil
     end)
 
     tp.register_type("pid_stats", function(t)

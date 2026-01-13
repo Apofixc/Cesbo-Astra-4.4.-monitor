@@ -690,10 +690,11 @@ if tp then
     end)
 
     tp.register_type("batch_queue", function(t)
-        t.events = t.events or {}
-        -- Очищаем массив событий, если он есть
-        for i = 1, #t.events do t.events[i] = nil end
         t.last_flush = nil
+        -- Очищаем массив событий, если он есть
+        if t.events then
+            for i = 1, #t.events do t.events[i] = nil end
+        end
     end)
 end
 

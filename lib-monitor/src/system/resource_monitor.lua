@@ -75,26 +75,26 @@ function ResourceMonitor.check()
     -- Используем пул для отчета
     if ResourceMonitor._report and TablePool then
         -- Явно указываем тип вложенного пула для возврата cpu, memory, network
-        TablePool.release(ResourceMonitor._report, "report", "generic")
+        TablePool.release(ResourceMonitor._report, "report_sys")
     end
 
-    local report = TablePool and TablePool.get("report") or {}
+    local report = TablePool and TablePool.get("report_sys") or {}
     report.pid = tonumber(ResourceMonitor._pid)
     report.uptime = now - ResourceMonitor._start_time
     
-    -- Вложенные таблицы тоже берем из пула для максимальной оптимизации
-    report.cpu = TablePool and TablePool.get("generic") or {}
+    -- Вложенные таблицы переиспользуются или берутся из пула
+    report.cpu = report.cpu or (TablePool and TablePool.get("sys_cpu") or {})
     report.cpu.usage = 0
     report.cpu.user = 0
     report.cpu.system = 0
     report.cpu.threads = tonumber(status.Threads) or 0
 
-    report.memory = TablePool and TablePool.get("generic") or {}
+    report.memory = report.memory or (TablePool and TablePool.get("sys_mem") or {})
     report.memory.lua = collectgarbage("count")
     report.memory.resident = tonumber(status.VmRSS and status.VmRSS:match("%d+")) or 0
     report.memory.virtual = tonumber(status.VmSize and status.VmSize:match("%d+")) or 0
 
-    report.network = TablePool and TablePool.get("generic") or {}
+    report.network = report.network or (TablePool and TablePool.get("sys_net") or {})
 
     -- Расчет CPU (на основе 100 тиков в секунду)
     if ResourceMonitor._last_cpu_check > 0 then
@@ -114,10 +114,10 @@ function ResourceMonitor.check()
     if utils_ifaddrs and type(utils_ifaddrs) == "function" then
         for name, addrs in pairs(utils_ifaddrs()) do
             if addrs.ipv4 and addrs.ipv4[1] then
-                table.insert(report.network, {
-                    interface = name,
-                    ip = addrs.ipv4[1]
-                })
+                local item = TablePool and TablePool.get("sys_net_item") or {}
+                item.interface = name
+                item.ip = addrs.ipv4[1]
+                table.insert(report.network, item)
             end
         end
     end
@@ -152,6 +152,56 @@ end
 --- @return boolean
 function ResourceMonitor.is_running()
     return true
+end
+
+-- Регистрация пулов при загрузке модуля
+if TablePool then
+    TablePool.register_type("report_sys", function(t)
+        t.pid = nil
+        t.uptime = nil
+        -- Вложенные таблицы cpu и memory НЕ зануляем, чтобы переиспользовать их структуру.
+        -- Но очищаем их поля.
+        if t.cpu then
+            t.cpu.usage = nil
+            t.cpu.user = nil
+            t.cpu.system = nil
+            t.cpu.threads = nil
+        end
+        if t.memory then
+            t.memory.lua = nil
+            t.memory.resident = nil
+            t.memory.virtual = nil
+        end
+        -- Сетевой массив: возвращаем элементы в пул
+        if t.network then
+            for i = 1, #t.network do
+                TablePool.release(t.network[i], "sys_net_item")
+                t.network[i] = nil
+            end
+        end
+    end)
+
+    TablePool.register_type("sys_cpu", function(t)
+        t.usage = nil
+        t.user = nil
+        t.system = nil
+        t.threads = nil
+    end)
+
+    TablePool.register_type("sys_mem", function(t)
+        t.lua = nil
+        t.resident = nil
+        t.virtual = nil
+    end)
+
+    TablePool.register_type("sys_net", function(t)
+        for i = 1, #t do t[i] = nil end
+    end)
+
+    TablePool.register_type("sys_net_item", function(t)
+        t.interface = nil
+        t.ip = nil
+    end)
 end
 
 -- Автоматический запуск при загрузке модуля

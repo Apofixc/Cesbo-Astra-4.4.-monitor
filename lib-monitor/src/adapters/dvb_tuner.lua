@@ -276,7 +276,7 @@ function DvbTuner:_on_astra_data(data)
         self:_clear_json_cache()
 
         -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
-        local r = self:get_table_from_pool("report")
+        local r = self:get_table_from_pool("report_dvb")
         Utils.init_report(r, "dvb", self._name)
         r.name_adapter = self._name
         r.format = self._config.type or ""
@@ -489,8 +489,20 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("dvb", function(t)
-        for k in pairs(t) do t[k] = nil end
+    tp.register_type("report_dvb", function(t)
+        t.type = nil
+        t.name = nil
+        t.name_adapter = nil
+        t.format = nil
+        t.modulation = nil
+        t.source = nil
+        t.status = nil
+        t.signal = nil
+        t.snr = nil
+        t.ber = nil
+        t.unc = nil
+        t.quality = nil
+        t.timestamp = nil
     end)
 end
 
