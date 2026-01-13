@@ -6,9 +6,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local pairs = pairs
-local table_insert = table.insert
-local table_remove = table.remove
+local next = next
 local type = type
 local collectgarbage = collectgarbage
 
@@ -33,6 +31,10 @@ local limits = {}
 local stats = {}
 local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
 
+-- Кэш для ускорения доступа к пулам и статистике
+local pool_cache = {}
+local stats_cache = {}
+
 --- Включает или выключает режим отладки для валидации чистоты таблиц
 --- @param enabled boolean
 function TablePool.set_debug(enabled)
@@ -43,25 +45,29 @@ end
 --- @param pool_type string
 local function init_stats(pool_type)
     if not stats[pool_type] then
-        stats[pool_type] = { hits = 0, misses = 0, created = 0 }
+        local s = { hits = 0, misses = 0, created = 0 }
+        stats[pool_type] = s
+        stats_cache[pool_type] = s
     end
 end
 
---- Очищает таблицу рекурсивно
+--- Очищает таблицу рекурсивно (оптимизированная версия)
 --- @param t table Таблица для очистки
 --- @param deep boolean|nil Флаг глубокой очистки
 --- @param visited table|nil Защита от циклических ссылок
 local function clear_table(t, deep, visited)
-    if type(t) ~= "table" then return end
-    visited = visited or {}
-    if visited[t] then return end
-    visited[t] = true
-
-    for k, v in pairs(t) do
+    local k = next(t)
+    while k ~= nil do
+        local v = t[k]
         if deep and type(v) == "table" then
-            clear_table(v, true, visited)
+            visited = visited or {}
+            if not visited[v] then
+                visited[v] = true
+                clear_table(v, true, visited)
+            end
         end
         t[k] = nil
+        k = next(t)
     end
 end
 
@@ -70,11 +76,14 @@ end
 --- @param item_pool_type string Тип пула для вложенных таблиц
 local function release_nested(t, item_pool_type)
     if type(t) ~= "table" then return end
-    for k, v in pairs(t) do
+    local k = next(t)
+    while k ~= nil do
+        local v = t[k]
         if type(v) == "table" then
             TablePool.release(v, item_pool_type)
         end
         t[k] = nil
+        k = next(t)
     end
 end
 
@@ -87,19 +96,46 @@ function TablePool.register_type(pool_type, cleaner, max_size)
     if type(cleaner) == "function" then
         cleaners[pool_type] = cleaner
     end
-    if type(max_size) == "number" then
-        limits[pool_type] = max_size
-    end
-
+    
+    local limit = max_size
     -- Переопределение лимита из конфигурации
     if MonitorConfig and MonitorConfig.PoolLimits and type(MonitorConfig.PoolLimits[pool_type]) == "number" then
-        limits[pool_type] = MonitorConfig.PoolLimits[pool_type]
+        limit = MonitorConfig.PoolLimits[pool_type]
     end
+    
+    limits[pool_type] = limit or DEFAULT_MAX_POOL_SIZE
+    
     if not pools[pool_type] then
         pools[pool_type] = {}
+        pool_cache[pool_type] = pools[pool_type]
     end
     init_stats(pool_type)
 end
+
+-- Регистрация стандартных типов для оптимизации
+TablePool.register_type("event", function(t)
+    t.id = nil
+    t.type = nil
+    t.data = nil
+    t.priority = nil
+    t.timestamp = nil
+    t.source = nil
+    t.source_monitor = nil
+    t.is_table = nil
+    t.json_cache = nil
+    t.pnr = nil
+    t.on_air = nil
+    t.value = nil
+    t.message = nil
+end)
+
+TablePool.register_type("report", function(t, nested_type)
+    if type(nested_type) == "string" then
+        release_nested(t, nested_type)
+    else
+        clear_table(t)
+    end
+end)
 
 --- Преаллокация таблиц в пуле
 --- @param pool_type string Тип пула
@@ -109,16 +145,18 @@ function TablePool.preallocate(pool_type, count)
     if not pool then
         pool = {}
         pools[pool_type] = pool
+        pool_cache[pool_type] = pool
     end
     init_stats(pool_type)
 
     local current = #pool
     if current < count then
+        local s = stats_cache[pool_type]
         for _ = 1, (count - current) do
             local t = {}
             t.__in_pool = pool_type -- Помечаем для O(1) проверки
-            table_insert(pool, t)
-            stats[pool_type].created = stats[pool_type].created + 1
+            pool[#pool + 1] = t
+            s.created = s.created + 1
         end
     end
 end
@@ -129,22 +167,31 @@ end
 --- @return table Свободная таблица
 function TablePool.get(pool_type)
     pool_type = pool_type or "generic"
-    local pool = pools[pool_type]
+    local pool = pool_cache[pool_type]
     if not pool then
         pool = {}
         pools[pool_type] = pool
+        pool_cache[pool_type] = pool
+        init_stats(pool_type)
     end
-    init_stats(pool_type)
 
-    if #pool > 0 then
-        local t = table_remove(pool)
+    local size = #pool
+    if size > 0 then
+        local t = pool[size]
+        pool[size] = nil
         t.__in_pool = nil -- Снимаем метку
-        stats[pool_type].hits = stats[pool_type].hits + 1
+        local s = stats_cache[pool_type]
+        s.hits = s.hits + 1
         return t
     end
 
-    stats[pool_type].misses = stats[pool_type].misses + 1
-    stats[pool_type].created = stats[pool_type].created + 1
+    local s = stats_cache[pool_type]
+    if not s then
+        init_stats(pool_type)
+        s = stats_cache[pool_type]
+    end
+    s.misses = s.misses + 1
+    s.created = s.created + 1
     return {}
 end
 
@@ -168,27 +215,22 @@ function TablePool.release(t, pool_type, deep_or_nested)
         return
     end
 
-    local pool = pools[pool_type]
+    local pool = pool_cache[pool_type]
     if not pool then
         pool = {}
         pools[pool_type] = pool
+        pool_cache[pool_type] = pool
+        init_stats(pool_type)
     end
-    init_stats(pool_type)
 
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
 
     if #pool < limit then
         local cleaner = cleaners[pool_type]
         if cleaner then
-            -- Если это отчет и передан тип вложенного пула, используем специальную логику
-            if pool_type == "report" and type(deep_or_nested) == "string" then
-                release_nested(t, deep_or_nested)
-            else
-                cleaner(t, deep_or_nested)
-            end
+            cleaner(t, deep_or_nested)
         else
-            -- Fallback логика (теперь с предупреждением, так как регистрация обязательна)
-            Logger.error(COMPONENT_NAME, "Тип пула '%s' не зарегистрирован! Используется медленная очистка.", pool_type)
+            -- Fallback логика
             if type(deep_or_nested) == "string" then
                 release_nested(t, deep_or_nested)
             else
@@ -200,15 +242,17 @@ function TablePool.release(t, pool_type, deep_or_nested)
 
         -- Валидация чистоты таблицы в режиме отладки
         if debug_mode then
-            for k, v in pairs(t) do
+            local k = next(t)
+            while k ~= nil do
                 if k ~= "__in_pool" then
                     Logger.error(COMPONENT_NAME, "Таблица типа '%s' возвращена в пул не полностью очищенной! Поле: %s", pool_type, tostring(k))
                     t[k] = nil -- Принудительная очистка в режиме отладки
                 end
+                k = next(t, k)
             end
         end
 
-        table_insert(pool, t)
+        pool[#pool + 1] = t
     end
 end
 
@@ -217,12 +261,21 @@ end
 function TablePool.clear_all()
     for name, pool in pairs(pools) do
         for i = 1, #pool do
-            if pool[i] then
-                pool[i].__in_pool = nil
+            local t = pool[i]
+            if t then
+                t.__in_pool = nil
                 pool[i] = nil
             end
         end
         pools[name] = {}
+        pool_cache[name] = pools[name]
+        
+        -- Очистка статистики при полной очистке пулов для предотвращения утечек
+        if stats[name] then
+            stats[name].hits = 0
+            stats[name].misses = 0
+            stats[name].created = 0
+        end
     end
     -- Согласно astra-api-usage.md: ручное управление памятью обязательно
     collectgarbage()
