@@ -204,8 +204,13 @@ if TablePool then
         t.virtual = nil
     end)
 
-    TablePool.register_type("sys_net", function(t)
-        for i = 1, #t do t[i] = nil end
+    TablePool.register_type("sys_net", function(t, nested_type)
+        for i = 1, #t do
+            if nested_type == "sys_net_item" then
+                TablePool.release(t[i], "sys_net_item")
+            end
+            t[i] = nil
+        end
     end)
 
     TablePool.register_type("sys_net_item", function(t)

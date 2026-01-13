@@ -72,6 +72,19 @@ local function generate_event_id()
     return "evt_" .. _event_counter
 end
 
+--- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
+--- @param data any Данные для копирования
+--- @return any Копия данных
+local function deep_copy_to_pool(data)
+    if type(data) ~= "table" then return data end
+    
+    local copy = TablePool.get("lvc_sub")
+    for k, v in pairs(data) do
+        copy[k] = deep_copy_to_pool(v)
+    end
+    return copy
+end
+
 --- Возвращает единственный экземпляр EventDispatcher (Singleton)
 --- @return EventDispatcher Экземпляр диспетчера
 function EventDispatcher.get_instance()
@@ -170,26 +183,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local cache_data = event_data
         if type(event_data) == "table" then
-            -- Оптимизация: "Умное" копирование с использованием пула
-            -- Поддерживает до 2-х уровней вложенности (например, report_sys -> cpu -> usage)
+            -- Глубокое копирование данных в пул для LVC
             cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
-                if type(v) == "table" then
-                    local sub = TablePool.get("lvc_sub")
-                    for sk, sv in pairs(v) do
-                        if type(sv) == "table" then
-                            -- Третий уровень вложенности (например, network[i])
-                            local sub2 = TablePool.get("lvc_sub")
-                            for ssk, ssv in pairs(sv) do sub2[ssk] = ssv end
-                            sub[sk] = sub2
-                        else
-                            sub[sk] = sv
-                        end
-                    end
-                    cache_data[k] = sub
-                else
-                    cache_data[k] = v
-                end
+                cache_data[k] = deep_copy_to_pool(v)
             end
         end
 
@@ -497,9 +494,21 @@ if tp then
         end
     end)
 
-    tp.register_type("lvc_sub", function(t)
+    tp.register_type("lvc_sub", function(t, nested_type)
         -- lvc_sub используется для вложенных таблиц в LVC
-        for k in pairs(t) do t[k] = nil end
+        if type(nested_type) == "string" then
+            -- Рекурсивное высвобождение вложенных таблиц
+            local k, v = next(t)
+            while k ~= nil do
+                if type(v) == "table" then
+                    tp.release(v, nested_type, nested_type)
+                end
+                t[k] = nil
+                k, v = next(t)
+            end
+        else
+            for k in pairs(t) do t[k] = nil end
+        end
     end)
 
     tp.register_type("lvc_wrapper", function(t)

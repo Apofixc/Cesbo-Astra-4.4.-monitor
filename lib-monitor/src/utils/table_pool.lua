@@ -9,6 +9,7 @@
 local next = next
 local type = type
 local collectgarbage = collectgarbage
+local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -55,26 +56,44 @@ end
 local visited_cache = {}
 local visited_depth = 0
 
---- Очищает таблицу рекурсивно (оптимизированная версия)
---- @param t table Таблица для очистки
---- @param deep boolean|nil Флаг глубокой очистки
-local function clear_table(t, deep)
+--- Очищает кэш посещенных объектов
+local function clear_visited_cache()
+    for k in next, visited_cache do
+        visited_cache[k] = nil
+    end
+    visited_depth = 0
+end
+
+--- Внутренняя рекурсивная функция очистки
+--- @param t table
+--- @param deep boolean
+local function do_clear_table(t, deep)
+    -- 1. Быстрая очистка массивной части (Lua 5.2+ оптимизация)
+    local len = #t
+    if len > 0 then
+        for i = 1, len do
+            local v = t[i]
+            if deep and type(v) == "table" then
+                if not visited_cache[v] then
+                    visited_cache[v] = true
+                    visited_depth = visited_depth + 1
+                    do_clear_table(v, true)
+                    visited_depth = visited_depth - 1
+                end
+            end
+            t[i] = nil
+        end
+    end
+
+    -- 2. Очистка хеш-части
     local k, v = next(t)
     while k ~= nil do
         if deep and type(v) == "table" then
             if not visited_cache[v] then
                 visited_cache[v] = true
                 visited_depth = visited_depth + 1
-                clear_table(v, true)
+                do_clear_table(v, true)
                 visited_depth = visited_depth - 1
-                if visited_depth == 0 then
-                    -- Очищаем кэш только на самом верхнем уровне
-                    local vk = next(visited_cache)
-                    while vk ~= nil do
-                        visited_cache[vk] = nil
-                        vk = next(visited_cache)
-                    end
-                end
             end
         end
         t[k] = nil
@@ -82,15 +101,42 @@ local function clear_table(t, deep)
     end
 end
 
+--- Очищает таблицу рекурсивно (оптимизированная версия с защитой)
+--- @param t table Таблица для очистки
+--- @param deep boolean|nil Флаг глубокой очистки
+local function clear_table(t, deep)
+    if not deep then
+        -- Максимально быстрый путь для плоских таблиц
+        local k = next(t)
+        while k ~= nil do
+            t[k] = nil
+            k = next(t)
+        end
+        return
+    end
+
+    -- Глубокая очистка с защитой от переполнения стека и ошибок
+    visited_depth = 0
+    local ok, err = pcall(do_clear_table, t, true)
+    
+    -- Гарантированный сброс кэша
+    clear_visited_cache()
+    
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Ошибка при глубокой очистке таблицы: %s", tostring(err))
+    end
+end
+
 --- Рекурсивно возвращает вложенные таблицы в пул
 --- @param t table Таблица, содержащая вложенные таблицы
 --- @param item_pool_type string Тип пула для вложенных таблиц
-local function release_nested(t, item_pool_type)
+--- @param recursive boolean|string|nil Флаг рекурсивного высвобождения
+local function release_nested(t, item_pool_type, recursive)
     if type(t) ~= "table" then return end
     local k, v = next(t)
     while k ~= nil do
         if type(v) == "table" then
-            TablePool.release(v, item_pool_type)
+            TablePool.release(v, item_pool_type, recursive)
         end
         t[k] = nil
         k, v = next(t)
@@ -234,7 +280,8 @@ function TablePool.release(t, pool_type, deep_or_nested)
     else
         -- Fallback логика
         if type(deep_or_nested) == "string" then
-            release_nested(t, deep_or_nested)
+            -- Если передана строка, считаем это типом для вложенных таблиц и чистим рекурсивно
+            release_nested(t, deep_or_nested, deep_or_nested)
         else
             clear_table(t, deep_or_nested)
         end
