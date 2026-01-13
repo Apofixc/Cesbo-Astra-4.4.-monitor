@@ -51,20 +51,34 @@ local function init_stats(pool_type)
     end
 end
 
+-- Статический кэш для защиты от циклических ссылок (избегаем аллокаций)
+local visited_cache = {}
+local visited_depth = 0
+
 --- Очищает таблицу рекурсивно (оптимизированная версия)
 --- @param t table Таблица для очистки
 --- @param deep boolean|nil Флаг глубокой очистки
---- @param visited table|nil Защита от циклических ссылок
-local function clear_table(t, deep, visited)
-    for k, v in pairs(t) do
+local function clear_table(t, deep)
+    local k, v = next(t)
+    while k ~= nil do
         if deep and type(v) == "table" then
-            visited = visited or {}
-            if not visited[v] then
-                visited[v] = true
-                clear_table(v, true, visited)
+            if not visited_cache[v] then
+                visited_cache[v] = true
+                visited_depth = visited_depth + 1
+                clear_table(v, true)
+                visited_depth = visited_depth - 1
+                if visited_depth == 0 then
+                    -- Очищаем кэш только на самом верхнем уровне
+                    local vk = next(visited_cache)
+                    while vk ~= nil do
+                        visited_cache[vk] = nil
+                        vk = next(visited_cache)
+                    end
+                end
             end
         end
         t[k] = nil
+        k, v = next(t)
     end
 end
 
@@ -73,11 +87,13 @@ end
 --- @param item_pool_type string Тип пула для вложенных таблиц
 local function release_nested(t, item_pool_type)
     if type(t) ~= "table" then return end
-    for k, v in pairs(t) do
+    local k, v = next(t)
+    while k ~= nil do
         if type(v) == "table" then
             TablePool.release(v, item_pool_type)
         end
         t[k] = nil
+        k, v = next(t)
     end
 end
 
@@ -106,51 +122,33 @@ function TablePool.register_type(pool_type, cleaner, max_size)
     init_stats(pool_type)
 end
 
--- Регистрация стандартных типов для оптимизации
-TablePool.register_type("event", function(t)
-    t.id = nil
-    t.type = nil
-    t.data = nil
-    t.priority = nil
-    t.timestamp = nil
-    t.source = nil
-    t.source_monitor = nil
-    t.is_table = nil
-    t.json_cache = nil
-    t.pnr = nil
-    t.on_air = nil
-    t.value = nil
-    t.message = nil
-end)
-
-TablePool.register_type("report", function(t, deep_or_nested)
-    if type(deep_or_nested) == "string" then
-        release_nested(t, deep_or_nested)
-    else
-        clear_table(t, deep_or_nested)
-    end
-end)
-
 --- Преаллокация таблиц в пуле
 --- @param pool_type string Тип пула
 --- @param count number Количество таблиц
 function TablePool.preallocate(pool_type, count)
+    if type(pool_type) ~= "string" or type(count) ~= "number" then return end
+    
     local pool = pools[pool_type]
     if not pool then
         pool = {}
         pools[pool_type] = pool
         pool_cache[pool_type] = pool
+        init_stats(pool_type)
     end
-    init_stats(pool_type)
 
+    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     local current = #pool
+    
+    -- Уважаем лимит при преаллокации
+    if count > limit then count = limit end
+    
     if current < count then
         local s = stats_cache[pool_type]
         for _ = 1, (count - current) do
             local t = {}
-            t.__in_pool = pool_type -- Помечаем для O(1) проверки
+            t.__in_pool = pool_type
             pool[#pool + 1] = t
-            s.created = s.created + 1
+            if s then s.created = s.created + 1 end
         end
     end
 end
