@@ -124,12 +124,8 @@ end
 function EventDispatcher:_release_lvc_entry(entry)
     if not entry then return end
     if type(entry.data) == "table" then
-        for k, v in pairs(entry.data) do
-            if type(v) == "table" then
-                TablePool.release(v, "lvc_sub")
-            end
-        end
-        TablePool.release(entry.data, "lvc_entry")
+        -- Рекурсивно возвращаем вложенные таблицы lvc_sub в пул
+        TablePool.release(entry.data, "lvc_entry", "lvc_sub")
     end
     if TablePool then
         TablePool.release(entry, "lvc_wrapper")

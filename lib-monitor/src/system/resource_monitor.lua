@@ -74,7 +74,8 @@ function ResourceMonitor.check()
 
     -- Используем пул для отчета
     if ResourceMonitor._report and TablePool then
-        TablePool.release(ResourceMonitor._report, "report")
+        -- Явно указываем тип вложенного пула для возврата cpu, memory, network
+        TablePool.release(ResourceMonitor._report, "report", "generic")
     end
 
     local report = TablePool and TablePool.get("report") or {}
