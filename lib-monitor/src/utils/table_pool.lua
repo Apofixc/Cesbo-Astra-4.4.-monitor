@@ -64,10 +64,12 @@ end
 --- @param deep boolean Флаг глубокой очистки (рекурсия по обычным таблицам)
 --- @param depth number Текущая глубина рекурсии
 local function do_clear_table(t, deep, depth)
+    local default_child_pool = type(deep) == "string" and deep or nil
+
     for k, v in next, t do
         if k ~= "__pool_type" then
             if type(v) == "table" and not visited_cache[v] then
-                local v_pool_type = v.__pool_type
+                local v_pool_type = v.__pool_type or default_child_pool
                 if v_pool_type then
                     -- Автоматический возврат вложенного объекта в его пул
                     TablePool.release(v, v_pool_type, deep, depth + 1)
@@ -240,9 +242,9 @@ function TablePool.release(t, pool_type, deep, depth)
         pool = pools[pool_type]
     end
 
-    -- Оптимизация: если пул полон и это корень, не тратим время на очистку
+    -- Оптимизация: если пул полон и не требуется глубокая очистка, выходим сразу
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
-    if depth == 0 and #pool >= limit then
+    if depth == 0 and #pool >= limit and not deep then
         visited_count = visited_count - 1
         if visited_count == 0 then clear_visited_cache() end
         return
@@ -252,15 +254,16 @@ function TablePool.release(t, pool_type, deep, depth)
 
     -- Выполняем очистку
     local cleaner = cleaners[pool_type]
+    local is_deep = (deep == true or type(deep) == "string")
     if cleaner then
         -- Кастомные очистители запускаем в pcall для безопасности
-        local ok, err = pcall(cleaner, t, deep == true, depth)
+        local ok, err = pcall(cleaner, t, is_deep, depth)
         if not ok then
             Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err))
         end
     elseif depth < MAX_DEPTH then
         -- Стандартная очистка (быстрее без pcall)
-        do_clear_table(t, deep == true, depth)
+        do_clear_table(t, is_deep, depth)
     end
 
     if getmetatable(t) then setmetatable(t, nil) end
