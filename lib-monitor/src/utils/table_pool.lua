@@ -8,6 +8,7 @@
 -- 1. Стандартные Lua функции
 local next = next
 local type = type
+local setmetatable = setmetatable
 local collectgarbage = collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
@@ -58,9 +59,10 @@ local function do_clear_table(t, deep, depth)
     for k, v in next, t do
         if k ~= "__pool_type" then
             if type(v) == "table" and not visited_cache[v] then
-                if v.__pool_type then
+                local v_pool_type = v.__pool_type
+                if v_pool_type then
                     -- Автоматический возврат вложенного объекта в его пул
-                    TablePool.release(v, v.__pool_type, deep, depth + 1)
+                    TablePool.release(v, v_pool_type, deep, depth + 1)
                 elseif deep and depth < MAX_DEPTH then
                     -- Рекурсивная очистка обычной вложенной таблицы
                     visited_cache[v] = true
@@ -77,7 +79,8 @@ end
 --- @param count number Количество таблиц
 local function do_preallocate(pool_type, count)
     local pool = pools[pool_type]
-    local limit = limits[pool_type]
+    if not pool then return end
+    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     local current = #pool
     if count > limit then count = limit end
 
@@ -118,22 +121,16 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     end
 end
 
---- Вспомогательная функция для получения или создания пула
-local function get_or_create_pool(pool_type)
-    local pool = pools[pool_type]
-    if not pool then
-        TablePool.register_type(pool_type)
-        pool = pools[pool_type]
-    end
-    return pool
-end
-
 --- Возвращает чистую таблицу из пула.
 --- @param pool_type? string Тип пула (по умолчанию "generic")
 --- @return table Свободная таблица
 function TablePool.get(pool_type)
     pool_type = pool_type or "generic"
-    local pool = pools[pool_type] or get_or_create_pool(pool_type)
+    local pool = pools[pool_type]
+    if not pool then
+        TablePool.register_type(pool_type)
+        pool = pools[pool_type]
+    end
 
     local size = #pool
     if size > 0 then
@@ -155,15 +152,22 @@ function TablePool.get(pool_type)
         s.created = s.created + 1
     end
 
+    -- Оптимизация: если пул пуст, преаллоцируем немного объектов для будущего использования.
+    -- Делаем это только для достаточно больших пулов, чтобы не заполнять их мгновенно.
+    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
+    if limit >= 20 then
+        do_preallocate(pool_type, 10)
+    end
+
     return { __pool_type = pool_type }
 end
 
 --- Возвращает таблицу в пул для повторного использования.
 --- @param t table Таблица для возврата
 --- @param pool_type? string Тип пула (если nil, берется из объекта)
---- @param deep_or_nested? boolean|string Флаг глубокой очистки или тип вложенных таблиц (legacy)
+--- @param deep? boolean Флаг глубокой очистки (рекурсивный возврат вложенных таблиц)
 --- @param _depth? number Внутренний параметр глубины рекурсии
-function TablePool.release(t, pool_type, deep_or_nested, _depth)
+function TablePool.release(t, pool_type, deep, _depth)
     if type(t) ~= "table" or visited_cache[t] then return end
 
     local depth = _depth or 0
@@ -182,13 +186,19 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
         return
     end
 
-    local pool = pools[pool_type] or get_or_create_pool(pool_type)
+    local pool = pools[pool_type]
+    if not pool then
+        TablePool.register_type(pool_type)
+        pool = pools[pool_type]
+    end
+
     local limit = limits[pool_type]
     local pool_full = #pool >= limit
 
-    -- Оптимизация: если пул полон и не требуется рекурсия, просто выбрасываем объект
-    -- Но сначала очищаем метатаблицу для безопасности
-    if pool_full and not deep_or_nested then
+    -- Оптимизация: если пул полон и не требуется рекурсия, просто выбрасываем объект.
+    -- Однако мы все равно очищаем таблицу, чтобы разорвать ссылки на объекты.
+    if pool_full and not deep then
+        do_clear_table(t, false, depth)
         setmetatable(t, nil)
         if depth == 0 then
             visited_count = visited_count - 1
@@ -203,11 +213,11 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
     local cleaner = cleaners[pool_type]
     if cleaner then
         -- Используем кастомный очиститель, если он есть
-        cleaner(t, deep_or_nested)
+        cleaner(t, deep)
     else
         -- Стандартная очистка с поддержкой авто-рекурсии
         if depth < MAX_DEPTH then
-            do_clear_table(t, deep_or_nested == true, depth)
+            do_clear_table(t, deep == true, depth)
         end
     end
 
@@ -228,7 +238,7 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
 
         pool[#pool + 1] = t
     else
-        -- Пул полон, но мы зашли сюда из-за deep_or_nested
+        -- Пул полон, но мы зашли сюда из-за deep
         setmetatable(t, nil)
     end
 
