@@ -31,6 +31,13 @@ local pools = {}
 local cleaners = {}
 local limits = {}
 local stats = {}
+local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
+
+--- Включает или выключает режим отладки для валидации чистоты таблиц
+--- @param enabled boolean
+function TablePool.set_debug(enabled)
+    debug_mode = enabled
+end
 
 --- Инициализирует структуру статистики для типа
 --- @param pool_type string
@@ -82,6 +89,11 @@ function TablePool.register_type(pool_type, cleaner, max_size)
     end
     if type(max_size) == "number" then
         limits[pool_type] = max_size
+    end
+
+    -- Переопределение лимита из конфигурации
+    if MonitorConfig and MonitorConfig.PoolLimits and type(MonitorConfig.PoolLimits[pool_type]) == "number" then
+        limits[pool_type] = MonitorConfig.PoolLimits[pool_type]
     end
     if not pools[pool_type] then
         pools[pool_type] = {}
@@ -185,6 +197,17 @@ function TablePool.release(t, pool_type, deep_or_nested)
         end
         
         t.__in_pool = pool_type -- Ставим метку перед возвратом в пул
+
+        -- Валидация чистоты таблицы в режиме отладки
+        if debug_mode then
+            for k, v in pairs(t) do
+                if k ~= "__in_pool" then
+                    Logger.error(COMPONENT_NAME, "Таблица типа '%s' возвращена в пул не полностью очищенной! Поле: %s", pool_type, tostring(k))
+                    t[k] = nil -- Принудительная очистка в режиме отладки
+                end
+            end
+        end
+
         table_insert(pool, t)
     end
 end

@@ -105,6 +105,8 @@ MonitorConfig.BatchFlushInterval = 0.5 -- Интервал сброса буфе
 MonitorConfig.BatchMaxSize = 50 -- Максимальный размер пачки событий
 MonitorConfig.DefaultBatchMode = "single" -- Режим по умолчанию ("single" или "array")
 MonitorConfig.MaxPoolSize = 100 -- Максимальный размер пула таблиц
+MonitorConfig.PoolLimits = {} -- Индивидуальные лимиты для типов пулов (тип -> число)
+MonitorConfig.PoolDebug = false -- Режим отладки пулов (валидация чистоты)
 MonitorConfig.EventBatchLimit = 100 -- Лимит событий за один проход очереди
 MonitorConfig.subscribers = {}
 
@@ -147,6 +149,9 @@ function MonitorConfig.validate()
     if MonitorConfig.DefaultBatchMode ~= "single" and MonitorConfig.DefaultBatchMode ~= "array" then
         return false, "Invalid DefaultBatchMode: " .. tostring(MonitorConfig.DefaultBatchMode)
     end
+
+    if type(MonitorConfig.PoolLimits) ~= "table" then return false, "PoolLimits must be a table" end
+    if type(MonitorConfig.PoolDebug) ~= "boolean" then return false, "PoolDebug must be a boolean" end
 
     return true
 end
