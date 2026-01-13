@@ -12,6 +12,7 @@ local pairs = _G.pairs
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
+local TablePool = ModuleManager.get_module("table_pool")
 
 -- Внутреннее состояние
 ResourceMonitor._pid = nil
@@ -71,22 +72,28 @@ function ResourceMonitor.check()
         end
     end
 
-    local report = {
-        pid = tonumber(ResourceMonitor._pid),
-        uptime = now - ResourceMonitor._start_time,
-        cpu = {
-            usage = 0,
-            user = 0,
-            system = 0,
-            threads = tonumber(status.Threads) or 0
-        },
-        memory = {
-            lua = collectgarbage("count"),
-            resident = tonumber(status.VmRSS and status.VmRSS:match("%d+")) or 0,
-            virtual = tonumber(status.VmSize and status.VmSize:match("%d+")) or 0,
-        },
-        network = {}
-    }
+    -- Используем пул для отчета
+    if ResourceMonitor._report and TablePool then
+        TablePool.release(ResourceMonitor._report, "report")
+    end
+
+    local report = TablePool and TablePool.get("report") or {}
+    report.pid = tonumber(ResourceMonitor._pid)
+    report.uptime = now - ResourceMonitor._start_time
+    
+    -- Вложенные таблицы тоже берем из пула для максимальной оптимизации
+    report.cpu = TablePool and TablePool.get("generic") or {}
+    report.cpu.usage = 0
+    report.cpu.user = 0
+    report.cpu.system = 0
+    report.cpu.threads = tonumber(status.Threads) or 0
+
+    report.memory = TablePool and TablePool.get("generic") or {}
+    report.memory.lua = collectgarbage("count")
+    report.memory.resident = tonumber(status.VmRSS and status.VmRSS:match("%d+")) or 0
+    report.memory.virtual = tonumber(status.VmSize and status.VmSize:match("%d+")) or 0
+
+    report.network = TablePool and TablePool.get("generic") or {}
 
     -- Расчет CPU (на основе 100 тиков в секунду)
     if ResourceMonitor._last_cpu_check > 0 then

@@ -122,14 +122,18 @@ end
 --- @private
 --- @param entry table Запись LVC
 function EventDispatcher:_release_lvc_entry(entry)
-    if not entry or type(entry.data) ~= "table" then return end
-
-    for k, v in pairs(entry.data) do
-        if type(v) == "table" then
-            TablePool.release(v, "lvc_sub")
+    if not entry then return end
+    if type(entry.data) == "table" then
+        for k, v in pairs(entry.data) do
+            if type(v) == "table" then
+                TablePool.release(v, "lvc_sub")
+            end
         end
+        TablePool.release(entry.data, "lvc_entry")
     end
-    TablePool.release(entry.data, "lvc_entry")
+    if TablePool then
+        TablePool.release(entry, "lvc_wrapper")
+    end
 end
 
 --- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
@@ -187,10 +191,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         local old_entry = self._lvc[event_type]
         self:_release_lvc_entry(old_entry)
 
-        self._lvc[event_type] = {
-            data = cache_data,
-            timestamp = os_time()
-        }
+        local entry = TablePool and TablePool.get("lvc_wrapper") or {}
+        entry.data = cache_data
+        entry.timestamp = os_time()
+        self._lvc[event_type] = entry
     end
 
     local p = priority or self.PRIORITIES.MEDIUM

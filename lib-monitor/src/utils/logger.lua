@@ -11,6 +11,7 @@ local unpack = _G.table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
 local MonitorConfig = nil -- Кэшируется при первом обращении
+local TablePool = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local log = ModuleManager.get_global_dependency("log")
@@ -52,6 +53,19 @@ local function get_monitor_config()
     if success and config and type(config) == "table" then
         MonitorConfig = config
         return MonitorConfig
+    end
+    return nil
+end
+
+--- Возвращает модуль TablePool (ленивая загрузка)
+--- @return TablePool|nil
+local function get_table_pool()
+    if TablePool then return TablePool end
+
+    local success, pool = pcall(ModuleManager.get_module, "table_pool")
+    if success and pool and type(pool) == "table" then
+        TablePool = pool
+        return TablePool
     end
     return nil
 end
@@ -112,18 +126,22 @@ function Logger.buffer_log(level, component, message, context_id)
     end
 
     local buffer = Logger._context_buffer[component]
-    local entry = {
-        timestamp = os_time(),
-        level = level,
-        message = message,
-        context_id = context_id
-    }
+    
+    local pool = get_table_pool()
+    local entry = pool and pool.get("log_entry") or {}
+    entry.timestamp = os_time()
+    entry.level = level
+    entry.message = message
+    entry.context_id = context_id
 
     table_insert(buffer, entry)
 
     -- Ограничение размера буфера (FIFO)
     if #buffer > Logger._buffer_size then
-        table_remove(buffer, 1)
+        local old = table_remove(buffer, 1)
+        if pool and old then
+            pool.release(old, "log_entry")
+        end
     end
 end
 
@@ -153,12 +171,17 @@ function Logger.flush()
     local current_queue = log_queue
     log_queue = {}
 
+    local pool = get_table_pool()
     for _, item in ipairs(current_queue) do
         local lower_level = item.level:lower()
         if log and type(log) == "table" and type(log[lower_level]) == "function" then
             pcall(log[lower_level], item.msg)
         else
             print(string_format("[%s] %s", item.level, item.msg))
+        end
+        
+        if pool then
+            pool.release(item, "log_entry")
         end
     end
 end
@@ -213,12 +236,17 @@ local function write_log(level_name, component, format_str, ...)
 
         -- Пакетная запись (Batch Logging)
         if config and config.LogBatchEnabled and config.LogBufferSize and config.LogBufferSize > 0 then
+            local pool = get_table_pool()
+            local item = pool and pool.get("log_entry") or {}
+            item.level = level_name
+            item.msg = msg
+
             if #log_queue < MAX_LOG_QUEUE_SIZE then
-                table_insert(log_queue, { level = level_name, msg = msg })
+                table_insert(log_queue, item)
             else
                 -- Если очередь переполнена, сбрасываем немедленно
                 Logger.flush()
-                table_insert(log_queue, { level = level_name, msg = msg })
+                table_insert(log_queue, item)
             end
         else
             -- Обычная немедленная запись

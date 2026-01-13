@@ -118,15 +118,33 @@ function TablePool.release(t, pool_type, deep_or_nested)
             t.priority = nil
             t.timestamp = nil
             t.source = nil
+            t.source_monitor = nil
             t.is_table = nil
             t.json_cache = nil
-        elseif pool_type == "lvc_entry" then
+        elseif pool_type == "pid_stats" then
+            t.type = nil
+            t.cc = nil
+            t.pes = nil
+            t.sc = nil
+        elseif pool_type == "log_entry" then
+            t.timestamp = nil
+            t.level = nil
+            t.message = nil
+            t.context_id = nil
+            t.msg = nil
+        elseif pool_type == "retry_item" then
+            t.config = nil
+            t.data = nil
+            t.type = nil
+            t.retries = nil
+            t.time = nil
+        elseif pool_type == "lvc_wrapper" then
             t.data = nil
             t.timestamp = nil
         elseif pool_type == "report" then
             -- Для отчетов используем глубокую очистку, так как они могут содержать вложенные данные
             clear_table(t, true)
-        elseif pool_type == "lvc_sub" or pool_type == "generic" then
+        elseif pool_type == "lvc_entry" or pool_type == "lvc_sub" or pool_type == "generic" or pool_type == "batch_queue" then
             if Utils and Utils.table_clear then
                 Utils.table_clear(t)
             else

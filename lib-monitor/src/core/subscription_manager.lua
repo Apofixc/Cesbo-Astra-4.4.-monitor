@@ -26,6 +26,7 @@ local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
+local TablePool = ModuleManager.get_module("table_pool")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -133,10 +134,15 @@ local Transport = {
                     if #retry_queue < MAX_RETRY_QUEUE_SIZE then
                         local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
                         local jitter = math_random(0, 2)
-                        table_insert(retry_queue, {
-                            config = config, data = retry_data, type = event_type,
-                            retries = retry_count + 1, time = os_time() + delay + jitter
-                        })
+                        
+                        local item = TablePool and TablePool.get("retry_item") or {}
+                        item.config = config
+                        item.data = retry_data
+                        item.type = event_type
+                        item.retries = retry_count + 1
+                        item.time = os_time() + delay + jitter
+                        
+                        table_insert(retry_queue, item)
                     else
                         Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
                     end
@@ -228,6 +234,10 @@ function SubscriptionManager:start_retry_processor()
             if now >= item.time then
                 table_remove(retry_queue, i)
                 Transport.HTTP(item.config, item.data, item.type, item.retries)
+                
+                if TablePool then
+                    TablePool.release(item, "retry_item")
+                end
             end
         end
 
@@ -501,7 +511,10 @@ end
 function SubscriptionManager:add_to_batch(sub, event)
     local sub_id = sub.id
     if not self._batch_queues[sub_id] then
-        self._batch_queues[sub_id] = { events = {}, last_flush = os_time() }
+        local q = TablePool and TablePool.get("batch_queue") or {}
+        q.events = q.events or {}
+        q.last_flush = os_time()
+        self._batch_queues[sub_id] = q
     end
 
     local queue = self._batch_queues[sub_id]
@@ -533,11 +546,17 @@ function SubscriptionManager:flush_batch(sub_id)
     for _, subs in pairs(self.subscriptions) do
         if subs[sub_id] then sub = subs[sub_id]; break end
     end
-    if not sub then self._batch_queues[sub_id] = nil; return end
+    if not sub then 
+        if TablePool then TablePool.release(queue, "batch_queue") end
+        self._batch_queues[sub_id] = nil
+        return 
+    end
 
     local events_json = queue.events
     local count = #events_json
-    queue.events = {}
+    
+    -- Очищаем массив событий (но не саму таблицу очереди)
+    for i = 1, count do events_json[i] = nil end
     queue.last_flush = os_time()
 
     -- Сборка финального JSON
@@ -588,7 +607,10 @@ end
 --- @param sub_id string ID подписки
 --- @return boolean Статус выполнения
 function SubscriptionManager:unsubscribe(sub_id)
-    self._batch_queues[sub_id] = nil
+    if self._batch_queues[sub_id] then
+        if TablePool then TablePool.release(self._batch_queues[sub_id], "batch_queue") end
+        self._batch_queues[sub_id] = nil
+    end
 
     -- Очистка состояния фильтров (FilterEngine)
     if FilterEngine and FilterEngine.clear_state then
