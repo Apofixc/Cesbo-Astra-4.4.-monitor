@@ -47,47 +47,24 @@ local function clear_visited_cache()
     end
 end
 
--- Предварительное объявление для рекурсии
-local do_clear_table
-
---- Обрабатывает значение при очистке таблицы
---- @param v any Значение
---- @param deep boolean Флаг глубокой очистки
---- @param depth number Текущая глубина рекурсии
-local function process_value(v, deep, depth)
-    if type(v) ~= "table" or visited_cache[v] then return end
-
-    if v.__pool_type then
-        -- Автоматический возврат вложенного объекта в его пул
-        TablePool.release(v, v.__pool_type, deep, depth + 1)
-    elseif deep then
-        if depth < MAX_DEPTH then
-            -- Рекурсивная очистка обычной вложенной таблицы
-            visited_cache[v] = true
-            do_clear_table(v, true, depth + 1)
-        end
-    end
-end
-
 --- Внутренняя рекурсивная функция очистки таблицы.
 --- Реализует автоматический возврат вложенных таблиц в их родные пулы.
 --- @param t table Таблица для очистки
 --- @param deep boolean Флаг глубокой очистки (рекурсия по обычным таблицам)
 --- @param depth number Текущая глубина рекурсии
-do_clear_table = function(t, deep, depth)
-    -- 1. Очистка массивной части
-    for i = 1, #t do
-        local v = t[i]
-        if v ~= nil then
-            process_value(v, deep, depth)
-            t[i] = nil
-        end
-    end
-
-    -- 2. Очистка хеш-части
+local function do_clear_table(t, deep, depth)
     for k, v in next, t do
         if k ~= "__pool_type" then
-            process_value(v, deep, depth)
+            if type(v) == "table" and not visited_cache[v] then
+                if v.__pool_type then
+                    -- Автоматический возврат вложенного объекта в его пул
+                    TablePool.release(v, v.__pool_type, deep, depth + 1)
+                elseif deep and depth < MAX_DEPTH then
+                    -- Рекурсивная очистка обычной вложенной таблицы
+                    visited_cache[v] = true
+                    do_clear_table(v, true, depth + 1)
+                end
+            end
             t[k] = nil
         end
     end
@@ -188,11 +165,9 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
 
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
-        -- Если таблица уже в пуле, просто игнорируем (может быть при циклах)
+        Logger.warn(COMPONENT_NAME, "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
         return
     end
-
-    visited_cache[t] = true
 
     local pool = get_or_create_pool(pool_type)
     local limit = limits[pool_type]
@@ -203,6 +178,8 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
         return
     end
 
+    visited_cache[t] = true
+
     -- Выполняем очистку
     local cleaner = cleaners[pool_type]
     if cleaner then
@@ -210,7 +187,6 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
         cleaner(t, deep_or_nested)
     else
         -- Стандартная очистка с поддержкой авто-рекурсии
-        -- pcall удален для производительности (ошибки должны быть видны)
         if depth < MAX_DEPTH then
             do_clear_table(t, deep_or_nested == true, depth)
         end
