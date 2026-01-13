@@ -94,6 +94,7 @@ MonitorConfig.ExtraDebug = false
 MonitorConfig.GcPause = 100
 MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
+MonitorConfig.MemoryLimitMb = 50 -- Лимит памяти для адаптивного GC (МБ)
 MonitorConfig.AutoRecoverInterval = 300 -- Интервал авто-восстановления в репозитории (сек)
 MonitorConfig.PidStatsLimit = 100 -- Лимит отслеживаемых PID в ChannelMonitor
 MonitorConfig.MaxCounterValue = 1000000000 -- Максимальное значение счетчиков (защита от переполнения)

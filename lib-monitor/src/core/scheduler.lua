@@ -17,6 +17,7 @@ local setmetatable = _G.setmetatable
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local TablePool = ModuleManager.get_module("utils.table_pool")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
