@@ -202,10 +202,12 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     event.priority = p
     event.timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time()
     event.source = (options and options.source) or "unknown"
+    -- Ссылка на монитор-источник для обратной связи по кэшированию JSON
+    event.source_monitor = options and options.source_monitor
     -- ОПАСНО: is_table должен быть true только если это явно указано.
     -- Иначе мы можем случайно очистить глобальные таблицы или таблицы модулей.
     event.is_table = options and options.is_table == true
-    event.json_cache = nil -- Кэш для ленивой сериализации
+    event.json_cache = options and options.json_cache -- Кэш для ленивой сериализации
 
     local queue = self.event_queues[p]
     if queue then

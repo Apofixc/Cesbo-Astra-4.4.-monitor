@@ -140,6 +140,7 @@ function BaseMonitor:publish(data, event_type, is_table)
         dispatcher:emit_safe(event_type, data, nil, {
             is_table = is_table,
             source = self._name,
+            source_monitor = self, -- Передаем ссылку на себя для обратной связи по кэшу
             json_cache = self._json_cache -- Передаем горячий кэш, если он есть
         })
     end

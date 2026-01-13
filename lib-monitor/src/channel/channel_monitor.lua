@@ -363,8 +363,9 @@ function ChannelMonitor:process_total_data(data)
         -- Обновляем Master State (таблица для Pull-запросов)
         self:_build_status_table(self._current_status_table, data)
 
-        -- Немедленно обновляем горячий JSON-кэш
-        self:_refresh_cache(self._current_status_table)
+        -- Сбрасываем кэш JSON, так как данные изменились.
+        -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
+        self:_clear_json_cache()
 
         -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
         local r = self:get_table_from_pool("report")

@@ -76,12 +76,21 @@ local function get_event_json(event)
     if not event then return nil end
     if event.json_cache then return event.json_cache end
 
+    local json
     if type(event.data) == "string" then
-        event.json_cache = event.data
+        json = event.data
     else
-        event.json_cache = json_encode(event.data)
+        json = json_encode(event.data)
     end
-    return event.json_cache
+
+    event.json_cache = json
+
+    -- Обратная связь: обновляем кэш в исходном мониторе, если он доступен
+    if event.source_monitor and type(event.source_monitor) == "table" then
+        event.source_monitor._json_cache = json
+    end
+
+    return json
 end
 
 --- @type table<string, function> Транспорты для доставки событий
