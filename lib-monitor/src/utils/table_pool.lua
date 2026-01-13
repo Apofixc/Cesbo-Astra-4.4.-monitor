@@ -56,9 +56,7 @@ end
 --- @param deep boolean|nil Флаг глубокой очистки
 --- @param visited table|nil Защита от циклических ссылок
 local function clear_table(t, deep, visited)
-    local k = next(t)
-    while k ~= nil do
-        local v = t[k]
+    for k, v in pairs(t) do
         if deep and type(v) == "table" then
             visited = visited or {}
             if not visited[v] then
@@ -67,7 +65,6 @@ local function clear_table(t, deep, visited)
             end
         end
         t[k] = nil
-        k = next(t)
     end
 end
 
@@ -76,14 +73,11 @@ end
 --- @param item_pool_type string Тип пула для вложенных таблиц
 local function release_nested(t, item_pool_type)
     if type(t) ~= "table" then return end
-    local k = next(t)
-    while k ~= nil do
-        local v = t[k]
+    for k, v in pairs(t) do
         if type(v) == "table" then
             TablePool.release(v, item_pool_type)
         end
         t[k] = nil
-        k = next(t)
     end
 end
 
@@ -168,30 +162,31 @@ end
 function TablePool.get(pool_type)
     pool_type = pool_type or "generic"
     local pool = pool_cache[pool_type]
-    if not pool then
+    
+    if pool then
+        local size = #pool
+        if size > 0 then
+            local t = pool[size]
+            pool[size] = nil
+            t.__in_pool = nil -- Снимаем метку
+            
+            local s = stats_cache[pool_type]
+            if s then s.hits = s.hits + 1 end
+            return t
+        end
+    else
+        -- Ленивая инициализация пула
         pool = {}
         pools[pool_type] = pool
         pool_cache[pool_type] = pool
         init_stats(pool_type)
     end
 
-    local size = #pool
-    if size > 0 then
-        local t = pool[size]
-        pool[size] = nil
-        t.__in_pool = nil -- Снимаем метку
-        local s = stats_cache[pool_type]
-        s.hits = s.hits + 1
-        return t
-    end
-
     local s = stats_cache[pool_type]
-    if not s then
-        init_stats(pool_type)
-        s = stats_cache[pool_type]
+    if s then
+        s.misses = s.misses + 1
+        s.created = s.created + 1
     end
-    s.misses = s.misses + 1
-    s.created = s.created + 1
     return {}
 end
 
@@ -223,7 +218,17 @@ function TablePool.release(t, pool_type, deep_or_nested)
         init_stats(pool_type)
     end
 
-    -- Очистка выполняется ВСЕГДА, даже если пул полон.
+    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
+    local pool_full = #pool >= limit
+
+    -- Оптимизация: если пул полон и не требуется глубокая/вложенная очистка,
+    -- мы можем просто выбросить таблицу, не тратя время на зануление полей.
+    -- Это значительно ускоряет работу при пиковых нагрузках.
+    if pool_full and not deep_or_nested then
+        return
+    end
+
+    -- Очистка выполняется, если пул не полон ИЛИ если требуется вложенная очистка.
     -- Это критично для высвобождения вложенных таблиц обратно в их пулы.
     local cleaner = cleaners[pool_type]
     if cleaner then
@@ -237,9 +242,7 @@ function TablePool.release(t, pool_type, deep_or_nested)
         end
     end
 
-    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
-
-    if #pool < limit then
+    if not pool_full then
         t.__in_pool = pool_type -- Ставим метку перед возвратом в пул
 
         -- Валидация чистоты таблицы в режиме отладки
