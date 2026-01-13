@@ -80,7 +80,9 @@ function Scheduler:initialize()
             local mem_kb = collectgarbage("count")
 
             if mem_kb > memory_limit_kb then
-                Logger.warn(COMPONENT_NAME, "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.", mem_kb, memory_limit_kb)
+                Logger.warn(COMPONENT_NAME,
+                    "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.",
+                    mem_kb, memory_limit_kb)
 
                 -- Очистка пулов таблиц перед GC для максимального эффекта
                 if TablePool and TablePool.clear_all then
@@ -140,7 +142,8 @@ function Scheduler:remove_task(id)
     if self._tasks[id] then
         self._tasks[id] = nil
         self._task_count = self._task_count - 1
-        Logger.debug(COMPONENT_NAME, "Задача удалена: %s", id)
+        Logger.debug(COMPONENT_NAME,
+            "Задача удалена: %s", id)
     end
 end
 
@@ -177,7 +180,8 @@ function Scheduler:_tick()
 
             -- Проверка времени выполнения (Load Balancing / Performance Monitoring)
             if duration > 0.1 then -- 100ms
-                Logger.warn(COMPONENT_NAME, "Задача %s выполнялась слишком долго: %.3f сек", id, duration)
+                Logger.warn(COMPONENT_NAME,
+                    "Задача %s выполнялась слишком долго: %.3f сек", id, duration)
             end
 
             task.last_run = now

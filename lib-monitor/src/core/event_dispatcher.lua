@@ -9,14 +9,12 @@
 -- 1. Стандартные Lua функции
 local type = _G.type
 local tostring = _G.tostring
-local string_format = _G.string.format
 local pairs = _G.pairs
 local table_insert = _G.table.insert
 local table_remove = _G.table.remove
 local os_time = _G.os.time
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
-local math_random = _G.math.random
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -77,7 +75,7 @@ end
 --- @return any Копия данных
 local function deep_copy_to_pool(data)
     if type(data) ~= "table" then return data end
-    
+
     local copy = TablePool.get("lvc_sub")
     for k, v in pairs(data) do
         copy[k] = deep_copy_to_pool(v)
@@ -128,7 +126,8 @@ function EventDispatcher:initialize()
     self.active = true
     self:start_queue_processor()
 
-    Logger.info(COMPONENT_NAME, "Диспетчер событий инициализирован с поддержкой LVC и масок (Wildcards)")
+    Logger.info(COMPONENT_NAME,
+        "Диспетчер событий инициализирован с поддержкой LVC и масок (Wildcards)")
 end
 
 --- Вспомогательная функция для очистки записи LVC и возврата таблиц в пул

@@ -81,7 +81,7 @@ function ResourceMonitor.check()
     local report = TablePool and TablePool.get("report_sys") or {}
     report.pid = tonumber(ResourceMonitor._pid)
     report.uptime = now - ResourceMonitor._start_time
-    
+
     -- Вложенные таблицы переиспользуются или берутся из пула
     report.cpu = report.cpu or (TablePool and TablePool.get("sys_cpu") or {})
     report.cpu.usage = 0

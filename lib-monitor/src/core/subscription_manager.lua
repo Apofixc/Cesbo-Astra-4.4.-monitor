@@ -60,10 +60,10 @@ local retry_queue = {}
 --- Генерирует уникальный идентификатор (UUID v4) для подписки.
 --- @return string UUID
 local function generate_uuid()
-    local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    return (string_gsub(template, '[xy]', function (c)
-        local v = (c == 'x') and math_random(0, 0xf) or math_random(8, 0xb)
-        return string_format('%x', v)
+    local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+    return (string_gsub(template, "[xy]", function(c)
+        local v = (c == "x") and math_random(0, 0xf) or math_random(8, 0xb)
+        return string_format("%x", v)
     end))
 end
 
@@ -121,7 +121,7 @@ local Transport = {
                 USER_AGENT, "Host: " .. config.host .. ":" .. config.port,
                 CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close"
             },
-            callback = function(s, r)
+            callback = function(s, _)
                 if not s and retry_count < MAX_RETRIES then
                     -- Для ретрая делаем копию данных, если это была таблица из пула
                     local retry_data = event
@@ -134,14 +134,14 @@ local Transport = {
                     if #retry_queue < MAX_RETRY_QUEUE_SIZE then
                         local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
                         local jitter = math_random(0, 2)
-                        
+
                         local item = TablePool and TablePool.get("retry_item") or {}
                         item.config = config
                         item.data = retry_data
                         item.type = event_type
                         item.retries = retry_count + 1
                         item.time = os_time() + delay + jitter
-                        
+
                         table_insert(retry_queue, item)
                     else
                         Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
@@ -234,14 +234,14 @@ function SubscriptionManager:start_retry_processor()
             if now >= item.time then
                 table_remove(retry_queue, i)
                 Transport.HTTP(item.config, item.data, item.type, item.retries)
-                
+
                 if TablePool then
                     TablePool.release(item, "retry_item")
                 end
             end
         end
 
-        -- 2. Отложенное сохранение (Debounced Save)
+        -- 3. Отложенное сохранение (Debounced Save)
         if self._save_pending then
             self:save_now()
         end
@@ -341,7 +341,7 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         batch_mode = sub_data.batch_mode or default_batch_mode,
         -- throttle_ms: 0 - выключено, >0 - минимальный интервал между событиями
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
-        last_event_at = 0, stats = { delivered = 0, failed = 0 }
+        last_event_at = 0, stats = { delivered = 0, failed = 0, consecutive_failures = 0 }
     }
 
     if not self.subscriptions[event_type] then
@@ -448,10 +448,18 @@ function SubscriptionManager:publish_event(event)
                     if success then
                         delivered = delivered + 1
                         sub.stats.delivered = sub.stats.delivered + 1
+                        sub.stats.consecutive_failures = 0
                         sub.last_event_at = now
                     else
                         failed = failed + 1
                         sub.stats.failed = sub.stats.failed + 1
+                        sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
+
+                        -- Автоматическое удаление "мертвых" подписчиков (после 50 ошибок подряд)
+                        if sub.stats.consecutive_failures > 50 then
+                            Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                            self:unsubscribe(sub.id)
+                        end
                     end
                 end
             end
@@ -518,7 +526,7 @@ function SubscriptionManager:add_to_batch(sub, event)
     end
 
     local queue = self._batch_queues[sub_id]
-    
+
     -- Получаем JSON события (используем кэш, если он есть)
     local event_json = get_event_json(event)
     if event_json then
@@ -546,18 +554,14 @@ function SubscriptionManager:flush_batch(sub_id)
     for _, subs in pairs(self.subscriptions) do
         if subs[sub_id] then sub = subs[sub_id]; break end
     end
-    if not sub then 
+    if not sub then
         if TablePool then TablePool.release(queue, "batch_queue") end
         self._batch_queues[sub_id] = nil
-        return 
+        return
     end
 
     local events_json = queue.events
     local count = #events_json
-    
-    -- Очищаем массив событий (но не саму таблицу очереди)
-    for i = 1, count do events_json[i] = nil end
-    queue.last_flush = os_time()
 
     -- Сборка финального JSON
     local final_json
@@ -566,6 +570,10 @@ function SubscriptionManager:flush_batch(sub_id)
     else
         final_json = "[" .. table.concat(events_json, ",") .. "]"
     end
+
+    -- Очищаем массив событий (но не саму таблицу очереди)
+    for i = 1, count do events_json[i] = nil end
+    queue.last_flush = os_time()
 
     -- Отправляем готовую строку. Транспорт HTTP/WS поддерживает передачу event_json.
     -- Для LUA_CALLBACK придется декодировать обратно, но батчинг обычно используется для внешних систем.

@@ -312,7 +312,9 @@ local function make_stream(conf)
 
     local handler = monitor_type_handlers[monitor_type]
     if not handler then
-        Logger.error(COMPONENT_NAME, "make_stream: неизвестный тип монитора '%s' для потока '%s'", monitor_type, conf.name)
+        Logger.error(COMPONENT_NAME,
+            "make_stream: неизвестный тип монитора '%s' для потока '%s'",
+            monitor_type, conf.name)
         kill_channel(channel_data)
         return nil
     end
@@ -390,7 +392,8 @@ local function update_monitor_parameters(name, params)
     if monitor then
         return monitor:update_parameters(params)
     end
-    Logger.error(COMPONENT_NAME, "update_monitor_parameters: монитор '%s' не найден", tostring(name))
+    Logger.error(COMPONENT_NAME,
+        "update_monitor_parameters: монитор '%s' не найден", tostring(name))
     return false
 end
 

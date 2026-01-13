@@ -141,7 +141,7 @@ function ChannelRoutes.create_channel_raw(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     if not make_channel(data) then
-        return false, "Не удалось создать канал в ядре Astra"
+        return HttpHelpers.error(server, client, 500, "Не удалось создать канал в ядре Astra")
     end
 
     return HttpHelpers.success(server, client, { message = "Канал создан" })
@@ -186,7 +186,9 @@ function ChannelRoutes.create_stream(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result = Channel.make_stream(data)
-    if not success then return false, result or "Не удалось создать поток" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result or "Не удалось создать поток")
+    end
 
     return HttpHelpers.success(server, client, { message = "Поток и монитор созданы" })
 end

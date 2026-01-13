@@ -122,7 +122,9 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
                 TablePool.maintain()
             end, MAINTENANCE_INTERVAL)
             MonitorConfig.PoolMaintenanceStarted = true
-            Logger.debug(COMPONENT_NAME, "Автоматическое обслуживание пулов запущено (интервал: %d сек)", MAINTENANCE_INTERVAL)
+            Logger.debug(COMPONENT_NAME,
+                "Автоматическое обслуживание пулов запущено (интервал: %d сек)",
+                MAINTENANCE_INTERVAL)
         end
     end
 
@@ -150,7 +152,9 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
             if debug_mode then
                 for k in next, t do
                     if k ~= "__pool_type" and k ~= "__in_pool" then
-                        Logger.error(COMPONENT_NAME, "Схематичный очиститель '%s' пропустил поле: %s", pool_type, tostring(k))
+                        Logger.error(COMPONENT_NAME,
+                            "Схематичный очиститель '%s' пропустил поле: %s",
+                            pool_type, tostring(k))
                         t[k] = nil
                     end
                 end
@@ -210,11 +214,10 @@ end
 --- @param t table Таблица для возврата
 --- @param pool_type? string Тип пула (если nil, берется из объекта)
 --- @param deep? boolean Флаг глубокой очистки (рекурсивный возврат вложенных таблиц)
---- @param _depth? number Внутренний параметр глубины рекурсии
-function TablePool.release(t, pool_type, deep, _depth)
+--- @param depth? number Внутренний параметр глубины рекурсии
+function TablePool.release(t, pool_type, deep, depth)
+    depth = depth or 0
     if type(t) ~= "table" or visited_cache[t] then return end
-
-    local depth = _depth or 0
     if depth == 0 then visited_count = visited_count + 1 end
 
     -- Определяем целевой пул
@@ -222,7 +225,8 @@ function TablePool.release(t, pool_type, deep, _depth)
 
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
-        Logger.warn(COMPONENT_NAME, "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
+        Logger.warn(COMPONENT_NAME,
+            "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
         if depth == 0 then
             visited_count = visited_count - 1
             if visited_count == 0 then clear_visited_cache() end
@@ -239,10 +243,8 @@ function TablePool.release(t, pool_type, deep, _depth)
     -- Оптимизация: если пул полон и это корень, не тратим время на очистку
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     if depth == 0 and #pool >= limit then
-        if depth == 0 then
-            visited_count = visited_count - 1
-            if visited_count == 0 then clear_visited_cache() end
-        end
+        visited_count = visited_count - 1
+        if visited_count == 0 then clear_visited_cache() end
         return
     end
 
@@ -321,7 +323,9 @@ function TablePool.maintain()
                 -- Расширяем пул
                 local new_limit = math.floor(current_limit * (1 + ADAPTIVE_STEP))
                 limits[name] = new_limit
-                Logger.debug(COMPONENT_NAME, "Пул '%s' расширен: %d -> %d (miss rate: %.2f)", name, current_limit, new_limit, miss_rate)
+                Logger.debug(COMPONENT_NAME,
+                    "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
+                    name, current_limit, new_limit, miss_rate)
             elseif miss_rate < 0.05 then
                 -- Сжимаем пул, если промахов почти нет
                 local new_limit = math.max(MIN_LIMIT, math.floor(current_limit * (1 - ADAPTIVE_STEP)))

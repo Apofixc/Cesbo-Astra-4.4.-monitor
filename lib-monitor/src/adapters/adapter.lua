@@ -50,7 +50,8 @@ local function dvb_tuner_monitor(conf)
         _G[conf.name_adapter] = instance
         return true
     else
-        Logger.error(COMPONENT_NAME, string_format("dvb_tuner_monitor: не удалось запустить тюнер '%s'", conf.name_adapter))
+        Logger.error(COMPONENT_NAME,
+        string_format("dvb_tuner_monitor: не удалось запустить тюнер '%s'", conf.name_adapter))
         return false
     end
 end

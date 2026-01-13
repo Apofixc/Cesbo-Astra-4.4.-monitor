@@ -117,7 +117,9 @@ function MonitorRoutes.update_monitor(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Channel.update_monitor_parameters(params.name, params)
-    if not success then return false, result_err or "Не удалось обновить" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result_err or "Не удалось обновить")
+    end
 
     return HttpHelpers.success(server, client, { message = "Монитор обновлен" })
 end

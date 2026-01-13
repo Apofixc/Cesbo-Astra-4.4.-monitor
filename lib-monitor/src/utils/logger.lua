@@ -126,7 +126,7 @@ function Logger.buffer_log(level, component, message, context_id)
     end
 
     local buffer = Logger._context_buffer[component]
-    
+
     local pool = get_table_pool()
     local entry = pool and pool.get("log_entry") or {}
     entry.timestamp = os_time()
@@ -235,7 +235,8 @@ local function write_log(level_name, component, format_str, ...)
         end
 
         -- Пакетная запись (Batch Logging)
-        if config and config.LogBatchEnabled and config.LogBufferSize and config.LogBufferSize > 0 then
+        if config and config.LogBatchEnabled and config.LogBufferSize and
+           config.LogBufferSize > 0 then
             local pool = get_table_pool()
             local item = pool and pool.get("log_entry") or {}
             item.level = level_name

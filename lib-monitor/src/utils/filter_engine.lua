@@ -217,10 +217,12 @@ local function generate_filter_code(filters)
         elseif op == "le" then
             expr = string.format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
         elseif op == "contains" then
-            expr = string.format("(type(%s) == 'string' and %s:find(%q, 1, true) ~= nil)",
+            expr = string.format(
+                "(type(%s) == 'string' and %s:find(%q, 1, true) ~= nil)",
                 field_expr, field_expr, tostring(target))
         elseif op == "matches" then
-            expr = string.format("(type(%s) == 'string' and %s:match(%q) ~= nil)",
+            expr = string.format(
+                "(type(%s) == 'string' and %s:match(%q) ~= nil)",
                 field_expr, field_expr, tostring(target))
         elseif op == "in" then
             if type(target) == "table" then
@@ -266,7 +268,8 @@ function FilterEngine.match(data, filters, sub_id)
         if not has_duration then
             local code = generate_filter_code(filters)
             if code then
-                local factory, _ = load(code, "=(filter_jit)", "t", { type = type, table = table })
+                local factory, _ = load(code, "=(filter_jit)", "t",
+                    { type = type, table = table })
                 if factory then
                     local ok, func = pcall(factory)
                     if ok and type(func) == "function" then

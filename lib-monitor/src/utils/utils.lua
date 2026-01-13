@@ -171,7 +171,7 @@ function Utils.validate_monitor_param(name, value)
 
     if type(value) ~= schema.type then
         Logger.error(COMPONENT_NAME,
-            "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s). Используется значение по умолчанию.",
+            "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s).",
             name, schema.type, type(value))
         return schema.default
     end
@@ -179,13 +179,13 @@ function Utils.validate_monitor_param(name, value)
     if schema.type == "number" then
         if schema.min and value < schema.min then
             Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: значение для '%s' слишком мало (%s < %s). Используется значение по умолчанию.",
+                "validate_monitor_param: значение для '%s' слишком мало (%s < %s).",
                 name, tostring(value), tostring(schema.min))
             return schema.default
         end
         if schema.max and value > schema.max then
             Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: значение для '%s' слишком велико (%s > %s). Используется значение по умолчанию.",
+                "validate_monitor_param: значение для '%s' слишком велико (%s > %s).",
                 name, tostring(value), tostring(schema.max))
             return schema.default
         end

@@ -59,7 +59,9 @@ function DvbRoutes.update_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_err = Adapter.update_dvb_monitor_parameters(params.name, params)
-    if not success then return false, result_err or "Не удалось обновить" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result_err or "Не удалось обновить")
+    end
 
     return HttpHelpers.success(server, client, { message = "Мониторинг адаптера обновлен" })
 end
@@ -74,7 +76,9 @@ function DvbRoutes.stop_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.stop_dvb_monitor(params.name, params.force == true)
-    if not success then return false, result_or_err or "Не удалось остановить" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result_or_err or "Не удалось остановить")
+    end
 
     return HttpHelpers.success(server, client, { message = "Адаптер остановлен", config = result_or_err })
 end
@@ -125,7 +129,9 @@ function DvbRoutes.tune_adapter(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.dvb_tuner_monitor(data)
-    if not success then return false, result_or_err or "Не удалось настроить тюнер" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result_or_err or "Не удалось настроить тюнер")
+    end
 
     return HttpHelpers.success(server, client, { message = "Настройка адаптера запущена" })
 end
@@ -140,7 +146,9 @@ function DvbRoutes.switch_transponder(server, client, request)
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local success, result_or_err = Adapter.switch_transponder(data.name, data, data.reserve_input)
-    if not success then return false, result_or_err or "Не удалось переключить" end
+    if not success then
+        return HttpHelpers.error(server, client, 500, result_or_err or "Не удалось переключить")
+    end
 
     return HttpHelpers.success(server, client, { message = "Транспондер переключен", backup = result_or_err })
 end

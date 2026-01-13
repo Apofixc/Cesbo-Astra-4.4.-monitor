@@ -64,7 +64,9 @@ function BaseRepository:unregister(name, force)
         self.monitors[name] = nil
         self.classes[name] = nil
         self.count_active = self.count_active - 1
-        Logger.debug(self.component_name, "Объект '%s' удален и остановлен (принудительно: %s).", name, tostring(force))
+        Logger.debug(self.component_name,
+            "Объект '%s' удален и остановлен (принудительно: %s).",
+            name, tostring(force))
         return config
     end
 
@@ -99,7 +101,8 @@ function BaseRepository:auto_recover()
             if health.state == BaseMonitor.STATE.RUNNING and
                now - (health.last_update or 0) > recover_interval then
 
-                Logger.warn(self.component_name, "Попытка восстановления зависшего монитора: %s", name)
+                Logger.warn(self.component_name,
+                    "Попытка восстановления зависшего монитора: %s", name)
 
                 -- 1. Останавливаем и получаем конфиг
                 local config = self:unregister(name, true)
@@ -110,14 +113,18 @@ function BaseRepository:auto_recover()
                     if new_monitor and new_monitor.start and new_monitor:start() then
                         self:register(name, new_monitor, class)
                         recovered = recovered + 1
-                        Logger.info(self.component_name, "Монитор %s успешно восстановлен", name)
+                        Logger.info(self.component_name,
+                            "Монитор %s успешно восстановлен", name)
                     else
                         failed = failed + 1
-                        Logger.error(self.component_name, "Не удалось перезапустить монитор %s при восстановлении", name)
+                        Logger.error(self.component_name,
+                            "Не удалось перезапустить монитор %s при восстановлении", name)
                     end
                 else
                     failed = failed + 1
-                    Logger.error(self.component_name, "Не удалось восстановить монитор %s: отсутствует конфиг или класс", name)
+                    Logger.error(self.component_name,
+                        "Не удалось восстановить монитор %s: отсутствует конфиг или класс",
+                        name)
                 end
             end
         end
