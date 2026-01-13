@@ -230,6 +230,15 @@ function ModuleManager.load_modules()
         end
     end
 
+    -- Преаллокация пулов таблиц для оптимизации старта
+    local TablePool = loaded_modules["table_pool"]
+    if TablePool and TablePool.preallocate then
+        TablePool.preallocate("event", 20)
+        TablePool.preallocate("report", 10)
+        TablePool.preallocate("generic", 20)
+        log_debug(COMPONENT_NAME, "Выполнена преаллокация пулов таблиц.")
+    end
+
     log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
     return load_order
 end

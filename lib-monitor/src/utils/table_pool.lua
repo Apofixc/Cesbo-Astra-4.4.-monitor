@@ -109,6 +109,16 @@ function TablePool.release(t, pool_type, deep_or_nested)
         pools[pool_type] = pool
     end
 
+    -- Защита от двойного высвобождения (Double Release)
+    -- Проверяем, не находится ли таблица уже в пуле.
+    -- Это критически важно для предотвращения порчи данных при одновременном использовании.
+    for i = 1, #pool do
+        if pool[i] == t then
+            Logger.warn(COMPONENT_NAME, "Попытка двойного высвобождения таблицы в пул '%s'", pool_type)
+            return
+        end
+    end
+
     if #pool < MAX_POOL_SIZE then
         -- Оптимизация: Быстрая очистка для известных типов
         if pool_type == "event" then
