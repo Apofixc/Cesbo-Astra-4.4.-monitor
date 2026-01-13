@@ -8,6 +8,8 @@
 -- 1. Стандартные Lua функции
 local next = next
 local type = type
+local pcall = pcall
+local getmetatable = getmetatable
 local setmetatable = setmetatable
 local collectgarbage = collectgarbage
 
@@ -44,7 +46,6 @@ end
 
 --- Очищает кэш посещенных объектов
 local function clear_visited_cache()
-    if visited_count > 0 then return end
     for k in next, visited_cache do
         visited_cache[k] = nil
     end
@@ -138,7 +139,6 @@ function TablePool.get(pool_type)
         pool[size] = nil
 
         t.__in_pool = nil -- Снимаем метку нахождения в пуле
-        -- t.__pool_type уже установлен при создании или предыдущем использовании
 
         local s = stats[pool_type]
         if s then s.hits = s.hits + 1 end
@@ -150,13 +150,6 @@ function TablePool.get(pool_type)
     if s then
         s.misses = s.misses + 1
         s.created = s.created + 1
-    end
-
-    -- Оптимизация: если пул пуст, преаллоцируем немного объектов для будущего использования.
-    -- Делаем это только для достаточно больших пулов, чтобы не заполнять их мгновенно.
-    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
-    if limit >= 20 then
-        do_preallocate(pool_type, 10)
     end
 
     return { __pool_type = pool_type }
@@ -181,7 +174,7 @@ function TablePool.release(t, pool_type, deep, _depth)
         Logger.warn(COMPONENT_NAME, "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
         if depth == 0 then
             visited_count = visited_count - 1
-            clear_visited_cache()
+            if visited_count == 0 then clear_visited_cache() end
         end
         return
     end
@@ -192,60 +185,42 @@ function TablePool.release(t, pool_type, deep, _depth)
         pool = pools[pool_type]
     end
 
-    local limit = limits[pool_type]
-    local pool_full = #pool >= limit
-
-    -- Оптимизация: если пул полон и не требуется рекурсия, просто выбрасываем объект.
-    -- Однако мы все равно очищаем таблицу, чтобы разорвать ссылки на объекты.
-    if pool_full and not deep then
-        do_clear_table(t, false, depth)
-        setmetatable(t, nil)
-        if depth == 0 then
-            visited_count = visited_count - 1
-            clear_visited_cache()
-        end
-        return
-    end
-
     visited_cache[t] = true
 
-    -- Выполняем очистку
-    local cleaner = cleaners[pool_type]
-    if cleaner then
-        -- Используем кастомный очиститель, если он есть
-        cleaner(t, deep)
-    else
-        -- Стандартная очистка с поддержкой авто-рекурсии
-        if depth < MAX_DEPTH then
+    -- Выполняем очистку в защищенном режиме
+    local ok, err = pcall(function()
+        local cleaner = cleaners[pool_type]
+        if cleaner then
+            cleaner(t, deep)
+        elseif depth < MAX_DEPTH then
             do_clear_table(t, deep == true, depth)
         end
-    end
 
-    -- Если в пуле есть место, сохраняем объект
-    if not pool_full then
-        t.__in_pool = pool_type
-        setmetatable(t, nil) -- Очистка метатаблицы для безопасности
+        if getmetatable(t) then setmetatable(t, nil) end
 
-        -- Валидация чистоты в режиме отладки
-        if debug_mode then
-            for k in next, t do
-                if k ~= "__in_pool" and k ~= "__pool_type" then
-                    Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
-                    t[k] = nil
+        local limit = limits[pool_type]
+        if #pool < limit then
+            t.__in_pool = pool_type
+
+            if debug_mode then
+                for k in next, t do
+                    if k ~= "__in_pool" and k ~= "__pool_type" then
+                        Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
+                        t[k] = nil
+                    end
                 end
             end
-        end
 
-        pool[#pool + 1] = t
-    else
-        -- Пул полон, но мы зашли сюда из-за deep
-        setmetatable(t, nil)
+            pool[#pool + 1] = t
+        end
+    end)
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Ошибка при освобождении таблицы в пул '%s': %s", pool_type, tostring(err))
     end
 
-    -- Сброс кэша посещений только на самом верхнем уровне вызова release
     if depth == 0 then
         visited_count = visited_count - 1
-        clear_visited_cache()
+        if visited_count == 0 then clear_visited_cache() end
     end
 end
 
