@@ -134,19 +134,26 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
         cleaner = function(t, deep, depth)
             for i = 1, #schema do
                 local k = schema[i]
-                if deep then
-                    local v = t[k]
-                    if type(v) == "table" and not visited_cache[v] then
-                        local v_pool_type = v.__pool_type
-                        if v_pool_type then
-                            TablePool.release(v, v_pool_type, true, depth + 1)
-                        elseif depth < MAX_DEPTH then
-                            visited_cache[v] = true
-                            do_clear_table(v, true, depth + 1)
-                        end
+                local v = t[k]
+                if type(v) == "table" and not visited_cache[v] then
+                    local v_pool_type = v.__pool_type
+                    if v_pool_type then
+                        TablePool.release(v, v_pool_type, deep, depth + 1)
+                    elseif deep and depth < MAX_DEPTH then
+                        visited_cache[v] = true
+                        do_clear_table(v, true, depth + 1)
                     end
                 end
                 t[k] = nil
+            end
+            -- В режиме отладки проверяем, не осталось ли лишних полей
+            if debug_mode then
+                for k in next, t do
+                    if k ~= "__pool_type" and k ~= "__in_pool" then
+                        Logger.error(COMPONENT_NAME, "Схематичный очиститель '%s' пропустил поле: %s", pool_type, tostring(k))
+                        t[k] = nil
+                    end
+                end
             end
         end
     end
@@ -229,37 +236,49 @@ function TablePool.release(t, pool_type, deep, _depth)
         pool = pools[pool_type]
     end
 
+    -- Оптимизация: если пул полон и это корень, не тратим время на очистку
+    local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
+    if depth == 0 and #pool >= limit then
+        if depth == 0 then
+            visited_count = visited_count - 1
+            if visited_count == 0 then clear_visited_cache() end
+        end
+        return
+    end
+
     visited_cache[t] = true
 
-    -- Выполняем очистку в защищенном режиме
-    local ok, err = pcall(function()
-        local cleaner = cleaners[pool_type]
-        if cleaner then
-            cleaner(t, deep, depth)
-        elseif depth < MAX_DEPTH then
-            do_clear_table(t, deep == true, depth)
+    -- Выполняем очистку
+    local cleaner = cleaners[pool_type]
+    if cleaner then
+        -- Кастомные очистители запускаем в pcall для безопасности
+        local ok, err = pcall(cleaner, t, deep == true, depth)
+        if not ok then
+            Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err))
         end
+    elseif depth < MAX_DEPTH then
+        -- Стандартная очистка (быстрее без pcall)
+        do_clear_table(t, deep == true, depth)
+    end
 
-        if getmetatable(t) then setmetatable(t, nil) end
+    if getmetatable(t) then setmetatable(t, nil) end
 
-        local limit = limits[pool_type]
-        if #pool < limit then
-            t.__in_pool = pool_type
+    -- Обновляем метку типа (важно при миграции между пулами)
+    t.__pool_type = pool_type
 
-            if debug_mode then
-                for k in next, t do
-                    if k ~= "__in_pool" and k ~= "__pool_type" then
-                        Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
-                        t[k] = nil
-                    end
+    if #pool < limit then
+        t.__in_pool = pool_type
+
+        if debug_mode then
+            for k in next, t do
+                if k ~= "__in_pool" and k ~= "__pool_type" then
+                    Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
+                    t[k] = nil
                 end
             end
-
-            pool[#pool + 1] = t
         end
-    end)
-    if not ok then
-        Logger.error(COMPONENT_NAME, "Ошибка при освобождении таблицы в пул '%s': %s", pool_type, tostring(err))
+
+        pool[#pool + 1] = t
     end
 
     if depth == 0 then
