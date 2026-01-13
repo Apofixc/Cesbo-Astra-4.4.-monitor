@@ -31,6 +31,11 @@ local cleaners = {} -- Кастомные функции очистки: type ->
 local limits = {}   -- Лимиты размеров: type -> number
 local stats = {}    -- Статистика использования: type -> { hits, misses, created }
 
+-- Конфигурация адаптивности
+local ADAPTIVE_THRESHOLD = 0.2 -- Порог промахов (20%) для расширения
+local ADAPTIVE_STEP = 0.25      -- Шаг изменения лимита (25%)
+local MIN_LIMIT = 10            -- Минимальный лимит
+
 -- Режим отладки для проверки чистоты возвращаемых таблиц
 local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
 
@@ -75,12 +80,13 @@ local function do_clear_table(t, deep, depth)
     end
 end
 
---- Внутренняя функция преаллокации таблиц.
+--- Публичный метод преаллокации таблиц.
 --- @param pool_type string Тип пула
 --- @param count number Количество таблиц
-local function do_preallocate(pool_type, count)
+function TablePool.preallocate(pool_type, count)
     local pool = pools[pool_type]
     if not pool then return end
+
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     local current = #pool
     if count > limit then count = limit end
@@ -100,13 +106,37 @@ end
 
 --- Регистрирует новый тип пула.
 --- @param pool_type string Уникальное имя типа (например, "report")
---- @param cleaner? function Опциональная функция кастомной очистки
+--- @param cleaner? function|table Опциональная функция очистки или список ключей (схема)
 --- @param max_size? number Максимальный размер пула (по умолчанию 100)
 --- @param preallocate_count? number Количество таблиц для преаллокации
 function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count)
     if type(pool_type) ~= "string" or pools[pool_type] then return end
 
     pools[pool_type] = {}
+
+    -- Если передана таблица ключей, создаем оптимизированный очиститель по схеме
+    if type(cleaner) == "table" then
+        local schema = cleaner
+        cleaner = function(t, deep, depth)
+            for i = 1, #schema do
+                local k = schema[i]
+                if deep then
+                    local v = t[k]
+                    if type(v) == "table" and not visited_cache[v] then
+                        local v_pool_type = v.__pool_type
+                        if v_pool_type then
+                            TablePool.release(v, v_pool_type, true, depth + 1)
+                        elseif depth < MAX_DEPTH then
+                            visited_cache[v] = true
+                            do_clear_table(v, true, depth + 1)
+                        end
+                    end
+                end
+                t[k] = nil
+            end
+        end
+    end
+
     cleaners[pool_type] = cleaner
     stats[pool_type] = { hits = 0, misses = 0, created = 0 }
 
@@ -118,7 +148,7 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     limits[pool_type] = limit or DEFAULT_MAX_POOL_SIZE
 
     if type(preallocate_count) == "number" and preallocate_count > 0 then
-        do_preallocate(pool_type, preallocate_count)
+        TablePool.preallocate(pool_type, preallocate_count)
     end
 end
 
@@ -191,7 +221,7 @@ function TablePool.release(t, pool_type, deep, _depth)
     local ok, err = pcall(function()
         local cleaner = cleaners[pool_type]
         if cleaner then
-            cleaner(t, deep)
+            cleaner(t, deep, depth)
         elseif depth < MAX_DEPTH then
             do_clear_table(t, deep == true, depth)
         end
@@ -243,6 +273,36 @@ function TablePool.clear_all()
 
     collectgarbage()
     Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
+end
+
+--- Выполняет обслуживание пулов: адаптивное изменение лимитов.
+--- Рекомендуется вызывать периодически (например, раз в минуту).
+function TablePool.maintain()
+    for name, s in pairs(stats) do
+        local total = s.hits + s.misses
+        if total > 0 then
+            local miss_rate = s.misses / total
+            local current_limit = limits[name] or DEFAULT_MAX_POOL_SIZE
+
+            if miss_rate > ADAPTIVE_THRESHOLD then
+                -- Расширяем пул
+                local new_limit = math.floor(current_limit * (1 + ADAPTIVE_STEP))
+                limits[name] = new_limit
+                Logger.debug(COMPONENT_NAME, "Пул '%s' расширен: %d -> %d (miss rate: %.2f)", name, current_limit, new_limit, miss_rate)
+            elseif miss_rate < 0.05 then
+                -- Сжимаем пул, если промахов почти нет
+                local new_limit = math.max(MIN_LIMIT, math.floor(current_limit * (1 - ADAPTIVE_STEP)))
+                if new_limit < current_limit then
+                    limits[name] = new_limit
+                    Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)
+                end
+            end
+
+            -- Сброс статистики для следующего интервала
+            s.hits = 0
+            s.misses = 0
+        end
+    end
 end
 
 --- Возвращает статистику использования пулов.

@@ -156,13 +156,12 @@ end
 
 -- Регистрация пулов при загрузке модуля
 if TablePool then
-    -- Используем стандартную очистку TablePool для всех типов,
-    -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
-    TablePool.register_type("report_sys")
-    TablePool.register_type("sys_cpu")
-    TablePool.register_type("sys_mem")
-    TablePool.register_type("sys_net")
-    TablePool.register_type("sys_net_item")
+    -- Используем оптимизированные очистители по схеме для системных отчетов
+    TablePool.register_type("report_sys", { "pid", "cpu", "memory", "network", "timestamp" }, 10, 2)
+    TablePool.register_type("sys_cpu", { "usage", "user", "system" }, 10, 2)
+    TablePool.register_type("sys_mem", { "lua", "rss", "vsz" }, 10, 2)
+    TablePool.register_type("sys_net", nil, 10, 2)
+    TablePool.register_type("sys_net_item", { "interface", "ip", "rx", "tx" }, 20, 5)
 end
 
 -- Автоматический запуск при загрузке модуля

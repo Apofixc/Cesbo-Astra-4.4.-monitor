@@ -419,12 +419,11 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    -- Используем стандартную очистку TablePool для всех типов,
-    -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
-    tp.register_type("event")
-    tp.register_type("lvc_entry")
-    tp.register_type("lvc_sub")
-    tp.register_type("lvc_wrapper")
+    -- Используем оптимизированные очистители по схеме для событий
+    TablePool.register_type("event", { "id", "type", "data", "timestamp", "is_table" }, 100, 10)
+    TablePool.register_type("lvc_wrapper", { "data", "timestamp" }, 50, 5)
+    TablePool.register_type("lvc_entry", nil, 50, 5)
+    TablePool.register_type("lvc_sub", nil, 20, 2)
 end
 
 return EventDispatcher
