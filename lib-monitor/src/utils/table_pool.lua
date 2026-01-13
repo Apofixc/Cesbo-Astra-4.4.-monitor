@@ -33,6 +33,7 @@ local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
 
 -- Статический кэш для защиты от циклических ссылок (избегаем аллокаций в горячем цикле)
 local visited_cache = {}
+local visited_count = 0
 
 --- Включает или выключает режим отладки
 --- @param enabled boolean
@@ -42,6 +43,7 @@ end
 
 --- Очищает кэш посещенных объектов
 local function clear_visited_cache()
+    if visited_count > 0 then return end
     for k in next, visited_cache do
         visited_cache[k] = nil
     end
@@ -131,15 +133,15 @@ end
 --- @return table Свободная таблица
 function TablePool.get(pool_type)
     pool_type = pool_type or "generic"
-    local pool = get_or_create_pool(pool_type)
+    local pool = pools[pool_type] or get_or_create_pool(pool_type)
 
     local size = #pool
     if size > 0 then
         local t = pool[size]
         pool[size] = nil
 
-        t.__in_pool = nil          -- Снимаем метку нахождения в пуле
-        t.__pool_type = pool_type  -- Сохраняем тип для авто-возврата
+        t.__in_pool = nil -- Снимаем метку нахождения в пуле
+        -- t.__pool_type уже установлен при создании или предыдущем использовании
 
         local s = stats[pool_type]
         if s then s.hits = s.hits + 1 end
@@ -165,6 +167,7 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
     if type(t) ~= "table" or visited_cache[t] then return end
 
     local depth = _depth or 0
+    if depth == 0 then visited_count = visited_count + 1 end
 
     -- Определяем целевой пул
     pool_type = pool_type or t.__pool_type or "generic"
@@ -172,15 +175,25 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
         Logger.warn(COMPONENT_NAME, "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
+        if depth == 0 then
+            visited_count = visited_count - 1
+            clear_visited_cache()
+        end
         return
     end
 
-    local pool = get_or_create_pool(pool_type)
+    local pool = pools[pool_type] or get_or_create_pool(pool_type)
     local limit = limits[pool_type]
     local pool_full = #pool >= limit
 
     -- Оптимизация: если пул полон и не требуется рекурсия, просто выбрасываем объект
+    -- Но сначала очищаем метатаблицу для безопасности
     if pool_full and not deep_or_nested then
+        setmetatable(t, nil)
+        if depth == 0 then
+            visited_count = visited_count - 1
+            clear_visited_cache()
+        end
         return
     end
 
@@ -196,11 +209,6 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
         if depth < MAX_DEPTH then
             do_clear_table(t, deep_or_nested == true, depth)
         end
-    end
-
-    -- Сброс кэша посещений только на самом верхнем уровне вызова release
-    if depth == 0 then
-        clear_visited_cache()
     end
 
     -- Если в пуле есть место, сохраняем объект
@@ -219,6 +227,15 @@ function TablePool.release(t, pool_type, deep_or_nested, _depth)
         end
 
         pool[#pool + 1] = t
+    else
+        -- Пул полон, но мы зашли сюда из-за deep_or_nested
+        setmetatable(t, nil)
+    end
+
+    -- Сброс кэша посещений только на самом верхнем уровне вызова release
+    if depth == 0 then
+        visited_count = visited_count - 1
+        clear_visited_cache()
     end
 end
 
