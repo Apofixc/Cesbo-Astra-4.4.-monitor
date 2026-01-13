@@ -489,22 +489,7 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("report_dvb", function(t)
-        t.type = nil
-        t.name = nil
-        t.name_adapter = nil
-        t.server = nil
-        t.format = nil
-        t.modulation = nil
-        t.source = nil
-        t.status = nil
-        t.signal = nil
-        t.snr = nil
-        t.ber = nil
-        t.unc = nil
-        t.quality = nil
-        t.timestamp = nil
-    end)
+    tp.register_type("report_dvb")
 end
 
 return DvbTuner

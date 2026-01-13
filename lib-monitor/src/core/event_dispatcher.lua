@@ -136,12 +136,9 @@ end
 --- @param entry table Запись LVC
 function EventDispatcher:_release_lvc_entry(entry)
     if not entry then return end
-    if type(entry.data) == "table" then
-        -- Рекурсивно возвращаем вложенные таблицы lvc_sub в пул
-        TablePool.release(entry.data, "lvc_entry", "lvc_sub")
-    end
     if TablePool then
-        TablePool.release(entry, "lvc_wrapper")
+        -- Используем автоматический рекурсивный возврат вложенных таблиц
+        TablePool.release(entry, "lvc_wrapper", true)
     end
 end
 
@@ -376,19 +373,10 @@ end
 --- @param event table Объект события
 function EventDispatcher:_safe_return_to_pool(event)
     local ok, err = pcall(function()
-        if event.is_table and event.data and TablePool then
-            -- Определяем тип отчета для корректного возврата в пул
-            local report_type = "report"
-            if event.type == "channels" then report_type = "report_channel"
-            elseif event.type == "error" then report_type = "report_error"
-            elseif event.type == "dvb" then report_type = "report_dvb"
-            elseif event.type == "sys" then report_type = "report_sys"
-            end
-            TablePool.release(event.data, report_type)
-        end
-
         if TablePool then
-            TablePool.release(event, "event")
+            -- Если данные события были из пула (is_table), используем глубокую очистку
+            -- для автоматического возврата вложенных таблиц в их пулы.
+            TablePool.release(event, "event", event.is_table == true)
         end
     end)
 
@@ -431,90 +419,12 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("event", function(t)
-        t.id = nil
-        t.type = nil
-        t.data = nil
-        t.priority = nil
-        t.timestamp = nil
-        t.source = nil
-        t.source_monitor = nil
-        t.is_table = nil
-        t.json_cache = nil
-    end)
-
-    tp.register_type("lvc_entry", function(t, nested_type)
-        -- lvc_entry используется для кэширования данных событий (report_channel, report_dvb и т.д.)
-        if type(nested_type) == "string" then
-            -- Если указан тип вложенных таблиц, возвращаем их в пул
-            local k = next(t)
-            while k ~= nil do
-                local v = t[k]
-                if type(v) == "table" then
-                    -- Рекурсивно возвращаем вложенные таблицы (поддержка 2-х уровней)
-                    tp.release(v, nested_type, nested_type)
-                end
-                t[k] = nil
-                k = next(t)
-            end
-        else
-            -- Стандартная очистка полей для плоских отчетов
-            t.type = nil
-            t.name = nil
-            t.display_name = nil
-            t.monitor = nil
-            t.status = nil
-            t.bitrate = nil
-            t.cc_errors = nil
-            t.pes_errors = nil
-            t.scrambled = nil
-            t.ready = nil
-            t.rate_stat = nil
-            t.stream = nil
-            t.format = nil
-            t.addr = nil
-            t.error = nil
-            t.name_adapter = nil
-            t.modulation = nil
-            t.source = nil
-            t.signal = nil
-            t.snr = nil
-            t.ber = nil
-            t.unc = nil
-            t.quality = nil
-            t.timestamp = nil
-            -- Для ResourceMonitor
-            t.pid = nil
-            t.uptime = nil
-            t.cpu = nil
-            t.memory = nil
-            t.network = nil
-            -- Очистка любых других полей, которые могли попасть
-            for k in pairs(t) do t[k] = nil end
-        end
-    end)
-
-    tp.register_type("lvc_sub", function(t, nested_type)
-        -- lvc_sub используется для вложенных таблиц в LVC
-        if type(nested_type) == "string" then
-            -- Рекурсивное высвобождение вложенных таблиц
-            local k, v = next(t)
-            while k ~= nil do
-                if type(v) == "table" then
-                    tp.release(v, nested_type, nested_type)
-                end
-                t[k] = nil
-                k, v = next(t)
-            end
-        else
-            for k in pairs(t) do t[k] = nil end
-        end
-    end)
-
-    tp.register_type("lvc_wrapper", function(t)
-        t.data = nil
-        t.timestamp = nil
-    end)
+    -- Используем стандартную очистку TablePool для всех типов,
+    -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
+    tp.register_type("event")
+    tp.register_type("lvc_entry")
+    tp.register_type("lvc_sub")
+    tp.register_type("lvc_wrapper")
 end
 
 return EventDispatcher

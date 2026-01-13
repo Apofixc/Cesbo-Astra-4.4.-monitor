@@ -74,8 +74,8 @@ function ResourceMonitor.check()
 
     -- Используем пул для отчета
     if ResourceMonitor._report and TablePool then
-        -- Используем стандартный механизм вложенного высвобождения
-        TablePool.release(ResourceMonitor._report, "report_sys", "sys_nested")
+        -- Теперь используем автоматический рекурсивный возврат вложенных таблиц
+        TablePool.release(ResourceMonitor._report, "report_sys", true)
     end
 
     local report = TablePool and TablePool.get("report_sys") or {}
@@ -156,67 +156,13 @@ end
 
 -- Регистрация пулов при загрузке модуля
 if TablePool then
-    TablePool.register_type("report_sys", function(t, nested_type)
-        t.pid = nil
-        t.uptime = nil
-        t.server = nil
-        
-        if nested_type == "sys_nested" then
-            -- Глубокая очистка с возвратом вложенных таблиц в их пулы
-            if t.cpu then TablePool.release(t.cpu, "sys_cpu") end
-            if t.memory then TablePool.release(t.memory, "sys_mem") end
-            if t.network then TablePool.release(t.network, "sys_net", "sys_net_item") end
-            t.cpu = nil
-            t.memory = nil
-            t.network = nil
-        else
-            -- Поверхностная очистка для переиспользования структуры (быстрый путь)
-            if t.cpu then
-                t.cpu.usage = nil
-                t.cpu.user = nil
-                t.cpu.system = nil
-                t.cpu.threads = nil
-            end
-            if t.memory then
-                t.memory.lua = nil
-                t.memory.resident = nil
-                t.memory.virtual = nil
-            end
-            if t.network then
-                for i = 1, #t.network do
-                    TablePool.release(t.network[i], "sys_net_item")
-                    t.network[i] = nil
-                end
-            end
-        end
-    end)
-
-    TablePool.register_type("sys_cpu", function(t)
-        t.usage = nil
-        t.user = nil
-        t.system = nil
-        t.threads = nil
-    end)
-
-    TablePool.register_type("sys_mem", function(t)
-        t.lua = nil
-        t.resident = nil
-        t.virtual = nil
-    end)
-
-    TablePool.register_type("sys_net", function(t, nested_type)
-        for i = 1, #t do
-            if nested_type == "sys_net_item" then
-                TablePool.release(t[i], "sys_net_item")
-            end
-            t[i] = nil
-        end
-    end)
-
-    TablePool.register_type("sys_net_item", function(t)
-        t.interface = nil
-        t.ip = nil
-    end)
+    -- Используем стандартную очистку TablePool для всех типов,
+    -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
+    TablePool.register_type("report_sys")
+    TablePool.register_type("sys_cpu")
+    TablePool.register_type("sys_mem")
+    TablePool.register_type("sys_net")
+    TablePool.register_type("sys_net_item")
 end
 
 -- Автоматический запуск при загрузке модуля

@@ -553,41 +553,11 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("report_channel", function(t)
-        t.type = nil
-        t.name = nil
-        t.display_name = nil
-        t.monitor = nil
-        t.server = nil
-        t.status = nil
-        t.bitrate = nil
-        t.cc_errors = nil
-        t.pes_errors = nil
-        t.scrambled = nil
-        t.ready = nil
-        t.rate_stat = nil
-        t.stream = nil
-        t.format = nil
-        t.addr = nil
-        t.timestamp = nil
-    end)
-
-    tp.register_type("report_error", function(t)
-        t.type = nil
-        t.name = nil
-        t.display_name = nil
-        t.monitor = nil
-        t.server = nil
-        t.error = nil
-        t.timestamp = nil
-    end)
-
-    tp.register_type("pid_stats", function(t)
-        t.type = nil
-        t.cc = nil
-        t.pes = nil
-        t.sc = nil
-    end)
+    -- Используем стандартную очистку TablePool для всех типов,
+    -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
+    tp.register_type("report_channel")
+    tp.register_type("report_error")
+    tp.register_type("pid_stats")
 end
 
 return ChannelMonitor

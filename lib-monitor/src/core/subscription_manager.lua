@@ -681,21 +681,8 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("retry_item", function(t)
-        t.config = nil
-        t.data = nil
-        t.type = nil
-        t.retries = nil
-        t.time = nil
-    end)
-
-    tp.register_type("batch_queue", function(t)
-        t.last_flush = nil
-        -- Очищаем массив событий, если он есть
-        if t.events then
-            for i = 1, #t.events do t.events[i] = nil end
-        end
-    end)
+    tp.register_type("retry_item")
+    tp.register_type("batch_queue")
 end
 
 return SubscriptionManager

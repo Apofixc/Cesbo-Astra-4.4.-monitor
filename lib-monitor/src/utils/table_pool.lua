@@ -2,47 +2,51 @@
 -- Модуль `utils.table_pool`
 --
 -- Пул таблиц для оптимизации работы с памятью и снижения нагрузки на GC.
--- Позволяет переиспользовать таблицы для отчетов и событий.
+-- Реализует автоматический рекурсивный возврат вложенных объектов в их пулы.
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
 local next = next
 local type = type
-local collectgarbage = collectgarbage
 local pcall = pcall
+local collectgarbage = collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local DEFAULT_MAX_POOL_SIZE = (MonitorConfig and MonitorConfig.MaxPoolSize) or 100
+local MAX_DEPTH = 10 -- Защита от слишком глубокой рекурсии
 
 --- @class TablePool
---- @field private pools table<string, table<number, table>> Хранилище пулов по типам
---- @field private cleaners table<string, function> Функции очистки для типов
---- @field private limits table<string, number> Индивидуальные лимиты для типов
---- @field private stats table<string, table> Статистика (hits, misses)
 local TablePool = {}
 
-local pools = {}
-local cleaners = {}
-local limits = {}
-local stats = {}
-local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
+-- Внутренние хранилища
+local pools = {}    -- Таблицы пулов: type -> { t1, t2, ... }
+local cleaners = {} -- Кастомные функции очистки: type -> function
+local limits = {}   -- Лимиты размеров: type -> number
+local stats = {}    -- Статистика использования: type -> { hits, misses, created }
 
--- Кэш для ускорения доступа к пулам и статистике
+-- Кэши для ускорения доступа
 local pool_cache = {}
 local stats_cache = {}
 
---- Включает или выключает режим отладки для валидации чистоты таблиц
+-- Режим отладки для проверки чистоты возвращаемых таблиц
+local debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false
+
+-- Статический кэш для защиты от циклических ссылок (избегаем аллокаций в горячем цикле)
+local visited_cache = {}
+local visited_depth = 0
+
+--- Включает или выключает режим отладки
 --- @param enabled boolean
 function TablePool.set_debug(enabled)
     debug_mode = enabled
 end
 
---- Инициализирует структуру статистики для типа
+--- Инициализирует структуру статистики для типа пула
 --- @param pool_type string
 local function init_stats(pool_type)
     if not stats[pool_type] then
@@ -52,10 +56,6 @@ local function init_stats(pool_type)
     end
 end
 
--- Статический кэш для защиты от циклических ссылок (избегаем аллокаций)
-local visited_cache = {}
-local visited_depth = 0
-
 --- Очищает кэш посещенных объектов
 local function clear_visited_cache()
     for k in next, visited_cache do
@@ -64,21 +64,28 @@ local function clear_visited_cache()
     visited_depth = 0
 end
 
---- Внутренняя рекурсивная функция очистки
---- @param t table
---- @param deep boolean
+--- Внутренняя рекурсивная функция очистки таблицы.
+--- Реализует автоматический возврат вложенных таблиц в их родные пулы.
+--- @param t table Таблица для очистки
+--- @param deep boolean Флаг глубокой очистки (рекурсия по обычным таблицам)
 local function do_clear_table(t, deep)
     -- 1. Быстрая очистка массивной части (Lua 5.2+ оптимизация)
     local len = #t
     if len > 0 then
         for i = 1, len do
             local v = t[i]
-            if deep and type(v) == "table" then
-                if not visited_cache[v] then
-                    visited_cache[v] = true
-                    visited_depth = visited_depth + 1
-                    do_clear_table(v, true)
-                    visited_depth = visited_depth - 1
+            if type(v) == "table" then
+                if v.__pool_type then
+                    -- Автоматический возврат вложенного объекта в его пул
+                    TablePool.release(v, v.__pool_type, deep)
+                elseif deep and visited_depth < MAX_DEPTH then
+                    -- Рекурсивная очистка обычной вложенной таблицы
+                    if not visited_cache[v] then
+                        visited_cache[v] = true
+                        visited_depth = visited_depth + 1
+                        do_clear_table(v, true)
+                        visited_depth = visited_depth - 1
+                    end
                 end
             end
             t[i] = nil
@@ -86,79 +93,64 @@ local function do_clear_table(t, deep)
     end
 
     -- 2. Очистка хеш-части
-    local k, v = next(t)
+    local k = next(t)
     while k ~= nil do
-        if deep and type(v) == "table" then
-            if not visited_cache[v] then
-                visited_cache[v] = true
-                visited_depth = visited_depth + 1
-                do_clear_table(v, true)
-                visited_depth = visited_depth - 1
+        -- Сохраняем следующий ключ заранее, так как текущий будет удален
+        local next_k = next(t, k)
+        
+        if k ~= "__pool_type" then
+            local v = t[k]
+            if type(v) == "table" then
+                if v.__pool_type then
+                    -- Автоматический возврат вложенного объекта
+                    TablePool.release(v, v.__pool_type, deep)
+                elseif deep and visited_depth < MAX_DEPTH then
+                    -- Рекурсивная очистка обычной таблицы
+                    if not visited_cache[v] then
+                        visited_cache[v] = true
+                        visited_depth = visited_depth + 1
+                        do_clear_table(v, true)
+                        visited_depth = visited_depth - 1
+                    end
+                end
             end
+            t[k] = nil
         end
-        t[k] = nil
-        k, v = next(t)
+        k = next_k
     end
 end
 
---- Очищает таблицу рекурсивно (оптимизированная версия с защитой)
+--- Очищает таблицу перед возвратом в пул.
 --- @param t table Таблица для очистки
 --- @param deep boolean|nil Флаг глубокой очистки
 local function clear_table(t, deep)
-    if not deep then
-        -- Максимально быстрый путь для плоских таблиц
-        local k = next(t)
-        while k ~= nil do
-            t[k] = nil
-            k = next(t)
-        end
-        return
-    end
-
-    -- Глубокая очистка с защитой от переполнения стека и ошибок
     visited_depth = 0
-    local ok, err = pcall(do_clear_table, t, true)
+    local ok, err = pcall(do_clear_table, t, deep == true)
     
-    -- Гарантированный сброс кэша
+    -- Гарантированный сброс кэша посещений
     clear_visited_cache()
     
     if not ok then
-        Logger.error(COMPONENT_NAME, "Ошибка при глубокой очистке таблицы: %s", tostring(err))
+        Logger.error(COMPONENT_NAME, "Ошибка при очистке таблицы: %s", tostring(err))
     end
 end
 
---- Рекурсивно возвращает вложенные таблицы в пул
---- @param t table Таблица, содержащая вложенные таблицы
---- @param item_pool_type string Тип пула для вложенных таблиц
---- @param recursive boolean|string|nil Флаг рекурсивного высвобождения
-local function release_nested(t, item_pool_type, recursive)
-    if type(t) ~= "table" then return end
-    local k, v = next(t)
-    while k ~= nil do
-        if type(v) == "table" then
-            TablePool.release(v, item_pool_type, recursive)
-        end
-        t[k] = nil
-        k, v = next(t)
-    end
-end
-
---- Регистрирует новый тип пула с кастомным очистителем и лимитом
---- @param pool_type string Тип пула
---- @param cleaner function Функция очистки таблицы
---- @param max_size number|nil Максимальный размер пула
+--- Регистрирует новый тип пула.
+--- @param pool_type string Уникальное имя типа (например, "report")
+--- @param cleaner? function Опциональная функция кастомной очистки
+--- @param max_size? number Максимальный размер пула (по умолчанию 100)
 function TablePool.register_type(pool_type, cleaner, max_size)
     if type(pool_type) ~= "string" then return end
+    
     if type(cleaner) == "function" then
         cleaners[pool_type] = cleaner
     end
     
+    -- Приоритет лимита: конфиг -> аргумент -> значение по умолчанию
     local limit = max_size
-    -- Переопределение лимита из конфигурации
     if MonitorConfig and MonitorConfig.PoolLimits and type(MonitorConfig.PoolLimits[pool_type]) == "number" then
         limit = MonitorConfig.PoolLimits[pool_type]
     end
-    
     limits[pool_type] = limit or DEFAULT_MAX_POOL_SIZE
     
     if not pools[pool_type] then
@@ -168,24 +160,20 @@ function TablePool.register_type(pool_type, cleaner, max_size)
     init_stats(pool_type)
 end
 
---- Преаллокация таблиц в пуле
+--- Преаллокация таблиц для минимизации задержек при старте.
 --- @param pool_type string Тип пула
 --- @param count number Количество таблиц
 function TablePool.preallocate(pool_type, count)
     if type(pool_type) ~= "string" or type(count) ~= "number" then return end
     
-    local pool = pools[pool_type]
+    local pool = pool_cache[pool_type]
     if not pool then
-        pool = {}
-        pools[pool_type] = pool
-        pool_cache[pool_type] = pool
-        init_stats(pool_type)
+        TablePool.register_type(pool_type)
+        pool = pool_cache[pool_type]
     end
 
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     local current = #pool
-    
-    -- Уважаем лимит при преаллокации
     if count > limit then count = limit end
     
     if current < count then
@@ -199,104 +187,95 @@ function TablePool.preallocate(pool_type, count)
     end
 end
 
---- Возвращает таблицу из пула указанного типа.
---- Если пул пуст, создает новую таблицу.
---- @param pool_type? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
+--- Возвращает чистую таблицу из пула.
+--- @param pool_type? string Тип пула (по умолчанию "generic")
 --- @return table Свободная таблица
 function TablePool.get(pool_type)
     pool_type = pool_type or "generic"
     local pool = pool_cache[pool_type]
     
-    if pool then
-        local size = #pool
-        if size > 0 then
-            local t = pool[size]
-            pool[size] = nil
-            t.__in_pool = nil -- Снимаем метку
-            
-            local s = stats_cache[pool_type]
-            if s then s.hits = s.hits + 1 end
-            return t
-        end
-    else
-        -- Ленивая инициализация пула
-        pool = {}
-        pools[pool_type] = pool
-        pool_cache[pool_type] = pool
-        init_stats(pool_type)
+    -- Ленивая инициализация пула при первом обращении
+    if not pool then
+        TablePool.register_type(pool_type)
+        pool = pool_cache[pool_type]
     end
 
+    local size = #pool
+    if size > 0 then
+        local t = pool[size]
+        pool[size] = nil
+        
+        t.__in_pool = nil          -- Снимаем метку нахождения в пуле
+        t.__pool_type = pool_type  -- Сохраняем тип для авто-возврата
+        
+        local s = stats_cache[pool_type]
+        if s then s.hits = s.hits + 1 end
+        return t
+    end
+
+    -- Пул пуст, создаем новый объект
     local s = stats_cache[pool_type]
     if s then
         s.misses = s.misses + 1
         s.created = s.created + 1
     end
-    return {}
+    
+    local t = {}
+    t.__pool_type = pool_type
+    return t
 end
 
 --- Возвращает таблицу в пул для повторного использования.
---- Перед возвратом таблица полностью очищается.
 --- @param t table Таблица для возврата
---- @param pool_type string|nil Тип пула. По умолчанию "generic"
---- @param deep_or_nested boolean|string|nil Флаг глубокой очистки (boolean) или тип пула для вложенных таблиц (string)
+--- @param pool_type? string Тип пула (если nil, берется из объекта)
+--- @param deep_or_nested? boolean|string Флаг глубокой очистки или тип вложенных таблиц (legacy)
 function TablePool.release(t, pool_type, deep_or_nested)
     if type(t) ~= "table" then return end
 
-    pool_type = pool_type or "generic"
+    -- Определяем целевой пул
+    pool_type = pool_type or t.__pool_type or "generic"
     
-    -- O(1) Защита от двойного высвобождения
+    -- Защита от двойного возврата (O(1))
     if t.__in_pool then
-        if t.__in_pool == pool_type then
-            Logger.warn(COMPONENT_NAME, "Попытка двойного высвобождения таблицы в пул '%s'", pool_type)
-        else
-            Logger.warn(COMPONENT_NAME, "Попытка высвобождения таблицы в пул '%s', хотя она уже в пуле '%s'", pool_type, t.__in_pool)
-        end
+        Logger.warn(COMPONENT_NAME, "Попытка двойного высвобождения таблицы в пул '%s'", pool_type)
         return
     end
 
     local pool = pool_cache[pool_type]
     if not pool then
-        pool = {}
-        pools[pool_type] = pool
-        pool_cache[pool_type] = pool
-        init_stats(pool_type)
+        TablePool.register_type(pool_type)
+        pool = pool_cache[pool_type]
     end
 
     local limit = limits[pool_type] or DEFAULT_MAX_POOL_SIZE
     local pool_full = #pool >= limit
 
-    -- Оптимизация: если пул полон и не требуется глубокая/вложенная очистка,
-    -- мы можем просто выбросить таблицу, не тратя время на зануление полей.
-    -- Это значительно ускоряет работу при пиковых нагрузках.
+    -- Оптимизация: если пул полон и не требуется рекурсия, просто выбрасываем объект
     if pool_full and not deep_or_nested then
         return
     end
 
-    -- Очистка выполняется, если пул не полон ИЛИ если требуется вложенная очистка.
-    -- Это критично для высвобождения вложенных таблиц обратно в их пулы.
+    -- Выполняем очистку
     local cleaner = cleaners[pool_type]
     if cleaner then
+        -- Используем кастомный очиститель, если он есть
         cleaner(t, deep_or_nested)
     else
-        -- Fallback логика
-        if type(deep_or_nested) == "string" then
-            -- Если передана строка, считаем это типом для вложенных таблиц и чистим рекурсивно
-            release_nested(t, deep_or_nested, deep_or_nested)
-        else
-            clear_table(t, deep_or_nested)
-        end
+        -- Стандартная очистка с поддержкой авто-рекурсии
+        clear_table(t, deep_or_nested)
     end
 
+    -- Если в пуле есть место, сохраняем объект
     if not pool_full then
-        t.__in_pool = pool_type -- Ставим метку перед возвратом в пул
+        t.__in_pool = pool_type
 
-        -- Валидация чистоты таблицы в режиме отладки
+        -- Валидация чистоты в режиме отладки
         if debug_mode then
             local k = next(t)
             while k ~= nil do
-                if k ~= "__in_pool" then
-                    Logger.error(COMPONENT_NAME, "Таблица типа '%s' возвращена в пул не полностью очищенной! Поле: %s", pool_type, tostring(k))
-                    t[k] = nil -- Принудительная очистка в режиме отладки
+                if k ~= "__in_pool" and k ~= "__pool_type" then
+                    Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
+                    t[k] = nil
                 end
                 k = next(t, k)
             end
@@ -306,8 +285,7 @@ function TablePool.release(t, pool_type, deep_or_nested)
     end
 end
 
---- Полностью очищает все пулы таблиц.
---- Используется для освобождения памяти при достижении лимитов.
+--- Полностью очищает все пулы и вызывает сборщик мусора.
 function TablePool.clear_all()
     for name, pool in pairs(pools) do
         for i = 1, #pool do
@@ -320,19 +298,18 @@ function TablePool.clear_all()
         pools[name] = {}
         pool_cache[name] = pools[name]
         
-        -- Очистка статистики при полной очистке пулов для предотвращения утечек
         if stats[name] then
             stats[name].hits = 0
             stats[name].misses = 0
             stats[name].created = 0
         end
     end
-    -- Согласно astra-api-usage.md: ручное управление памятью обязательно
+    
     collectgarbage()
     Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
 end
 
---- Возвращает статистику использования пулов
+--- Возвращает статистику использования пулов.
 --- @return table Статистика (тип -> данные)
 function TablePool.get_stats()
     local result = {}
