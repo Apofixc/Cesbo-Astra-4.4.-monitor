@@ -82,11 +82,17 @@ local Logger = {}
 Logger._context_buffer = {}
 Logger._buffer_size = 1000
 
---- Обновляет кэшированный уровень логирования
+--- Обновляет кэшированный уровень логирования и сбрасывает кэш конфигурации
 function Logger.refresh_log_level()
     local config = get_monitor_config()
-    local level_name = config and config.LogLevel or "INFO"
-    cached_log_level = LOG_LEVELS[level_name] or LOG_LEVELS.INFO
+    if config then
+        cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
+        cached_log_format = config.LogFormat or "TEXT"
+    else
+        cached_log_level = LOG_LEVELS.INFO
+        cached_log_format = "TEXT"
+    end
+    last_config_check = os_time()
 end
 
 local function refresh_cache_if_needed()
