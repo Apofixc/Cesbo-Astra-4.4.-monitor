@@ -444,8 +444,9 @@ end
 
 -- Подписка на события
 if EventDispatcher then
-    EventDispatcher.subscribe(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, on_adapter_before_restart)
-    EventDispatcher.subscribe(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, on_adapter_after_restart)
+    local dispatcher = EventDispatcher.get_instance()
+    dispatcher:subscribe(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, on_adapter_before_restart)
+    dispatcher:subscribe(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, on_adapter_after_restart)
 end
 
 -- Экспорт в таблицу модуля для ModuleManager

@@ -17,10 +17,10 @@ local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
 -- 1. Стандартные Lua функции
-local setmetatable = setmetatable
-local tostring = tostring
-local os_time = os.time
-local collectgarbage = collectgarbage
+local setmetatable = _G.setmetatable
+local tostring = _G.tostring
+local os_time = _G.os.time
+local collectgarbage = _G.collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -129,21 +129,25 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
 end
 
 --- Публикует данные через EventDispatcher.
---- Теперь принимает таблицу и поддерживает ленивую сериализацию.
---- Использует emit_safe для предотвращения сбоев монитора при ошибках в шине событий.
+--- Использует пул для таблицы опций (Zero-Allocation Path).
 --- @param data table|string Данные события
 --- @param event_type string Тип события
 --- @param is_table? boolean [Флаг, что данные из пула таблиц]
 function BaseMonitor:publish(data, event_type, is_table)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
-    if dispatcher then
-        dispatcher:emit_safe(event_type, data, nil, {
-            is_table = is_table,
-            source = self._name,
-            source_monitor = self, -- Передаем ссылку на себя для обратной связи по кэшу
-            json_cache = self._json_cache -- Передаем горячий кэш, если он есть
-        })
-    end
+    if not dispatcher then return end
+
+    -- Берем таблицу опций из пула для минимизации нагрузки на GC
+    local options = self:get_table_from_pool("event_options")
+    options.is_table = is_table
+    options.source = self._name
+    options.source_monitor = self
+    options.json_cache = self._json_cache
+
+    -- Метка для автоматического возврата в пул при глубокой очистке события
+    options.__pool_type = "event_options"
+
+    dispatcher:emit_safe(event_type, data, nil, options)
 end
 
 --- Возвращает актуальные данные в виде таблицы (сырые данные).

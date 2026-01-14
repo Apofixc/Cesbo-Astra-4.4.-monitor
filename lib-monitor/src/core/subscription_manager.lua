@@ -75,7 +75,10 @@ local MAX_RETRY_QUEUE_SIZE = 500
 --- @return string|nil JSON-строка
 local function get_event_json(event)
     if not event then return nil end
-    if event.json_cache then return event.json_cache end
+    local options = event.options
+
+    -- Проверяем наличие кэша в опциях события
+    if options and options.json_cache then return options.json_cache end
 
     local json
     if type(event.data) == "string" then
@@ -84,11 +87,15 @@ local function get_event_json(event)
         json = json_encode(event.data)
     end
 
-    event.json_cache = json
+    -- Сохраняем кэш в опциях для повторного использования в рамках текущей рассылки
+    if options then
+        options.json_cache = json
 
-    -- Обратная связь: обновляем кэш в исходном мониторе, если он доступен
-    if event.source_monitor and type(event.source_monitor) == "table" then
-        event.source_monitor._json_cache = json
+        -- Обратная связь: обновляем кэш в исходном мониторе для последующих событий
+        local source_monitor = options.source_monitor
+        if source_monitor and type(source_monitor) == "table" then
+            source_monitor._json_cache = json
+        end
     end
 
     return json

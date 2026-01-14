@@ -140,7 +140,7 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
 
     -- 2. Уведомление о начале рестарта (для остановки каналов)
     if not force and EventDispatcher then
-        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
+        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
     local old_channels_count = 0
@@ -173,14 +173,14 @@ local function restart_dvb_monitor(name_adapter, new_params, force)
         Logger.error(COMPONENT_NAME, "restart_dvb_monitor: не удалось перезапустить '%s'. Откат...", name_adapter)
         perform_restart(old_conf)
         if not force and EventDispatcher then
-            EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+            EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
         end
         return false
     end
 
     -- 4. Уведомление о завершении рестарта (для запуска каналов)
     if not force and EventDispatcher then
-        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
     return true
@@ -250,14 +250,14 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
 
     -- 1. Уведомление о начале переключения (каналы остановятся сами)
     if EventDispatcher then
-        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
+        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
     -- 2. Перенастройка тюнера
     if not restart_dvb_monitor(name_adapter, new_tuner_params, true) then
         -- В случае ошибки возвращаем старый конфиг
         restart_dvb_monitor(name_adapter, old_tuner_params, true)
-        if EventDispatcher then EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter) end
+        if EventDispatcher then EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter) end
         return nil
     end
 
@@ -282,7 +282,7 @@ local function switch_transponder(name_adapter, new_tuner_params, reserve_input)
 
     -- 4. Уведомление о завершении (остальные каналы запустятся сами)
     if EventDispatcher then
-        EventDispatcher.publish(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
     end
 
     Logger.info(COMPONENT_NAME, "Транспондер переключен на адаптере '%s'", name_adapter)

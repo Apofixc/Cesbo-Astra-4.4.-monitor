@@ -109,12 +109,16 @@ function EventDispatcher:initialize()
     self._lvc_keys = {}
     self._lvc_size = 0
 
-    self.event_queues = {
-        [self.PRIORITIES.CRITICAL] = {},
-        [self.PRIORITIES.HIGH] = {},
-        [self.PRIORITIES.MEDIUM] = {},
-        [self.PRIORITIES.LOW] = {}
-    }
+    self.event_queues = {}
+    for _, p in pairs(self.PRIORITIES) do
+        self.event_queues[p] = {
+            data = {},
+            head = 1,
+            tail = 1,
+            size = 0,
+            max_size = 1000
+        }
+    end
 
     self.stats = {
         emitted = 0,
@@ -204,28 +208,34 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     event.data = event_data
     event.priority = p
     event.timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time()
-    event.source = (options and options.source) or "unknown"
-    -- Ссылка на монитор-источник для обратной связи по кэшированию JSON
-    event.source_monitor = options and options.source_monitor
-    -- ОПАСНО: is_table должен быть true только если это явно указано.
-    -- Иначе мы можем случайно очистить глобальные таблицы или таблицы модулей.
+    -- Сохраняем всю таблицу опций целиком для гибкости и Zero-Allocation Path
+    event.options = options
+    -- Флаг для TablePool, чтобы знать, нужно ли глубокое освобождение данных
     event.is_table = options and options.is_table == true
-    event.json_cache = options and options.json_cache -- Кэш для ленивой сериализации
 
     local queue = self.event_queues[p]
     if queue then
-        table_insert(queue, event)
-        if #queue > 1000 then
-            local dropped_event = table_remove(queue, 1)
+        -- Вставка в круговую очередь
+        if queue.size >= queue.max_size then
+            -- Вытеснение старого события (O(1))
+            local dropped_event = queue.data[queue.head]
+            queue.data[queue.head] = nil
+            queue.head = (queue.head % queue.max_size) + 1
+            queue.size = queue.size - 1
+
             if dropped_event then
-                -- Если данные были из пула, возвращаем их перед удалением самого события
+                -- Если данные были из пула, возвращаем их (автоопределение типа пула)
                 if dropped_event.is_table and dropped_event.data and TablePool then
-                    TablePool.release(dropped_event.data, "report")
+                    TablePool.release(dropped_event.data, nil, true)
                 end
                 if TablePool then TablePool.release(dropped_event, "event") end
             end
             self.stats.dropped = self.stats.dropped + 1
         end
+
+        queue.data[queue.tail] = event
+        queue.tail = (queue.tail % queue.max_size) + 1
+        queue.size = queue.size + 1
     end
 
     self.stats.emitted = self.stats.emitted + 1
@@ -267,16 +277,6 @@ function EventDispatcher:get_last_values(event_type)
     return result
 end
 
---- Публикует событие (алиас для emit).
---- @param event_type string Тип события
---- @param ... any Аргументы события
---- @return string|nil ID события
-function EventDispatcher:publish(event_type, ...)
-    local args = {...}
-    local data = args[1]
-    if #args > 1 then data = { args = args } end
-    return self:emit(event_type, data, nil, nil)
-end
 
 --- Регистрирует новую подписку на события.
 --- @param event_type string Тип события или маска (например, "adapter:*")
@@ -341,8 +341,12 @@ function EventDispatcher:process_queue()
 
     for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
         local queue = self.event_queues[p]
-        while #queue > 0 do
-            local event = table_remove(queue, 1)
+        while queue.size > 0 do
+            local event = queue.data[queue.head]
+            queue.data[queue.head] = nil
+            queue.head = (queue.head % queue.max_size) + 1
+            queue.size = queue.size - 1
+
             if event then
                 local ok, err = pcall(function()
                     self.subscription_manager:publish_event(event)
@@ -400,8 +404,11 @@ function EventDispatcher:shutdown()
 
     -- Очистка очередей
     for p, queue in pairs(self.event_queues) do
-        while #queue > 0 do
-            local event = table_remove(queue, 1)
+        while queue.size > 0 do
+            local event = queue.data[queue.head]
+            queue.data[queue.head] = nil
+            queue.head = (queue.head % queue.max_size) + 1
+            queue.size = queue.size - 1
             self:_safe_return_to_pool(event)
         end
     end
@@ -419,7 +426,11 @@ end
 local tp = ModuleManager.get_module("table_pool")
 if tp then
     -- Используем оптимизированные очистители по схеме для событий
-    TablePool.register_type("event", { "id", "type", "data", "timestamp", "is_table" }, 100, 10)
+    TablePool.register_type("event", {
+        "id", "type", "data", "priority", "timestamp", "options", "is_table"
+    }, 100, 10)
+    -- Пул для динамических опций с полной очисткой (Full Wipe)
+    TablePool.register_type("event_options", nil, 100, 10)
     TablePool.register_type("lvc_wrapper", { "data", "timestamp" }, 50, 5)
     TablePool.register_type("lvc_entry", nil, 50, 5)
     TablePool.register_type("lvc_sub", nil, 20, 2)
