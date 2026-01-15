@@ -80,6 +80,8 @@ end
 --- @field public subscription_manager SubscriptionManager Менеджер подписок
 --- @field private _lvc table<string, table> Кэш последних значений (Last Value Cache)
 --- @field private _lvc_keys table<number, string> Очередь ключей для FIFO вытеснения из LVC
+--- @field private _lvc_head number Индекс головы очереди ключей LVC
+--- @field private _lvc_tail number Индекс хвоста очереди ключей LVC
 --- @field private _lvc_size number Текущий размер LVC
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
 --- @field private stats table Статистика диспетчера
@@ -132,6 +134,8 @@ function EventDispatcher:initialize()
     -- Кэш последних значений (Last Value Cache)
     self._lvc = {}
     self._lvc_keys = {}
+    self._lvc_head = 1
+    self._lvc_tail = 1
     self._lvc_size = 0
 
     self.event_queues = {}
@@ -180,27 +184,33 @@ end
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
 
+    local now = os_time()
+    local sub_mgr = self.subscription_manager
+
     -- Оптимизация: Subscription-aware Emitting
-    -- Если на событие нет подписчиков и оно не кэшируется (или LVC не нужен), выходим сразу.
     local no_cache = options and options.no_cache
-    if no_cache and not self.subscription_manager:has_subscriptions(event_type) then
+    if no_cache and not sub_mgr:has_subscriptions(event_type) then
         return nil
     end
 
     -- Обновляем LVC (если не запрещено в опциях)
     if not no_cache then
-        -- Ограничить размер LVC для предотвращения утечек памяти (O(1) вытеснение)
+        -- Ограничить размер LVC для предотвращения утечек памяти (O(1) вытеснение через круговой буфер)
         if not self._lvc[event_type] then
             if self._lvc_size >= MAX_LVC_SIZE then
-                local oldest_key = table_remove(self._lvc_keys, 1)
+                local oldest_key = self._lvc_keys[self._lvc_head]
+                self._lvc_keys[self._lvc_head] = nil
+                self._lvc_head = (self._lvc_head % MAX_LVC_SIZE) + 1
+                self._lvc_size = self._lvc_size - 1
+
                 if oldest_key then
                     local old_entry = self._lvc[oldest_key]
                     self:_release_lvc_entry(old_entry)
                     self._lvc[oldest_key] = nil
-                    self._lvc_size = self._lvc_size - 1
                 end
             end
-            table_insert(self._lvc_keys, event_type)
+            self._lvc_keys[self._lvc_tail] = event_type
+            self._lvc_tail = (self._lvc_tail % MAX_LVC_SIZE) + 1
             self._lvc_size = self._lvc_size + 1
         end
 
@@ -219,7 +229,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local entry = TablePool and TablePool.get("lvc_wrapper") or {}
         entry.data = cache_data
-        entry.timestamp = os_time()
+        entry.timestamp = now
         self._lvc[event_type] = entry
     end
 
@@ -230,7 +240,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     event.type = event_type
     event.data = event_data
     event.priority = p
-    event.timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time()
+    event.timestamp = (type(event_data) == "table" and event_data.timestamp) or now
     event.options = options
     event.is_table = options and options.is_table == true
 
@@ -270,9 +280,7 @@ end
 --- @param options? table Дополнительные параметры
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit_safe(event_type, event_data, priority, options)
-    local ok, result = pcall(function()
-        return self:emit(event_type, event_data, priority, options)
-    end)
+    local ok, result = pcall(self.emit, self, event_type, event_data, priority, options)
 
     if not ok then
         Logger.error(COMPONENT_NAME, "Ошибка публикации события: %s", tostring(result))
@@ -342,6 +350,7 @@ end
 --- @private
 function EventDispatcher:process_queue()
     local now = os_time()
+    local sub_mgr = self.subscription_manager
 
     -- Периодическая очистка старых записей LVC (TTL)
     -- Выполняется раз в минуту для снижения нагрузки
@@ -358,19 +367,21 @@ function EventDispatcher:process_queue()
 
     local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
     local processed_in_batch = 0
+    local priorities = self.PRIORITIES
 
-    for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
+    for p = priorities.CRITICAL, priorities.LOW do
         local queue = self.event_queues[p]
+        local q_data = queue.data
+        local q_max = queue.max_size
+
         while queue.size > 0 do
-            local event = queue.data[queue.head]
-            queue.data[queue.head] = nil
-            queue.head = (queue.head % queue.max_size) + 1
+            local event = q_data[queue.head]
+            q_data[queue.head] = nil
+            queue.head = (queue.head % q_max) + 1
             queue.size = queue.size - 1
 
             if event then
-                local ok, err = pcall(function()
-                    self.subscription_manager:publish_event(event)
-                end)
+                local ok, err = pcall(sub_mgr.publish_event, sub_mgr, event, now)
 
                 if not ok then
                     Logger.error(COMPONENT_NAME, "Не удалось обработать событие %s: %s",
@@ -395,12 +406,9 @@ end
 --- @private
 --- @param event table Объект события
 function EventDispatcher:_safe_return_to_pool(event)
-    local ok, err = pcall(function()
-        if TablePool then
-            -- Если данные события были из пула (is_table), используем глубокую очистку
-            TablePool.release(event, "event", event.is_table == true)
-        end
-    end)
+    if not TablePool or not event then return end
+
+    local ok, err = pcall(TablePool.release, event, "event", event.is_table == true)
 
     if not ok then
         Logger.warn(COMPONENT_NAME, "Не удалось вернуть событие в пул: %s", tostring(err))
@@ -439,6 +447,8 @@ function EventDispatcher:shutdown()
         self._lvc[name] = nil
     end
     self._lvc_keys = {}
+    self._lvc_head = 1
+    self._lvc_tail = 1
     self._lvc_size = 0
 end
 

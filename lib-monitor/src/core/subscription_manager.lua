@@ -380,6 +380,7 @@ function SubscriptionManager:match(pattern, name)
     local matcher = self._matchers[pattern]
     if not matcher and Wildcard and (pattern:find("*", 1, true) or pattern:find("?", 1, true)) then
         matcher = Wildcard.compile(pattern)
+        self._matchers[pattern] = matcher -- Кэшируем скомпилированный матчер
     end
 
     if matcher then return matcher(name) end
@@ -400,10 +401,11 @@ end
 
 --- Рассылает объект события всем подписчикам.
 --- @param event table Объект события (из EventDispatcher)
+--- @param now? number [Текущее время (опционально, для оптимизации)]
 --- @return number, number Количество успешно доставленных и проваленных уведомлений
-function SubscriptionManager:publish_event(event)
+function SubscriptionManager:publish_event(event, now)
     local delivered, failed = 0, 0
-    local now = os_time()
+    now = now or os_time()
     local event_type = event.type
     local event_data = event.data
     local event_json = nil -- Кэш JSON для текущей рассылки
