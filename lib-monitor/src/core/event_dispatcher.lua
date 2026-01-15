@@ -39,7 +39,7 @@ local DEFAULT_BATCH_LIMIT = 100
 --- TTL для записей LVC по умолчанию (1 час)
 local DEFAULT_LVC_TTL = 3600
 
--- 5. Внутреннее состояние (Private State)
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class EventDispatcherState
 --- @field instance EventDispatcher|nil Единственный экземпляр (Singleton)
 --- @field event_counter number Счетчик для генерации ID событий
@@ -47,34 +47,6 @@ local state = {
     instance = nil,
     event_counter = 0,
 }
-
--- ===========================================================================
--- Внутренние функции (Private)
--- ===========================================================================
-
---- Генерация уникального ID события
---- @return string
-local function _generate_event_id()
-    state.event_counter = state.event_counter + 1
-    return "evt_" .. state.event_counter
-end
-
---- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
---- @param data any Данные для копирования
---- @return any Копия данных
-local function _deep_copy_to_pool(data)
-    if type(data) ~= "table" then return data end
-
-    local copy = TablePool.get("lvc_sub")
-    for k, v in pairs(data) do
-        copy[k] = _deep_copy_to_pool(v)
-    end
-    return copy
-end
-
--- ===========================================================================
--- Публичное API (Public API)
--- ===========================================================================
 
 --- @class EventDispatcher
 --- @field public subscription_manager SubscriptionManager Менеджер подписок
@@ -88,6 +60,77 @@ end
 --- @field private active boolean Флаг активности обработки
 local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Генерация уникального ID события
+--- @private
+--- @return string ID события
+local function _generate_event_id()
+    state.event_counter = state.event_counter + 1
+    return "evt_" .. state.event_counter
+end
+
+--- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
+--- @private
+--- @param data any Данные для копирования
+--- @return any Копия данных
+local function _deep_copy_to_pool(data)
+    if type(data) ~= "table" then return data end
+
+    local copy = TablePool.get("lvc_sub")
+    for k, v in pairs(data) do
+        copy[k] = _deep_copy_to_pool(v)
+    end
+    return copy
+end
+
+--- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди
+--- @private
+function EventDispatcher:_initialize()
+    -- Тонкая настройка Garbage Collector для инкрементальной очистки
+    local gc_pause = (MonitorConfig and MonitorConfig.GcPause) or 100
+    local gc_stepmul = (MonitorConfig and MonitorConfig.GcStepMul) or 500
+    collectgarbage("setpause", gc_pause)
+    collectgarbage("setstepmul", gc_stepmul)
+
+    self.subscription_manager = SubscriptionManager.new()
+
+    -- Кэш последних значений (Last Value Cache)
+    -- Используется для мгновенного получения состояния при подписке
+    self._lvc = {}
+    self._lvc_keys = {}
+    self._lvc_head = 1
+    self._lvc_tail = 1
+    self._lvc_size = 0
+
+    -- Очереди событий по приоритетам (FIFO круговые буферы)
+    self.event_queues = {}
+    for _, p in pairs(self.PRIORITIES) do
+        self.event_queues[p] = {
+            data = {},
+            head = 1,
+            tail = 1,
+            size = 0,
+            max_size = MAX_QUEUE_SIZE
+        }
+    end
+
+    self.stats = {
+        emitted = 0,
+        processed = 0,
+        dropped = 0,
+        last_reset = os_time()
+    }
+
+    self.active = true
+    self:_start_queue_processor()
+
+    Logger.info(COMPONENT_NAME,
+        "Диспетчер событий инициализирован с поддержкой LVC и масок (Wildcards)")
+end
 
 --- Приоритеты событий (1 - самый высокий, 4 - самый низкий)
 --- @type table<string, number>
@@ -115,53 +158,11 @@ EventDispatcher.EVENTS = {
 function EventDispatcher.get_instance()
     if not state.instance then
         state.instance = setmetatable({}, EventDispatcher)
-        state.instance:initialize()
+        state.instance:_initialize()
     end
     return state.instance
 end
 
---- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди.
---- @private
-function EventDispatcher:initialize()
-    -- Тонкая настройка Garbage Collector для инкрементальной очистки
-    local gc_pause = (MonitorConfig and MonitorConfig.GcPause) or 100
-    local gc_stepmul = (MonitorConfig and MonitorConfig.GcStepMul) or 500
-    collectgarbage("setpause", gc_pause)
-    collectgarbage("setstepmul", gc_stepmul)
-
-    self.subscription_manager = SubscriptionManager.new()
-
-    -- Кэш последних значений (Last Value Cache)
-    self._lvc = {}
-    self._lvc_keys = {}
-    self._lvc_head = 1
-    self._lvc_tail = 1
-    self._lvc_size = 0
-
-    self.event_queues = {}
-    for _, p in pairs(self.PRIORITIES) do
-        self.event_queues[p] = {
-            data = {},
-            head = 1,
-            tail = 1,
-            size = 0,
-            max_size = MAX_QUEUE_SIZE
-        }
-    end
-
-    self.stats = {
-        emitted = 0,
-        processed = 0,
-        dropped = 0,
-        last_reset = os_time()
-    }
-
-    self.active = true
-    self:start_queue_processor()
-
-    Logger.info(COMPONENT_NAME,
-        "Диспетчер событий инициализирован с поддержкой LVC и масок (Wildcards)")
-end
 
 --- Вспомогательная функция для очистки записи LVC и возврата таблиц в пул
 --- @private
@@ -342,22 +343,22 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     return sub_id
 end
 
---- Запускает фоновый таймер для обработки очереди событий через планировщик.
+--- Запускает фоновый таймер для обработки очереди событий через планировщик
 --- @private
-function EventDispatcher:start_queue_processor()
+function EventDispatcher:_start_queue_processor()
     if not Scheduler then return end
 
     local scheduler = Scheduler.get_instance()
     local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
 
     scheduler:add_task("event_dispatcher_queue", function()
-        if self.active then self:process_queue() end
+        if self.active then self:_process_queue() end
     end, interval)
 end
 
---- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager.
+--- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager
 --- @private
-function EventDispatcher:process_queue()
+function EventDispatcher:_process_queue()
     local now = os_time()
     local sub_mgr = self.subscription_manager
 

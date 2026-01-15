@@ -115,9 +115,10 @@ SubscriptionManager.__index = SubscriptionManager
 -- Внутренние функции (Private)
 -- ===========================================================================
 
---- Генерирует уникальный идентификатор (UUID v4) для подписки.
+--- Генерирует уникальный идентификатор (UUID v4) для подписки
+--- @private
 --- @return string UUID
-local function generate_uuid()
+local function _generate_uuid()
     local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
     return (string_gsub(template, "[xy]", function(c)
         local v = (c == "x") and math_random(0, 0xf) or math_random(8, 0xb)
@@ -126,9 +127,10 @@ local function generate_uuid()
 end
 
 --- Вспомогательная функция для получения JSON из события (Lazy JSON)
+--- @private
 --- @param event table Объект события
 --- @return string|nil JSON-строка
-local function get_event_json(event)
+local function _get_event_json(event)
     if not event then return nil end
     local options = event.options
 
@@ -142,7 +144,12 @@ local function get_event_json(event)
     if type(event.data) == "string" then
         json = event.data
     else
-        json = encode(event.data)
+        local ok, res = pcall(encode, event.data)
+        if not ok then
+            Logger.error(COMPONENT_NAME, "Ошибка кодирования JSON: %s", tostring(res))
+            return nil
+        end
+        json = res
     end
 
     -- Сохраняем кэш в опциях для повторного использования в рамках текущей рассылки
@@ -174,7 +181,7 @@ local Transport = {
 
         local encode = get_json_encode()
         local content = event_json or
-                        ((type(event) == "table" and event.id) and get_event_json(event) or
+                        ((type(event) == "table" and event.id) and _get_event_json(event) or
                         ((type(event) == "table") and (encode and encode(event) or nil) or tostring(event)))
 
         if not content then return false, "ошибка кодирования JSON" end
@@ -214,7 +221,7 @@ local Transport = {
         if WsSubscriber and WsSubscriber.broadcast_raw then
             local encode = get_json_encode()
             local json_data = event_json or
-                             ((type(event) == "table" and event.id) and get_event_json(event) or
+                             ((type(event) == "table" and event.id) and _get_event_json(event) or
                              ((type(event) == "table") and (encode and encode(event) or nil) or event))
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
@@ -240,7 +247,7 @@ local Transport = {
     CONSOLE = function(self, config, event, event_type, event_json)
         local encode = get_json_encode()
         local message = event_json or
-                        ((type(event) == "table" and event.id) and get_event_json(event) or
+                        ((type(event) == "table" and event.id) and _get_event_json(event) or
                         ((type(event) == "table") and (encode and encode(event) or nil) or event))
         Logger.info("Консоль", "[СОБЫТИЕ:%s] %s", tostring(event_type), tostring(message))
         return true
@@ -283,8 +290,8 @@ function SubscriptionManager:enqueue_retry(config, event, event_type, retry_coun
     return true
 end
 
---- Создает и инициализирует новый экземпляр SubscriptionManager.
---- Загружает сохраненные подписки из файла и запускает обработчик повторов.
+--- Создает и инициализирует новый экземпляр SubscriptionManager
+--- Загружает сохраненные подписки из файла и запускает обработчик повторов
 --- @return SubscriptionManager Экземпляр менеджера
 function SubscriptionManager.new()
     local self = setmetatable({}, SubscriptionManager)
@@ -414,7 +421,7 @@ function SubscriptionManager:load()
     end
 end
 
---- Регистрирует новую подписку на события.
+--- Регистрирует новую подписку на события
 --- @param event_type string Тип события или маска
 --- @param sub_data table|function Данные подписки (callback, filters, throttle_ms) или функция коллбэка
 --- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
@@ -428,7 +435,7 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     local transport = self:detect_transport(sub_data.callback)
     if not transport then return nil end
 
-    local sub_id = existing_id or generate_uuid()
+    local sub_id = existing_id or _generate_uuid()
     local filters = sub_data.filters or {}
     local default_batch_mode = (MonitorConfig and MonitorConfig.DefaultBatchMode) or "single"
 
@@ -560,7 +567,7 @@ function SubscriptionManager:publish_event(event, now)
                 else
                     -- Обычная немедленная отправка
                     if sub.transport ~= "LUA_CALLBACK" and not event_json then
-                        event_json = get_event_json(event)
+                        event_json = _get_event_json(event)
                     end
 
                     local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
@@ -631,7 +638,7 @@ function SubscriptionManager:detect_transport(cfg)
     return nil
 end
 
---- Добавляет событие в пакетную очередь подписчика.
+--- Добавляет событие в пакетную очередь подписчика
 --- Оптимизация: сохраняем уже готовую JSON-строку для предотвращения повреждения данных
 --- и ускорения финальной сборки батча.
 --- @param sub table Объект подписки
@@ -648,7 +655,7 @@ function SubscriptionManager:add_to_batch(sub, event)
     local queue = self._batch_queues[sub_id]
 
     -- Получаем JSON события (используем кэш, если он есть)
-    local event_json = get_event_json(event)
+    local event_json = _get_event_json(event)
     if event_json then
         table_insert(queue.events, event_json)
     end

@@ -24,7 +24,7 @@ local string_gmatch = _G.string.gmatch
 --- Максимальный размер кэша скомпилированных функций
 local MAX_CACHE_SIZE = 1000
 
--- 5. Внутреннее состояние (Private State)
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class WildcardState
 --- @field compile_cache table<string, function> Кэш скомпилированных функций
 --- @field cache_size number Текущее количество элементов в кэше
@@ -33,12 +33,16 @@ local state = {
     cache_size = 0,
 }
 
+--- @class Wildcard
+local Wildcard = {}
+
 -- ===========================================================================
 -- Внутренние функции (Private)
 -- ===========================================================================
 
 --- Создает матчер для любого значения (маска "*")
---- @return function
+--- @private
+--- @return function Функция-матчер
 local function _create_any_matcher()
     return function(name)
         return name ~= nil and type(name) == "string"
@@ -46,8 +50,9 @@ local function _create_any_matcher()
 end
 
 --- Создает матчер для точного совпадения строк
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_exact_matcher(pattern)
     return function(name)
         return pattern == name
@@ -55,8 +60,9 @@ local function _create_exact_matcher(pattern)
 end
 
 --- Создает матчер для проверки префикса (маска "prefix:*")
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_prefix_matcher(pattern)
     local prefix = string_sub(pattern, 1, -2)
     return function(name)
@@ -66,8 +72,9 @@ local function _create_prefix_matcher(pattern)
 end
 
 --- Создает матчер для проверки суффикса (маска "*:suffix")
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_suffix_matcher(pattern)
     local suffix = string_sub(pattern, 2)
     local suffix_len = #suffix
@@ -78,8 +85,9 @@ local function _create_suffix_matcher(pattern)
 end
 
 --- Создает матчер для проверки вхождения (маска "*middle*")
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_middle_matcher(pattern)
     local middle = string_sub(pattern, 2, -2)
     return function(name)
@@ -90,8 +98,9 @@ end
 
 --- Создает матчер для сложных масок с множественными сегментами (только "*")
 --- Например: "prefix*middle*suffix"
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_segments_matcher(pattern)
     local segments = {}
     local segment_lens = {}
@@ -143,8 +152,9 @@ end
 
 --- Создает универсальный матчер на основе регулярных выражений Lua
 --- Используется как fallback для масок с "?" или сложной комбинацией "*"
---- @param pattern string
---- @return function
+--- @private
+--- @param pattern string Маска
+--- @return function Функция-матчер
 local function _create_regex_matcher(pattern)
     -- Экранируем магические символы Lua, кроме * и ?
     local regex = string_gsub(pattern, "%%", "%%%%")
@@ -165,9 +175,6 @@ end
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
-
---- @class Wildcard
-local Wildcard = {}
 
 --- Компилирует маску в функцию сопоставления.
 --- Поддерживает оптимизированные пути для частых случаев (префиксы, суффиксы, сегменты).

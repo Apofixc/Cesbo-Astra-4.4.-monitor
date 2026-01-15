@@ -30,19 +30,22 @@ local COMPONENT_NAME = "FilterEngine"
 local MAX_CACHE_SIZE = 500 -- Увеличенный размер кэша для сложных систем
 
 -- 5. Инициализация объектов и внутреннее состояние
+--- @class FilterEngineState
+--- @field script_cache table<string, function> Кэш скомпилированных скриптов
+--- @field script_cache_count number Текущее количество скриптов в кэше
+--- @field accessor_cache table<string, function> Кэш функций-аксессоров
+--- @field accessor_cache_count number Текущее количество аксессоров в кэше
+--- @field duration_state table<string, table<string, number>> Состояние фильтров по длительности
+local state = {
+    script_cache = {},
+    script_cache_count = 0,
+    accessor_cache = {},
+    accessor_cache_count = 0,
+    duration_state = {},
+}
+
 --- @class FilterEngine
---- @field private duration_state table<string, table<string, number>> Состояние фильтров по длительности
 local FilterEngine = {}
-
--- Внутренние кэши
-local script_cache = {}
-local script_cache_count = 0
-local accessor_cache = {}
-local accessor_cache_count = 0
-
--- Состояние для фильтров по длительности (Duration)
--- Структура: duration_state[sub_id][condition_key] = first_match_time
-local duration_state = {}
 
 --- @type table<string, function> Операторы сравнения для интерпретируемого режима
 local OPERATORS = {
@@ -68,7 +71,7 @@ local OPERATORS = {
 -- Публичное API (Public API)
 -- ===========================================================================
 
---- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным.
+--- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным
 --- @param path string Путь к полю через точку (например, "total.bitrate")
 --- @return function Функция-аксессор: function(data) return value end
 function FilterEngine.compile_accessor(path)
@@ -76,12 +79,12 @@ function FilterEngine.compile_accessor(path)
         return function(d) return d end
     end
 
-    local accessor = accessor_cache[path]
+    local accessor = state.accessor_cache[path]
     if accessor then return accessor end
 
-    if accessor_cache_count >= MAX_CACHE_SIZE then
-        accessor_cache = {}
-        accessor_cache_count = 0
+    if state.accessor_cache_count >= MAX_CACHE_SIZE then
+        state.accessor_cache = {}
+        state.accessor_cache_count = 0
     end
 
     local parts = {}
@@ -112,16 +115,16 @@ function FilterEngine.compile_accessor(path)
         end
     end
 
-    accessor_cache[path] = accessor
-    accessor_cache_count = accessor_cache_count + 1
+    state.accessor_cache[path] = accessor
+    state.accessor_cache_count = state.accessor_cache_count + 1
     return accessor
 end
 
---- Очищает состояние фильтров для указанной подписки.
+--- Очищает состояние фильтров для указанной подписки
 --- @param sub_id string ID подписки
 function FilterEngine.clear_state(sub_id)
-    if sub_id and duration_state[sub_id] then
-        duration_state[sub_id] = nil
+    if sub_id and state.duration_state[sub_id] then
+        state.duration_state[sub_id] = nil
     end
 end
 
@@ -129,14 +132,14 @@ end
 -- Внутренние функции (Private)
 -- ===========================================================================
 
---- Проверяет соответствие данных конкретному условию (интерпретируемый режим).
+--- Проверяет соответствие данных конкретному условию (интерпретируемый режим)
 --- @private
 --- @param data table Данные события
 --- @param condition table Параметры условия
 --- @param sub_id string|nil ID подписки
 --- @param cond_idx any Уникальный ключ условия
 --- @return boolean Результат проверки
-local function check_condition(data, condition, sub_id, cond_idx)
+local function _check_condition(data, condition, sub_id, cond_idx)
     if type(data) ~= "table" then return false end
     
     -- Если это вложенная группа условий
@@ -168,18 +171,18 @@ local function check_condition(data, condition, sub_id, cond_idx)
     -- Обработка длительности
     local duration = condition.duration
     if duration and duration > 0 and sub_id then
-        if not duration_state[sub_id] then duration_state[sub_id] = {} end
-        local state = duration_state[sub_id]
+        if not state.duration_state[sub_id] then state.duration_state[sub_id] = {} end
+        local d_state = state.duration_state[sub_id]
         local key = tostring(cond_idx)
 
         if is_match then
-            if not state[key] then
-                state[key] = os_time()
+            if not d_state[key] then
+                d_state[key] = os_time()
                 return false
             end
-            return (os_time() - state[key]) >= duration
+            return (os_time() - d_state[key]) >= duration
         else
-            state[key] = nil
+            d_state[key] = nil
             return false
         end
     end
@@ -187,9 +190,12 @@ local function check_condition(data, condition, sub_id, cond_idx)
     return is_match
 end
 
---- Генерирует выражение для одного условия в JIT-коде.
+--- Генерирует выражение для одного условия в JIT-коде
 --- @private
-local function generate_cond_expr(cond, upvalues)
+--- @param cond table Условие
+--- @param upvalues table Список внешних значений
+--- @return string Lua-выражение
+local function _generate_cond_expr(cond, upvalues)
     local op = cond.op or "eq"
     local field = cond.field
     local target = cond.value
@@ -240,17 +246,20 @@ local function generate_cond_expr(cond, upvalues)
     return "false"
 end
 
---- Рекурсивно генерирует Lua-код для фильтров.
+--- Рекурсивно генерирует Lua-код для фильтров
 --- @private
-local function generate_recursive(filters, upvalues)
+--- @param filters table Схема фильтров
+--- @param upvalues table Список внешних значений
+--- @return string Lua-код
+local function _generate_recursive(filters, upvalues)
     if not filters.conditions or #filters.conditions == 0 then return "true" end
     
     local parts = {}
     for _, cond in ipairs(filters.conditions) do
         if cond.conditions then
-            table_insert(parts, "(" .. generate_recursive(cond, upvalues) .. ")")
+            table_insert(parts, "(" .. _generate_recursive(cond, upvalues) .. ")")
         else
-            table_insert(parts, generate_cond_expr(cond, upvalues))
+            table_insert(parts, _generate_cond_expr(cond, upvalues))
         end
     end
     
@@ -258,7 +267,7 @@ local function generate_recursive(filters, upvalues)
     return table_concat(parts, joiner)
 end
 
---- Проверяет данные события на соответствие набору фильтров.
+--- Проверяет данные события на соответствие набору фильтров
 --- @param data table Данные события
 --- @param filters table Схема фильтров
 --- @param sub_id string|nil ID подписки
@@ -276,7 +285,7 @@ function FilterEngine.match(data, filters, sub_id)
                     -- Компилируем само условие для ускорения интерпретатора
                     if not c._compiled_cond then
                         local upvalues = {}
-                        local expr = generate_cond_expr(c, upvalues)
+                        local expr = _generate_cond_expr(c, upvalues)
                         local uv_env = { 
                             type = type, tostring = tostring, 
                             string_find = string_find, string_match = string_match 
@@ -294,7 +303,7 @@ function FilterEngine.match(data, filters, sub_id)
 
         if not has_duration then
             local upvalues = {}
-            local expr = generate_recursive(filters, upvalues)
+            local expr = _generate_recursive(filters, upvalues)
             
             local uv_decl = {}
             local uv_env = { 
@@ -330,18 +339,18 @@ function FilterEngine.match(data, filters, sub_id)
 
     -- Lua-скрипт
     if filters.script and type(filters.script) == "string" then
-        local func = script_cache[filters.script]
+        local func = state.script_cache[filters.script]
         if not func then
-            if script_cache_count >= MAX_CACHE_SIZE then
-                script_cache = {}
-                script_cache_count = 0
+            if state.script_cache_count >= MAX_CACHE_SIZE then
+                state.script_cache = {}
+                state.script_cache_count = 0
             end
             local env = { data = data, type = type, tostring = tostring, os_time = os_time, pairs = pairs, ipairs = ipairs }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
             if func then
-                script_cache[filters.script] = func
-                script_cache_count = script_cache_count + 1
+                state.script_cache[filters.script] = func
+                state.script_cache_count = state.script_cache_count + 1
             else
                 Logger.error(COMPONENT_NAME, "Script Error: %s", tostring(err))
                 return false
@@ -356,12 +365,12 @@ function FilterEngine.match(data, filters, sub_id)
         local logic = filters.logic or "and"
         if logic == "and" then
             for i, cond in ipairs(filters.conditions) do
-                if not check_condition(data, cond, sub_id, i) then return false end
+                if not _check_condition(data, cond, sub_id, i) then return false end
             end
             return true
         else
             for i, cond in ipairs(filters.conditions) do
-                if check_condition(data, cond, sub_id, i) then return true end
+                if _check_condition(data, cond, sub_id, i) then return true end
             end
             return false
         end
