@@ -31,6 +31,11 @@ local last_errors = {}
 local context_stack = {}
 local current_context_id = nil
 local context_counter = 0
+local active_contexts = 0
+
+-- Список компонентов для ограничения размера _context_buffer
+local component_list = {}
+local MAX_COMPONENTS = 100
 
 -- Очередь для пакетной записи логов
 local log_queue = {}
@@ -117,9 +122,15 @@ end
 --- @param level string Уровень лога
 --- @param component string Имя компонента
 --- @param message string Текст сообщения
---- @param context_id? string ID контекста
+--- @param context_id? number ID контекста
 function Logger.buffer_log(level, component, message, context_id)
     if not Logger._context_buffer[component] then
+        -- Ограничение количества отслеживаемых компонентов (защита от утечек)
+        if #component_list >= MAX_COMPONENTS then
+            local old_comp = table_remove(component_list, 1)
+            Logger.clear_component_buffer(old_comp)
+        end
+        table_insert(component_list, component)
         Logger._context_buffer[component] = {}
     end
 
@@ -139,6 +150,31 @@ function Logger.buffer_log(level, component, message, context_id)
         local old = table_remove(buffer, 1)
         if pool and old then
             pool.release(old, "log_entry")
+        end
+    end
+end
+
+--- Полностью очищает буфер логов для указанного компонента
+--- @param component string Имя компонента
+function Logger.clear_component_buffer(component)
+    local buffer = Logger._context_buffer[component]
+    if not buffer then return end
+
+    local pool = get_table_pool()
+    for i = 1, #buffer do
+        local entry = buffer[i]
+        if pool and entry then
+            pool.release(entry, "log_entry")
+        end
+        buffer[i] = nil
+    end
+    Logger._context_buffer[component] = nil
+
+    -- Удаляем из списка компонентов
+    for i = 1, #component_list do
+        if component_list[i] == component then
+            table_remove(component_list, i)
+            break
         end
     end
 end
@@ -217,22 +253,23 @@ local function write_log(level_name, component, format_str, ...)
 
     if should_log(level) then
         local use_json = (cached_log_format == "JSON")
+        local raw_msg = msg
 
         if use_json then
             local log_data = {
                 timestamp = os_time(),
                 level = level_name,
                 component = component,
-                message = msg,
+                message = raw_msg,
                 context_id = current_context_id
             }
             msg = json_encode(log_data)
         else
-            msg = string_format("[%s] %s", component, msg)
+            msg = string_format("[%s] %s", component, raw_msg)
         end
 
         -- Пакетная запись (Batch Logging)
-        if cached_log_batch_enabled and cached_log_buffer_size > 0 then
+        if cached_log_batch_enabled then
             local pool = get_table_pool()
             local item = pool and pool.get("log_entry") or {}
             item.level = level_name
@@ -299,8 +336,9 @@ end
 --- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке (для HTTP-функций)
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
+    active_contexts = active_contexts + 1
     context_counter = context_counter + 1
-    local context_id = tostring(context_counter) -- Уникальный ID для этого вызова
+    local context_id = context_counter -- Используем число для предотвращения аллокаций строк
 
     local prev_context_id = current_context_id
     if prev_context_id then
@@ -316,12 +354,20 @@ function Logger.with_error(func, ...)
         table_remove(context_stack)
     end
 
+    local function cleanup()
+        last_errors[context_id] = nil
+        active_contexts = active_contexts - 1
+        if active_contexts == 0 then
+            context_counter = 0
+        end
+    end
+
     local ok = results[1]
     if not ok then
         -- Ошибка выполнения (crash)
         local err = results[2]
         Logger.error("Logger", "Ошибка выполнения: %s", tostring(err))
-        last_errors[context_id] = nil
+        cleanup()
         return false, tostring(err)
     end
 
@@ -330,12 +376,12 @@ function Logger.with_error(func, ...)
     if not success then
         -- Извлекаем ошибку, которая была сохранена для ЭТОГО контекста
         local err = last_errors[context_id] or "Неизвестная ошибка"
-        last_errors[context_id] = nil
+        cleanup()
         return false, err
     end
 
     -- Успех
-    last_errors[context_id] = nil
+    cleanup()
     return unpack(results, 2)
 end
 
