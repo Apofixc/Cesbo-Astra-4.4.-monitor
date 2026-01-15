@@ -145,15 +145,12 @@ local function _format_message(format_str, ...)
     return str
 end
 
---- Распространяет ошибку вверх по стеку контекстов
+--- Сохраняет ошибку в текущем контексте (Lazy Propagation)
 --- @param msg string Текст ошибки
 local function _propagate_error(msg)
     if not state.current_context_id then return end
-    
+    -- Записываем только в текущий контекст (O(1))
     state.last_errors[state.current_context_id] = msg
-    for i = 1, #state.context_stack do
-        state.last_errors[state.context_stack[i]] = msg
-    end
 end
 
 --- Выполняет непосредственную запись сообщения в лог Astra или консоль
@@ -175,6 +172,11 @@ end
 --- @param level_name string
 --- @param message string
 local function _enqueue_log(level_name, message)
+    if not state.cached_log_batch_enabled then
+        _write_to_output(level_name, message)
+        return
+    end
+
     local pool = _get_table_pool()
     local item = pool and pool.get("log_entry") or {}
     item.level = level_name
@@ -275,6 +277,7 @@ local function _write_log(level_name, component, format_str, ...)
     -- Вывод лога
     if should_log_msg then
         local output_msg
+        local pool = _get_table_pool()
         if state.cached_log_format == "JSON" then
             local pool = _get_table_pool()
             local log_data = pool and pool.get("log_data") or {}
@@ -291,11 +294,7 @@ local function _write_log(level_name, component, format_str, ...)
             output_msg = string_format("[%s] %s", component_str, msg)
         end
 
-        if state.cached_log_batch_enabled then
-            _enqueue_log(level_name, output_msg)
-        else
-            _write_to_output(level_name, output_msg)
-        end
+        _enqueue_log(level_name, output_msg)
     end
 end
 
@@ -437,6 +436,12 @@ function Logger.with_error(func, ...)
 
     -- Execute function
     local results = { pcall(func, ...) }
+
+    -- Lazy Propagation: пробрасываем ошибку вверх при завершении контекста
+    local current_err = state.last_errors[context_id]
+    if current_err and prev_context_id then
+        state.last_errors[prev_context_id] = current_err
+    end
 
     -- Pop context (защита от повреждения стека)
     state.current_context_id = prev_context_id

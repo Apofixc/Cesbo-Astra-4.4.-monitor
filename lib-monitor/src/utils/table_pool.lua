@@ -42,6 +42,7 @@ local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInt
 --- @field cleaners table<string, function> Кастомные функции очистки: type -> function
 --- @field limits table<string, number> Лимиты размеров: type -> number
 --- @field stats table<string, table> Статистика использования: type -> { hits, misses, created }
+--- @field is_flat table<string, boolean> Флаги плоских пулов (без рекурсии)
 --- @field visited_cache table<table, boolean> Кэш для защиты от циклических ссылок
 --- @field visited_count number Счетчик вложенности для очистки кэша
 --- @field debug_mode boolean Режим отладки
@@ -50,6 +51,7 @@ local state = {
     cleaners = {},
     limits = {},
     stats = {},
+    is_flat = {},
     visited_cache = {},
     visited_count = 0,
     debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false,
@@ -110,7 +112,8 @@ end
 --- @param cleaner? function|table Опциональная функция очистки или список ключей (схема)
 --- @param max_size? number Максимальный размер пула (по умолчанию 100)
 --- @param preallocate_count? number Количество таблиц для преаллокации
-function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count)
+--- @param is_flat? boolean Флаг плоского пула (без рекурсивной очистки)
+function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count, is_flat)
     if type(pool_type) ~= "string" or state.pools[pool_type] then return end
 
     -- Автоматический запуск обслуживания при первой регистрации пула
@@ -163,6 +166,7 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
 
     state.cleaners[pool_type] = cleaner
     state.stats[pool_type] = { hits = 0, misses = 0, created = 0 }
+    state.is_flat[pool_type] = is_flat or false
 
     -- Приоритет лимита: конфиг -> аргумент -> значение по умолчанию
     local limit = max_size
@@ -244,7 +248,15 @@ function TablePool.release(t, pool_type, deep, depth)
     if depth == 0 then state.visited_count = state.visited_count + 1 end
 
     -- Определяем целевой пул
-    pool_type = pool_type or t.__pool_type or "generic"
+    local original_type = t.__pool_type
+    pool_type = pool_type or original_type or "generic"
+
+    -- Защита от "Type Poisoning": если тип не совпадает, форсируем полную очистку
+    local force_deep = false
+    if original_type and original_type ~= pool_type then
+        force_deep = true
+        deep = true
+    end
 
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
@@ -276,15 +288,25 @@ function TablePool.release(t, pool_type, deep, depth)
     -- Выполняем очистку
     local cleaner = state.cleaners[pool_type]
     local is_deep = (deep == true or type(deep) == "string")
-    if cleaner then
+    local is_flat = state.is_flat[pool_type] and not force_deep
+
+    if force_deep then
+        -- Принудительная полная очистка при смене типа пула
+        _do_clear_table(t, true, depth)
+    elseif cleaner then
         -- Кастомные очистители запускаем в pcall для безопасности
         local ok, err = pcall(cleaner, t, is_deep, depth)
         if not ok then
             Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err))
         end
-    elseif depth < MAX_DEPTH then
+    elseif not is_flat and depth < MAX_DEPTH then
         -- Стандартная очистка (быстрее без pcall)
         _do_clear_table(t, is_deep, depth)
+    elseif is_flat then
+        -- Быстрая очистка для плоских пулов
+        for k in next, t do
+            if k ~= "__pool_type" then t[k] = nil end
+        end
     end
 
     if getmetatable(t) then setmetatable(t, nil) end
