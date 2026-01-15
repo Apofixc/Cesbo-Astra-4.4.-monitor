@@ -39,8 +39,8 @@ local MAX_LOG_QUEUE_SIZE = 200
 -- Кэширование уровня логирования и конфига
 local cached_log_level = nil
 local cached_log_format = nil
-local last_config_check = 0
-local CONFIG_REFRESH_INTERVAL = 5 -- секунд
+local cached_log_buffer_size = 0
+local cached_log_batch_enabled = false
 
 -- 5. Инициализация объектов из загруженных модулей
 
@@ -88,32 +88,20 @@ function Logger.refresh_log_level()
     if config then
         cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
         cached_log_format = config.LogFormat or "TEXT"
+        cached_log_buffer_size = config.LogBufferSize or 0
+        cached_log_batch_enabled = config.LogBatchEnabled or false
     else
         cached_log_level = LOG_LEVELS.INFO
         cached_log_format = "TEXT"
+        cached_log_buffer_size = 0
+        cached_log_batch_enabled = false
     end
-    last_config_check = os_time()
-end
-
-local function refresh_cache_if_needed()
-    local now = os_time()
-    if (now - last_config_check) < CONFIG_REFRESH_INTERVAL and cached_log_level then
-        return
-    end
-
-    local config = get_monitor_config()
-    if config then
-        cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
-        cached_log_format = config.LogFormat or "TEXT"
-    else
-        cached_log_level = cached_log_level or LOG_LEVELS.INFO
-        cached_log_format = cached_log_format or "TEXT"
-    end
-    last_config_check = now
 end
 
 local function get_current_level()
-    refresh_cache_if_needed()
+    if not cached_log_level then
+        Logger.refresh_log_level()
+    end
     return cached_log_level
 end
 
@@ -218,9 +206,8 @@ local function write_log(level_name, component, format_str, ...)
     end
 
     -- Буферизация (если включена в конфиге)
-    local config = get_monitor_config()
-    if config and config.LogBufferSize and config.LogBufferSize > 0 then
-        Logger._buffer_size = config.LogBufferSize
+    if cached_log_buffer_size > 0 then
+        Logger._buffer_size = cached_log_buffer_size
         Logger.buffer_log(level_name, component, msg, current_context_id)
     end
 
@@ -241,8 +228,7 @@ local function write_log(level_name, component, format_str, ...)
         end
 
         -- Пакетная запись (Batch Logging)
-        if config and config.LogBatchEnabled and config.LogBufferSize and
-           config.LogBufferSize > 0 then
+        if cached_log_batch_enabled and cached_log_buffer_size > 0 then
             local pool = get_table_pool()
             local item = pool and pool.get("log_entry") or {}
             item.level = level_name
@@ -360,5 +346,8 @@ local tp = ModuleManager.get_module("table_pool")
 if tp then
     tp.register_type("log_entry")
 end
+
+-- Первичная инициализация кэша
+Logger.refresh_log_level()
 
 return Logger
