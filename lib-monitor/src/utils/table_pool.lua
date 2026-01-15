@@ -135,8 +135,9 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     -- Если передана таблица ключей, создаем оптимизированный очиститель по схеме
     if type(cleaner) == "table" then
         local schema = cleaner
+        local schema_len = #schema
         cleaner = function(t, deep, depth)
-            for i = 1, #schema do
+            for i = 1, schema_len do
                 local k = schema[i]
                 local v = t[k]
                 if type(v) == "table" and not state.visited_cache[v] then

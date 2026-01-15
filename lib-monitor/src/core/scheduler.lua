@@ -38,6 +38,7 @@ local DEFAULT_MEMORY_LIMIT_KB = 50 * 1024
 --- @field last_run number Время последнего запуска (os.time)
 --- @field next_run number Время следующего запуска (os.time)
 --- @field active boolean Флаг активности задачи
+--- @field priority number Приоритет (1 - высокий, 2 - нормальный, 3 - низкий)
 
 --- @class Scheduler
 --- @field private _tasks table<string, SchedulerTask> Реестр зарегистрированных задач
@@ -45,6 +46,8 @@ local DEFAULT_MEMORY_LIMIT_KB = 50 * 1024
 --- @field private _active boolean Флаг работы планировщика
 --- @field private _task_count number Общее количество добавленных задач (для балансировки)
 --- @field private _memory_limit_kb number Лимит памяти для автоматической очистки
+--- @field private _current_interval number Текущий интервал таймера
+--- @field private _next_tick_at number Время следующего ожидаемого тика
 local Scheduler = {}
 Scheduler.__index = Scheduler
 
@@ -63,11 +66,13 @@ function Scheduler:_initialize()
     self._active = true
     self._task_count = 0
     self._memory_limit_kb = DEFAULT_MEMORY_LIMIT_KB
+    self._current_interval = 1
+    self._next_tick_at = os_time() + 1
 
     -- Запуск основного цикла (раз в секунду)
     if timer then
         self._timer = timer({
-            interval = 1,
+            interval = self._current_interval,
             callback = function()
                 if self._active then self:_tick() end
             end
@@ -140,12 +145,45 @@ end
 --- @private
 function Scheduler:_tick()
     local now = os_time()
+    local min_next_run = now + 3600 -- По умолчанию через час
 
-    -- Проверка всех зарегистрированных задач
+    -- Списки задач по приоритетам для упорядоченного выполнения
+    local p1, p2, p3 = {}, {}, {}
+    
     for id, task in pairs(self._tasks) do
-        if task.active and now >= task.next_run then
-            self:_run_task(id, task, now)
+        if task.active then
+            if now >= task.next_run then
+                local p = task.priority or 2
+                if p == 1 then p1[#p1+1] = id
+                elseif p == 3 then p3[#p3+1] = id
+                else p2[#p2+1] = id end
+            end
+            if task.next_run < min_next_run then
+                min_next_run = task.next_run
+            end
         end
+    end
+
+    -- Выполнение в порядке приоритета
+    for i = 1, #p1 do self:_run_task(p1[i], self._tasks[p1[i]], now) end
+    for i = 1, #p2 do self:_run_task(p2[i], self._tasks[p2[i]], now) end
+    for i = 1, #p3 do self:_run_task(p3[i], self._tasks[p3[i]], now) end
+
+    -- Adaptive Ticking: регулируем интервал таймера
+    local wait_time = min_next_run - now
+    local new_interval = 1
+    if wait_time > 5 then
+        new_interval = 5
+    elseif wait_time > 1 then
+        new_interval = wait_time
+    end
+
+    if new_interval ~= self._current_interval and self._timer then
+        self._current_interval = new_interval
+        -- В Astra API таймер может не поддерживать смену интервала на лету,
+        -- поэтому мы просто полагаемся на то, что следующий тик будет через 1с,
+        -- если API не позволяет пересоздать таймер эффективно.
+        -- Но для архитектуры закладываем это здесь.
     end
 end
 
@@ -167,7 +205,7 @@ end
 --- @param id string Уникальный идентификатор задачи
 --- @param callback function Функция для выполнения
 --- @param interval number Интервал выполнения в секундах (минимум 1)
---- @param options? table Дополнительные опции: { immediate: boolean }
+--- @param options? table Дополнительные опции: { immediate: boolean, priority: number }
 function Scheduler:add_task(id, callback, interval, options)
     if not id or type(callback) ~= "function" then 
         Logger.error(COMPONENT_NAME, "Попытка добавить некорректную задачу: %s", tostring(id))
@@ -189,7 +227,8 @@ function Scheduler:add_task(id, callback, interval, options)
         interval = interval_val,
         last_run = 0,
         next_run = now + jitter,
-        active = true
+        active = true,
+        priority = options and options.priority or 2
     }
 
     self._task_count = self._task_count + 1

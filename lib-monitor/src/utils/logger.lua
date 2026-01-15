@@ -244,7 +244,7 @@ end
 
 --- Внутренняя функция для записи лога
 --- @param level_name string Имя уровня (INFO, ERROR и т.д.)
---- @param component any Имя компонента
+--- @param component string Имя компонента
 --- @param format_str any Форматная строка
 --- @param ... any Аргументы формата
 local function _write_log(level_name, component, format_str, ...)
@@ -257,7 +257,6 @@ local function _write_log(level_name, component, format_str, ...)
         return
     end
 
-    local component_str = tostring(component)
     local msg = _format_message(format_str, ...)
 
     -- Сохранение ошибки в контекст
@@ -389,7 +388,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.info(component, format_str, ...)
-    _write_log("INFO", component, format_str, ...)
+    _write_log("INFO", type(component) == "string" and component or tostring(component), format_str, ...)
 end
 
 --- Логирует сообщение с уровнем ERROR и сохраняет в контекст, если он активен
@@ -397,7 +396,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.error(component, format_str, ...)
-    _write_log("ERROR", component, format_str, ...)
+    _write_log("ERROR", type(component) == "string" and component or tostring(component), format_str, ...)
 end
 
 --- Логирует сообщение с уровнем DEBUG
@@ -405,7 +404,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.debug(component, format_str, ...)
-    _write_log("DEBUG", component, format_str, ...)
+    _write_log("DEBUG", type(component) == "string" and component or tostring(component), format_str, ...)
 end
 
 --- Логирует сообщение с уровнем WARN
@@ -413,7 +412,7 @@ end
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
 function Logger.warning(component, format_str, ...)
-    _write_log("WARN", component, format_str, ...)
+    _write_log("WARN", type(component) == "string" and component or tostring(component), format_str, ...)
 end
 
 --- Выполняет функцию в контексте отслеживания ошибок
