@@ -37,6 +37,13 @@ local MAX_COMPONENTS = 100
 local MAX_LOG_QUEUE_SIZE = 200
 local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 
+local LEVEL_MAP = {
+    DEBUG = "debug",
+    INFO = "info",
+    WARN = "warning",
+    ERROR = "error"
+}
+
 -- 5. Внутреннее состояние (Private State)
 local state = {
     -- Контекстное хранение ошибок
@@ -150,9 +157,9 @@ end
 --- @param level_name string
 --- @param message string
 local function _write_to_output(level_name, message)
-    local lower_level = level_name:lower()
-    if log and type(log) == "table" and type(log[lower_level]) == "function" then
-        local ok, err = pcall(log[lower_level], message)
+    local method_name = LEVEL_MAP[level_name] or level_name:lower()
+    if log and type(log) == "table" and type(log[method_name]) == "function" then
+        local ok, err = pcall(log[method_name], message)
         if not ok then
             print(string_format("[ОШИБКА ЛОГГЕРА] Не удалось записать в лог Astra: %s", tostring(err)))
         end
@@ -402,7 +409,7 @@ end
 --- @param component string Имя компонента
 --- @param format_str string Форматная строка
 --- @param ... any Аргументы для формата
-function Logger.warn(component, format_str, ...)
+function Logger.warning(component, format_str, ...)
     _write_log("WARN", component, format_str, ...)
 end
 
