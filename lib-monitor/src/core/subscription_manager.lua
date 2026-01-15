@@ -20,6 +20,7 @@ local io = _G.io
 local math_random = _G.math.random
 local math_floor = _G.math.floor
 local string_gsub = _G.string.gsub
+local table_concat = _G.table.concat
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -28,12 +29,50 @@ local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
 local TablePool = ModuleManager.get_module("table_pool")
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
-local function get_dep(name) return ModuleManager.get_global_dependency(name) end
+-- 3. Глобальные зависимости Astra (Lazy Caching)
+local _http_request = nil
+local _json_encode = nil
+local _json_decode = nil
+local _astra_version = nil
+local _user_agent = nil
+
+--- Возвращает функцию http_request
+--- @return function|nil
+local function get_http_request()
+    if _http_request then return _http_request end
+    _http_request = ModuleManager.get_global_dependency("http_request")
+    return _http_request
+end
+
+--- Возвращает функцию json.encode
+--- @return function|nil
+local function get_json_encode()
+    if _json_encode then return _json_encode end
+    _json_encode = ModuleManager.get_global_dependency("json.encode")
+    return _json_encode
+end
+
+--- Возвращает функцию json.decode
+--- @return function|nil
+local function get_json_decode()
+    if _json_decode then return _json_decode end
+    _json_decode = ModuleManager.get_global_dependency("json.decode")
+    return _json_decode
+end
+
+--- Возвращает строку User-Agent
+--- @return string
+local function get_user_agent()
+    if _user_agent then return _user_agent end
+    if not _astra_version then
+        _astra_version = ModuleManager.get_global_dependency("astra.version") or "unknown"
+    end
+    _user_agent = "User-Agent: Astra v." .. _astra_version
+    return _user_agent
+end
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriptionManager"
-local USER_AGENT_PREFIX = "User-Agent: Astra v."
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
 local MAX_RETRIES = 5
@@ -91,14 +130,14 @@ local function get_event_json(event)
     -- Проверяем наличие кэша в опциях события
     if options and options.json_cache then return options.json_cache end
 
-    local _json_encode = get_dep("json.encode")
-    if not _json_encode then return nil end
+    local encode = get_json_encode()
+    if not encode then return nil end
 
     local json
     if type(event.data) == "string" then
         json = event.data
     else
-        json = _json_encode(event.data)
+        json = encode(event.data)
     end
 
     -- Сохраняем кэш в опциях для повторного использования в рамках текущей рассылки
@@ -118,26 +157,31 @@ end
 --- @type table<string, function> Транспорты для доставки событий
 local Transport = {
     --- Доставка через HTTP POST запрос
+    --- @param self SubscriptionManager
+    --- @param config table Параметры (host, port, path)
+    --- @param event table|string Объект события или данные
+    --- @param event_type string Тип события
+    --- @param retry_count? number [Текущая попытка повтора]
+    --- @param event_json? string [Предварительно подготовленный JSON]
     HTTP = function(self, config, event, event_type, retry_count, event_json)
-        local _http_request = get_dep("http_request")
-        if not _http_request then return false, "http_request недоступен" end
+        local request = get_http_request()
+        if not request then return false, "http_request недоступен" end
 
-        local _json_encode = get_dep("json.encode")
+        local encode = get_json_encode()
         local content = event_json or
                         ((type(event) == "table" and event.id) and get_event_json(event) or
-                        ((type(event) == "table") and (_json_encode and _json_encode(event) or nil) or tostring(event)))
+                        ((type(event) == "table") and (encode and encode(event) or nil) or tostring(event)))
 
         if not content then return false, "ошибка кодирования JSON" end
 
         retry_count = retry_count or 0
-        local _astra_version = get_dep("astra.version") or "unknown"
 
-        _http_request({
+        request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
             timeout = HTTP_TIMEOUT,
             headers = {
-                USER_AGENT_PREFIX .. _astra_version, "Host: " .. config.host .. ":" .. config.port,
+                get_user_agent(), "Host: " .. config.host .. ":" .. config.port,
                 CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close"
             },
             callback = function(s, response)
@@ -155,19 +199,27 @@ local Transport = {
         return true
     end,
     --- Доставка через WebSocket
+    --- @param self SubscriptionManager
+    --- @param config table Параметры транспорта
+    --- @param event table|string Объект события или данные
+    --- @param event_type string Тип события
+    --- @param event_json? string [Предварительно подготовленный JSON]
     WS = function(self, config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
-            local _json_encode = get_dep("json.encode")
+            local encode = get_json_encode()
             local json_data = event_json or
                              ((type(event) == "table" and event.id) and get_event_json(event) or
-                             ((type(event) == "table") and (_json_encode and _json_encode(event) or nil) or event))
+                             ((type(event) == "table") and (encode and encode(event) or nil) or event))
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
         end
         return false, "WsSubscriber недоступен"
     end,
     --- Доставка через вызов Lua функции
+    --- @param self SubscriptionManager
+    --- @param config table Параметры (callback)
+    --- @param event table|string Объект события или данные
     LUA_CALLBACK = function(self, config, event)
         local callback = type(config) == "table" and config.callback or config
         if type(callback) ~= "function" then return false, "некорректный callback" end
@@ -175,17 +227,28 @@ local Transport = {
         return pcall(callback, data)
     end,
     --- Вывод события в консоль (лог Astra)
+    --- @param self SubscriptionManager
+    --- @param config table Параметры транспорта
+    --- @param event table|string Объект события или данные
+    --- @param event_type string Тип события
+    --- @param event_json? string [Предварительно подготовленный JSON]
     CONSOLE = function(self, config, event, event_type, event_json)
-        local _json_encode = get_dep("json.encode")
+        local encode = get_json_encode()
         local message = event_json or
                         ((type(event) == "table" and event.id) and get_event_json(event) or
-                        ((type(event) == "table") and (_json_encode and _json_encode(event) or nil) or event))
+                        ((type(event) == "table") and (encode and encode(event) or nil) or event))
         Logger.info("Консоль", "[СОБЫТИЕ:%s] %s", tostring(event_type), tostring(message))
         return true
     end
 }
 
 --- Добавляет событие в очередь на повторную отправку.
+--- @param config table Параметры транспорта
+--- @param event table|string Объект события или данные
+--- @param event_type string Тип события
+--- @param retry_count number Текущая попытка
+--- @param content string Подготовленный JSON
+--- @return boolean Статус добавления
 function SubscriptionManager:enqueue_retry(config, event, event_type, retry_count, content)
     if #self._retry_queue >= MAX_RETRY_QUEUE_SIZE then
         Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
@@ -197,6 +260,7 @@ function SubscriptionManager:enqueue_retry(config, event, event_type, retry_coun
 
     local item = TablePool and TablePool.get("retry_item") or {}
     item.config = config
+    -- Для ретрая делаем копию данных, если это была таблица из пула
     local retry_data = event
     if type(event) == "table" and event.is_table then
         retry_data = content
@@ -211,15 +275,17 @@ function SubscriptionManager:enqueue_retry(config, event, event_type, retry_coun
 end
 
 --- Создает и инициализирует новый экземпляр SubscriptionManager.
+--- Загружает сохраненные подписки из файла и запускает обработчик повторов.
+--- @return SubscriptionManager Экземпляр менеджера
 function SubscriptionManager.new()
     local self = setmetatable({}, SubscriptionManager)
-    self.subscriptions = {}
+    self.subscriptions = {} -- [event_type][subscription_id] = sub_data
     self.stats = { total = 0, delivered = 0, failed = 0 }
-    self._matchers = {}
-    self._route_cache = {}
+    self._matchers = {} -- [pattern] = function
+    self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
     self._route_cache_size = 0
     self._save_pending = false
-    self._batch_queues = {}
+    self._batch_queues = {} -- [sub_id] = { events = {}, last_flush = T }
     self._retry_queue = {}
     self:load()
     self:start_retry_processor()
@@ -227,15 +293,18 @@ function SubscriptionManager.new()
 end
 
 --- Запускает фоновый процесс обработки очереди повторных попыток и отложенного сохранения.
+--- @private
 function SubscriptionManager:start_retry_processor()
     local Scheduler = ModuleManager.get_module("core.scheduler")
     if not Scheduler then return end
 
     local scheduler = Scheduler.get_instance()
 
+    -- Задача для повторов и сохранения (раз в секунду)
     scheduler:add_task("subscription_manager_maintenance", function()
         local now = os_time()
 
+        -- 1. Пакетная отправка (Batch Flush)
         if MonitorConfig and MonitorConfig.BatchEnabled then
             local interval = MonitorConfig.BatchFlushInterval or 0.5
             for sub_id, queue in pairs(self._batch_queues) do
@@ -245,28 +314,38 @@ function SubscriptionManager:start_retry_processor()
             end
         end
 
+        -- 2. Обработка повторов
         for i = #self._retry_queue, 1, -1 do
             local item = self._retry_queue[i]
             if now >= item.time then
                 table_remove(self._retry_queue, i)
                 Transport.HTTP(self, item.config, item.data, item.type, item.retries)
-                if TablePool then TablePool.release(item, "retry_item") end
+
+                if TablePool then
+                    TablePool.release(item, "retry_item")
+                end
             end
         end
 
-        if self._save_pending then self:save_now() end
+        -- 3. Отложенное сохранение (Debounced Save)
+        if self._save_pending then
+            self:save_now()
+        end
     end, 1)
 end
 
---- Планирует сохранение подписок.
+--- Планирует сохранение подписок (отложенная запись).
 function SubscriptionManager:save()
     self._save_pending = true
 end
 
 --- Немедленно сохраняет текущие активные подписки в JSON файл.
+--- Использует атомарную запись через временный файл.
+--- Lua-коллбэки игнорируются при сохранении.
+--- @return boolean Статус выполнения
 function SubscriptionManager:save_now()
-    local _json_encode = get_dep("json.encode")
-    if not _json_encode then return false end
+    local encode = get_json_encode()
+    if not encode then return false end
 
     self._save_pending = false
     local data_to_save = {}
@@ -285,14 +364,16 @@ function SubscriptionManager:save_now()
         end
     end
 
-    local content = _json_encode(data_to_save)
+    local content = encode(data_to_save)
     if not content then return false end
 
+    -- Атомарная запись через временный файл
     local tmp_path = STORAGE_PATH .. ".tmp"
     local f = io.open(tmp_path, "w")
     if f then
         f:write(content)
         f:close()
+        -- В Astra/Linux os.rename атомарен
         local ok, err = os.rename(tmp_path, STORAGE_PATH)
         if not ok then
             Logger.error(COMPONENT_NAME, "Ошибка атомарного сохранения: %s", tostring(err))
@@ -304,17 +385,18 @@ function SubscriptionManager:save_now()
     return false
 end
 
---- Загружает подписки из JSON файла.
+--- Загружает подписки из JSON файла и регистрирует их в системе.
+--- @private
 function SubscriptionManager:load()
-    local _json_decode = get_dep("json.decode")
-    if not _json_decode then return end
+    local decode = get_json_decode()
+    if not decode then return end
 
     local f = io.open(STORAGE_PATH, "r")
     if not f then return end
     local content = f:read("*all")
     f:close()
     if not content or content == "" then return end
-    local data = _json_decode(content)
+    local data = decode(content)
     if type(data) ~= "table" then return end
     for event_type, subs in pairs(data) do
         for id, sub_data in pairs(subs) do
@@ -324,8 +406,15 @@ function SubscriptionManager:load()
 end
 
 --- Регистрирует новую подписку на события.
+--- @param event_type string Тип события или маска
+--- @param sub_data table|function Данные подписки (callback, filters, throttle_ms) или функция коллбэка
+--- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
+--- @return string|nil ID подписки (UUID) или nil при ошибке
 function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
-    if type(sub_data) == "function" then sub_data = { callback = sub_data } end
+    -- Поддержка передачи функции напрямую
+    if type(sub_data) == "function" then
+        sub_data = { callback = sub_data }
+    end
 
     local transport = self:detect_transport(sub_data.callback)
     if not transport then return nil end
@@ -334,9 +423,12 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     local filters = sub_data.filters or {}
     local default_batch_mode = (MonitorConfig and MonitorConfig.DefaultBatchMode) or "single"
 
+    -- Предкомпиляция аксессоров для фильтров
     if FilterEngine and filters.conditions then
         for _, cond in pairs(filters.conditions) do
-            if cond.field then cond.accessor = FilterEngine.compile_accessor(cond.field) end
+            if cond.field then
+                cond.accessor = FilterEngine.compile_accessor(cond.field)
+            end
         end
     end
 
@@ -344,18 +436,24 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         id = sub_id, event_type = event_type, callback = sub_data.callback,
         transport = transport, filters = filters,
         batch_mode = sub_data.batch_mode or default_batch_mode,
+        -- throttle_ms: 0 - выключено, >0 - минимальный интервал между событиями
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
         last_event_at = 0, stats = { delivered = 0, failed = 0, consecutive_failures = 0 }
     }
 
     if not self.subscriptions[event_type] then
         self.subscriptions[event_type] = {}
-        if Wildcard then self._matchers[event_type] = Wildcard.compile(event_type) end
+        -- Предкомпиляция маски
+        if Wildcard then
+            self._matchers[event_type] = Wildcard.compile(event_type)
+        end
     end
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
 
+    -- Оптимизация: Гранулярный сброс кэша маршрутизации
     if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
+        -- Если добавлена маска, нужно проверить все записи в кэше, которые могут ей соответствовать
         for cached_type, _ in pairs(self._route_cache) do
             if self:match(event_type, cached_type) then
                 self._route_cache[cached_type] = nil
@@ -372,34 +470,58 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
 end
 
 --- Проверяет соответствие имени события маске.
+--- @param pattern string Маска
+--- @param name string Имя события
+--- @return boolean Результат
 function SubscriptionManager:match(pattern, name)
     local matcher = self._matchers[pattern]
     if not matcher and Wildcard and (pattern:find("*", 1, true) or pattern:find("?", 1, true)) then
         matcher = Wildcard.compile(pattern)
-        self._matchers[pattern] = matcher
+        self._matchers[pattern] = matcher -- Кэшируем скомпилированный матчер
     end
+
     if matcher then return matcher(name) end
     return pattern == name
 end
 
+--- Рассылает событие всем подписчикам (устаревший метод).
+--- @param event_type string Точное имя события
+--- @param event_data table Данные события
+--- @return number, number Количество успешно доставленных и проваленных уведомлений
+function SubscriptionManager:publish(event_type, event_data)
+    return self:publish_event({
+        type = event_type,
+        data = event_data,
+        timestamp = os_time()
+    })
+end
+
 --- Рассылает объект события всем подписчикам.
+--- @param event table Объект события (из EventDispatcher)
+--- @param now? number [Текущее время (опционально, для оптимизации)]
+--- @return number, number Количество успешно доставленных и проваленных уведомлений
 function SubscriptionManager:publish_event(event, now)
     local delivered, failed = 0, 0
     now = now or os_time()
     local event_type = event.type
     local event_data = event.data
-    local event_json = nil
+    local event_json = nil -- Кэш JSON для текущей рассылки
 
+    -- Оптимизация: Fast Path через кэш маршрутизации
     local targets = type(self._route_cache) == "table" and self._route_cache[event_type] or nil
     if not targets then
+        -- Ограничение размера кэша для предотвращения утечек памяти
         if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE or type(self._route_cache) ~= "table" then
             self._route_cache = {}
             self._route_cache_size = 0
         end
+
         targets = {}
         for pattern, subs in pairs(self.subscriptions) do
             if self:match(pattern, event_type) then
-                for _, sub in pairs(subs) do table_insert(targets, sub) end
+                for _, sub in pairs(subs) do
+                    table_insert(targets, sub)
+                end
             end
         end
         self._route_cache[event_type] = targets
@@ -419,16 +541,19 @@ function SubscriptionManager:publish_event(event, now)
                 end
             end
             if should_send then
+                -- Пакетная отправка (Batching)
                 if MonitorConfig and MonitorConfig.BatchEnabled and
                    (sub.transport == "HTTP" or sub.transport == "WS") and
                    sub.batch_mode ~= "single"
                 then
                     self:add_to_batch(sub, event)
-                    delivered = delivered + 1
+                    delivered = delivered + 1 -- Считаем как доставленное в очередь
                 else
+                    -- Обычная немедленная отправка
                     if sub.transport ~= "LUA_CALLBACK" and not event_json then
                         event_json = get_event_json(event)
                     end
+
                     local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
                     if success then
                         delivered = delivered + 1
@@ -439,6 +564,8 @@ function SubscriptionManager:publish_event(event, now)
                         failed = failed + 1
                         sub.stats.failed = sub.stats.failed + 1
                         sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
+
+                        -- Автоматическое удаление "мертвых" подписчиков (после 50 ошибок подряд)
                         if sub.stats.consecutive_failures > 50 then
                             Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
                             self:unsubscribe(sub.id)
@@ -454,16 +581,26 @@ function SubscriptionManager:publish_event(event, now)
 end
 
 --- Отправляет событие конкретному подписчику по его ID.
+--- Используется для инициализации (LVC) или отладки.
+--- @param sub_id string ID подписки
+--- @param event_type string Имя события
+--- @param event_data table Данные события
+--- @return boolean Статус выполнения
 function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     for _, subs in pairs(self.subscriptions) do
         local sub = subs[sub_id]
         if sub then
+            -- Smart Packaging для LVC: если режим array, оборачиваем в массив
             local payload = event_data
-            if sub.batch_mode == "array" then payload = { event_data } end
+            if sub.batch_mode == "array" then
+                payload = { event_data }
+            end
+
+            -- Для одиночной отправки (LVC) готовим JSON если нужно
             local event_json = nil
             if sub.transport ~= "LUA_CALLBACK" then
-                local _json_encode = get_dep("json.encode")
-                event_json = (type(payload) == "table") and (_json_encode and _json_encode(payload) or nil) or tostring(payload)
+                local encode = get_json_encode()
+                event_json = (type(payload) == "table") and (encode and encode(payload) or nil) or tostring(payload)
             end
             Transport[sub.transport](self, sub.callback, payload, event_type, nil, event_json)
             return true
@@ -472,7 +609,9 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
     return false
 end
 
---- Определяет тип транспорта.
+--- Определяет тип транспорта на основе конфигурации callback.
+--- @param cfg function|table Конфигурация коллбэка или функция
+--- @return string|nil Тип транспорта (HTTP, WS, CONSOLE, LUA_CALLBACK)
 function SubscriptionManager:detect_transport(cfg)
     if type(cfg) == "function" then return "LUA_CALLBACK" end
     if type(cfg) == "table" then
@@ -483,7 +622,11 @@ function SubscriptionManager:detect_transport(cfg)
     return nil
 end
 
---- Добавляет событие в пакетную очередь.
+--- Добавляет событие в пакетную очередь подписчика.
+--- Оптимизация: сохраняем уже готовую JSON-строку для предотвращения повреждения данных
+--- и ускорения финальной сборки батча.
+--- @param sub table Объект подписки
+--- @param event table Объект события
 function SubscriptionManager:add_to_batch(sub, event)
     local sub_id = sub.id
     if not self._batch_queues[sub_id] then
@@ -492,18 +635,32 @@ function SubscriptionManager:add_to_batch(sub, event)
         q.last_flush = os_time()
         self._batch_queues[sub_id] = q
     end
+
     local queue = self._batch_queues[sub_id]
+
+    -- Получаем JSON события (используем кэш, если он есть)
     local event_json = get_event_json(event)
-    if event_json then table_insert(queue.events, event_json) end
+    if event_json then
+        table_insert(queue.events, event_json)
+    end
+
+    -- Smart Flush: немедленный сброс для критических событий (Priority 1-2)
     local is_high_priority = event.priority and event.priority <= 2
     local max_size = MonitorConfig and MonitorConfig.BatchMaxSize or 50
-    if is_high_priority or #queue.events >= max_size then self:flush_batch(sub_id) end
+
+    if is_high_priority or #queue.events >= max_size then
+        self:flush_batch(sub_id)
+    end
 end
 
 --- Принудительно отправляет накопленную пачку событий.
+--- Оптимизация: сборка батча через table.concat без повторного json.encode.
+--- @param sub_id string ID подписки
 function SubscriptionManager:flush_batch(sub_id)
     local queue = self._batch_queues[sub_id]
     if not queue or #queue.events == 0 then return end
+
+    -- Находим объект подписки
     local sub = nil
     for _, subs in pairs(self.subscriptions) do
         if subs[sub_id] then sub = subs[sub_id]; break end
@@ -513,21 +670,33 @@ function SubscriptionManager:flush_batch(sub_id)
         self._batch_queues[sub_id] = nil
         return
     end
+
     local events_json = queue.events
     local count = #events_json
+
+    -- Сборка финального JSON
     local final_json
     if count == 1 and sub.batch_mode ~= "array" then
         final_json = events_json[1]
     else
         final_json = "[" .. table.concat(events_json, ",") .. "]"
     end
+
+    -- Очищаем массив событий (но не саму таблицу очереди)
     for i = 1, count do events_json[i] = nil end
     queue.last_flush = os_time()
-    local payload = final_json
+
+    -- Отправляем готовую строку. Транспорт HTTP/WS поддерживает передачу event_json.
+    -- Для LUA_CALLBACK придется декодировать обратно, но батчинг обычно используется для внешних систем.
+    --- @type string|table|nil
+    local payload
     if sub.transport == "LUA_CALLBACK" then
-        local _json_decode = get_dep("json.decode")
-        payload = _json_decode and _json_decode(final_json) or nil
+        local decode = get_json_decode()
+        payload = decode and decode(final_json) or nil
+    else
+        payload = final_json
     end
+
     local success, _ = Transport[sub.transport](self, sub.callback, payload, sub.event_type, nil, final_json)
     if success then
         sub.stats.delivered = sub.stats.delivered + count
@@ -535,33 +704,56 @@ function SubscriptionManager:flush_batch(sub_id)
     end
 end
 
---- Останавливает менеджер подписок.
+--- Останавливает менеджер подписок, сбрасывает батчи и удаляет задачи из планировщика.
 function SubscriptionManager:shutdown()
     local Scheduler = ModuleManager.get_module("core.scheduler")
-    if Scheduler then Scheduler.get_instance():remove_task("subscription_manager_maintenance") end
-    if MonitorConfig and MonitorConfig.BatchEnabled then
-        for sub_id, _ in pairs(self._batch_queues) do self:flush_batch(sub_id) end
+    if Scheduler then
+        Scheduler.get_instance():remove_task("subscription_manager_maintenance")
     end
-    if self._save_pending then self:save_now() end
+
+    -- Сброс всех накопленных батчей перед выходом
+    if MonitorConfig and MonitorConfig.BatchEnabled then
+        for sub_id, _ in pairs(self._batch_queues) do
+            self:flush_batch(sub_id)
+        end
+    end
+
+    -- Финальное сохранение, если оно требовалось
+    if self._save_pending then
+        self:save_now()
+    end
+
     Logger.info(COMPONENT_NAME, "Менеджер подписок остановлен")
 end
 
---- Удаляет подписку.
+--- Удаляет подписку по её ID и сохраняет изменения в файл.
+--- @param sub_id string ID подписки
+--- @return boolean Статус выполнения
 function SubscriptionManager:unsubscribe(sub_id)
     if self._batch_queues[sub_id] then
         if TablePool then TablePool.release(self._batch_queues[sub_id], "batch_queue") end
         self._batch_queues[sub_id] = nil
     end
-    if FilterEngine and FilterEngine.clear_state then FilterEngine.clear_state(sub_id) end
+
+    -- Очистка состояния фильтров (FilterEngine)
+    if FilterEngine and FilterEngine.clear_state then
+        FilterEngine.clear_state(sub_id)
+    end
+
     for event_type, subs in pairs(self.subscriptions) do
         if subs[sub_id] then
             subs[sub_id] = nil
             self.stats.total = self.stats.total - 1
+
+            -- Если подписок на этот тип больше нет, удаляем матчер
             if not next(subs) then
                 self.subscriptions[event_type] = nil
                 self._matchers[event_type] = nil
             end
+
+            -- Оптимизация: Гранулярный сброс кэша маршрутизации
             if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
+                -- При удалении маски сбрасываем только те типы, которые ей соответствовали
                 for cached_type, _ in pairs(self._route_cache) do
                     if self:match(event_type, cached_type) then
                         self._route_cache[cached_type] = nil
@@ -572,6 +764,7 @@ function SubscriptionManager:unsubscribe(sub_id)
                 self._route_cache[event_type] = nil
                 self._route_cache_size = self._route_cache_size - 1
             end
+
             self:save()
             return true
         end
@@ -579,22 +772,32 @@ function SubscriptionManager:unsubscribe(sub_id)
     return false
 end
 
---- Проверяет наличие активных подписок.
+--- Проверяет наличие активных подписок на указанный тип события.
+--- @param event_type string Тип события
+--- @return boolean true если есть хотя бы один активный подписчик
 function SubscriptionManager:has_subscriptions(event_type)
+    -- Проверка через кэш маршрутизации (самый быстрый путь)
     local targets = self._route_cache[event_type]
     if targets then
-        for i = 1, #targets do if targets[i].active then return true end end
+        for i = 1, #targets do
+            if targets[i].active then return true end
+        end
         return false
     end
+
+    -- Если в кэше нет, проверяем все паттерны
     for pattern, subs in pairs(self.subscriptions) do
         if self:match(pattern, event_type) then
-            for _, sub in pairs(subs) do if sub.active then return true end end
+            for _, sub in pairs(subs) do
+                if sub.active then return true end
+            end
         end
     end
     return false
 end
 
---- Возвращает список всех активных подписок.
+--- Возвращает список всех активных подписок в системе.
+--- @return table<string, table> Таблица подписок
 function SubscriptionManager:get_all_subscriptions()
     local res = {}
     for _, subs in pairs(self.subscriptions) do
@@ -603,7 +806,7 @@ function SubscriptionManager:get_all_subscriptions()
     return res
 end
 
--- Регистрация пулов
+-- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
     tp.register_type("retry_item")
