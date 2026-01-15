@@ -43,19 +43,36 @@ local MAX_RETRIES = 5
 local RETRY_DELAY = 5
 local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 local MAX_ROUTE_CACHE_SIZE = 1000
+local MAX_RETRY_QUEUE_SIZE = 500
+
+--- @class SubscriptionStats
+--- @field delivered number Количество успешно доставленных событий
+--- @field failed number Количество проваленных доставок
+--- @field consecutive_failures number Количество последовательных ошибок
+
+--- @class Subscription
+--- @field id string Уникальный идентификатор
+--- @field event_type string Тип события или маска
+--- @field callback function|table Конфигурация коллбэка
+--- @field transport string Тип транспорта (HTTP, WS, CONSOLE, LUA_CALLBACK)
+--- @field filters table Фильтры события
+--- @field batch_mode string Режим батчинга (single, array)
+--- @field throttle_ms number Троттлинг в мс
+--- @field active boolean Флаг активности
+--- @field last_event_at number Время последнего события
+--- @field stats SubscriptionStats Статистика подписки
 
 --- @class SubscriptionManager
---- @field private subscriptions table<string, table<string, table>> Хранилище подписок по типам событий
+--- @field private subscriptions table<string, table<string, Subscription>> Хранилище подписок
 --- @field private stats table Глобальная статистика подписок
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
---- @field private _route_cache table<string, table<number, table>> Кэш маршрутизации
+--- @field private _route_cache table<string, Subscription[]> Кэш маршрутизации
+--- @field private _route_cache_size number Текущий размер кэша маршрутизации
 --- @field private _save_pending boolean Флаг отложенного сохранения
 --- @field private _batch_queues table<string, table> Очереди для пакетной отправки
+--- @field private _retry_queue table Очередь на повторную отправку
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
-
--- Очередь на повторную отправку
-local retry_queue = {}
 
 --- Генерирует уникальный идентификатор (UUID v4) для подписки.
 --- @return string UUID
@@ -66,9 +83,6 @@ local function generate_uuid()
         return string_format("%x", v)
     end))
 end
-
--- Максимальный размер очереди повторов
-local MAX_RETRY_QUEUE_SIZE = 500
 
 --- Вспомогательная функция для получения JSON из события (Lazy JSON)
 --- @param event table Объект события
@@ -104,12 +118,13 @@ end
 --- @type table<string, function> Транспорты для доставки событий
 local Transport = {
     --- Доставка через HTTP POST запрос
+    --- @param self SubscriptionManager
     --- @param config table Параметры (host, port, path)
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
     --- @param retry_count? number [Текущая попытка повтора]
     --- @param event_json? string [Предварительно подготовленный JSON]
-    HTTP = function(config, event, event_type, retry_count, event_json)
+    HTTP = function(self, config, event, event_type, retry_count, event_json)
         if not http_request then return false, "http_request недоступен" end
 
         local content = event_json or
@@ -128,17 +143,21 @@ local Transport = {
                 USER_AGENT, "Host: " .. config.host .. ":" .. config.port,
                 CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close"
             },
-            callback = function(s, _)
-                if not s and retry_count < MAX_RETRIES then
+            callback = function(s, response)
+                -- Ретрай при ошибке соединения (not s) или HTTP 5xx
+                local is_error = not s
+                if s and response and response.code >= 500 then
+                    is_error = true
+                end
+
+                if is_error and retry_count < MAX_RETRIES then
                     -- Для ретрая делаем копию данных, если это была таблица из пула
                     local retry_data = event
                     if type(event) == "table" and event.is_table then
-                        -- Если это событие с таблицей из пула, к этому моменту таблица может быть уже возвращена в пул.
-                        -- Поэтому для ретрая используем уже готовый JSON.
                         retry_data = content
                     end
 
-                    if #retry_queue < MAX_RETRY_QUEUE_SIZE then
+                    if #self._retry_queue < MAX_RETRY_QUEUE_SIZE then
                         local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
                         local jitter = math_random(0, 2)
 
@@ -149,7 +168,7 @@ local Transport = {
                         item.retries = retry_count + 1
                         item.time = os_time() + delay + jitter
 
-                        table_insert(retry_queue, item)
+                        table_insert(self._retry_queue, item)
                     else
                         Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
                     end
@@ -159,11 +178,12 @@ local Transport = {
         return true
     end,
     --- Доставка через WebSocket
+    --- @param self SubscriptionManager
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
     --- @param event_json? string [Предварительно подготовленный JSON]
-    WS = function(config, event, event_type, event_json)
+    WS = function(self, config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
             local json_data = event_json or
@@ -175,20 +195,22 @@ local Transport = {
         return false, "WsSubscriber недоступен"
     end,
     --- Доставка через вызов Lua функции
+    --- @param self SubscriptionManager
     --- @param config table Параметры (callback)
     --- @param event table|string Объект события или данные
-    LUA_CALLBACK = function(config, event)
+    LUA_CALLBACK = function(self, config, event)
         local callback = type(config) == "table" and config.callback or config
         if type(callback) ~= "function" then return false, "некорректный callback" end
         local data = (type(event) == "table" and event.id) and event.data or event
         return pcall(callback, data)
     end,
     --- Вывод события в консоль (лог Astra)
+    --- @param self SubscriptionManager
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
     --- @param event_json? string [Предварительно подготовленный JSON]
-    CONSOLE = function(config, event, event_type, event_json)
+    CONSOLE = function(self, config, event, event_type, event_json)
         local message = event_json or
                         ((type(event) == "table" and event.id) and get_event_json(event) or
                         ((type(event) == "table") and json_encode(event) or event))
@@ -206,8 +228,10 @@ function SubscriptionManager.new()
     self.stats = { total = 0, delivered = 0, failed = 0 }
     self._matchers = {} -- [pattern] = function
     self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
+    self._route_cache_size = 0
     self._save_pending = false
     self._batch_queues = {} -- [sub_id] = { events = {}, last_flush = T }
+    self._retry_queue = {}
     self:load()
     self:start_retry_processor()
     return self
@@ -236,11 +260,11 @@ function SubscriptionManager:start_retry_processor()
         end
 
         -- 2. Обработка повторов
-        for i = #retry_queue, 1, -1 do
-            local item = retry_queue[i]
+        for i = #self._retry_queue, 1, -1 do
+            local item = self._retry_queue[i]
             if now >= item.time then
-                table_remove(retry_queue, i)
-                Transport.HTTP(item.config, item.data, item.type, item.retries)
+                table_remove(self._retry_queue, i)
+                Transport.HTTP(self, item.config, item.data, item.type, item.retries)
 
                 if TablePool then
                     TablePool.release(item, "retry_item")
@@ -322,10 +346,15 @@ end
 
 --- Регистрирует новую подписку на события.
 --- @param event_type string Тип события или маска
---- @param sub_data table Данные подписки (callback, filters, throttle_ms)
+--- @param sub_data table|function Данные подписки (callback, filters, throttle_ms) или функция коллбэка
 --- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
 --- @return string|nil ID подписки (UUID) или nil при ошибке
 function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
+    -- Поддержка передачи функции напрямую
+    if type(sub_data) == "function" then
+        sub_data = { callback = sub_data }
+    end
+
     local transport = self:detect_transport(sub_data.callback)
     if not transport then return nil end
 
@@ -364,8 +393,10 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     -- Оптимизация: Гранулярный сброс кэша маршрутизации
     if event_type:find("*") then
         self._route_cache = {}
-    else
+        self._route_cache_size = 0
+    elseif type(self._route_cache) == "table" and self._route_cache[event_type] then
         self._route_cache[event_type] = nil
+        self._route_cache_size = self._route_cache_size - 1
     end
 
     if not existing_id then self:save() end
@@ -411,13 +442,12 @@ function SubscriptionManager:publish_event(event, now)
     local event_json = nil -- Кэш JSON для текущей рассылки
 
     -- Оптимизация: Fast Path через кэш маршрутизации
-    local targets = self._route_cache[event_type]
+    local targets = type(self._route_cache) == "table" and self._route_cache[event_type] or nil
     if not targets then
         -- Ограничение размера кэша для предотвращения утечек памяти
-        local cache_count = 0
-        for _ in pairs(self._route_cache) do cache_count = cache_count + 1 end
-        if cache_count >= MAX_ROUTE_CACHE_SIZE then
+        if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE or type(self._route_cache) ~= "table" then
             self._route_cache = {}
+            self._route_cache_size = 0
         end
 
         targets = {}
@@ -429,6 +459,7 @@ function SubscriptionManager:publish_event(event, now)
             end
         end
         self._route_cache[event_type] = targets
+        self._route_cache_size = self._route_cache_size + 1
     end
 
     for i = 1, #targets do
@@ -457,7 +488,7 @@ function SubscriptionManager:publish_event(event, now)
                         event_json = get_event_json(event)
                     end
 
-                    local success, _ = Transport[sub.transport](sub.callback, event, event_type, nil, event_json)
+                    local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
                     if success then
                         delivered = delivered + 1
                         sub.stats.delivered = sub.stats.delivered + 1
@@ -504,7 +535,7 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
             if sub.transport ~= "LUA_CALLBACK" then
                 event_json = (type(payload) == "table") and json_encode(payload) or tostring(payload)
             end
-            Transport[sub.transport](sub.callback, payload, event_type, nil, event_json)
+            Transport[sub.transport](self, sub.callback, payload, event_type, nil, event_json)
             return true
         end
     end
@@ -595,7 +626,7 @@ function SubscriptionManager:flush_batch(sub_id)
         payload = json_decode(final_json)
     end
 
-    local success, _ = Transport[sub.transport](sub.callback, payload, sub.event_type, nil, final_json)
+    local success, _ = Transport[sub.transport](self, sub.callback, payload, sub.event_type, nil, final_json)
     if success then
         sub.stats.delivered = sub.stats.delivered + count
         sub.last_event_at = queue.last_flush
@@ -650,12 +681,12 @@ function SubscriptionManager:unsubscribe(sub_id)
             end
 
             -- Оптимизация: Гранулярный сброс кэша маршрутизации
-            -- Вместо полной очистки сбрасываем только затронутый тип события
-            -- и все типы, если это была маска (для простоты)
             if event_type:find("*") then
                 self._route_cache = {}
-            else
+                self._route_cache_size = 0
+            elseif type(self._route_cache) == "table" and self._route_cache[event_type] then
                 self._route_cache[event_type] = nil
+                self._route_cache_size = self._route_cache_size - 1
             end
 
             self:save()
