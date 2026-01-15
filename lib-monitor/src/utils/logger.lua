@@ -270,19 +270,18 @@ local function _write_log(level_name, component, format_str, ...)
     if state.cached_log_buffer_size > 0 then
         state.buffer_size = state.cached_log_buffer_size
         -- Используем прямую запись в буфер, так как Logger еще не полностью определен
-        _write_to_buffer(level_name, component_str, msg, state.current_context_id, now)
+        _write_to_buffer(level_name, component, msg, state.current_context_id, now)
     end
 
     -- Вывод лога
     if should_log_msg then
         local output_msg
-        local pool = _get_table_pool()
         if state.cached_log_format == "JSON" then
             local pool = _get_table_pool()
             local log_data = pool and pool.get("log_data") or {}
             log_data.timestamp = now
             log_data.level = level_name
-            log_data.component = component_str
+            log_data.component = component
             log_data.message = msg
             log_data.context_id = state.current_context_id
 
@@ -290,7 +289,7 @@ local function _write_log(level_name, component, format_str, ...)
 
             if pool then pool.release(log_data, "log_data") end
         else
-            output_msg = string_format("[%s] %s", component_str, msg)
+            output_msg = string_format("[%s] %s", component, msg)
         end
 
         _enqueue_log(level_name, output_msg)

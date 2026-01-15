@@ -165,9 +165,19 @@ function Scheduler:_tick()
     end
 
     -- Выполнение в порядке приоритета
-    for i = 1, #p1 do self:_run_task(p1[i], self._tasks[p1[i]], now) end
-    for i = 1, #p2 do self:_run_task(p2[i], self._tasks[p2[i]], now) end
-    for i = 1, #p3 do self:_run_task(p3[i], self._tasks[p3[i]], now) end
+    -- Проверка на nil обязательна, так как задача могла быть удалена другой задачей в этом же тике
+    for i = 1, #p1 do
+        local t = self._tasks[p1[i]]
+        if t then self:_run_task(p1[i], t, now) end
+    end
+    for i = 1, #p2 do
+        local t = self._tasks[p2[i]]
+        if t then self:_run_task(p2[i], t, now) end
+    end
+    for i = 1, #p3 do
+        local t = self._tasks[p3[i]]
+        if t then self:_run_task(p3[i], t, now) end
+    end
 
     -- Adaptive Ticking: регулируем интервал таймера
     local wait_time = min_next_run - now
