@@ -1,36 +1,42 @@
 -- ===========================================================================
 -- Модуль `utils.filter_engine`
 --
--- Реализует логику фильтрации событий. Поддерживает простые сравнения,
--- операторы (gt, lt, matches), выполнение Lua-выражений и фильтры по длительности.
+-- Высокопроизводительный движок фильтрации событий с поддержкой JIT-компиляции,
+-- сложных логических групп и фильтров по длительности (Duration).
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type = type
-local pairs = pairs
-local pcall = pcall
-local load = load
+local type = _G.type
+local pairs = _G.pairs
+local ipairs = _G.ipairs
+local pcall = _G.pcall
+local load = _G.load
 local tostring = tostring
-local os_time = os.time
+local string_format = _G.string.format
+local string_match = _G.string.match
+local string_find = _G.string.find
+local table_concat = _G.table.concat
+local table_insert = _G.table.insert
+local os_time = _G.os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "FilterEngine"
+local MAX_CACHE_SIZE = 500 -- Увеличенный размер кэша для сложных систем
 
 --- @class FilterEngine
---- @field private duration_state table<string, table<number, number>> Состояние фильтров по длительности
+--- @field private duration_state table<string, table<string, number>> Состояние фильтров по длительности
 local FilterEngine = {}
 
--- Кэш для скомпилированных скриптов и путей
+-- Внутренние кэши
 local script_cache = {}
 local script_cache_count = 0
 local accessor_cache = {}
 local accessor_cache_count = 0
-local MAX_CACHE_SIZE = 100
 
---- @type table<string, function> Операторы сравнения
+--- @type table<string, function> Операторы сравнения для интерпретируемого режима
 local OPERATORS = {
     eq = function(a, b) return a == b end,
     ne = function(a, b) return a ~= b end,
@@ -38,20 +44,20 @@ local OPERATORS = {
     ge = function(a, b) return (type(a) == "number" and type(b) == "number") and a >= b end,
     lt = function(a, b) return (type(a) == "number" and type(b) == "number") and a < b end,
     le = function(a, b) return (type(a) == "number" and type(b) == "number") and a <= b end,
-    contains = function(a, b) return (type(a) == "string" and type(b) == "string") and a:find(b, 1, true) ~= nil end,
-    matches = function(a, b) return (type(a) == "string" and type(b) == "string") and a:match(b) ~= nil end,
+    contains = function(a, b) return (type(a) == "string" and type(b) == "string") and string_find(a, b, 1, true) ~= nil end,
+    matches = function(a, b) return (type(a) == "string" and type(b) == "string") and string_match(a, b) ~= nil end,
     ["in"] = function(a, b)
         if type(b) == "table" then
             for _, v in pairs(b) do if v == a then return true end end
         elseif type(b) == "string" then
-            return b:find(tostring(a), 1, true) ~= nil
+            return string_find(b, tostring(a), 1, true) ~= nil
         end
         return false
     end,
 }
 
 -- Состояние для фильтров по длительности (Duration)
--- Структура: state[sub_id][condition_index] = { first_match_time }
+-- Структура: duration_state[sub_id][condition_key] = first_match_time
 local duration_state = {}
 
 --- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным.
@@ -65,7 +71,6 @@ function FilterEngine.compile_accessor(path)
     local accessor = accessor_cache[path]
     if accessor then return accessor end
 
-    -- Очистка кэша при переполнении (O(1) проверка)
     if accessor_cache_count >= MAX_CACHE_SIZE then
         accessor_cache = {}
         accessor_cache_count = 0
@@ -73,10 +78,9 @@ function FilterEngine.compile_accessor(path)
 
     local parts = {}
     for part in path:gmatch("[^%.]+") do
-        parts[#parts + 1] = part
+        table_insert(parts, part)
     end
 
-    -- Генерация функции-аксессора
     if #parts == 1 then
         local key = parts[1]
         accessor = function(d)
@@ -113,21 +117,27 @@ function FilterEngine.clear_state(sub_id)
     end
 end
 
---- Проверяет соответствие данных конкретному условию с учетом оператора и длительности.
+--- Проверяет соответствие данных конкретному условию (интерпретируемый режим).
+--- @private
 --- @param data table Данные события
---- @param condition table Параметры условия (field, op, value, duration, accessor)
---- @param sub_id string|nil ID подписки (для отслеживания длительности)
---- @param cond_idx number Индекс условия в списке
+--- @param condition table Параметры условия
+--- @param sub_id string|nil ID подписки
+--- @param cond_idx any Уникальный ключ условия
 --- @return boolean Результат проверки
 local function check_condition(data, condition, sub_id, cond_idx)
     if type(data) ~= "table" then return false end
+    
+    -- Если это вложенная группа условий
+    if condition.conditions then
+        return FilterEngine.match(data, condition, sub_id)
+    end
+
     if not condition.field then return true end
 
     local value
     if condition.accessor then
         value = condition.accessor(data)
     else
-        -- Fallback для обратной совместимости или если аксессор не скомпилирован
         local accessor = FilterEngine.compile_accessor(condition.field)
         condition.accessor = accessor
         value = accessor(data)
@@ -135,27 +145,25 @@ local function check_condition(data, condition, sub_id, cond_idx)
 
     local op = condition.op or "eq"
     local target = condition.value
-    local duration = condition.duration -- в секундах
+    local duration = condition.duration
 
     local func = OPERATORS[op]
     local is_match = func and func(value, target) or false
 
-    -- Обработка длительности (Duration)
+    -- Обработка длительности
     if duration and duration > 0 and sub_id then
         if not duration_state[sub_id] then duration_state[sub_id] = {} end
         local state = duration_state[sub_id]
+        local key = tostring(cond_idx)
 
         if is_match then
-            if not state[cond_idx] then
-                state[cond_idx] = os_time()
-                return false -- Еще не прошло достаточно времени
+            if not state[key] then
+                state[key] = os_time()
+                return false
             end
-            if (os_time() - state[cond_idx]) >= duration then
-                return true -- Условие выполняется дольше чем duration
-            end
-            return false
+            return (os_time() - state[key]) >= duration
         else
-            state[cond_idx] = nil -- Сброс, если условие перестало выполняться
+            state[key] = nil
             return false
         end
     end
@@ -163,119 +171,124 @@ local function check_condition(data, condition, sub_id, cond_idx)
     return is_match
 end
 
---- Генерирует Lua-код для проверки набора условий.
+--- Генерирует выражение для одного условия в JIT-коде.
 --- @private
---- @param filters table Схема фильтров
---- @return string|nil Lua-код функции
-local function generate_filter_code(filters)
-    if not filters.conditions or #filters.conditions == 0 then return nil end
+local function generate_cond_expr(cond, upvalues)
+    local op = cond.op or "eq"
+    local field = cond.field
+    local target = cond.value
 
-    local logic = filters.logic or "and"
-    local code_parts = {}
-
-    for i, cond in ipairs(filters.conditions) do
-        local op = cond.op or "eq"
-        local field = cond.field
-        local target = cond.value
-
-        -- Поддержка вложенных полей (например, "total.bitrate")
-        local field_expr
-        if field:find("%.") then
-            local parts = {}
-            local current = "data"
-            local checks = {}
-            for part in field:gmatch("[^%.]+") do
-                current = string.format("%s[%q]", current, part)
-                table.insert(parts, current)
-            end
-            -- Проверка существования всех уровней вложенности
-            for j = 1, #parts - 1 do
-                table.insert(checks, string.format("type(%s) == 'table'", parts[j]))
-            end
-            field_expr = parts[#parts]
-            if #checks > 0 then
-                field_expr = string.format("(%s and %s)", table.concat(checks, " and "), field_expr)
-            end
-        else
-            field_expr = string.format("data[%q]", field)
+    -- Генерация пути доступа
+    local field_expr
+    if field:find("%.") then
+        local parts = {}
+        local current = "data"
+        local checks = {}
+        for part in field:gmatch("[^%.]+") do
+            current = string_format("%s[%q]", current, part)
+            table_insert(parts, current)
         end
-
-        -- Формируем выражение для одного условия
-        local expr
-        local target_val = type(target) == "string" and string.format("%q", target) or tostring(target)
-
-        if op == "eq" then
-            expr = string.format("(%s == %s)", field_expr, target_val)
-        elseif op == "ne" then
-            expr = string.format("(%s ~= %s)", field_expr, target_val)
-        elseif op == "gt" then
-            expr = string.format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
-        elseif op == "ge" then
-            expr = string.format("(type(%s) == 'number' and %s >= %s)", field_expr, field_expr, target_val)
-        elseif op == "lt" then
-            expr = string.format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
-        elseif op == "le" then
-            expr = string.format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
-        elseif op == "contains" then
-            expr = string.format(
-                "(type(%s) == 'string' and %s:find(%q, 1, true) ~= nil)",
-                field_expr, field_expr, tostring(target))
-        elseif op == "matches" then
-            expr = string.format(
-                "(type(%s) == 'string' and %s:match(%q) ~= nil)",
-                field_expr, field_expr, tostring(target))
-        elseif op == "in" then
-            if type(target) == "table" then
-                local items = {}
-                for _, v in pairs(target) do
-                    table.insert(items, type(v) == "string" and string.format("[%q]=true", v) or string.format("[%s]=true", tostring(v)))
-                end
-                expr = string.format("(({%s})[%s] == true)", table.concat(items, ","), field_expr)
-            elseif type(target) == "string" then
-                expr = string.format("(type(%s) ~= 'nil' and %q:find(tostring(%s), 1, true) ~= nil)",
-                    field_expr, target, field_expr)
-            end
+        for j = 1, #parts - 1 do
+            table_insert(checks, string_format("type(%s) == 'table'", parts[j]))
         end
-
-        if expr then
-            table.insert(code_parts, expr)
-        end
+        field_expr = string_format("(%s and %s)", table_concat(checks, " and "), parts[#parts])
+    else
+        field_expr = string_format("data[%q]", field)
     end
 
-    if #code_parts == 0 then return nil end
+    -- Оптимизация оператора 'in' через upvalues
+    if op == "in" and type(target) == "table" then
+        local lookup = {}
+        for _, v in pairs(target) do lookup[v] = true end
+        local uv_name = "uv" .. (#upvalues + 1)
+        table_insert(upvalues, { name = uv_name, value = lookup })
+        return string_format("(%s ~= nil and %s[%s] == true)", field_expr, uv_name, field_expr)
+    end
 
-    local joiner = (logic == "or") and " or " or " and "
-    return "return function(data) return " .. table.concat(code_parts, joiner) .. " end"
+    local target_val = type(target) == "string" and string_format("%q", target) or tostring(target)
+    
+    if op == "eq" then return string_format("(%s == %s)", field_expr, target_val)
+    elseif op == "ne" then return string_format("(%s ~= %s)", field_expr, target_val)
+    elseif op == "gt" then return string_format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
+    elseif op == "ge" then return string_format("(type(%s) == 'number' and %s >= %s)", field_expr, field_expr, target_val)
+    elseif op == "lt" then return string_format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
+    elseif op == "le" then return string_format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
+    elseif op == "contains" then
+        return string_format("(type(%s) == 'string' and string_find(%s, %q, 1, true) ~= nil)", field_expr, field_expr, tostring(target))
+    elseif op == "matches" then
+        return string_format("(type(%s) == 'string' and string_match(%s, %q) ~= nil)", field_expr, field_expr, tostring(target))
+    elseif op == "in" and type(target) == "string" then
+        return string_format("(type(%s) ~= 'nil' and string_find(%q, tostring(%s), 1, true) ~= nil)", field_expr, target, field_expr)
+    end
+
+    return "false"
+end
+
+--- Рекурсивно генерирует Lua-код для фильтров.
+--- @private
+local function generate_recursive(filters, upvalues)
+    if not filters.conditions or #filters.conditions == 0 then return "true" end
+    
+    local parts = {}
+    for _, cond in ipairs(filters.conditions) do
+        if cond.conditions then
+            table_insert(parts, "(" .. generate_recursive(cond, upvalues) .. ")")
+        else
+            table_insert(parts, generate_cond_expr(cond, upvalues))
+        end
+    end
+    
+    local joiner = (filters.logic == "or") and " or " or " and "
+    return table_concat(parts, joiner)
 end
 
 --- Проверяет данные события на соответствие набору фильтров.
---- Поддерживает Fast Path (если фильтры пусты), Lua-скрипты и логические группы условий.
 --- @param data table Данные события
 --- @param filters table Схема фильтров
---- @param sub_id string|nil ID подписки для отслеживания состояний
+--- @param sub_id string|nil ID подписки
 --- @return boolean Результат проверки
 function FilterEngine.match(data, filters, sub_id)
     if not filters or next(filters) == nil then return true end
 
-    -- Оптимизация: JIT-компиляция условий в функцию
+    -- JIT-компиляция
     if filters.conditions and not filters.script and not filters._compiled_func then
-        -- Если есть условия с длительностью, JIT не используем (нужно состояние)
         local has_duration = false
-        for _, c in ipairs(filters.conditions) do
-            if c.duration and c.duration > 0 then has_duration = true; break end
+        local function check_dur(f)
+            for _, c in ipairs(f.conditions) do
+                if c.duration and c.duration > 0 then has_duration = true; break end
+                if c.conditions then check_dur(c) end
+                if has_duration then break end
+            end
         end
+        check_dur(filters)
 
         if not has_duration then
-            local code = generate_filter_code(filters)
-            if code then
-                local factory, _ = load(code, "=(filter_jit)", "t",
-                    { type = type, table = table })
-                if factory then
-                    local ok, func = pcall(factory)
-                    if ok and type(func) == "function" then
-                        filters._compiled_func = func
-                    end
+            local upvalues = {}
+            local expr = generate_recursive(filters, upvalues)
+            
+            local uv_decl = {}
+            local uv_env = { 
+                type = type, tostring = tostring, 
+                string_find = string_find, string_match = string_match 
+            }
+            for _, uv in ipairs(upvalues) do
+                table_insert(uv_decl, uv.name)
+                uv_env[uv.name] = uv.value
+            end
+            
+            local code = string_format(
+                "return function(data) return %s end",
+                expr
+            )
+            
+            local factory, err = load(code, "=(filter_jit)", "t", uv_env)
+            if factory then
+                local ok, func = pcall(factory)
+                if ok and type(func) == "function" then
+                    filters._compiled_func = func
                 end
+            else
+                Logger.error(COMPONENT_NAME, "JIT Error: %s", tostring(err))
             end
         end
     end
@@ -285,51 +298,48 @@ function FilterEngine.match(data, filters, sub_id)
         return ok and res == true
     end
 
-    -- 1. Проверка Lua-скрипта
+    -- Lua-скрипт
     if filters.script and type(filters.script) == "string" then
         local func = script_cache[filters.script]
         if not func then
-            -- Очистка кэша при переполнении (O(1) проверка)
             if script_cache_count >= MAX_CACHE_SIZE then
                 script_cache = {}
                 script_cache_count = 0
             end
-
-            local env = { data = data, type = type, tostring = tostring, os_time = os_time }
+            local env = { data = data, type = type, tostring = tostring, os_time = os_time, pairs = pairs, ipairs = ipairs }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
             if func then
                 script_cache[filters.script] = func
                 script_cache_count = script_cache_count + 1
             else
-                Logger.error(COMPONENT_NAME, "Ошибка компиляции скрипта фильтра: %s", tostring(err))
+                Logger.error(COMPONENT_NAME, "Script Error: %s", tostring(err))
                 return false
             end
         end
-
         local ok, res = pcall(func)
         return ok and res == true
     end
 
-    -- 2. Проверка условий (conditions)
-    if filters.conditions and type(filters.conditions) == "table" then
+    -- Интерпретируемый режим (для Duration или Fallback)
+    if filters.conditions then
         local logic = filters.logic or "and"
         if logic == "and" then
-            for i, cond in pairs(filters.conditions) do
+            for i, cond in ipairs(filters.conditions) do
                 if not check_condition(data, cond, sub_id, i) then return false end
             end
             return true
-        elseif logic == "or" then
-            for i, cond in pairs(filters.conditions) do
+        else
+            for i, cond in ipairs(filters.conditions) do
                 if check_condition(data, cond, sub_id, i) then return true end
             end
             return false
         end
     end
 
-    -- 3. Простая фильтрация
+    -- Простая фильтрация по полям
     for key, val in pairs(filters) do
-        if key ~= "conditions" and key ~= "logic" and key ~= "script" then
+        if key ~= "conditions" and key ~= "logic" and key ~= "script" and not key:find("^_") then
             if data[key] ~= val then return false end
         end
     end
