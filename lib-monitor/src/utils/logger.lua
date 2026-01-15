@@ -131,15 +131,18 @@ local function _should_log(level)
     return level >= _get_current_level()
 end
 
---- Формирует текстовое сообщение лога
---- @param format_str string
+--- Формирует текстовое сообщение лога с защитой от ошибок форматирования
+--- @param format_str any
 --- @param ... any
 --- @return string
 local function _format_message(format_str, ...)
+    local str = tostring(format_str)
     if select("#", ...) > 0 then
-        return string_format(format_str, ...)
+        local ok, res = pcall(string_format, str, ...)
+        if ok then return res end
+        return str .. " [ОШИБКА ФОРМАТИРОВАНИЯ]"
     end
-    return format_str
+    return str
 end
 
 --- Распространяет ошибку вверх по стеку контекстов
@@ -239,8 +242,8 @@ end
 
 --- Внутренняя функция для записи лога
 --- @param level_name string Имя уровня (INFO, ERROR и т.д.)
---- @param component string Имя компонента
---- @param format_str string Форматная строка
+--- @param component any Имя компонента
+--- @param format_str any Форматная строка
 --- @param ... any Аргументы формата
 local function _write_log(level_name, component, format_str, ...)
     local level = LOG_LEVELS[level_name]
@@ -252,6 +255,7 @@ local function _write_log(level_name, component, format_str, ...)
         return
     end
 
+    local component_str = tostring(component)
     local msg = _format_message(format_str, ...)
 
     -- Сохранение ошибки в контекст
@@ -265,7 +269,7 @@ local function _write_log(level_name, component, format_str, ...)
     if state.cached_log_buffer_size > 0 then
         state.buffer_size = state.cached_log_buffer_size
         -- Используем прямую запись в буфер, так как Logger еще не полностью определен
-        _write_to_buffer(level_name, component, msg, state.current_context_id, now)
+        _write_to_buffer(level_name, component_str, msg, state.current_context_id, now)
     end
 
     -- Вывод лога
@@ -276,7 +280,7 @@ local function _write_log(level_name, component, format_str, ...)
             local log_data = pool and pool.get("log_data") or {}
             log_data.timestamp = now
             log_data.level = level_name
-            log_data.component = component
+            log_data.component = component_str
             log_data.message = msg
             log_data.context_id = state.current_context_id
 
@@ -284,7 +288,7 @@ local function _write_log(level_name, component, format_str, ...)
 
             if pool then pool.release(log_data, "log_data") end
         else
-            output_msg = string_format("[%s] %s", component, msg)
+            output_msg = string_format("[%s] %s", component_str, msg)
         end
 
         if state.cached_log_batch_enabled then
