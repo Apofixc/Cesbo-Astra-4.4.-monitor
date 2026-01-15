@@ -41,6 +41,8 @@ local cached_log_level = nil
 local cached_log_format = nil
 local cached_log_buffer_size = 0
 local cached_log_batch_enabled = false
+local last_config_refresh = 0
+local CONFIG_REFRESH_INTERVAL = 5 -- секунд
 
 -- 5. Инициализация объектов из загруженных модулей
 
@@ -99,8 +101,10 @@ function Logger.refresh_log_level()
 end
 
 local function get_current_level()
-    if not cached_log_level then
+    local now = os_time()
+    if not cached_log_level or now - last_config_refresh > CONFIG_REFRESH_INTERVAL then
         Logger.refresh_log_level()
+        last_config_refresh = now
     end
     return cached_log_level
 end
@@ -309,13 +313,7 @@ function Logger.with_error(func, ...)
     -- Восстанавливаем контекст (защита от повреждения стека)
     current_context_id = prev_context_id
     if prev_context_id then
-        -- Удаляем последний элемент из стека, так как мы его восстановили
-        for i = #context_stack, 1, -1 do
-            if context_stack[i] == prev_context_id then
-                table_remove(context_stack, i)
-                break
-            end
-        end
+        table_remove(context_stack)
     end
 
     local ok = results[1]
