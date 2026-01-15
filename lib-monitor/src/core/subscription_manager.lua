@@ -151,27 +151,7 @@ local Transport = {
                 end
 
                 if is_error and retry_count < MAX_RETRIES then
-                    -- Для ретрая делаем копию данных, если это была таблица из пула
-                    local retry_data = event
-                    if type(event) == "table" and event.is_table then
-                        retry_data = content
-                    end
-
-                    if #self._retry_queue < MAX_RETRY_QUEUE_SIZE then
-                        local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
-                        local jitter = math_random(0, 2)
-
-                        local item = TablePool and TablePool.get("retry_item") or {}
-                        item.config = config
-                        item.data = retry_data
-                        item.type = event_type
-                        item.retries = retry_count + 1
-                        item.time = os_time() + delay + jitter
-
-                        table_insert(self._retry_queue, item)
-                    else
-                        Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
-                    end
+                    self:enqueue_retry(config, event, event_type, retry_count, content)
                 end
             end
         })
@@ -218,6 +198,38 @@ local Transport = {
         return true
     end
 }
+
+--- Добавляет событие в очередь на повторную отправку.
+--- @param config table Параметры транспорта
+--- @param event table|string Объект события или данные
+--- @param event_type string Тип события
+--- @param retry_count number Текущая попытка
+--- @param content string Подготовленный JSON
+--- @return boolean Статус добавления
+function SubscriptionManager:enqueue_retry(config, event, event_type, retry_count, content)
+    if #self._retry_queue >= MAX_RETRY_QUEUE_SIZE then
+        Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
+        return false
+    end
+
+    local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
+    local jitter = math_random(0, 2)
+
+    local item = TablePool and TablePool.get("retry_item") or {}
+    item.config = config
+    -- Для ретрая делаем копию данных, если это была таблица из пула
+    local retry_data = event
+    if type(event) == "table" and event.is_table then
+        retry_data = content
+    end
+    item.data = retry_data
+    item.type = event_type
+    item.retries = retry_count + 1
+    item.time = os_time() + delay + jitter
+
+    table_insert(self._retry_queue, item)
+    return true
+end
 
 --- Создает и инициализирует новый экземпляр SubscriptionManager.
 --- Загружает сохраненные подписки из файла и запускает обработчик повторов.
