@@ -13,8 +13,10 @@ local tostring = _G.tostring
 local pcall = _G.pcall
 local table_concat = _G.table.concat
 local table_insert = _G.table.insert
+local table_remove = _G.table.remove
 local string_gmatch = _G.string.gmatch
 local string_format = _G.string.format
+local string_match = _G.string.match
 
 -- 2. Функции из ModuleManager.get_module()
 -- ModuleManager является корнем системы и не использует get_module для себя.
@@ -46,8 +48,22 @@ local _global_dependencies = {}
 --- @type table<string, any> Кэш для ускорения поиска вложенных зависимостей
 local _nested_dependency_cache = {}
 
---- @type table|nil Ссылка на модуль Logger (инициализируется лениво)
-local _Logger = nil
+--- @type table<string, string[]> Кэш разобранных путей зависимостей
+local _path_parts_cache = {}
+
+--- @type boolean Флаг блокировки изменений во время загрузки
+local _is_loading = false
+
+--- @type table Прокси-объект для логгера, обеспечивающий доступ даже после сброса состояния
+local _LoggerProxy = setmetatable({}, {
+    __index = function(_, key)
+        local Logger = _loaded_modules["logger"]
+        if Logger and Logger[key] then
+            return Logger[key]
+        end
+        return nil
+    end
+})
 
 -- ===========================================================================
 -- Внутренние функции (Private)
@@ -58,7 +74,7 @@ local _Logger = nil
 --- @param format_str string Строка формата
 --- @param ... any Аргументы форматирования
 local function _log_info(component, format_str, ...)
-    if _Logger and _Logger.info then _Logger.info(component, format_str, ...) end
+    if _LoggerProxy.info then _LoggerProxy.info(component, format_str, ...) end
 end
 
 --- Прокси-функция для логирования ошибок
@@ -66,9 +82,10 @@ end
 --- @param format_str string Строка формата
 --- @param ... any Аргументы форматирования
 local function _log_error(component, format_str, ...)
-    if _Logger and _Logger.error then
-        _Logger.error(component, format_str, ...)
+    if _LoggerProxy.error then
+        _LoggerProxy.error(component, format_str, ...)
     else
+        -- Fallback до инициализации логгера
         print(string_format("[%s][ERROR] %s", component, string_format(format_str, ...)))
     end
 end
@@ -78,72 +95,79 @@ end
 --- @param format_str string Строка формата
 --- @param ... any Аргументы форматирования
 local function _log_debug(component, format_str, ...)
-    if _Logger and _Logger.debug then _Logger.debug(component, format_str, ...) end
+    if _LoggerProxy.debug then _LoggerProxy.debug(component, format_str, ...) end
 end
 
---- Выполняет ленивую инициализацию логгера после загрузки соответствующего модуля.
---- Это необходимо для разрыва циклической зависимости, так как Logger сам зависит от ModuleManager.
---- @private
-local function _init_logger()
-    if not _Logger then
-        local module_info = _registered_modules["logger"]
-        if not module_info then return end
-
-        -- Используем прямой require для предотвращения рекурсии в get_module
-        local success, logger_module = pcall(require, module_info.path)
-        if success and logger_module then
-            _Logger = logger_module
-        end
-    end
-end
-
---- Реализует алгоритм топологической сортировки (DFS) для определения порядка загрузки.
+--- Реализует итеративный алгоритм топологической сортировки для определения порядка загрузки.
+--- Использование итеративного подхода исключает риск переполнения стека (stack overflow)
+--- и позволяет корректно обрабатывать графы любой глубины.
 --- @private
 --- @return string[]|nil Список имен модулей в порядке загрузки или nil при ошибке (цикл)
 local function _topological_sort()
     local load_order = {}
     local visited = {}
-    local temp_visited = {}
-
-    --- Рекурсивный обход графа зависимостей
-    --- @param name string Имя модуля
-    --- @return boolean Успех обхода
-    local function visit(name)
-        if not _registered_modules[name] then
-            _log_error(COMPONENT_NAME, "Попытка загрузить незарегистрированный модуль: %s.", name)
-            return false
-        end
-
-        if visited[name] then
-            return true
-        end
-
-        if temp_visited[name] then
-            _log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость с участием модуля: %s.", name)
-            return false
-        end
-
-        temp_visited[name] = true
-
-        local module_info = _registered_modules[name]
-        for _, dep_name in ipairs(module_info.dependencies) do
-            if not visit(dep_name) then
-                return false
-            end
-        end
-
-        temp_visited[name] = nil
-        visited[name] = true
-
-        -- Добавляем в список после посещения всех зависимостей
-        table_insert(load_order, name)
-        return true
+    local in_stack = {}
+    local keys = {}
+    
+    -- Получаем список всех ключей для стабильной итерации (микро-оптимизация)
+    for name in pairs(_registered_modules) do
+        keys[#keys + 1] = name
     end
 
-    for name, _ in pairs(_registered_modules) do
-        if not visited[name] then
-            if not visit(name) then
-                return nil
+    for i = 1, #keys do
+        local root_name = keys[i]
+        if not visited[root_name] then
+            -- Стек для итеративного DFS: { {name, next_dep_index}, ... }
+            local stack = { { root_name, 1 } }
+            in_stack[root_name] = true
+            
+            while #stack > 0 do
+                local current = stack[#stack]
+                local name = current[1]
+                local module_info = _registered_modules[name]
+                
+                if not module_info then
+                    _log_error(COMPONENT_NAME, "Модуль '%s' не зарегистрирован, но указан как зависимость.", name)
+                    return nil
+                end
+
+                local deps = module_info.dependencies
+                local found_new_dep = false
+                
+                -- Проверяем зависимости, начиная с сохраненного индекса
+                for j = current[2], #deps do
+                    local dep_name = deps[j]
+                    if not visited[dep_name] then
+                        if in_stack[dep_name] then
+                            -- Обнаружен цикл. Формируем путь для отчета.
+                            local cycle_path = {}
+                            local start_collect = false
+                            for k = 1, #stack do
+                                if stack[k][1] == dep_name then start_collect = true end
+                                if start_collect then cycle_path[#cycle_path + 1] = stack[k][1] end
+                            end
+                            cycle_path[#cycle_path + 1] = dep_name
+                            _log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость: %s", 
+                                table_concat(cycle_path, " -> "))
+                            return nil
+                        end
+                        
+                        -- Сохраняем прогресс текущего модуля и переходим к зависимости
+                        current[2] = j + 1
+                        stack[#stack + 1] = { dep_name, 1 }
+                        in_stack[dep_name] = true
+                        found_new_dep = true
+                        break
+                    end
+                end
+
+                if not found_new_dep then
+                    -- Все зависимости модуля обработаны
+                    visited[name] = true
+                    in_stack[name] = nil
+                    load_order[#load_order + 1] = name
+                    table_remove(stack)
+                end
             end
         end
     end
@@ -161,88 +185,96 @@ end
 --- @param dependencies string[]|nil Список имен модулей, от которых зависит данный модуль.
 --- @return boolean Статус выполнения
 function ModuleManager.register_module(name, path, dependencies)
-    if not name or type(name) ~= "string" then
-        _log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с некорректным именем.")
+    if _is_loading then
+        _log_error(COMPONENT_NAME, "Регистрация модуля '%s' отклонена: процесс загрузки уже запущен.", name)
         return false
     end
 
-    if not path or type(path) ~= "string" then
-        _log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
+    if not name or type(name) ~= "string" or name == "" then
+        _log_error(COMPONENT_NAME, "Попытка регистрации модуля с некорректным именем.")
         return false
     end
 
-    if _registered_modules[name] then
-        _log_debug(COMPONENT_NAME, "Модуль '%s' уже зарегистрирован. Обновление информации.", name)
+    if not path or type(path) ~= "string" or path == "" then
+        _log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть непустой строкой.", name)
+        return false
+    end
+    
+    -- Валидация формата пути (базовая проверка на отсутствие подозрительных символов)
+    if string_match(path, "[^%w%._%-/]") then
+        _log_error(COMPONENT_NAME, "Модуль '%s': путь содержит недопустимые символы.", name)
+        return false
     end
 
-    -- Валидация и фильтрация списка зависимостей
-    local valid_dependencies = {}
-    if dependencies and type(dependencies) == "table" then
-        for _, dep in ipairs(dependencies) do
+    -- Валидация и фильтрация списка зависимостей (ленивая инициализация таблицы)
+    local valid_dependencies = nil
+    if dependencies and type(dependencies) == "table" and #dependencies > 0 then
+        valid_dependencies = {}
+        for i = 1, #dependencies do
+            local dep = dependencies[i]
             if type(dep) == "string" and dep ~= "" then
-                table_insert(valid_dependencies, dep)
-            else
-                _log_error(COMPONENT_NAME, "Модуль '%s': игнорируем некорректную зависимость.", name)
+                valid_dependencies[#valid_dependencies + 1] = dep
             end
         end
     end
 
     _registered_modules[name] = {
         path = path,
-        dependencies = valid_dependencies
+        dependencies = valid_dependencies or {}
     }
 
-    _log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован. Зависимости: %s.",
-             name, table_concat(valid_dependencies, ", "))
+    _log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован.", name)
     return true
 end
 
 --- Загружает все зарегистрированные модули в правильном порядке.
 --- @return string[]|nil Список имен успешно загруженных модулей или nil при критической ошибке.
 function ModuleManager.load_modules()
-    -- Проверка версии Lua согласно стандартам проекта (lua-version.md)
-    if _VERSION ~= "Lua 5.2" then
-        _log_error(COMPONENT_NAME, "Неподдерживаемая версия Lua: %s. Ожидается Lua 5.2.", _VERSION)
-    end
-
-    local load_order = _topological_sort()
-
-    if not load_order then
-        _log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки из-за ошибок в зависимостях.")
+    if _is_loading then
+        _log_error(COMPONENT_NAME, "Вызов load_modules отклонен: загрузка уже выполняется.")
         return nil
     end
 
-    _log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
+    _is_loading = true
 
-    for _, name in ipairs(load_order) do
+    -- Проверка версии Lua согласно стандартам проекта (lua-version.md)
+    if _VERSION ~= "Lua 5.2" then
+        _log_error(COMPONENT_NAME, "Внимание: версия Lua %s отличается от целевой (5.2).", _VERSION)
+    end
+
+    local load_order = _topological_sort()
+    if not load_order then
+        _is_loading = false
+        return nil
+    end
+
+    for i = 1, #load_order do
+        local name = load_order[i]
         if not _loaded_modules[name] then
             local module_info = _registered_modules[name]
-            _log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path)
+            _log_debug(COMPONENT_NAME, "Загрузка: %s (%s).", name, module_info.path)
 
             local success, module_or_err = pcall(require, module_info.path)
 
             if not success then
-                _log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' (%s): %s.",
+                _log_error(COMPONENT_NAME, "Ошибка загрузки модуля '%s' (%s): %s.",
                     name, module_info.path, tostring(module_or_err))
+                _is_loading = false
                 return nil
             end
 
             if module_or_err == nil then
                 _log_error(COMPONENT_NAME, "Модуль '%s' вернул nil при загрузке.", name)
+                _is_loading = false
                 return nil
             end
 
             _loaded_modules[name] = module_or_err
-
-            -- Специальная обработка для логгера для включения расширенного логирования
-            if name == "logger" and not _Logger then
-                _init_logger()
-            end
-
             _log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name)
         end
     end
 
+    _is_loading = false
     _log_info(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
     return load_order
 end
@@ -258,37 +290,47 @@ end
 --- @return boolean true, если все зависимости найдены в реестре.
 function ModuleManager.validate_dependencies()
     local all_met = true
-
     for name, module_info in pairs(_registered_modules) do
-        for _, dep_name in ipairs(module_info.dependencies) do
+        local deps = module_info.dependencies
+        for i = 1, #deps do
+            local dep_name = deps[i]
             if not _registered_modules[dep_name] then
                 _log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
                 all_met = false
             end
         end
     end
-
     return all_met
 end
 
 --- Динамически проверяет наличие вложенной зависимости в глобальном окружении.
---- Использует кэширование для оптимизации повторных проверок.
+--- Использует двухуровневое кэширование (пути и объекты) для максимальной производительности.
 --- @param path_str string Путь к объекту (например, "astra.reload").
 --- @return any|nil Найденный объект или nil.
 function ModuleManager.check_nested_dependency(path_str)
-    if not path_str or type(path_str) ~= "string" then
-        _log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
-        return nil
-    end
+    if not path_str or type(path_str) ~= "string" then return nil end
 
+    -- 1. Проверка кэша объектов
     if _nested_dependency_cache[path_str] ~= nil then
         return _nested_dependency_cache[path_str]
     end
 
+    -- 2. Получение или создание кэша разобранного пути
+    local parts = _path_parts_cache[path_str]
+    if not parts then
+        parts = {}
+        for part in string_gmatch(path_str, "[^.]+") do
+            parts[#parts + 1] = part
+        end
+        _path_parts_cache[path_str] = parts
+    end
+
+    -- 3. Поиск объекта
     local current_scope = _G
-    for part in string_gmatch(path_str, "[^.]+") do
+    for i = 1, #parts do
+        local part = parts[i]
         if type(current_scope) ~= "table" or current_scope[part] == nil then
-            _log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена.", path_str)
+            _log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена на уровне '%s'.", path_str, part)
             return nil
         end
         current_scope = current_scope[part]
@@ -323,7 +365,7 @@ end
 --- @return boolean Статус выполнения.
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
-        _log_error(COMPONENT_NAME, "Ожидалась таблица зависимостей.")
+        _log_error(COMPONENT_NAME, "set_global_dependencies: ожидалась таблица.")
         return false
     end
     for path, obj in pairs(deps) do
@@ -337,8 +379,8 @@ end
 --- @return string[]
 function ModuleManager.get_global_dependencies()
     local deps = {}
-    for path, _ in pairs(_global_dependencies) do
-        table_insert(deps, path)
+    for path in pairs(_global_dependencies) do
+        deps[#deps + 1] = path
     end
     return deps
 end
@@ -355,7 +397,7 @@ end
 function ModuleManager.get_registered_modules()
     local modules = {}
     for name in pairs(_registered_modules) do
-        table_insert(modules, name)
+        modules[#modules + 1] = name
     end
     return modules
 end
@@ -365,18 +407,22 @@ end
 function ModuleManager.get_loaded_modules()
     local modules = {}
     for name in pairs(_loaded_modules) do
-        table_insert(modules, name)
+        modules[#modules + 1] = name
     end
     return modules
 end
 
 --- Сбрасывает состояние менеджера (используется преимущественно в тестах).
 function ModuleManager.reset()
+    if _is_loading then
+        _log_error(COMPONENT_NAME, "Сброс состояния запрещен во время загрузки модулей.")
+        return
+    end
     _registered_modules = {}
     _loaded_modules = {}
     _global_dependencies = {}
     _nested_dependency_cache = {}
-    _Logger = nil
+    _path_parts_cache = {}
     _log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
 end
 
