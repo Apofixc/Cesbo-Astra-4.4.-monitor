@@ -352,6 +352,12 @@ function HttpServer.start(addr, port, retry_count, force_free)
 
     if ok then
         HttpServer._instance = result
+        
+        -- Инициализация WebSocket подписчика
+        if WsSubscriber and WsSubscriber.init then
+            WsSubscriber.init(result)
+        end
+
         HttpServer._sentinel = setmetatable({}, {
             __gc = function()
                 if HttpServer._instance then pcall(HttpServer._instance.close, HttpServer._instance) end
