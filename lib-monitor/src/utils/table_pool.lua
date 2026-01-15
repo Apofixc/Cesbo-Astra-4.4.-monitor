@@ -20,10 +20,10 @@ local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
--- ===========================================================================
--- КОНСТАНТЫ И НАСТРОЙКИ
--- ===========================================================================
+-- 3. Глобальные зависимости Astra
+-- (Модуль не использует внешние зависимости Astra)
 
+-- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
 
 -- Настройки пула по умолчанию
@@ -36,10 +36,7 @@ local ADAPTIVE_STEP = (MonitorConfig and MonitorConfig.PoolAdaptiveStep) or 0.25
 local MIN_LIMIT = (MonitorConfig and MonitorConfig.PoolMinLimit) or 10
 local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInterval) or 300
 
--- ===========================================================================
--- ВНУТРЕННЕЕ СОСТОЯНИЕ
--- ===========================================================================
-
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class TablePoolState
 --- @field pools table<string, table[]> Таблицы пулов: type -> { t1, t2, ... }
 --- @field cleaners table<string, function> Кастомные функции очистки: type -> function
@@ -62,7 +59,7 @@ local state = {
 local TablePool = {}
 
 -- ===========================================================================
--- ВНУТРЕННИЕ ФУНКЦИИ (PRIVATE)
+-- Внутренние функции (Private)
 -- ===========================================================================
 
 --- Очищает кэш посещенных объектов
@@ -99,7 +96,7 @@ local function _do_clear_table(t, deep, depth)
 end
 
 -- ===========================================================================
--- ПУБЛИЧНОЕ API
+-- Публичное API (Public API)
 -- ===========================================================================
 
 --- Включает или выключает режим отладки
