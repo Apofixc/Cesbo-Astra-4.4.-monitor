@@ -82,6 +82,9 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
         return
     end
 
+    -- Оптимизация: Проверяем наличие клиентов перед сборкой сообщения
+    if not next(clients) then return end
+
     local message = '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
     
     for client, _ in pairs(clients) do

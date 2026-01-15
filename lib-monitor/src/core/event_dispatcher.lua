@@ -297,7 +297,16 @@ end
 function EventDispatcher:get_last_values(event_type)
     local result = {}
 
-    -- Используем SubscriptionManager для сопоставления масок
+    -- Оптимизация: Прямой поиск, если нет масок (O(1))
+    if not event_type:find("*", 1, true) and not event_type:find("?", 1, true) then
+        local entry = self._lvc[event_type]
+        if entry then
+            result[event_type] = entry
+        end
+        return result
+    end
+
+    -- Используем SubscriptionManager для сопоставления масок (O(N))
     for name, entry in pairs(self._lvc) do
         if self.subscription_manager:match(event_type, name) then
             result[name] = entry

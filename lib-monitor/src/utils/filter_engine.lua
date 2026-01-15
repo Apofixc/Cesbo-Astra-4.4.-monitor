@@ -134,23 +134,27 @@ local function check_condition(data, condition, sub_id, cond_idx)
 
     if not condition.field then return true end
 
-    local value
-    if condition.accessor then
-        value = condition.accessor(data)
+    local is_match
+    if condition._compiled_cond then
+        is_match = condition._compiled_cond(data)
     else
-        local accessor = FilterEngine.compile_accessor(condition.field)
-        condition.accessor = accessor
-        value = accessor(data)
+        local value
+        if condition.accessor then
+            value = condition.accessor(data)
+        else
+            local accessor = FilterEngine.compile_accessor(condition.field)
+            condition.accessor = accessor
+            value = accessor(data)
+        end
+
+        local op = condition.op or "eq"
+        local target = condition.value
+        local func = OPERATORS[op]
+        is_match = func and func(value, target) or false
     end
 
-    local op = condition.op or "eq"
-    local target = condition.value
-    local duration = condition.duration
-
-    local func = OPERATORS[op]
-    local is_match = func and func(value, target) or false
-
     -- Обработка длительности
+    local duration = condition.duration
     if duration and duration > 0 and sub_id then
         if not duration_state[sub_id] then duration_state[sub_id] = {} end
         local state = duration_state[sub_id]
@@ -255,9 +259,23 @@ function FilterEngine.match(data, filters, sub_id)
         local has_duration = false
         local function check_dur(f)
             for _, c in ipairs(f.conditions) do
-                if c.duration and c.duration > 0 then has_duration = true; break end
+                if c.duration and c.duration > 0 then 
+                    has_duration = true
+                    -- Компилируем само условие для ускорения интерпретатора
+                    if not c._compiled_cond then
+                        local upvalues = {}
+                        local expr = generate_cond_expr(c, upvalues)
+                        local uv_env = { 
+                            type = type, tostring = tostring, 
+                            string_find = string_find, string_match = string_match 
+                        }
+                        for _, uv in ipairs(upvalues) do uv_env[uv.name] = uv.value end
+                        local code = string_format("return function(data) return %s end", expr)
+                        local factory = load(code, "=(cond_jit)", "t", uv_env)
+                        if factory then c._compiled_cond = factory() end
+                    end
+                end
                 if c.conditions then check_dur(c) end
-                if has_duration then break end
             end
         end
         check_dur(filters)
