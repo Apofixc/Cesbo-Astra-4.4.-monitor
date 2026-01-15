@@ -378,6 +378,10 @@ end
 --- @return boolean Результат
 function SubscriptionManager:match(pattern, name)
     local matcher = self._matchers[pattern]
+    if not matcher and Wildcard and (pattern:find("*", 1, true) or pattern:find("?", 1, true)) then
+        matcher = Wildcard.compile(pattern)
+    end
+
     if matcher then return matcher(name) end
     return pattern == name
 end

@@ -3,7 +3,7 @@
 --
 -- Центральная шина событий для системы мониторинга.
 -- Реализует очередь с приоритетами, асинхронную обработку и кэш последних состояний (LVC).
--- Поддерживает маски (wildcards) в именах событий.
+-- Поддерживает маски (wildcards) в именах событий через SubscriptionManager.
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
@@ -15,6 +15,7 @@ local table_remove = _G.table.remove
 local os_time = _G.os.time
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
+local collectgarbage = _G.collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -23,11 +24,57 @@ local TablePool = ModuleManager.get_module("table_pool")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- 3. Глобальные зависимости Astra
 -- (Используем Scheduler вместо прямого обращения к timer)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "EventDispatcher"
+
+--- Максимальный размер LVC (Last Value Cache)
+local MAX_LVC_SIZE = 1000
+--- Максимальный размер очереди событий на один приоритет
+local MAX_QUEUE_SIZE = 1000
+--- Лимит обработки событий за один тик планировщика
+local DEFAULT_BATCH_LIMIT = 100
+--- TTL для записей LVC по умолчанию (1 час)
+local DEFAULT_LVC_TTL = 3600
+
+-- 5. Внутреннее состояние (Private State)
+--- @class EventDispatcherState
+--- @field instance EventDispatcher Единственный экземпляр (Singleton)
+--- @field event_counter number Счетчик для генерации ID событий
+local state = {
+    instance = nil,
+    event_counter = 0,
+}
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Генерация уникального ID события
+--- @return string
+local function _generate_event_id()
+    state.event_counter = state.event_counter + 1
+    return "evt_" .. state.event_counter
+end
+
+--- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
+--- @param data any Данные для копирования
+--- @return any Копия данных
+local function _deep_copy_to_pool(data)
+    if type(data) ~= "table" then return data end
+
+    local copy = TablePool.get("lvc_sub")
+    for k, v in pairs(data) do
+        copy[k] = _deep_copy_to_pool(v)
+    end
+    return copy
+end
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
 
 --- @class EventDispatcher
 --- @field public subscription_manager SubscriptionManager Менеджер подписок
@@ -39,8 +86,6 @@ local COMPONENT_NAME = "EventDispatcher"
 --- @field private active boolean Флаг активности обработки
 local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
-
-local instance = nil
 
 --- Приоритеты событий (1 - самый высокий, 4 - самый низкий)
 --- @type table<string, number>
@@ -63,34 +108,14 @@ EventDispatcher.EVENTS = {
     SYS_CONNECTED = "sys:connected"
 }
 
--- Генерация уникального ID события
-local _event_counter = 0
-local function generate_event_id()
-    _event_counter = _event_counter + 1
-    return "evt_" .. _event_counter
-end
-
---- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
---- @param data any Данные для копирования
---- @return any Копия данных
-local function deep_copy_to_pool(data)
-    if type(data) ~= "table" then return data end
-
-    local copy = TablePool.get("lvc_sub")
-    for k, v in pairs(data) do
-        copy[k] = deep_copy_to_pool(v)
-    end
-    return copy
-end
-
 --- Возвращает единственный экземпляр EventDispatcher (Singleton)
 --- @return EventDispatcher Экземпляр диспетчера
 function EventDispatcher.get_instance()
-    if not instance then
-        instance = setmetatable({}, EventDispatcher)
-        instance:initialize()
+    if not state.instance then
+        state.instance = setmetatable({}, EventDispatcher)
+        state.instance:initialize()
     end
-    return instance
+    return state.instance
 end
 
 --- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди.
@@ -116,7 +141,7 @@ function EventDispatcher:initialize()
             head = 1,
             tail = 1,
             size = 0,
-            max_size = 1000
+            max_size = MAX_QUEUE_SIZE
         }
     end
 
@@ -163,12 +188,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     end
 
     -- Обновляем LVC (если не запрещено в опциях)
-    -- Если данные являются таблицей, создаем глубокую копию для кэша,
-    -- так как оригинальная таблица может быть возвращена в пул и очищена.
-    if not (options and options.no_cache) then
+    if not no_cache then
         -- Ограничить размер LVC для предотвращения утечек памяти (O(1) вытеснение)
         if not self._lvc[event_type] then
-            if self._lvc_size >= 1000 then
+            if self._lvc_size >= MAX_LVC_SIZE then
                 local oldest_key = table_remove(self._lvc_keys, 1)
                 if oldest_key then
                     local old_entry = self._lvc[oldest_key]
@@ -186,7 +209,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             -- Глубокое копирование данных в пул для LVC
             cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
-                cache_data[k] = deep_copy_to_pool(v)
+                cache_data[k] = _deep_copy_to_pool(v)
             end
         end
 
@@ -203,14 +226,12 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     local p = priority or self.PRIORITIES.MEDIUM
     local event = TablePool and TablePool.get("event") or {}
 
-    event.id = generate_event_id()
+    event.id = _generate_event_id()
     event.type = event_type
     event.data = event_data
     event.priority = p
     event.timestamp = (type(event_data) == "table" and event_data.timestamp) or os_time()
-    -- Сохраняем всю таблицу опций целиком для гибкости и Zero-Allocation Path
     event.options = options
-    -- Флаг для TablePool, чтобы знать, нужно ли глубокое освобождение данных
     event.is_table = options and options.is_table == true
 
     local queue = self.event_queues[p]
@@ -224,7 +245,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             queue.size = queue.size - 1
 
             if dropped_event then
-                -- Если данные были из пула, возвращаем их (автоопределение типа пула)
+                -- Если данные были из пула, возвращаем их
                 if dropped_event.is_table and dropped_event.data and TablePool then
                     TablePool.release(dropped_event.data, nil, true)
                 end
@@ -277,7 +298,6 @@ function EventDispatcher:get_last_values(event_type)
     return result
 end
 
-
 --- Регистрирует новую подписку на события.
 --- @param event_type string Тип события или маска (например, "adapter:*")
 --- @param callback function|table Функция-обработчик или конфигурация транспорта
@@ -326,7 +346,7 @@ function EventDispatcher:process_queue()
     -- Периодическая очистка старых записей LVC (TTL)
     -- Выполняется раз в минуту для снижения нагрузки
     if now % 60 == 0 then
-        local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
+        local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
         for name, entry in pairs(self._lvc) do
             if now - entry.timestamp > lvc_ttl then
                 self:_release_lvc_entry(entry)
@@ -336,7 +356,7 @@ function EventDispatcher:process_queue()
         end
     end
 
-    local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or 100
+    local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
     local processed_in_batch = 0
 
     for p = self.PRIORITIES.CRITICAL, self.PRIORITIES.LOW do
@@ -378,7 +398,6 @@ function EventDispatcher:_safe_return_to_pool(event)
     local ok, err = pcall(function()
         if TablePool then
             -- Если данные события были из пула (is_table), используем глубокую очистку
-            -- для автоматического возврата вложенных таблиц в их пулы.
             TablePool.release(event, "event", event.is_table == true)
         end
     end)
@@ -391,6 +410,7 @@ end
 --- Останавливает диспетчер событий и очищает очереди.
 function EventDispatcher:shutdown()
     self.active = false
+    state.instance = nil
     Logger.info(COMPONENT_NAME, "Остановка диспетчера событий...")
 
     if Scheduler then
@@ -403,7 +423,7 @@ function EventDispatcher:shutdown()
     end
 
     -- Очистка очередей
-    for p, queue in pairs(self.event_queues) do
+    for _, queue in pairs(self.event_queues) do
         while queue.size > 0 do
             local event = queue.data[queue.head]
             queue.data[queue.head] = nil
@@ -425,15 +445,13 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    -- Используем оптимизированные очистители по схеме для событий
-    TablePool.register_type("event", {
+    tp.register_type("event", {
         "id", "type", "data", "priority", "timestamp", "options", "is_table"
     }, 100, 10)
-    -- Пул для динамических опций с полной очисткой (Full Wipe)
-    TablePool.register_type("event_options", nil, 100, 10)
-    TablePool.register_type("lvc_wrapper", { "data", "timestamp" }, 50, 5)
-    TablePool.register_type("lvc_entry", nil, 50, 5)
-    TablePool.register_type("lvc_sub", nil, 20, 2)
+    tp.register_type("event_options", nil, 100, 10)
+    tp.register_type("lvc_wrapper", { "data", "timestamp" }, 50, 5)
+    tp.register_type("lvc_entry", nil, 50, 5)
+    tp.register_type("lvc_sub", nil, 20, 2)
 end
 
 return EventDispatcher
