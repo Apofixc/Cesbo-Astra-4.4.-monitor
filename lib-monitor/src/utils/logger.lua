@@ -78,9 +78,9 @@ local function get_table_pool()
 end
 
 --- @class Logger
---- @field private last_errors table<string, string> Хранилище последних ошибок по контекстам
---- @field private context_stack table<number, string> Стек контекстов
---- @field private current_context_id string|nil Текущий идентификатор контекста
+--- @field private last_errors table<number, string> Хранилище последних ошибок по контекстам
+--- @field private context_stack table<number, number> Стек контекстов
+--- @field private current_context_id number|nil Текущий идентификатор контекста
 --- @field _context_buffer table<string, table> Буфер логов для диагностики
 --- @field _buffer_size number Максимальный размер буфера
 local Logger = {}
@@ -123,7 +123,8 @@ end
 --- @param component string Имя компонента
 --- @param message string Текст сообщения
 --- @param context_id? number ID контекста
-function Logger.buffer_log(level, component, message, context_id)
+--- @param now? number Текущее время
+function Logger.buffer_log(level, component, message, context_id, now)
     if not Logger._context_buffer[component] then
         -- Ограничение количества отслеживаемых компонентов (защита от утечек)
         if #component_list >= MAX_COMPONENTS then
@@ -138,7 +139,7 @@ function Logger.buffer_log(level, component, message, context_id)
 
     local pool = get_table_pool()
     local entry = pool and pool.get("log_entry") or {}
-    entry.timestamp = os_time()
+    entry.timestamp = now or os_time()
     entry.level = level
     entry.message = message
     entry.context_id = context_id
@@ -208,12 +209,13 @@ function Logger.flush()
     local pool = get_table_pool()
     for _, item in ipairs(current_queue) do
         local lower_level = item.level:lower()
+        local message = item.message
         if log and type(log) == "table" and type(log[lower_level]) == "function" then
-            pcall(log[lower_level], item.msg)
+            pcall(log[lower_level], message)
         else
-            print(string_format("[%s] %s", item.level, item.msg))
+            print(string_format("[%s] %s", item.level, message))
         end
-        
+
         if pool then
             pool.release(item, "log_entry")
         end
@@ -227,7 +229,8 @@ local function write_log(level_name, component, format_str, ...)
     local is_error = (level_name == "ERROR")
 
     -- Оптимизация: Проверяем уровень ДО формирования строки
-    if not should_log(level) and not (is_error and current_context_id) then
+    local should_log_msg = should_log(level)
+    if not should_log_msg and not (is_error and current_context_id) then
         return
     end
 
@@ -240,30 +243,37 @@ local function write_log(level_name, component, format_str, ...)
 
     if is_error and current_context_id then
         last_errors[current_context_id] = msg
-        for _, id in ipairs(context_stack) do
-            last_errors[id] = msg
+        for i = 1, #context_stack do
+            last_errors[context_stack[i]] = msg
         end
     end
+
+    local now = os_time()
 
     -- Буферизация (если включена в конфиге)
     if cached_log_buffer_size > 0 then
         Logger._buffer_size = cached_log_buffer_size
-        Logger.buffer_log(level_name, component, msg, current_context_id)
+        Logger.buffer_log(level_name, component, msg, current_context_id, now)
     end
 
-    if should_log(level) then
+    if should_log_msg then
         local use_json = (cached_log_format == "JSON")
         local raw_msg = msg
 
         if use_json then
-            local log_data = {
-                timestamp = os_time(),
-                level = level_name,
-                component = component,
-                message = raw_msg,
-                context_id = current_context_id
-            }
+            local pool = get_table_pool()
+            local log_data = pool and pool.get("log_data") or {}
+            log_data.timestamp = now
+            log_data.level = level_name
+            log_data.component = component
+            log_data.message = raw_msg
+            log_data.context_id = current_context_id
+
             msg = json_encode(log_data)
+
+            if pool then
+                pool.release(log_data, "log_data")
+            end
         else
             msg = string_format("[%s] %s", component, raw_msg)
         end
@@ -273,7 +283,7 @@ local function write_log(level_name, component, format_str, ...)
             local pool = get_table_pool()
             local item = pool and pool.get("log_entry") or {}
             item.level = level_name
-            item.msg = msg
+            item.message = msg
 
             if #log_queue < MAX_LOG_QUEUE_SIZE then
                 table_insert(log_queue, item)
@@ -388,7 +398,10 @@ end
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
-    tp.register_type("log_entry")
+    -- Пул для записей в буфере и очереди
+    tp.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
+    -- Пул для временных объектов при JSON-логировании
+    tp.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
 end
 
 -- Первичная инициализация кэша
