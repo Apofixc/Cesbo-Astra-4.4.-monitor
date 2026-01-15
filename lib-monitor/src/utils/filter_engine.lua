@@ -22,10 +22,14 @@ local os_time = _G.os.time
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 
+-- 3. Глобальные зависимости Astra
+-- (Модуль не использует внешние зависимости Astra)
+
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "FilterEngine"
 local MAX_CACHE_SIZE = 500 -- Увеличенный размер кэша для сложных систем
 
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class FilterEngine
 --- @field private duration_state table<string, table<string, number>> Состояние фильтров по длительности
 local FilterEngine = {}
@@ -35,6 +39,10 @@ local script_cache = {}
 local script_cache_count = 0
 local accessor_cache = {}
 local accessor_cache_count = 0
+
+-- Состояние для фильтров по длительности (Duration)
+-- Структура: duration_state[sub_id][condition_key] = first_match_time
+local duration_state = {}
 
 --- @type table<string, function> Операторы сравнения для интерпретируемого режима
 local OPERATORS = {
@@ -56,9 +64,9 @@ local OPERATORS = {
     end,
 }
 
--- Состояние для фильтров по длительности (Duration)
--- Структура: duration_state[sub_id][condition_key] = first_match_time
-local duration_state = {}
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
 
 --- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным.
 --- @param path string Путь к полю через точку (например, "total.bitrate")
@@ -116,6 +124,10 @@ function FilterEngine.clear_state(sub_id)
         duration_state[sub_id] = nil
     end
 end
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
 
 --- Проверяет соответствие данных конкретному условию (интерпретируемый режим).
 --- @private

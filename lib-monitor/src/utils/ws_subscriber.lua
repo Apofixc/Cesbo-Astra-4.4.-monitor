@@ -13,9 +13,13 @@ local type = type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 
+-- 3. Глобальные зависимости Astra
+-- (Модуль не использует внешние зависимости Astra)
+
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "WsSubscriber"
 
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class WsSubscriber
 --- @field private clients table<userdata, boolean> Список активных WebSocket клиентов
 --- @field private http_server_instance any Ссылка на экземпляр http_server
@@ -23,6 +27,10 @@ local WsSubscriber = {}
 
 local clients = {}
 local http_server_instance = nil
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
 
 --- Инициализирует модуль и привязывает его к экземпляру HTTP-сервера.
 --- @param server any Экземпляр сервера Astra http_server

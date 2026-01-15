@@ -81,6 +81,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 local MAX_ROUTE_CACHE_SIZE = 1000
 local MAX_RETRY_QUEUE_SIZE = 500
 
+-- 5. Инициализация объектов и внутреннее состояние
 --- @class SubscriptionStats
 --- @field delivered number Количество успешно доставленных событий
 --- @field failed number Количество проваленных доставок
@@ -109,6 +110,10 @@ local MAX_RETRY_QUEUE_SIZE = 500
 --- @field private _retry_queue table Очередь на повторную отправку
 local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
 
 --- Генерирует уникальный идентификатор (UUID v4) для подписки.
 --- @return string UUID
@@ -241,6 +246,10 @@ local Transport = {
         return true
     end
 }
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
 
 --- Добавляет событие в очередь на повторную отправку.
 --- @param config table Параметры транспорта
