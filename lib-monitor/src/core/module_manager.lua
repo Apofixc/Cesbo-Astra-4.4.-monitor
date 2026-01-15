@@ -6,120 +6,111 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type, pairs, ipairs, tostring, pcall = _G.type, _G.pairs, _G.ipairs, _G.tostring, _G.pcall
-local table_concat, table_insert = _G.table.concat, _G.table.insert
+local type = _G.type
+local pairs = _G.pairs
+local ipairs = _G.ipairs
+local tostring = _G.tostring
+local pcall = _G.pcall
+local table_concat = _G.table.concat
+local table_insert = _G.table.insert
 local string_gmatch = _G.string.gmatch
 local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
--- Logger будет загружен позже, чтобы избежать циклической зависимости при инициализации ModuleManager
-local Logger = nil
-local function log_info(component, format_str, ...)
-    if Logger and Logger.info then Logger.info(component, format_str, ...) end
-end
-local function log_error(component, format_str, ...)
-    if Logger and Logger.error then Logger.error(component, format_str, ...) end
-end
-local function log_debug(component, format_str, ...)
-    if Logger and Logger.debug then Logger.debug(component, format_str, ...) end
-end
+-- ModuleManager является корнем системы и не использует get_module для себя.
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- Нет прямых глобальных зависимостей Astra, кроме тех, что управляются самим ModuleManager.
+-- Глобальные зависимости Astra управляются самим ModuleManager.
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ModuleManager"
 
--- 5. Инициализация объектов из загруженных модулей
+-- 5. Внутреннее состояние (Private State)
+
 --- @class ModuleManager
---- @field private registered_modules table<string, table> Список зарегистрированных модулей
---- @field private loaded_modules table<string, table> Список загруженных модулей
---- @field private global_dependencies table<string, any> Глобальные зависимости Astra
 local ModuleManager = {}
-ModuleManager.__index = ModuleManager
 
---- @type table<string, table>
-local registered_modules = {}
---- @type table<string, table>
-local loaded_modules = {}
---- @type table<string, any>
-local global_dependencies = {}
+--- @class ModuleInfo
+--- @field path string Путь к файлу модуля
+--- @field dependencies string[] Список имен зависимостей
 
---- @type table<string, any>
-local nested_dependency_cache = {}
+--- @type table<string, ModuleInfo> Реестр зарегистрированных модулей
+local _registered_modules = {}
 
---- Пост-инициализация Logger после того, как ModuleManager будет доступен
+--- @type table<string, any> Кэш загруженных экземпляров модулей
+local _loaded_modules = {}
+
+--- @type table<string, any> Хранилище глобальных зависимостей Astra
+local _global_dependencies = {}
+
+--- @type table<string, any> Кэш для ускорения поиска вложенных зависимостей
+local _nested_dependency_cache = {}
+
+--- @type table|nil Ссылка на модуль Logger (инициализируется лениво)
+local _Logger = nil
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Прокси-функция для логирования информационных сообщений
+--- @param component string Имя компонента
+--- @param format_str string Строка формата
+--- @param ... any Аргументы форматирования
+local function _log_info(component, format_str, ...)
+    if _Logger and _Logger.info then _Logger.info(component, format_str, ...) end
+end
+
+--- Прокси-функция для логирования ошибок
+--- @param component string Имя компонента
+--- @param format_str string Строка формата
+--- @param ... any Аргументы форматирования
+local function _log_error(component, format_str, ...)
+    if _Logger and _Logger.error then
+        _Logger.error(component, format_str, ...)
+    else
+        print(string_format("[%s][ERROR] %s", component, string_format(format_str, ...)))
+    end
+end
+
+--- Прокси-функция для логирования отладочных сообщений
+--- @param component string Имя компонента
+--- @param format_str string Строка формата
+--- @param ... any Аргументы форматирования
+local function _log_debug(component, format_str, ...)
+    if _Logger and _Logger.debug then _Logger.debug(component, format_str, ...) end
+end
+
+--- Выполняет ленивую инициализацию логгера после загрузки соответствующего модуля.
+--- Это необходимо для разрыва циклической зависимости, так как Logger сам зависит от ModuleManager.
 --- @private
-local function init_logger()
-    if not Logger then
-        local module_info = registered_modules["logger"]
+local function _init_logger()
+    if not _Logger then
+        local module_info = _registered_modules["logger"]
         if not module_info then return end
 
-        -- Использовать require вместо ModuleManager.get_module для избежания рекурсии
+        -- Используем прямой require для предотвращения рекурсии в get_module
         local success, logger_module = pcall(require, module_info.path)
         if success and logger_module then
-            Logger = logger_module
-            log_info = Logger.info
-            log_error = Logger.error
-            log_debug = Logger.debug
+            _Logger = logger_module
         end
     end
 end
 
---- Регистрирует модуль в ModuleManager.
---- @param name string Имя модуля (например, "utils.logger").
---- @param path string Путь к файлу модуля (например, "src.utils.logger").
---- @param dependencies table|nil Таблица строк, содержащих имена зависимостей этого модуля.
---- @return boolean Статус выполнения
-function ModuleManager.register_module(name, path, dependencies)
-    if not name or type(name) ~= "string" then
-        log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с некорректным именем.")
-        return false
-    end
-
-    if not path or type(path) ~= "string" then
-        log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
-        return false
-    end
-
-    if registered_modules[name] then
-        log_debug(COMPONENT_NAME, "Модуль '%s' уже зарегистрирован. Обновление информации.", name)
-    end
-
-    -- Валидация зависимостей
-    local valid_dependencies = {}
-    if dependencies and type(dependencies) == "table" then
-        for _, dep in ipairs(dependencies) do
-            if type(dep) == "string" and dep ~= "" then
-                table_insert(valid_dependencies, dep)
-            else
-                log_error(COMPONENT_NAME, "Модуль '%s': игнорируем некорректную зависимость.", name)
-            end
-        end
-    end
-
-    registered_modules[name] = {
-        path = path,
-        dependencies = valid_dependencies
-    }
-
-    log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован с зависимостями: %s.",
-             name, table_concat(valid_dependencies, ", "))
-    return true
-end
-
---- Вспомогательная функция для топологической сортировки с проверкой циклических зависимостей
+--- Реализует алгоритм топологической сортировки (DFS) для определения порядка загрузки.
 --- @private
---- @return table|nil Список имен или nil
-local function topological_sort()
+--- @return string[]|nil Список имен модулей в порядке загрузки или nil при ошибке (цикл)
+local function _topological_sort()
     local load_order = {}
     local visited = {}
     local temp_visited = {}
 
+    --- Рекурсивный обход графа зависимостей
+    --- @param name string Имя модуля
+    --- @return boolean Успех обхода
     local function visit(name)
-        if not registered_modules[name] then
-            local msg = string_format("Попытка загрузить незарегистрированный модуль: %s.", name)
-            log_error(COMPONENT_NAME, msg)
+        if not _registered_modules[name] then
+            _log_error(COMPONENT_NAME, "Попытка загрузить незарегистрированный модуль: %s.", name)
             return false
         end
 
@@ -128,14 +119,13 @@ local function topological_sort()
         end
 
         if temp_visited[name] then
-            local msg = string_format("Обнаружена циклическая зависимость с участием модуля: %s.", name)
-            log_error(COMPONENT_NAME, msg)
+            _log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость с участием модуля: %s.", name)
             return false
         end
 
         temp_visited[name] = true
 
-        local module_info = registered_modules[name]
+        local module_info = _registered_modules[name]
         for _, dep_name in ipairs(module_info.dependencies) do
             if not visit(dep_name) then
                 return false
@@ -145,12 +135,12 @@ local function topological_sort()
         temp_visited[name] = nil
         visited[name] = true
 
-        -- Добавляем в порядке завершения (зависимости идут перед модулями, которые от них зависят)
+        -- Добавляем в список после посещения всех зависимостей
         table_insert(load_order, name)
         return true
     end
 
-    for name, _ in pairs(registered_modules) do
+    for name, _ in pairs(_registered_modules) do
         if not visited[name] then
             if not visit(name) then
                 return nil
@@ -161,221 +151,236 @@ local function topological_sort()
     return load_order
 end
 
---- Загружает все зарегистрированные модули в правильном порядке, разрешая зависимости.
---- @return table|nil Список имен загруженных модулей или nil
-function ModuleManager.load_modules()
-    -- Проверка версии Lua (согласно lua-version.md)
-    if _VERSION ~= "Lua 5.2" then
-        local msg = string_format("Неподдерживаемая версия Lua: %s. Ожидается Lua 5.2.", _VERSION)
-        if Logger then
-            log_error(COMPONENT_NAME, msg)
-        else
-            print(string_format("[%s][ERROR] %s", COMPONENT_NAME, msg))
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
+--- Регистрирует модуль в системе.
+--- @param name string Уникальное имя модуля (например, "utils.logger").
+--- @param path string Путь для require (например, "astra.lib-monitor.src.utils.logger").
+--- @param dependencies string[]|nil Список имен модулей, от которых зависит данный модуль.
+--- @return boolean Статус выполнения
+function ModuleManager.register_module(name, path, dependencies)
+    if not name or type(name) ~= "string" then
+        _log_error(COMPONENT_NAME, "Попытка зарегистрировать модуль с некорректным именем.")
+        return false
+    end
+
+    if not path or type(path) ~= "string" then
+        _log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть строкой.", name)
+        return false
+    end
+
+    if _registered_modules[name] then
+        _log_debug(COMPONENT_NAME, "Модуль '%s' уже зарегистрирован. Обновление информации.", name)
+    end
+
+    -- Валидация и фильтрация списка зависимостей
+    local valid_dependencies = {}
+    if dependencies and type(dependencies) == "table" then
+        for _, dep in ipairs(dependencies) do
+            if type(dep) == "string" and dep ~= "" then
+                table_insert(valid_dependencies, dep)
+            else
+                _log_error(COMPONENT_NAME, "Модуль '%s': игнорируем некорректную зависимость.", name)
+            end
         end
     end
 
-    local load_order = topological_sort()
+    _registered_modules[name] = {
+        path = path,
+        dependencies = valid_dependencies
+    }
+
+    _log_debug(COMPONENT_NAME, "Модуль '%s' зарегистрирован. Зависимости: %s.",
+             name, table_concat(valid_dependencies, ", "))
+    return true
+end
+
+--- Загружает все зарегистрированные модули в правильном порядке.
+--- @return string[]|nil Список имен успешно загруженных модулей или nil при критической ошибке.
+function ModuleManager.load_modules()
+    -- Проверка версии Lua согласно стандартам проекта (lua-version.md)
+    if _VERSION ~= "Lua 5.2" then
+        _log_error(COMPONENT_NAME, "Неподдерживаемая версия Lua: %s. Ожидается Lua 5.2.", _VERSION)
+    end
+
+    local load_order = _topological_sort()
 
     if not load_order then
-        log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки.")
-        -- Вывести информацию о циклических зависимостях
-        for name, module_info in pairs(registered_modules) do
-            log_error(COMPONENT_NAME, "Модуль: %s, Зависимости: %s",
-                name, table_concat(module_info.dependencies, ", "))
-        end
+        _log_error(COMPONENT_NAME, "Не удалось определить порядок загрузки из-за ошибок в зависимостях.")
         return nil
     end
 
-    if Logger then
-        log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
-    else
-        print(string_format("[%s] Порядок загрузки модулей: %s", COMPONENT_NAME, table_concat(load_order, ", ")))
-    end
+    _log_debug(COMPONENT_NAME, "Порядок загрузки модулей: %s.", table_concat(load_order, ", "))
 
     for _, name in ipairs(load_order) do
-        -- Пропускаем уже загруженные модули
-        if loaded_modules[name] then
-            if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' уже загружен, пропускаем.", name) end
-        else
-            local module_info = registered_modules[name]
-            if Logger then log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path) end
+        if not _loaded_modules[name] then
+            local module_info = _registered_modules[name]
+            _log_debug(COMPONENT_NAME, "Загрузка модуля: %s (%s).", name, module_info.path)
 
             local success, module_or_err = pcall(require, module_info.path)
 
             if not success then
-                local err_msg = string_format("Ошибка при загрузке модуля '%s' из '%s': %s.",
+                _log_error(COMPONENT_NAME, "Ошибка при загрузке модуля '%s' (%s): %s.",
                     name, module_info.path, tostring(module_or_err))
-                if Logger then
-                    log_error(COMPONENT_NAME, err_msg)
-                else
-                    print(string_format("[%s][ERROR] %s", COMPONENT_NAME, err_msg))
-                end
                 return nil
             end
 
             if module_or_err == nil then
-                log_error(COMPONENT_NAME, "Модуль '%s' из '%s' вернул nil.", name, module_info.path)
+                _log_error(COMPONENT_NAME, "Модуль '%s' вернул nil при загрузке.", name)
                 return nil
             end
 
-            local module = module_or_err
+            _loaded_modules[name] = module_or_err
 
-            loaded_modules[name] = module
-
-            if name == "logger" and not Logger then
-                init_logger()
+            -- Специальная обработка для логгера для включения расширенного логирования
+            if name == "logger" and not _Logger then
+                _init_logger()
             end
 
-            if Logger then log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name) end
+            _log_debug(COMPONENT_NAME, "Модуль '%s' успешно загружен.", name)
         end
     end
 
-
-    log_debug(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
+    _log_info(COMPONENT_NAME, "Все модули успешно загружены. Всего: %d.", #load_order)
     return load_order
 end
 
---- Возвращает загруженный модуль по его имени.
+--- Возвращает экземпляр загруженного модуля.
 --- @param name string Имя модуля.
---- @return any|nil Загруженный модуль или nil, если модуль не найден.
+--- @return any|nil Экземпляр модуля или nil, если он не загружен.
 function ModuleManager.get_module(name)
-    return loaded_modules[name]
+    return _loaded_modules[name]
 end
 
---- Проверяет, что все зарегистрированные модули имеют удовлетворенные зависимости.
---- @return boolean Статус выполнения
+--- Проверяет целостность графа зависимостей (все ли зависимости зарегистрированы).
+--- @return boolean true, если все зависимости найдены в реестре.
 function ModuleManager.validate_dependencies()
-    local all_dependencies_met = true
+    local all_met = true
 
-    for name, module_info in pairs(registered_modules) do
+    for name, module_info in pairs(_registered_modules) do
         for _, dep_name in ipairs(module_info.dependencies) do
-            if not registered_modules[dep_name] then
-                log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
-                all_dependencies_met = false
+            if not _registered_modules[dep_name] then
+                _log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
+                all_met = false
             end
         end
     end
 
-    if not all_dependencies_met then
-        log_error(COMPONENT_NAME, "Обнаружены незарегистрированные внутренние зависимости.")
-        return false
-    end
-
-    log_debug(COMPONENT_NAME, "Все внутренние зависимости зарегистрированных модулей удовлетворены.")
-    return true
+    return all_met
 end
 
---- Проверяет наличие глобальной переменной или вложенной функции/таблицы.
---- @param path_str string Строка, представляющая путь к переменной/функции (например, "find_channel").
---- @return any|nil Найденный объект или nil
+--- Динамически проверяет наличие вложенной зависимости в глобальном окружении.
+--- Использует кэширование для оптимизации повторных проверок.
+--- @param path_str string Путь к объекту (например, "astra.reload").
+--- @return any|nil Найденный объект или nil.
 function ModuleManager.check_nested_dependency(path_str)
     if not path_str or type(path_str) ~= "string" then
-        log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
+        _log_error(COMPONENT_NAME, "Некорректный путь для проверки зависимости.")
         return nil
     end
 
-    if nested_dependency_cache[path_str] ~= nil then
-        return nested_dependency_cache[path_str]
+    if _nested_dependency_cache[path_str] ~= nil then
+        return _nested_dependency_cache[path_str]
     end
 
     local current_scope = _G
-
     for part in string_gmatch(path_str, "[^.]+") do
         if type(current_scope) ~= "table" or current_scope[part] == nil then
-            log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена.", path_str)
+            _log_debug(COMPONENT_NAME, "Зависимость '%s' не найдена.", path_str)
             return nil
         end
         current_scope = current_scope[part]
     end
 
-    nested_dependency_cache[path_str] = current_scope
-
-    log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
+    _nested_dependency_cache[path_str] = current_scope
+    _log_debug(COMPONENT_NAME, "Вложенная зависимость '%s' найдена.", path_str)
     return current_scope
 end
 
---- Возвращает сохраненную ссылку на глобальную зависимость.
+--- Возвращает сохраненную ссылку на глобальную зависимость Astra.
 --- @param name string Имя зависимости.
---- @return any|nil Сохраненный объект или nil, если зависимость не найдена.
+--- @return any|nil Объект зависимости или nil.
 function ModuleManager.get_global_dependency(name)
-    return global_dependencies[name]
+    return _global_dependencies[name]
 end
 
---- Удаляет сохраненную глобальную зависимость из кэша.
+--- Удаляет глобальную зависимость из кэша.
 --- @param name string Имя зависимости.
---- @return boolean Статус выполнения
+--- @return boolean true, если зависимость была удалена.
 function ModuleManager.remove_global_dependency(name)
-    if global_dependencies[name] ~= nil then
-        global_dependencies[name] = nil
-        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена из кэша.", name)
+    if _global_dependencies[name] ~= nil then
+        _global_dependencies[name] = nil
+        _log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' удалена.", name)
         return true
     end
     return false
 end
 
---- Устанавливает глобальные зависимости
---- @param deps table Таблица, где ключ - это путь к зависимости, значение - сам объект зависимости
---- @return boolean Статус выполнения
+--- Регистрирует набор глобальных зависимостей.
+--- @param deps table<string, any> Таблица зависимостей.
+--- @return boolean Статус выполнения.
 function ModuleManager.set_global_dependencies(deps)
     if type(deps) ~= "table" then
-        log_error(COMPONENT_NAME,
-            "Попытка установить глобальные зависимости с некорректным аргументом (ожидалась таблица).")
+        _log_error(COMPONENT_NAME, "Ожидалась таблица зависимостей.")
         return false
     end
     for path, obj in pairs(deps) do
-        global_dependencies[path] = obj
-        log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' установлена.", path)
+        _global_dependencies[path] = obj
+        _log_debug(COMPONENT_NAME, "Глобальная зависимость '%s' установлена.", path)
     end
     return true
 end
 
---- Получает список всех сохраненных глобальных зависимостей
---- @return table Список путей к сохраненным зависимостям
+--- Возвращает список имен всех зарегистрированных глобальных зависимостей.
+--- @return string[]
 function ModuleManager.get_global_dependencies()
     local deps = {}
-    for path, _ in pairs(global_dependencies) do
+    for path, _ in pairs(_global_dependencies) do
         table_insert(deps, path)
     end
     return deps
 end
 
---- Проверяет, загружен ли модуль
---- @param name string Имя модуля
---- @return boolean true если модуль загружен, иначе false
+--- Проверяет, загружен ли конкретный модуль.
+--- @param name string Имя модуля.
+--- @return boolean
 function ModuleManager.is_module_loaded(name)
-    return loaded_modules[name] ~= nil
+    return _loaded_modules[name] ~= nil
 end
 
---- Получает список всех зарегистрированных модулей
---- @return table Список имен модулей
+--- Возвращает список имен всех зарегистрированных модулей.
+--- @return string[]
 function ModuleManager.get_registered_modules()
     local modules = {}
-    for name in pairs(registered_modules) do
+    for name in pairs(_registered_modules) do
         table_insert(modules, name)
     end
     return modules
 end
 
---- Получает список всех загруженных модулей
---- @return table Список имен загруженных модулей
+--- Возвращает список имен всех загруженных модулей.
+--- @return string[]
 function ModuleManager.get_loaded_modules()
     local modules = {}
-    for name in pairs(loaded_modules) do
+    for name in pairs(_loaded_modules) do
         table_insert(modules, name)
     end
     return modules
 end
 
---- Очищает все зарегистрированные и загруженные модули (для тестов)
+--- Сбрасывает состояние менеджера (используется преимущественно в тестах).
 function ModuleManager.reset()
-    registered_modules = {}
-    loaded_modules = {}
-    global_dependencies = {} -- Сбрасываем только Astra-специфичные зависимости
-    nested_dependency_cache = {}
-    log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
+    _registered_modules = {}
+    _loaded_modules = {}
+    _global_dependencies = {}
+    _nested_dependency_cache = {}
+    _Logger = nil
+    _log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
 end
 
--- Регистрируем себя в глобальном пространстве
+-- Экспорт в глобальную область видимости для удобства доступа из скриптов Astra
 _G.ModuleManager = ModuleManager
 
 return ModuleManager
