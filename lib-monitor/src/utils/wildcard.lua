@@ -7,12 +7,9 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local type = type
-local string_find = string.find
-local string_gsub = string.gsub
-local string_match = string.match
-local setmetatable = setmetatable
-local next = next
+local type = _G.type
+local string_find = _G.string.find
+local string_match = _G.string.match
 
 --- @class Wildcard
 local Wildcard = {}
