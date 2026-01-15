@@ -41,7 +41,7 @@ local DEFAULT_LVC_TTL = 3600
 
 -- 5. Внутреннее состояние (Private State)
 --- @class EventDispatcherState
---- @field instance EventDispatcher Единственный экземпляр (Singleton)
+--- @field instance EventDispatcher|nil Единственный экземпляр (Singleton)
 --- @field event_counter number Счетчик для генерации ID событий
 local state = {
     instance = nil,
