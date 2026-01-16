@@ -28,9 +28,9 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local COMPONENT_NAME = "BaseRepository"
 
 --- Настройки по умолчанию
-local DEFAULT_RECOVER_INTERVAL = 300
-local DEFAULT_MAX_ATTEMPTS = 3
-local DEFAULT_COOLDOWN_TIME = 3600 -- 1 час стабильной работы для сброса попыток
+local DEFAULT_RECOVER_INTERVAL = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
+local DEFAULT_MAX_ATTEMPTS = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or 3
+local DEFAULT_COOLDOWN_TIME = (MonitorConfig and MonitorConfig.RecoveryCooldown) or 3600 -- 1 час стабильной работы для сброса попыток
 
 --- Типы событий репозитория
 local EVENTS = {

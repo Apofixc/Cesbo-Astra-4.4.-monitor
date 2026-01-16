@@ -15,6 +15,7 @@ local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 local Scheduler = ModuleManager.get_module("core.scheduler")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -23,6 +24,7 @@ local analyze = ModuleManager.get_global_dependency("analyze")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "DvbTuner"
+local MAX_STATS_COUNT = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000
 
 -- Предварительно рассчитанная таблица состояний для всех возможных значений статуса (0-31)
 -- Это исключает циклы и побитовые операции в основном callback-е, обеспечивая максимальную производительность.
@@ -221,7 +223,6 @@ function DvbTuner:_on_astra_data(data)
     -- Накопление статистики для расчета качества (упрощенно)
     if self._config.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
         -- Защита от переполнения при длительном отсутствии изменений
-        local MAX_STATS_COUNT = 1000000
         if self._stats.count < MAX_STATS_COUNT then
             self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)
             self._stats.unc_sum = self._stats.unc_sum + (data.unc or 0)

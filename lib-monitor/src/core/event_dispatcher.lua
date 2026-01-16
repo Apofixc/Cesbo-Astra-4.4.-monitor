@@ -39,15 +39,15 @@ end
 local COMPONENT_NAME = "EventDispatcher"
 
 --- Максимальный размер LVC (Last Value Cache)
-local MAX_LVC_SIZE = 1000
+local MAX_LVC_SIZE = (MonitorConfig and MonitorConfig.MaxLvcSize) or 1000
 --- Максимальный размер очереди событий на один приоритет
-local MAX_QUEUE_SIZE = 1000
+local MAX_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxQueueSize) or 1000
 --- Лимит обработки событий за один тик планировщика
-local DEFAULT_BATCH_LIMIT = 100
+local DEFAULT_BATCH_LIMIT = (MonitorConfig and MonitorConfig.EventBatchLimit) or 100
 --- Максимальный лимит при высокой нагрузке
-local MAX_BATCH_LIMIT = 1000
+local MAX_BATCH_LIMIT = (MonitorConfig and MonitorConfig.MaxBatchLimit) or 1000
 --- TTL для записей LVC по умолчанию (1 час)
-local DEFAULT_LVC_TTL = 3600
+local DEFAULT_LVC_TTL = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class EventDispatcherState

@@ -21,13 +21,14 @@ local os_time = _G.os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "FilterEngine"
-local MAX_CACHE_SIZE = 500 -- Увеличенный размер кэша для сложных систем
+local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.filter_engine) or 500
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class FilterEngineState

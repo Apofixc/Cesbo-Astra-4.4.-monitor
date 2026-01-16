@@ -18,14 +18,14 @@ local string_gsub = _G.string.gsub
 local string_gmatch = _G.string.gmatch
 
 -- 2. Функции из ModuleManager.get_module()
--- (Модуль не использует другие модули библиотеки)
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
 
 -- 4. Константы и конфигурации
 --- Максимальный размер кэша скомпилированных функций
-local MAX_CACHE_SIZE = 1000
+local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.wildcard) or 1000
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class WildcardState

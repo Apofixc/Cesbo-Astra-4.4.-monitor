@@ -77,11 +77,11 @@ local COMPONENT_NAME = "SubscriptionManager"
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local CONNECTION_CLOSE = "Connection: close"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
-local MAX_RETRIES = 5
-local RETRY_DELAY = 5
+local MAX_RETRIES = (MonitorConfig and MonitorConfig.MaxRetries) or 5
+local RETRY_DELAY = (MonitorConfig and MonitorConfig.RetryDelay) or 5
 local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
-local MAX_ROUTE_CACHE_SIZE = 1000
-local MAX_RETRY_QUEUE_SIZE = 500
+local MAX_ROUTE_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxRouteCacheSize) or 1000
+local MAX_RETRY_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxRetryQueueSize) or 500
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class SubscriptionManagerState

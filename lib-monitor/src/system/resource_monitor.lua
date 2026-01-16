@@ -74,19 +74,19 @@ local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
 local STAT_READ_BUFFER = 512
 local STATUS_READ_BUFFER = 4096
 
--- Настройки по умолчанию
-local DEFAULT_CPU_THRESHOLD = 90
-local DEFAULT_RAM_THRESHOLD_PCT = 80
-local HYSTERESIS_FACTOR = 0.95
-local NETWORK_CHECK_INTERVAL = 30
-local CONFIG_REFRESH_INTERVAL = 10
-local ADAPTIVE_TICK_THRESHOLD_CPU = 50
-local ADAPTIVE_TICK_THRESHOLD_RAM = 70
-local TICK_INTERVAL_NORMAL = 5
-local TICK_INTERVAL_FAST = 1
-local RARE_METRIC_INTERVAL = 5 -- Интервал для FD и Threads
-local MAX_CPU_JUMP = 50        -- Максимальный скачок CPU за тик (%)
-local MAX_RAM_JUMP_PCT = 20    -- Максимальный скачок RAM за тик (%)
+-- Настройки по умолчанию (используются если MonitorConfig недоступен)
+local DEFAULT_CPU_THRESHOLD = (MonitorConfig and MonitorConfig.CpuThreshold) or 90
+local DEFAULT_RAM_THRESHOLD_PCT = (MonitorConfig and MonitorConfig.RamThresholdPct) or 80
+local HYSTERESIS_FACTOR = (MonitorConfig and MonitorConfig.HysteresisFactor) or 0.95
+local NETWORK_CHECK_INTERVAL = (MonitorConfig and MonitorConfig.NetworkCheckInterval) or 30
+local CONFIG_REFRESH_INTERVAL = (MonitorConfig and MonitorConfig.ConfigRefreshInterval) or 10
+local ADAPTIVE_TICK_THRESHOLD_CPU = (MonitorConfig and MonitorConfig.AdaptiveTickThresholdCpu) or 50
+local ADAPTIVE_TICK_THRESHOLD_RAM = (MonitorConfig and MonitorConfig.AdaptiveTickThresholdRam) or 70
+local TICK_INTERVAL_NORMAL = (MonitorConfig and MonitorConfig.TickIntervalNormal) or 5
+local TICK_INTERVAL_FAST = (MonitorConfig and MonitorConfig.TickIntervalFast) or 1
+local RARE_METRIC_INTERVAL = (MonitorConfig and MonitorConfig.RareMetricInterval) or 5
+local MAX_CPU_JUMP = (MonitorConfig and MonitorConfig.MaxCpuJump) or 50
+local MAX_RAM_JUMP_PCT = (MonitorConfig and MonitorConfig.MaxRamJumpPct) or 20
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
@@ -98,11 +98,11 @@ local state = {
     last_lua_mem = 0,
     last_post_gc_mem = 0,
     pid = nil,
-    
+
     -- Persistent File Handles
     stat_file = nil,
     status_file = nil,
-    
+
     -- Статический отчет (Static Table Reuse)
     report = {
         pid = nil,
@@ -112,17 +112,17 @@ local state = {
         memory = { lua = 0, lua_delta = 0, lua_post_gc = 0, resident = 0, virtual = 0 },
         network = {}
     },
-    
+
     -- Moving Average O(1)
     cpu_buffer = {},
     cpu_sum = 0,
     cpu_index = 0,
     cpu_count = 0,
     last_cpu_usage = 0,
-    
+
     -- Сеть
     last_network_check = 0,
-    
+
     -- Гистерезис событий
     active_warnings = {
         cpu = false,
@@ -134,8 +134,8 @@ local state = {
     config_cache = {
         cpu_threshold = DEFAULT_CPU_THRESHOLD,
         ram_threshold_pct = DEFAULT_RAM_THRESHOLD_PCT,
-        ram_limit_kb = 50 * 1024,
-        fd_threshold = 800, -- По умолчанию 80% от 1024
+        ram_limit_kb = ((MonitorConfig and MonitorConfig.MemoryLimitMb) or 50) * 1024,
+        fd_threshold = (MonitorConfig and MonitorConfig.FdThreshold) or 800,
         last_refresh = 0
     },
 

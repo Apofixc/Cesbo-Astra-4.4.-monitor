@@ -33,9 +33,9 @@ local LOG_LEVELS = {
     NONE = 5
 }
 
-local MAX_COMPONENTS = 100
-local MAX_LOG_QUEUE_SIZE = 200
-local CONFIG_REFRESH_INTERVAL = 5 -- секунд
+local MAX_COMPONENTS = (MonitorConfig and MonitorConfig.MaxLogComponents) or 100
+local MAX_LOG_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxLogQueueSize) or 200
+local CONFIG_REFRESH_INTERVAL = (MonitorConfig and MonitorConfig.ConfigRefreshInterval) or 5 -- секунд
 
 local LEVEL_MAP = {
     DEBUG = "debug",
