@@ -6,21 +6,20 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local math_abs = math.abs
-local math_max = math.max
-local math_min = math.min
-local pairs = pairs
-local tostring = tostring
-local type = type
-local string_format = string.format
-local io_popen = io.popen
-local os_execute = os.execute
-local os_clock = os.clock
-local math_huge = math.huge
-local pcall = pcall
-local unpack = table.unpack
-local error = error
-local select = select
+local math_abs = _G.math.abs
+local math_max = _G.math.max
+local math_min = _G.math.min
+local pairs = _G.pairs
+local tostring = _G.tostring
+local type = _G.type
+local string_format = _G.string.format
+local io_popen = _G.io.popen
+local os_execute = _G.os.execute
+local os_clock = _G.os.clock
+local math_huge = _G.math.huge
+local pcall = _G.pcall
+local unpack = _G.table.unpack
+local error = _G.error
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = nil -- Кэшируется при первом обращении
