@@ -61,6 +61,7 @@ local function get_json_decode()
 end
 
 --- Возвращает строку User-Agent
+--- Оптимизировано: кэширование полной строки заголовка.
 --- @return string
 local function get_user_agent()
     if _user_agent then return _user_agent end
@@ -433,6 +434,13 @@ end
 --- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
 --- @return string|nil ID подписки (UUID) или nil при ошибке
 function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
+    -- Ограничение размера кэша транспортов для предотвращения утечек
+    if not existing_id then
+        local count = 0
+        for _ in pairs(state.transport_cache) do count = count + 1 end
+        if count >= 1000 then state.transport_cache = {} end
+    end
+
     -- Поддержка передачи функции напрямую
     if type(sub_data) == "function" then
         sub_data = { callback = sub_data }

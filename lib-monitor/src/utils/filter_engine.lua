@@ -44,6 +44,12 @@ local state = {
     duration_state = {},
 }
 
+-- 2.1. Загрузка TablePool для оптимизации Duration
+local TablePool = ModuleManager.get_module("table_pool")
+if TablePool then
+    TablePool.register_type("filter_duration_state", nil, 100, 10)
+end
+
 --- @class FilterEngine
 local FilterEngine = {}
 
@@ -120,10 +126,14 @@ function FilterEngine.compile_accessor(path)
     return accessor
 end
 
---- Очищает состояние фильтров для указанной подписки
+--- Очищает состояние фильтров для указанной подписки.
+--- Оптимизировано: возврат таблицы состояния в пул.
 --- @param sub_id string ID подписки
 function FilterEngine.clear_state(sub_id)
     if sub_id and state.duration_state[sub_id] then
+        if TablePool then
+            TablePool.release(state.duration_state[sub_id], "filter_duration_state")
+        end
         state.duration_state[sub_id] = nil
     end
 end
@@ -171,7 +181,9 @@ local function _check_condition(data, condition, sub_id, cond_idx)
     -- Обработка длительности
     local duration = condition.duration
     if duration and duration > 0 and sub_id then
-        if not state.duration_state[sub_id] then state.duration_state[sub_id] = {} end
+        if not state.duration_state[sub_id] then
+            state.duration_state[sub_id] = TablePool and TablePool.get("filter_duration_state") or {}
+        end
         local d_state = state.duration_state[sub_id]
         local key = tostring(cond_idx)
 

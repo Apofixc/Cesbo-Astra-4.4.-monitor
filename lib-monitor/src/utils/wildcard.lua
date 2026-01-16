@@ -198,8 +198,8 @@ function Wildcard.compile(pattern)
 
     -- Определение стратегии компиляции
     if pattern == "*" then
-        -- 1. Любая строка
-        matcher = _create_any_matcher()
+        -- 1. Любая строка (Оптимизировано: константная функция)
+        matcher = function(name) return name ~= nil end
     elseif not string_find(pattern, "[%*%?]") then
         -- 2. Прямое сравнение (нет спецсимволов)
         matcher = _create_exact_matcher(pattern)

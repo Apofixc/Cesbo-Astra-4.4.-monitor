@@ -140,6 +140,7 @@ function EventDispatcher:_initialize()
         emitted = 0,
         processed = 0,
         dropped = 0,
+        max_queue_size = 0,
         last_reset = os_time()
     }
 
@@ -264,6 +265,11 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
     local queue = self.event_queues[p]
     if queue then
+        -- Обновление метрики максимального размера
+        if queue.size + 1 > self.stats.max_queue_size then
+            self.stats.max_queue_size = queue.size + 1
+        end
+
         -- Вставка в круговую очередь
         if queue.size >= queue.max_size then
             -- Вытеснение старого события (O(1))
@@ -407,6 +413,15 @@ function EventDispatcher:_process_queue()
     self._last_lvc_check_key = current_key
 
     local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
+    
+    -- Адаптивная частота: если суммарный размер очередей > 50%, увеличиваем лимит
+    local current_total_size = 0
+    for _, q in pairs(self.event_queues) do current_total_size = current_total_size + q.size end
+    
+    if current_total_size > (MAX_QUEUE_SIZE * 0.5) then
+        limit = limit * 2
+    end
+
     local processed_in_batch = 0
     local priorities = self.PRIORITIES
 

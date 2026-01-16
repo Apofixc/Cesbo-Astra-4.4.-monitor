@@ -21,7 +21,7 @@ local COMPONENT_NAME = "WsSubscriber"
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class WsSubscriberState
---- @field clients table<userdata, boolean> Список активных WebSocket клиентов
+--- @field clients table<userdata, number> Список активных WebSocket клиентов (значение - счетчик ошибок)
 --- @field http_server_instance any Ссылка на экземпляр http_server
 local state = {
     clients = {},
@@ -74,7 +74,7 @@ function WsSubscriber.on_message(server, client, request)
 
     -- Регистрация нового клиента при первом сообщении
     if not state.clients[client] then
-        state.clients[client] = true
+        state.clients[client] = 0 -- 0 ошибок при регистрации
         pcall(server.send, server, client, '{"event":"sys:connected","data":"Добро пожаловать"}')
     end
 
@@ -103,12 +103,23 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
     local message = '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
     local send = server.send
     
-    for client, _ in pairs(clients) do
+    for client, error_count in pairs(clients) do
         local ok, err = pcall(send, server, client, message)
         if not ok then
-            -- Если отправка не удалась, вероятно клиент отключился некорректно
-            clients[client] = nil
-            Logger.debug(COMPONENT_NAME, "Ошибка отправки клиенту WS (удален): %s", tostring(err))
+            -- Инкремент счетчика ошибок
+            error_count = error_count + 1
+            clients[client] = error_count
+            
+            -- Если ошибок слишком много (например, 5 подряд), удаляем клиента
+            if error_count >= 5 then
+                clients[client] = nil
+                Logger.debug(COMPONENT_NAME, "Клиент WS удален после 5 ошибок: %s", tostring(err))
+            else
+                Logger.debug(COMPONENT_NAME, "Ошибка отправки клиенту WS (попытка %d): %s", error_count, tostring(err))
+            end
+        else
+            -- Сброс счетчика при успешной отправке
+            if error_count > 0 then clients[client] = 0 end
         end
     end
 end
