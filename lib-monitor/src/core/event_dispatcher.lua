@@ -45,7 +45,7 @@ local MAX_QUEUE_SIZE = 1000
 --- Лимит обработки событий за один тик планировщика
 local DEFAULT_BATCH_LIMIT = 100
 --- Максимальный лимит при высокой нагрузке
-local MAX_BATCH_LIMIT = 500
+local MAX_BATCH_LIMIT = 1000
 --- TTL для записей LVC по умолчанию (1 час)
 local DEFAULT_LVC_TTL = 3600
 
@@ -413,7 +413,8 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
         local last_values = self:get_last_values(event_type)
         for name, entry in pairs(last_values) do
             -- Отправляем немедленно (вне очереди) для инициализации подписчика
-            self.subscription_manager:publish_to_single(sub_id, name, entry.data)
+            -- Оптимизировано: передаем весь объект entry (с .data и .json)
+            self.subscription_manager:publish_to_single(sub_id, name, entry)
         end
     end
 
