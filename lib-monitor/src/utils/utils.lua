@@ -1,3 +1,10 @@
+-- ===========================================================================
+-- Модуль `utils.utils`
+--
+-- Набор вспомогательных функций для работы с таблицами, строками,
+-- валидации параметров и измерения производительности.
+-- ===========================================================================
+
 -- 1. Стандартные Lua функции
 local math_abs = math.abs
 local math_max = math.max
@@ -12,12 +19,14 @@ local os_clock = os.clock
 local math_huge = math.huge
 local pcall = pcall
 local unpack = table.unpack
+local error = error
+local select = select
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Logger = nil -- Кэшируется при первом обращении
+local MonitorConfig = nil -- Кэшируется при первом обращении
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- 3. Глобальные зависимости Astra
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
 local astra_parse_url = ModuleManager.get_global_dependency("parse_url")
 
@@ -25,23 +34,81 @@ local astra_parse_url = ModuleManager.get_global_dependency("parse_url")
 local COMPONENT_NAME = "Utils"
 local HOSTNAME = utils_hostname and utils_hostname() or "unknown"
 
--- 5. Инициализация объектов из загруженных модулей
+-- 5. Внутреннее состояние (Private State)
+local state = {
+    --- Хранилище статистики производительности
+    --- @type table<string, PerformanceStats>
+    performance_stats = {}
+}
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Возвращает модуль логгера (ленивая загрузка)
+--- @return Logger|nil
+local function _get_logger()
+    if Logger then return Logger end
+    Logger = ModuleManager.get_module("logger")
+    return Logger
+end
+
+--- Возвращает модуль конфигурации (ленивая загрузка)
+--- @return MonitorConfig|nil
+local function _get_monitor_config()
+    if MonitorConfig then return MonitorConfig end
+    MonitorConfig = ModuleManager.get_module("monitor_config")
+    return MonitorConfig
+end
+
+--- Обновляет статистику производительности для указанной операции
+--- @param name string Уникальное имя операции
+--- @param duration number Длительность выполнения в секундах
+local function _update_stats(name, duration)
+    if not state.performance_stats[name] then
+        state.performance_stats[name] = {
+            count = 0,
+            total_time = 0,
+            avg_time = 0,
+            max_time = 0,
+            min_time = math_huge
+        }
+    end
+
+    local stats = state.performance_stats[name]
+    stats.count = stats.count + 1
+    stats.total_time = stats.total_time + duration
+    stats.avg_time = stats.total_time / stats.count
+    stats.max_time = math_max(stats.max_time, duration)
+    stats.min_time = math_min(stats.min_time, duration)
+end
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
+--- @class PerformanceStats
+--- @field count number Количество вызовов функции
+--- @field total_time number Суммарное время выполнения в секундах
+--- @field avg_time number Среднее время выполнения в секундах
+--- @field max_time number Максимальное зафиксированное время выполнения
+--- @field min_time number Минимальное зафиксированное время выполнения
+
 --- @class Utils
 local Utils = {}
-
--- Внутреннее состояние для статистики производительности
-Utils._performance_stats = {}
 
 --- Возвращает имя потока по IP-адресу
 --- @param ip_address string IP-адрес потока
 --- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
-        Logger.error(COMPONENT_NAME, "get_stream_name: некорректный ip_address")
+        local log = _get_logger()
+        if log then log.error(COMPONENT_NAME, "get_stream_name: некорректный ip_address") end
         return nil
     end
 
-    local stream_map = MonitorConfig and MonitorConfig.STREAM or {}
+    local config = _get_monitor_config()
+    local stream_map = config and config.STREAM or {}
     return stream_map[ip_address] or ip_address
 end
 
@@ -87,7 +154,7 @@ function Utils.table_merge(dst, src)
     end
 end
 
---- Разделяет строку по разделителю (аналог string.split из Astra)
+--- Разделяет строку по разделителю
 --- @param s string Исходная строка
 --- @param d string Разделитель
 --- @return table|nil Таблица частей строки или nil
@@ -107,9 +174,9 @@ function Utils.split(s, d)
 end
 
 --- Создает глубокую копию таблицы
---- @param t table Исходная таблица
---- @param cache? table [Внутренний кэш для обработки циклических ссылок]
---- @return table Глубокая копия таблицы
+--- @param t any Исходное значение
+--- @param cache? table Внутренний кэш для обработки циклических ссылок
+--- @return any Глубокая копия
 function Utils.deep_copy(t, cache)
     if type(t) ~= "table" then
         return t
@@ -153,15 +220,16 @@ function Utils.shallow_compare(t1, t2)
     return true
 end
 
---- Валидирует параметр монитора на основе схемы.
---- Если значение невалидно или отсутствует, возвращает значение по умолчанию из схемы.
+--- Валидирует параметр монитора на основе схемы
 --- @param name string Имя параметра
 --- @param value any Значение
 --- @return any Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[name]
+    local config = _get_monitor_config()
+    local schema = config and config.ValidationSchema and config.ValidationSchema[name]
     if not schema then
-        Logger.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name)
+        local log = _get_logger()
+        if log then log.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name) end
         return nil
     end
 
@@ -170,23 +238,32 @@ function Utils.validate_monitor_param(name, value)
     end
 
     if type(value) ~= schema.type then
-        Logger.error(COMPONENT_NAME,
-            "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s).",
-            name, schema.type, type(value))
+        local log = _get_logger()
+        if log then
+            log.error(COMPONENT_NAME,
+                "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s).",
+                name, schema.type, type(value))
+        end
         return schema.default
     end
 
     if schema.type == "number" then
         if schema.min and value < schema.min then
-            Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: значение для '%s' слишком мало (%s < %s).",
-                name, tostring(value), tostring(schema.min))
+            local log = _get_logger()
+            if log then
+                log.error(COMPONENT_NAME,
+                    "validate_monitor_param: значение для '%s' слишком мало (%s < %s).",
+                    name, tostring(value), tostring(schema.min))
+            end
             return schema.default
         end
         if schema.max and value > schema.max then
-            Logger.error(COMPONENT_NAME,
-                "validate_monitor_param: значение для '%s' слишком велико (%s > %s).",
-                name, tostring(value), tostring(schema.max))
+            local log = _get_logger()
+            if log then
+                log.error(COMPONENT_NAME,
+                    "validate_monitor_param: значение для '%s' слишком велико (%s > %s).",
+                    name, tostring(value), tostring(schema.max))
+            end
             return schema.default
         end
     end
@@ -206,7 +283,8 @@ function Utils.validate_monitor_name(name)
         return false
     end
 
-    if MonitorConfig and MonitorConfig.MaxMonitorNameLength and #name > MonitorConfig.MaxMonitorNameLength then
+    local config = _get_monitor_config()
+    if config and config.MaxMonitorNameLength and #name > config.MaxMonitorNameLength then
         return false
     end
 
@@ -225,16 +303,16 @@ end
 function Utils.parse_url(url)
     if type(url) ~= "string" or url == "" then return nil end
     if not astra_parse_url then
-        Logger.error(COMPONENT_NAME, "parse_url: зависимость не найдена")
+        local log = _get_logger()
+        if log then log.error(COMPONENT_NAME, "parse_url: зависимость не найдена") end
         return nil
     end
     return astra_parse_url(url)
 end
 
---- Инициализирует таблицу отчета базовыми статичными полями.
---- Используется для реализации пула таблиц и предотвращения лишних аллокаций.
+--- Инициализирует таблицу отчета базовыми статичными полями
 --- @param t table Таблица для инициализации
---- @param type_name string Тип объекта (Channel, Dvb, System)
+--- @param type_name string Тип объекта
 --- @param name string Техническое имя объекта
 function Utils.init_report(t, type_name, name)
     if type(t) ~= "table" then return end
@@ -255,33 +333,34 @@ function Utils.is_port_busy(port)
     return res ~= ""
 end
 
---- Принудительно освобождает TCP-порт, завершая процесс
+--- Принудительно освобождает TCP-порт
 --- @param port number Номер порта
 --- @return boolean true если порт свободен или был успешно освобожден
 function Utils.free_port(port)
     if not port then return false end
     if not Utils.is_port_busy(port) then return true end
 
-    Logger.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port)
+    local log = _get_logger()
+    if log then log.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port) end
     os_execute(string_format("fuser -k %d/tcp >/dev/null 2>&1", port))
 
     -- Ожидание освобождения (до 2 секунд)
     local start = os_clock()
     while os_clock() - start < 2 do
         if not Utils.is_port_busy(port) then
-            Logger.info(COMPONENT_NAME, "Порт %d успешно освобожден", port)
+            if log then log.info(COMPONENT_NAME, "Порт %d успешно освобожден", port) end
             return true
         end
     end
 
     local busy = Utils.is_port_busy(port)
     if busy then
-        Logger.error(COMPONENT_NAME, "Не удалось освободить порт %d", port)
+        if log then log.error(COMPONENT_NAME, "Не удалось освободить порт %d", port) end
     end
     return not busy
 end
 
---- Очищает таблицу без удаления самой ссылки (для переиспользования в пулах)
+--- Очищает таблицу без удаления самой ссылки
 --- @param t table Таблица для очистки
 function Utils.table_clear(t)
     if type(t) ~= "table" then return end
@@ -290,7 +369,7 @@ function Utils.table_clear(t)
     end
 end
 
---- Измеряет время выполнения функции и сохраняет статистику.
+--- Измеряет время выполнения функции и сохраняет статистику
 --- @param name string Уникальное имя операции
 --- @param func function Функция для выполнения
 --- @param ... any Аргументы функции
@@ -300,38 +379,20 @@ function Utils.measure_time(name, func, ...)
     local results = { pcall(func, ...) }
     local end_time = os_clock()
 
-    local duration = end_time - start_time
-
-    if not Utils._performance_stats[name] then
-        Utils._performance_stats[name] = {
-            count = 0,
-            total_time = 0,
-            avg_time = 0,
-            max_time = 0,
-            min_time = math_huge
-        }
-    end
-
-    local stats = Utils._performance_stats[name]
-    stats.count = stats.count + 1
-    stats.total_time = stats.total_time + duration
-    stats.avg_time = stats.total_time / stats.count
-    stats.max_time = math_max(stats.max_time, duration)
-    stats.min_time = math_min(stats.min_time, duration)
+    _update_stats(name, end_time - start_time)
 
     local ok = results[1]
     if not ok then
-        -- Если функция упала, пробрасываем ошибку дальше после записи статистики
         error(results[2])
     end
 
     return unpack(results, 2)
 end
 
---- Возвращает копию накопленной статистики производительности.
---- @return table Статистика производительности
+--- Возвращает копию накопленной статистики производительности
+--- @return table<string, PerformanceStats> Статистика производительности
 function Utils.get_performance_stats()
-    return Utils.deep_copy(Utils._performance_stats)
+    return Utils.deep_copy(state.performance_stats)
 end
 
 return Utils
