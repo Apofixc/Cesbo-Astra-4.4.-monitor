@@ -43,7 +43,7 @@
 | :--- | :---: | :--- | :--- |
 | **BaseMonitor** | 90% | Стабилен | - |
 | **ChannelMonitor** | 75% | Требует длительных тестов | - |
-| **ResourceMonitor** | 100% | **Готов (Ultra-Extreme) + Adaptive Ticking** | 16.01.2026 |
+| **ResourceMonitor** | 100% | **Готов (Hardcore Zero-alloc) + Adaptive** | 16.01.2026 |
 
 ---
 
