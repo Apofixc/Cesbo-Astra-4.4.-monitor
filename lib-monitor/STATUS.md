@@ -27,9 +27,9 @@
 ## 3. Уровень данных (Repositories)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseRepository** | 100% | **Готов (Ultra-Extreme) + Recovery Limits** | 16.01.2026 |
-| **ChannelRepository** | 100% | **Готов (Ultra-Extreme) + Safe Start** | 16.01.2026 |
-| **DvbRepository** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
+| **BaseRepository** | 100% | **Готов (Hardcore+) + Shadow Copy + Events** | 16.01.2026 |
+| **ChannelRepository** | 100% | **Готов (Hardcore+) + Safe Start** | 16.01.2026 |
+| **DvbRepository** | 100% | **Готов (Hardcore+)** | 16.01.2026 |
 
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
