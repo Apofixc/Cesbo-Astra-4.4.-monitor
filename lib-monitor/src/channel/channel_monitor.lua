@@ -167,10 +167,15 @@ function ChannelMonitor:start()
         rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
-            if not self._active then return end
+            -- Защита от вызова после destroy или во время очистки
+            if not self._active or not self._instance then return end
+            
             local ok, err = pcall(self._on_astra_data, self, data)
             if not ok then
-                Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
+                -- В экстремальных условиях логируем только критические ошибки
+                if self._active then
+                    Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
+                end
             end
         end
     })
@@ -462,14 +467,18 @@ function ChannelMonitor:destroy(force)
     self:clear_stats()
 
     if self._instance then
-        -- Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО (astra-api-usage.md)
-        if type(self._instance.__options) == "table" then
-            self._instance.__options.callback = nil
+        -- 1. Сначала обнуляем ссылку на инстанс в объекте Lua
+        local inst = self._instance
+        self._instance = nil
+
+        -- 2. Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО
+        if type(inst.__options) == "table" then
+            inst.__options.callback = nil
         end
 
-        -- Физическое закрытие инстанса Astra
-        if self._instance.close then
-            self._instance:close()
+        -- 3. Физическое закрытие инстанса Astra
+        if inst.close then
+            pcall(inst.close, inst)
         end
     end
 

@@ -8,6 +8,9 @@
 
 -- 1. Стандартные Lua функции
 local type = _G.type
+local pairs = _G.pairs
+local ipairs = _G.ipairs
+local table_insert = _G.table.insert
 local string_find = _G.string.find
 local string_match = _G.string.match
 local string_sub = _G.string.sub
