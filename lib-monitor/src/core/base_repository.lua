@@ -25,6 +25,7 @@ function BaseRepository.new(component_name)
     local self = setmetatable({}, BaseRepository)
     self.monitors = {}
     self.classes = {}
+    self.recovery_attempts = {}
     self.count_active = 0
     self.component_name = component_name or "BaseRepository"
     return self
@@ -63,6 +64,7 @@ function BaseRepository:unregister(name, force)
     if config then
         self.monitors[name] = nil
         self.classes[name] = nil
+        self.recovery_attempts[name] = nil
         self.count_active = self.count_active - 1
         Logger.debug(self.component_name,
             "Объект '%s' удален и остановлен (принудительно: %s).",
@@ -90,6 +92,8 @@ function BaseRepository:auto_recover()
     end
 
     local recover_interval = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
+    local max_attempts = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or 3
+
     for _, name in ipairs(names) do
         local monitor = self.monitors[name]
         local class = self.classes[name]
@@ -101,17 +105,33 @@ function BaseRepository:auto_recover()
             if health.state == BaseMonitor.STATE.RUNNING and
                now - (health.last_update or 0) > recover_interval then
 
+                local attempts = (self.recovery_attempts[name] or 0) + 1
+                if attempts > max_attempts then
+                    Logger.error(self.component_name,
+                        "Превышен лимит попыток восстановления для %s (%d/%d). Монитор оставлен в покое.",
+                        name, attempts - 1, max_attempts)
+                    -- Помечаем как STOPPED, чтобы больше не проверять
+                    if monitor.pause then monitor:pause() end
+                    goto next_monitor
+                end
+
                 Logger.warn(self.component_name,
-                    "Попытка восстановления зависшего монитора: %s", name)
+                    "Попытка восстановления зависшего монитора: %s (попытка %d/%d)",
+                    name, attempts, max_attempts)
 
                 -- 1. Останавливаем и получаем конфиг
+                -- unregister очищает recovery_attempts[name], поэтому сохраняем и восстанавливаем
                 local config = self:unregister(name, true)
+                self.recovery_attempts[name] = attempts
 
                 -- 2. Пытаемся создать и запустить новый экземпляр
                 if config and class.new then
                     local new_monitor = class.new(config)
                     if new_monitor and new_monitor.start and new_monitor:start() then
                         self:register(name, new_monitor, class)
+                        -- При успешном старте НЕ сбрасываем попытки сразу, 
+                        -- так как он может снова зависнуть через минуту.
+                        -- Попытки сбросятся только при ручном пересоздании или если он проработает долго (в будущем).
                         recovered = recovered + 1
                         Logger.info(self.component_name,
                             "Монитор %s успешно восстановлен", name)
@@ -128,6 +148,7 @@ function BaseRepository:auto_recover()
                 end
             end
         end
+        ::next_monitor::
     end
 
     return recovered, failed

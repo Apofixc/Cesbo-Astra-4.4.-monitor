@@ -42,10 +42,34 @@ end
 function ChannelRepository:start_dependent_channels(configs)
     if not configs or type(configs) ~= "table" then return end
     local Channel = ModuleManager.get_module("channel")
-    if not Channel then return end
+    if not Channel then
+        Logger.error(COMPONENT_NAME, "start_dependent_channels: модуль 'channel' не найден")
+        return
+    end
+
+    local total = #configs
+    if total == 0 then return end
+
+    Logger.info(COMPONENT_NAME, "Запуск %d зависимых каналов...", total)
+    local success_count = 0
 
     for _, conf in ipairs(configs) do
-        Channel.make_stream(conf)
+        local name = conf.name or "Unknown"
+        Logger.debug(COMPONENT_NAME, "Попытка запуска канала: %s", name)
+
+        local ok, res = pcall(Channel.make_stream, conf)
+        if ok and res then
+            success_count = success_count + 1
+            Logger.debug(COMPONENT_NAME, "Канал %s успешно запущен", name)
+        else
+            Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", name, tostring(res or "unknown error"))
+        end
+    end
+
+    if success_count == total then
+        Logger.info(COMPONENT_NAME, "Все зависимые каналы (%d/%d) успешно запущены", success_count, total)
+    else
+        Logger.warn(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", success_count, total)
     end
 end
 

@@ -96,6 +96,7 @@ MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
 MonitorConfig.MemoryLimitMb = 50 -- Лимит памяти для адаптивного GC (МБ)
 MonitorConfig.AutoRecoverInterval = 300 -- Интервал авто-восстановления в репозитории (сек)
+MonitorConfig.MaxRecoveryAttempts = 3 -- Максимальное количество попыток восстановления монитора
 MonitorConfig.PidStatsLimit = 100 -- Лимит отслеживаемых PID в ChannelMonitor
 MonitorConfig.MaxCounterValue = 1000000000 -- Максимальное значение счетчиков (защита от переполнения)
 MonitorConfig.MaxErrorCount = 1000000 -- Максимальное значение ошибок (защита от переполнения)
@@ -142,6 +143,7 @@ function MonitorConfig.validate()
     end
 
     if type(MonitorConfig.AutoRecoverInterval) ~= "number" then return false, "AutoRecoverInterval must be a number" end
+    if type(MonitorConfig.MaxRecoveryAttempts) ~= "number" then return false, "MaxRecoveryAttempts must be a number" end
     if type(MonitorConfig.PidStatsLimit) ~= "number" then return false, "PidStatsLimit must be a number" end
     if type(MonitorConfig.MaxCounterValue) ~= "number" then return false, "MaxCounterValue must be a number" end
     if type(MonitorConfig.MaxErrorCount) ~= "number" then return false, "MaxErrorCount must be a number" end
