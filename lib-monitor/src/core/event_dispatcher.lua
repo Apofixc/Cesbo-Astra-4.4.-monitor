@@ -274,7 +274,6 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
 
         local cache_data = event_data
-        local cache_json = nil
 
         if type(event_data) == "table" then
             -- Глубокое копирование данных в пул для LVC
@@ -282,15 +281,6 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             for k, v in pairs(event_data) do
                 cache_data[k] = _deep_copy_to_pool(v)
             end
-
-            -- Предварительное кодирование в JSON для внешних подписчиков (Hybrid LVC)
-            local encode = get_json_encode()
-            if encode then
-                local ok, res = pcall(encode, event_data)
-                if ok then cache_json = res end
-            end
-        else
-            cache_json = tostring(event_data)
         end
 
         -- Если в LVC уже есть данные для этого типа, возвращаем их в пул
@@ -299,7 +289,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local entry = TablePool and TablePool.get("lvc_wrapper") or {}
         entry.data = cache_data
-        entry.json = cache_json
+        -- Оптимизация: ленивое кодирование JSON для LVC (Zero-copy)
+        entry.json = (type(event_data) ~= "table") and tostring(event_data) or nil
         entry.timestamp = now
         self._lvc[event_type] = entry
     end

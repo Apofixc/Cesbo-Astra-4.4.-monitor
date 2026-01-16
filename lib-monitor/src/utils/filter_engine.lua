@@ -204,6 +204,7 @@ local function _check_condition(data, condition, sub_id, cond_idx)
 end
 
 --- Генерирует выражение для одного условия в JIT-коде
+--- Оптимизировано: инлайнинг аксессоров и минимизация проверок типов.
 --- @private
 --- @param cond table Условие
 --- @param upvalues table Список внешних значений
@@ -213,26 +214,26 @@ local function _generate_cond_expr(cond, upvalues)
     local field = cond.field
     local target = cond.value
 
-    -- Генерация пути доступа
+    -- Генерация пути доступа (Inlining accessors)
     local field_expr
     if field:find("%.") then
         local parts = {}
+        for part in field:gmatch("[^%.]+") do
+            table_insert(parts, part)
+        end
+        
         local current = "data"
         local checks = {}
-        for part in field:gmatch("[^%.]+") do
-            current = string_format("%s[%q]", current, part)
-            table_insert(parts, current)
+        for i = 1, #parts - 1 do
+            current = string_format("%s[%q]", current, parts[i])
+            table_insert(checks, string_format("type(%s) == 'table'", current))
         end
-        -- Оптимизация: уменьшаем количество проверок типов для простых путей
-        for j = 1, #parts - 1 do
-            table_insert(checks, string_format("type(%s) == 'table'", parts[j]))
-        end
-        field_expr = string_format("(%s and %s)", table_concat(checks, " and "), parts[#parts])
+        field_expr = string_format("(%s and %s[%q])", table_concat(checks, " and "), current, parts[#parts])
     else
         field_expr = string_format("data[%q]", field)
     end
 
-    -- Оптимизация оператора 'in' через upvalues
+    -- Оптимизация оператора 'in' через upvalues (Lookup table)
     if op == "in" and type(target) == "table" then
         local lookup = {}
         for _, v in pairs(target) do lookup[v] = true end
@@ -241,8 +242,20 @@ local function _generate_cond_expr(cond, upvalues)
         return string_format("(%s ~= nil and %s[%s] == true)", field_expr, uv_name, field_expr)
     end
 
-    local target_val = type(target) == "string" and string_format("%q", target) or tostring(target)
+    -- Constant folding для target_val
+    local target_val
+    if type(target) == "string" then
+        target_val = string_format("%q", target)
+    elseif type(target) == "number" or type(target) == "boolean" then
+        target_val = tostring(target)
+    else
+        -- Для сложных типов используем upvalues
+        local uv_name = "uv" .. (#upvalues + 1)
+        table_insert(upvalues, { name = uv_name, value = target })
+        target_val = uv_name
+    end
     
+    -- Генерация финального выражения с учетом типов
     if op == "eq" then return string_format("(%s == %s)", field_expr, target_val)
     elseif op == "ne" then return string_format("(%s ~= %s)", field_expr, target_val)
     elseif op == "gt" then return string_format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
@@ -250,11 +263,11 @@ local function _generate_cond_expr(cond, upvalues)
     elseif op == "lt" then return string_format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
     elseif op == "le" then return string_format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
     elseif op == "contains" then
-        return string_format("(type(%s) == 'string' and string_find(%s, %q, 1, true) ~= nil)", field_expr, field_expr, tostring(target))
+        return string_format("(type(%s) == 'string' and string_find(%s, %s, 1, true) ~= nil)", field_expr, field_expr, target_val)
     elseif op == "matches" then
-        return string_format("(type(%s) == 'string' and string_match(%s, %q) ~= nil)", field_expr, field_expr, tostring(target))
+        return string_format("(type(%s) == 'string' and string_match(%s, %s) ~= nil)", field_expr, field_expr, target_val)
     elseif op == "in" and type(target) == "string" then
-        return string_format("(type(%s) ~= 'nil' and string_find(%q, tostring(%s), 1, true) ~= nil)", field_expr, target, field_expr)
+        return string_format("(type(%s) ~= 'nil' and string_find(%s, tostring(%s), 1, true) ~= nil)", field_expr, target_val, field_expr)
     end
 
     return "false"

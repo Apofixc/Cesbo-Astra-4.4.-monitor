@@ -141,9 +141,12 @@ end
 --- @return string|nil JSON-строка
 local function _get_event_json(event)
     if not event then return nil end
+    
+    -- 1. Проверяем кэш в самом объекте события (самый быстрый путь)
+    if event.json_cache then return event.json_cache end
+    
     local options = event.options
-
-    -- Проверяем наличие кэша в опциях события
+    -- 2. Проверяем кэш в опциях (совместимость)
     if options and options.json_cache then return options.json_cache end
 
     local encode = get_json_encode()
@@ -161,16 +164,9 @@ local function _get_event_json(event)
         json = res
     end
 
-    -- Сохраняем кэш в опциях для повторного использования в рамках текущей рассылки
-    if options then
-        options.json_cache = json
-
-        -- Обратная связь: обновляем кэш в исходном мониторе для последующих событий
-        local source_monitor = options.source_monitor
-        if source_monitor and type(source_monitor) == "table" then
-            source_monitor._json_cache = json
-        end
-    end
+    -- Сохраняем кэш для повторного использования
+    event.json_cache = json
+    if options then options.json_cache = json end
 
     return json
 end
@@ -495,13 +491,19 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     -- Оптимизация: Гранулярный сброс кэша маршрутизации
     if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
         -- Если добавлена маска, нужно проверить все записи в кэше, которые могут ей соответствовать
+        local to_remove = {}
         for cached_type, _ in pairs(self._route_cache) do
             if self:match(event_type, cached_type) then
-                self._route_cache[cached_type] = nil
-                self._route_cache_size = self._route_cache_size - 1
+                table_insert(to_remove, cached_type)
             end
         end
-    elseif type(self._route_cache) == "table" and self._route_cache[event_type] then
+        for _, k in pairs(to_remove) do
+            self._route_cache[k] = nil
+            self._route_cache_size = self._route_cache_size - 1
+        end
+        -- Сброс дерева решений Wildcard
+        if Wildcard and Wildcard.clear_tree then Wildcard.clear_tree() end
+    elseif self._route_cache[event_type] then
         self._route_cache[event_type] = nil
         self._route_cache_size = self._route_cache_size - 1
     end
@@ -546,10 +548,24 @@ function SubscriptionManager:publish_event(event, now)
         end
 
         targets = {}
-        for pattern, subs in pairs(self.subscriptions) do
-            if self:match(pattern, event_type) then
-                for _, sub in pairs(subs) do
-                    targets[#targets + 1] = sub
+        -- Оптимизация: использование Decision Tree для поиска всех масок за один проход
+        if Wildcard and Wildcard.match_multiple then
+            local matched_patterns = Wildcard.match_multiple(event_type, self.subscriptions)
+            for _, pattern in ipairs(matched_patterns) do
+                local subs = self.subscriptions[pattern]
+                if subs then
+                    for _, sub in pairs(subs) do
+                        table_insert(targets, sub)
+                    end
+                end
+            end
+        else
+            -- Fallback на обычный перебор
+            for pattern, subs in pairs(self.subscriptions) do
+                if self:match(pattern, event_type) then
+                    for _, sub in pairs(subs) do
+                        table_insert(targets, sub)
+                    end
                 end
             end
         end
@@ -854,13 +870,19 @@ function SubscriptionManager:unsubscribe(sub_id)
             -- Оптимизация: Гранулярный сброс кэша маршрутизации
             if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
                 -- При удалении маски сбрасываем только те типы, которые ей соответствовали
+                local to_remove = {}
                 for cached_type, _ in pairs(self._route_cache) do
                     if self:match(event_type, cached_type) then
-                        self._route_cache[cached_type] = nil
-                        self._route_cache_size = self._route_cache_size - 1
+                        table_insert(to_remove, cached_type)
                     end
                 end
-            elseif type(self._route_cache) == "table" and self._route_cache[event_type] then
+                for _, k in pairs(to_remove) do
+                    self._route_cache[k] = nil
+                    self._route_cache_size = self._route_cache_size - 1
+                end
+                -- Сброс дерева решений Wildcard
+                if Wildcard and Wildcard.clear_tree then Wildcard.clear_tree() end
+            elseif self._route_cache[event_type] then
                 self._route_cache[event_type] = nil
                 self._route_cache_size = self._route_cache_size - 1
             end

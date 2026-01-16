@@ -28,9 +28,11 @@ local MAX_CACHE_SIZE = 1000
 --- @class WildcardState
 --- @field compile_cache table<string, function> Кэш скомпилированных функций
 --- @field cache_size number Текущее количество элементов в кэше
+--- @field decision_tree table|nil Дерево решений для множественного сопоставления
 local state = {
     compile_cache = {},
     cache_size = 0,
+    decision_tree = nil,
 }
 
 --- @class Wildcard
@@ -164,6 +166,75 @@ end
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
+
+--- Очищает дерево решений. Вызывается при изменении набора подписок.
+function Wildcard.clear_tree()
+    state.decision_tree = nil
+end
+
+--- Сопоставляет имя события со всеми активными масками за один проход.
+--- Реализует дерево решений (Decision Tree) для оптимизации маршрутизации.
+--- @param name string Имя события
+--- @param patterns table<string, any> Список активных паттернов (ключи - паттерны)
+--- @return table Список совпавших паттернов
+function Wildcard.match_multiple(name, patterns)
+    -- Если паттернов мало, используем обычный перебор (Fast Path)
+    local count = 0
+    for _ in pairs(patterns) do count = count + 1 end
+    
+    if count < 5 then
+        local result = {}
+        for p in pairs(patterns) do
+            if Wildcard.compile(p)(name) then
+                table_insert(result, p)
+            end
+        end
+        return result
+    end
+
+    -- Построение дерева решений (ленивая инициализация)
+    if not state.decision_tree then
+        local tree = { nodes = {}, patterns = {} }
+        for p in pairs(patterns) do
+            local current = tree
+            -- Разбиваем паттерн на сегменты по разделителю (например, ":")
+            for segment in p:gmatch("[^:]+") do
+                current.nodes = current.nodes or {}
+                current.nodes[segment] = current.nodes[segment] or { nodes = {}, patterns = {} }
+                current = current.nodes[segment]
+            end
+            table_insert(current.patterns, p)
+        end
+        state.decision_tree = tree
+    end
+
+    -- Поиск по дереву
+    local result = {}
+    local function search(node, segments, idx)
+        -- Добавляем паттерны текущего узла
+        for _, p in ipairs(node.patterns) do table_insert(result, p) end
+        
+        local seg = segments[idx]
+        if not seg then return end
+
+        if node.nodes then
+            -- Точное совпадение сегмента
+            if node.nodes[seg] then
+                search(node.nodes[seg], segments, idx + 1)
+            end
+            -- Совпадение через wildcard (если есть в дереве)
+            if node.nodes["*"] then
+                search(node.nodes["*"], segments, idx + 1)
+            end
+        end
+    end
+
+    local name_segments = {}
+    for s in name:gmatch("[^:]+") do table_insert(name_segments, s) end
+    search(state.decision_tree, name_segments, 1)
+
+    return result
+end
 
 --- Компилирует маску в функцию сопоставления.
 --- Поддерживает оптимизированные пути для частых случаев (префиксы, суффиксы, сегменты).
