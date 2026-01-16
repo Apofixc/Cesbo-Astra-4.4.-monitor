@@ -51,15 +51,23 @@ local TablePool = ModuleManager.get_module("table_pool")
 -- 3. Глобальные зависимости Astra
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
 
+--- @class AstraInterfaceInfo
+--- @field ipv4 string[]|nil Список IPv4 адресов
+--- @field ipv6 string[]|nil Список IPv6 адресов
+--- @field link table|nil Информация о канальном уровне
+
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
 local PROC_STAT = "/proc/self/stat"
 local PROC_STATUS = "/proc/self/status"
 local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
+local STAT_READ_BUFFER = 512 -- Достаточно для первых 15 полей
 
--- Пороги для уведомлений
-local CPU_THRESHOLD = 90 -- %
-local RAM_THRESHOLD_PCT = 80 -- % от лимита
+-- Настройки по умолчанию (могут быть переопределены в MonitorConfig)
+local DEFAULT_CPU_THRESHOLD = 90
+local DEFAULT_RAM_THRESHOLD_PCT = 80
+local HYSTERESIS_FACTOR = 0.95 -- 5% гистерезис
+local NETWORK_CHECK_INTERVAL = 30 -- секунд
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
@@ -72,7 +80,20 @@ local state = {
     last_post_gc_mem = 0,
     pid = nil,
     report = nil,
-    cpu_buffer = {} -- Кольцевой буфер для Moving Average
+    
+    -- Moving Average O(1)
+    cpu_buffer = {},
+    cpu_sum = 0,
+    
+    -- Сеть
+    last_network_check = 0,
+    cached_network = nil,
+    
+    -- Гистерезис событий
+    active_warnings = {
+        cpu = false,
+        ram = false
+    }
 }
 
 -- ===========================================================================
@@ -90,7 +111,8 @@ local function _parse_status()
     local f = io_open(PROC_STATUS, "r")
     if not f then return nil end
 
-    local status = {}
+    -- Используем пул для временной таблицы парсинга
+    local status = TablePool and TablePool.get("sys_status_temp") or {}
     local found = 0
     for line in f:lines() do
         local key, val = line:match("^(%w+):%s+(%d+)")
@@ -117,7 +139,8 @@ local function _parse_stat()
     local f = io_open(PROC_STAT, "r")
     if not f then return 0, 0 end
 
-    local content = f:read("*a")
+    -- Оптимизация: читаем только начало файла
+    local content = f:read(STAT_READ_BUFFER)
     f:close()
     if not content then return 0, 0 end
 
@@ -135,7 +158,7 @@ local function _parse_stat()
     return utime, stime
 end
 
---- Рассчитывает среднее значение CPU из буфера
+--- Рассчитывает среднее значение CPU из буфера (O(1))
 --- @param val number Новое значение
 --- @return number
 local function _moving_average(val)
@@ -143,47 +166,79 @@ local function _moving_average(val)
     if window <= 1 then return val end
 
     table_insert(state.cpu_buffer, val)
-    while #state.cpu_buffer > window do
-        table_remove(state.cpu_buffer, 1)
+    state.cpu_sum = state.cpu_sum + val
+    
+    if #state.cpu_buffer > window then
+        local old_val = table_remove(state.cpu_buffer, 1)
+        state.cpu_sum = state.cpu_sum - old_val
     end
 
-    local sum = 0
-    for _, v in ipairs(state.cpu_buffer) do
-        sum = sum + v
-    end
-    return sum / #state.cpu_buffer
+    return state.cpu_sum / #state.cpu_buffer
 end
 
---- Проверяет пороги и генерирует события при необходимости
+--- Проверяет пороги и генерирует события при необходимости (с гистерезисом)
 --- @param report SystemReport
 local function _check_thresholds(report)
     local ed = _get_event_dispatcher()
     if not ed then return end
 
-    -- Проверка CPU
-    if report.cpu.usage > CPU_THRESHOLD then
-        ed:emit("sys:resource_warning", {
-            type = "cpu",
-            value = report.cpu.usage,
-            threshold = CPU_THRESHOLD,
-            message = string.format("Высокая нагрузка на CPU: %.1f%%", report.cpu.usage)
-        })
+    local cpu_threshold = (MonitorConfig and MonitorConfig.CpuThreshold) or DEFAULT_CPU_THRESHOLD
+    local ram_threshold_pct = (MonitorConfig and MonitorConfig.RamThresholdPct) or DEFAULT_RAM_THRESHOLD_PCT
+    
+    -- 1. Проверка CPU
+    local cpu_val = report.cpu.usage
+    if not state.active_warnings.cpu then
+        if cpu_val > cpu_threshold then
+            state.active_warnings.cpu = true
+            ed:emit("sys:resource_warning", {
+                type = "cpu",
+                status = "critical",
+                value = cpu_val,
+                threshold = cpu_threshold,
+                message = string.format("Высокая нагрузка на CPU: %.1f%%", cpu_val)
+            })
+        end
+    else
+        -- Сброс варнинга только если упало ниже порога с учетом гистерезиса
+        if cpu_val < (cpu_threshold * HYSTERESIS_FACTOR) then
+            state.active_warnings.cpu = false
+            ed:emit("sys:resource_warning", {
+                type = "cpu",
+                status = "ok",
+                value = cpu_val,
+                message = "Нагрузка на CPU нормализовалась"
+            })
+        end
     end
 
-    -- Проверка RAM (Lua)
+    -- 2. Проверка RAM (Lua)
     local ram_limit_mb = (MonitorConfig and MonitorConfig.MemoryLimitMb) or 50
     local ram_limit_kb = ram_limit_mb * 1024
     local ram_usage_pct = (report.memory.lua / ram_limit_kb) * 100
 
-    if ram_usage_pct > RAM_THRESHOLD_PCT then
-        ed:emit("sys:resource_warning", {
-            type = "ram",
-            value = ram_usage_pct,
-            threshold = RAM_THRESHOLD_PCT,
-            current_kb = report.memory.lua,
-            limit_kb = ram_limit_kb,
-            message = string.format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
-        })
+    if not state.active_warnings.ram then
+        if ram_usage_pct > ram_threshold_pct then
+            state.active_warnings.ram = true
+            ed:emit("sys:resource_warning", {
+                type = "ram",
+                status = "critical",
+                value = ram_usage_pct,
+                threshold = ram_threshold_pct,
+                current_kb = report.memory.lua,
+                limit_kb = ram_limit_kb,
+                message = string.format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
+            })
+        end
+    else
+        if ram_usage_pct < (ram_threshold_pct * HYSTERESIS_FACTOR) then
+            state.active_warnings.ram = false
+            ed:emit("sys:resource_warning", {
+                type = "ram",
+                status = "ok",
+                value = ram_usage_pct,
+                message = "Потребление памяти Lua нормализовалось"
+            })
+        end
     end
 end
 
@@ -198,6 +253,7 @@ local ResourceMonitor = {}
 --- @return SystemReport|nil
 function ResourceMonitor.check()
     local now_clock = os_clock()
+    local now_time = os_time()
     local utime, stime = _parse_stat()
     local status = _parse_status() or {}
     local current_lua_mem = collectgarbage("count")
@@ -210,7 +266,7 @@ function ResourceMonitor.check()
     -- Получение нового отчета из пула
     local report = TablePool and TablePool.get("report_sys") or {}
     report.pid = state.pid
-    report.uptime = os_time() - state.start_time
+    report.uptime = now_time - state.start_time
 
     -- Метрики CPU
     report.cpu = report.cpu or (TablePool and TablePool.get("sys_cpu") or {})
@@ -240,7 +296,6 @@ function ResourceMonitor.check()
     report.memory.lua = current_lua_mem
     report.memory.lua_delta = (state.last_lua_mem > 0) and (current_lua_mem - state.last_lua_mem) or 0
     
-    -- Диагностика GC: если память уменьшилась, значит была сборка
     if current_lua_mem < state.last_lua_mem then
         state.last_post_gc_mem = current_lua_mem
     end
@@ -251,22 +306,50 @@ function ResourceMonitor.check()
 
     state.last_lua_mem = current_lua_mem
 
-    -- Метрики сети
+    -- Метрики сети (с кэшированием)
     report.network = report.network or (TablePool and TablePool.get("sys_net") or {})
-    if utils_ifaddrs and type(utils_ifaddrs) == "function" then
-        local interfaces = utils_ifaddrs()
-        for name, addrs in pairs(interfaces) do
-            if addrs.ipv4 and addrs.ipv4[1] then
-                local item = TablePool and TablePool.get("sys_net_item") or {}
-                item.interface = name
-                item.ip = addrs.ipv4[1]
-                table_insert(report.network, item)
+    
+    if not state.cached_network or (now_time - state.last_network_check > NETWORK_CHECK_INTERVAL) then
+        -- Очищаем старый кэш, если он был
+        if state.cached_network and TablePool then
+            TablePool.release(state.cached_network, "sys_net", true)
+        end
+        
+        local net_list = TablePool and TablePool.get("sys_net") or {}
+        if utils_ifaddrs and type(utils_ifaddrs) == "function" then
+            local interfaces = utils_ifaddrs()
+            --- @cast interfaces table<string, AstraInterfaceInfo>
+            if type(interfaces) == "table" then
+                for name, addrs in pairs(interfaces) do
+                    if addrs.ipv4 and addrs.ipv4[1] then
+                    local item = TablePool and TablePool.get("sys_net_item") or {}
+                    item.interface = name
+                    item.ip = addrs.ipv4[1]
+                    table_insert(net_list, item)
+                    end
+                end
             end
         end
+        state.cached_network = net_list
+        state.last_network_check = now_time
+    end
+
+    -- Копируем из кэша в отчет
+    for i = 1, #state.cached_network do
+        local cached_item = state.cached_network[i]
+        local item = TablePool and TablePool.get("sys_net_item") or {}
+        item.interface = cached_item.interface
+        item.ip = cached_item.ip
+        table_insert(report.network, item)
     end
 
     -- Проверка порогов
     _check_thresholds(report)
+
+    -- Освобождаем временную таблицу статуса
+    if TablePool and status.__pool_type then
+        TablePool.release(status, "sys_status_temp")
+    end
 
     state.report = report
     return report
@@ -334,6 +417,7 @@ if TablePool then
     TablePool.register_type("sys_mem", { "lua", "lua_delta", "lua_post_gc", "resident", "virtual" }, 10, 2)
     TablePool.register_type("sys_net", nil, 10, 2)
     TablePool.register_type("sys_net_item", { "interface", "ip" }, 20, 5)
+    TablePool.register_type("sys_status_temp", { "resident", "virtual", "threads" }, 5, 1, true)
 end
 
 -- Автоматический запуск при загрузке
