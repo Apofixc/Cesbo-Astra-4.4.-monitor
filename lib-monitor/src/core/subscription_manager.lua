@@ -575,6 +575,16 @@ function SubscriptionManager:publish_event(event, now)
             end
 
             if should_send then
+                -- Проверка батчинга в Fast Path
+                if MonitorConfig and MonitorConfig.BatchEnabled and
+                   (sub.transport == "HTTP" or sub.transport == "WS") and
+                   sub.batch_mode ~= "single"
+                then
+                    self:add_to_batch(sub, event)
+                    self.stats.delivered = self.stats.delivered + 1
+                    return 1, 0
+                end
+
                 if sub.transport ~= "LUA_CALLBACK" then
                     event_json = _get_event_json(event)
                 end
