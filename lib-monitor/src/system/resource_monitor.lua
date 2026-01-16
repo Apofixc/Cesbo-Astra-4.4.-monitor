@@ -2,7 +2,7 @@
 -- Модуль `system.resource_monitor`
 --
 -- Высокопроизводительный мониторинг системных ресурсов процесса Astra.
--- Сбор метрик CPU, RAM, потоков и сетевых интерфейсов из /proc.
+-- Сбор метрик CPU, RAM, потоков, FD и сетевых интерфейсов из /proc.
 -- Интеграция с EventDispatcher для генерации предупреждений по порогам.
 -- ===========================================================================
 
@@ -23,12 +23,25 @@
 --- @field interface string Имя интерфейса
 --- @field ip string IP-адрес
 
+--- @class AstraInterfaceInfo
+--- @field ipv4 string[]|nil Список IPv4 адресов
+--- @field ipv6 string[]|nil Список IPv6 адресов
+--- @field link { mac: string }|nil Информация о канальном уровне
+
+--- @class SysStatusTemp
+--- @field resident number|nil Резидентная память (КБ)
+--- @field virtual number|nil Виртуальная память (КБ)
+--- @field threads number|nil Количество потоков
+--- @field fd_size number|nil Количество открытых дескрипторов
+--- @field __pool_type string|nil Тип пула (для TablePool)
+
 --- @class SystemReport
 --- @field pid number Идентификатор процесса
 --- @field uptime number Время работы процесса (сек)
 --- @field cpu CpuMetrics Метрики процессора
 --- @field memory MemoryMetrics Метрики памяти
 --- @field network NetworkItem[] Список сетевых интерфейсов
+--- @field fd_size number Количество открытых файловых дескрипторов
 
 -- 1. Стандартные Lua функции
 local collectgarbage = _G.collectgarbage
@@ -41,6 +54,10 @@ local table_insert = _G.table.insert
 local table_remove = _G.table.remove
 local tonumber = _G.tonumber
 local type = _G.type
+local string_find = _G.string.find
+local string_sub = _G.string.sub
+local string_match = _G.string.match
+local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -49,25 +66,23 @@ local Scheduler = ModuleManager.get_module("core.scheduler")
 local TablePool = ModuleManager.get_module("table_pool")
 
 -- 3. Глобальные зависимости Astra
+--- @type fun():table<string, AstraInterfaceInfo>
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
-
---- @class AstraInterfaceInfo
---- @field ipv4 string[]|nil Список IPv4 адресов
---- @field ipv6 string[]|nil Список IPv6 адресов
---- @field link table|nil Информация о канальном уровне
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ResourceMonitor"
 local PROC_STAT = "/proc/self/stat"
 local PROC_STATUS = "/proc/self/status"
 local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
-local STAT_READ_BUFFER = 512 -- Достаточно для первых 15 полей
+local STAT_READ_BUFFER = 512
+local STATUS_READ_BUFFER = 4096
 
--- Настройки по умолчанию (могут быть переопределены в MonitorConfig)
+-- Настройки по умолчанию
 local DEFAULT_CPU_THRESHOLD = 90
 local DEFAULT_RAM_THRESHOLD_PCT = 80
-local HYSTERESIS_FACTOR = 0.95 -- 5% гистерезис
-local NETWORK_CHECK_INTERVAL = 30 -- секунд
+local HYSTERESIS_FACTOR = 0.95
+local NETWORK_CHECK_INTERVAL = 30
+local CONFIG_REFRESH_INTERVAL = 10
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
@@ -92,6 +107,13 @@ local state = {
     active_warnings = {
         cpu = false,
         ram = false
+    },
+
+    -- Кэш конфигурации
+    config_cache = {
+        cpu_threshold = DEFAULT_CPU_THRESHOLD,
+        ram_threshold_pct = DEFAULT_RAM_THRESHOLD_PCT,
+        last_refresh = 0
     }
 }
 
@@ -99,61 +121,85 @@ local state = {
 -- Внутренние функции (Private)
 -- ===========================================================================
 
+--- Обновляет кэш конфигурации
+local function _refresh_config()
+    local now = os_time()
+    if now - state.config_cache.last_refresh < CONFIG_REFRESH_INTERVAL then return end
+    
+    if MonitorConfig then
+        state.config_cache.cpu_threshold = MonitorConfig.CpuThreshold or DEFAULT_CPU_THRESHOLD
+        state.config_cache.ram_threshold_pct = MonitorConfig.RamThresholdPct or DEFAULT_RAM_THRESHOLD_PCT
+    end
+    state.config_cache.last_refresh = now
+end
+
 --- Возвращает EventDispatcher (ленивая загрузка)
 local function _get_event_dispatcher()
     return ModuleManager.get_module("core.event_dispatcher")
 end
 
---- Парсит /proc/self/status с ранним выходом
+--- Парсит /proc/self/status (Zero-allocation parsing)
 --- @return table|nil
 local function _parse_status()
     local f = io_open(PROC_STATUS, "r")
     if not f then return nil end
 
-    -- Используем пул для временной таблицы парсинга
-    local status = TablePool and TablePool.get("sys_status_temp") or {}
-    local found = 0
-    for line in f:lines() do
-        local key, val = line:match("^(%w+):%s+(%d+)")
-        if key == "VmRSS" then
-            status.resident = tonumber(val) or 0
-            found = found + 1
-        elseif key == "VmSize" then
-            status.virtual = tonumber(val) or 0
-            found = found + 1
-        elseif key == "Threads" then
-            status.threads = tonumber(val) or 0
-            found = found + 1
-        end
-        -- Ранний выход, если все 3 поля найдены
-        if found >= 3 then break end
-    end
+    local content = f:read(STATUS_READ_BUFFER)
     f:close()
+    if not content then return nil end
+
+    --- @type SysStatusTemp
+    local status = TablePool and TablePool.get("sys_status_temp") or {}
+    
+    -- Поиск VmRSS
+    local _, e, val = string_find(content, "VmRSS:%s+(%d+)")
+    if val then status.resident = tonumber(val) or 0 end
+    
+    -- Поиск VmSize
+    _, e, val = string_find(content, "VmSize:%s+(%d+)")
+    if val then status.virtual = tonumber(val) or 0 end
+    
+    -- Поиск Threads
+    _, e, val = string_find(content, "Threads:%s+(%d+)")
+    if val then status.threads = tonumber(val) or 0 end
+
+    -- Поиск FDSize
+    _, e, val = string_find(content, "FDSize:%s+(%d+)")
+    if val then status.fd_size = tonumber(val) or 0 end
+
     return status
 end
 
---- Парсит /proc/self/stat для получения тиков CPU
+--- Парсит /proc/self/stat (Zero-allocation parsing)
 --- @return number, number
 local function _parse_stat()
     local f = io_open(PROC_STAT, "r")
     if not f then return 0, 0 end
 
-    -- Оптимизация: читаем только начало файла
     local content = f:read(STAT_READ_BUFFER)
     f:close()
     if not content then return 0, 0 end
 
-    local utime, stime = 0, 0
-    local count = 0
-    for val in content:gmatch("[^%s]+") do
-        count = count + 1
-        if count == 14 then
-            utime = tonumber(val) or 0
-        elseif count == 15 then
-            stime = tonumber(val) or 0
-            break
-        end
+    -- utime и stime - это 14-й и 15-й параметры.
+    -- Пропускаем первые 13 пробелов.
+    local pos = 1
+    for i = 1, 13 do
+        local s, e = string_find(content, "%s+", pos)
+        if not s then return 0, 0 end
+        pos = e + 1
     end
+
+    -- Читаем 14-й параметр (utime)
+    local s, e = string_find(content, "%d+", pos)
+    if not s then return 0, 0 end
+    local utime = tonumber(string_sub(content, s, e)) or 0
+    pos = e + 1
+
+    -- Читаем 15-й параметр (stime)
+    s, e = string_find(content, "%d+", pos)
+    if not s then return utime, 0 end
+    local stime = tonumber(string_sub(content, s, e)) or 0
+
     return utime, stime
 end
 
@@ -181,8 +227,9 @@ local function _check_thresholds(report)
     local ed = _get_event_dispatcher()
     if not ed then return end
 
-    local cpu_threshold = (MonitorConfig and MonitorConfig.CpuThreshold) or DEFAULT_CPU_THRESHOLD
-    local ram_threshold_pct = (MonitorConfig and MonitorConfig.RamThresholdPct) or DEFAULT_RAM_THRESHOLD_PCT
+    _refresh_config()
+    local cpu_threshold = state.config_cache.cpu_threshold
+    local ram_threshold_pct = state.config_cache.ram_threshold_pct
     
     -- 1. Проверка CPU
     local cpu_val = report.cpu.usage
@@ -194,11 +241,10 @@ local function _check_thresholds(report)
                 status = "critical",
                 value = cpu_val,
                 threshold = cpu_threshold,
-                message = string.format("Высокая нагрузка на CPU: %.1f%%", cpu_val)
+                message = string_format("Высокая нагрузка на CPU: %.1f%%", cpu_val)
             })
         end
     else
-        -- Сброс варнинга только если упало ниже порога с учетом гистерезиса
         if cpu_val < (cpu_threshold * HYSTERESIS_FACTOR) then
             state.active_warnings.cpu = false
             ed:emit("sys:resource_warning", {
@@ -225,7 +271,7 @@ local function _check_thresholds(report)
                 threshold = ram_threshold_pct,
                 current_kb = report.memory.lua,
                 limit_kb = ram_limit_kb,
-                message = string.format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
+                message = string_format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
             })
         end
     else
@@ -254,6 +300,7 @@ function ResourceMonitor.check()
     local now_clock = os_clock()
     local now_time = os_time()
     local utime, stime = _parse_stat()
+    --- @type SysStatusTemp
     local status = _parse_status() or {}
     local current_lua_mem = collectgarbage("count")
 
@@ -263,9 +310,11 @@ function ResourceMonitor.check()
     end
 
     -- Получение нового отчета из пула
+    --- @type SystemReport
     local report = TablePool and TablePool.get("report_sys") or {}
     report.pid = state.pid
     report.uptime = now_time - state.start_time
+    report.fd_size = status.fd_size or 0
 
     -- Метрики CPU
     report.cpu = report.cpu or (TablePool and TablePool.get("sys_cpu") or {})
@@ -305,30 +354,38 @@ function ResourceMonitor.check()
 
     state.last_lua_mem = current_lua_mem
 
-    -- Метрики сети (с кэшированием)
+    -- Метрики сети (с кэшированием и переиспользованием таблиц)
     report.network = report.network or (TablePool and TablePool.get("sys_net") or {})
     
     if not state.cached_network or (now_time - state.last_network_check > NETWORK_CHECK_INTERVAL) then
-        -- Очищаем старый кэш, если он был
-        if state.cached_network and TablePool then
-            TablePool.release(state.cached_network, "sys_net", true)
-        end
+        -- Вместо полной очистки, переиспользуем существующие таблицы в кэше
+        local net_list = state.cached_network or (TablePool and TablePool.get("sys_net") or {})
+        local idx = 1
         
-        local net_list = TablePool and TablePool.get("sys_net") or {}
         if utils_ifaddrs and type(utils_ifaddrs) == "function" then
             local interfaces = utils_ifaddrs()
-            --- @cast interfaces table<string, AstraInterfaceInfo>
             if type(interfaces) == "table" then
                 for name, addrs in pairs(interfaces) do
                     if addrs.ipv4 and addrs.ipv4[1] then
-                    local item = TablePool and TablePool.get("sys_net_item") or {}
-                    item.interface = name
-                    item.ip = addrs.ipv4[1]
-                    table_insert(net_list, item)
+                        local item = net_list[idx]
+                        if not item then
+                            item = TablePool and TablePool.get("sys_net_item") or {}
+                            table_insert(net_list, item)
+                        end
+                        item.interface = name
+                        item.ip = addrs.ipv4[1]
+                        idx = idx + 1
                     end
                 end
             end
         end
+        
+        -- Удаляем лишние элементы из кэша, если их стало меньше
+        while #net_list >= idx do
+            local old_item = table_remove(net_list)
+            if TablePool then TablePool.release(old_item, "sys_net_item") end
+        end
+        
         state.cached_network = net_list
         state.last_network_check = now_time
     end
@@ -401,19 +458,19 @@ local f_pid = io_open(PROC_STAT, "r")
 if f_pid then
     local content = f_pid:read(64)
     if content then
-        state.pid = tonumber(content:match("^(%d+)"))
+        state.pid = tonumber(string_match(content, "^(%d+)"))
     end
     f_pid:close()
 end
 
 -- Регистрация типов в TablePool
 if TablePool then
-    TablePool.register_type("report_sys", { "pid", "uptime", "cpu", "memory", "network" }, 10, 2)
+    TablePool.register_type("report_sys", { "pid", "uptime", "cpu", "memory", "network", "fd_size" }, 10, 2)
     TablePool.register_type("sys_cpu", { "usage", "user", "system", "threads" }, 10, 2)
     TablePool.register_type("sys_mem", { "lua", "lua_delta", "lua_post_gc", "resident", "virtual" }, 10, 2)
     TablePool.register_type("sys_net", nil, 10, 2)
     TablePool.register_type("sys_net_item", { "interface", "ip" }, 20, 5)
-    TablePool.register_type("sys_status_temp", { "resident", "virtual", "threads" }, 5, 1, true)
+    TablePool.register_type("sys_status_temp", { "resident", "virtual", "threads", "fd_size" }, 5, 1, true)
 end
 
 -- Автоматический запуск при загрузке
