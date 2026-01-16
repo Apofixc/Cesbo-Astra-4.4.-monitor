@@ -98,7 +98,7 @@ end
 
 --- Создает матчер для сложных масок с множественными сегментами (только "*")
 --- Например: "prefix*middle*suffix"
---- Оптимизировано: JIT-компиляция логики поиска сегментов.
+--- Оптимизировано: читаемый цикл с использованием string.find.
 --- @private
 --- @param pattern string Маска
 --- @return function Функция-матчер
@@ -114,40 +114,28 @@ local function _create_segments_matcher(pattern)
     local first_is_star = string_sub(pattern, 1, 1) == "*"
     local last_is_star = string_sub(pattern, -1, -1) == "*"
 
-    local code_parts = { "return function(name)" }
-    table_insert(code_parts, "if not name or type(name) ~= 'string' then return false end")
-    table_insert(code_parts, "local pos = 1")
-    table_insert(code_parts, "local s, e")
+    return function(name)
+        if not name or type(name) ~= "string" then return false end
+        local pos = 1
 
-    local uv_env = { type = type, string_find = string_find }
-
-    for i = 1, num_segments do
-        local seg = segments[i]
-        local uv_name = "seg" .. i
-        uv_env[uv_name] = seg
-
-        if i == 1 and not first_is_star then
-            table_insert(code_parts, string_format("if string_find(name, %s, 1, true) ~= 1 then return false end", uv_name))
-            table_insert(code_parts, string_format("pos = %d", #seg + 1))
-        elseif i == num_segments and not last_is_star then
-            table_insert(code_parts, string_format("s = string_find(name, %s, -%d, true)", uv_name, #seg))
-            table_insert(code_parts, string_format("if not s or (s + %d) ~= #name then return false end", #seg - 1))
-        else
-            table_insert(code_parts, string_format("s, e = string_find(name, %s, pos, true)", uv_name))
-            table_insert(code_parts, "if not s then return false end")
-            table_insert(code_parts, "pos = e + 1")
+        for i = 1, num_segments do
+            local seg = segments[i]
+            if i == 1 and not first_is_star then
+                -- Проверка префикса
+                if string_find(name, seg, 1, true) ~= 1 then return false end
+                pos = #seg + 1
+            elseif i == num_segments and not last_is_star then
+                -- Проверка суффикса
+                local s = string_find(name, seg, -#seg, true)
+                if not s or (s + #seg - 1) ~= #name then return false end
+            else
+                -- Поиск сегмента в середине
+                local s, e = string_find(name, seg, pos, true)
+                if not s then return false end
+                pos = e + 1
+            end
         end
-    end
-
-    table_insert(code_parts, "return true")
-    table_insert(code_parts, "end")
-
-    local factory, err = load(table_concat(code_parts, "\n"), "=(wildcard_jit)", "t", uv_env)
-    if factory then
-        return factory()
-    else
-        -- Fallback на старую логику при ошибке JIT
-        return function(name) return false end
+        return true
     end
 end
 
