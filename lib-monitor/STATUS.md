@@ -43,7 +43,7 @@
 | :--- | :---: | :--- | :--- |
 | **BaseMonitor** | 90% | Стабилен | - |
 | **ChannelMonitor** | 75% | Требует длительных тестов | - |
-| **ResourceMonitor** | 85% | Стабилен | - |
+| **ResourceMonitor** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
 
 ---
 
