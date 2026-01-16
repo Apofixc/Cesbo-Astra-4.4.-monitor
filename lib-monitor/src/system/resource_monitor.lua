@@ -71,7 +71,6 @@ local NETWORK_CHECK_INTERVAL = 30 -- секунд
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
-    log = nil,
     start_time = os_time(),
     last_clock = 0,
     last_utime = 0,
@@ -369,7 +368,7 @@ end
 function ResourceMonitor.start(interval)
     local scheduler = Scheduler and Scheduler.get_instance()
     if not scheduler then
-        if state.log then state.log:error(COMPONENT_NAME, "Scheduler not available") end
+        if Logger then Logger.error(COMPONENT_NAME, "Scheduler not available") end
         return
     end
 
@@ -396,9 +395,6 @@ end
 -- ===========================================================================
 -- Инициализация модуля
 -- ===========================================================================
-
--- Инициализация логгера
-state.log = Logger and Logger.new("resource-monitor")
 
 -- Инициализация PID
 local f_pid = io_open(PROC_STAT, "r")
