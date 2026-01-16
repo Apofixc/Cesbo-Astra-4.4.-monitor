@@ -51,12 +51,11 @@ BaseRepository.__index = BaseRepository
 -- ===========================================================================
 
 --- Выполняет очистку ресурсов монитора при удалении
---- @param self BaseRepository
 --- @param name string Имя монитора
 --- @param instance any Экземпляр монитора
 --- @param force boolean Флаг принудительной остановки
 --- @return table|nil Конфигурация монитора
-local function _destroy_instance(self, name, instance, force)
+function BaseRepository:_destroy_instance(name, instance, force)
     -- Все мониторы наследуются от BaseMonitor и имеют метод destroy
     local config = instance.destroy and instance:destroy(force)
     if config then
@@ -76,11 +75,10 @@ local function _destroy_instance(self, name, instance, force)
 end
 
 --- Публикует событие через EventDispatcher
---- @param self BaseRepository
 --- @param event_type string Тип события
 --- @param name string Имя монитора
 --- @param data? table Дополнительные данные
-local function _emit_event(self, event_type, name, data)
+function BaseRepository:_emit_event(event_type, name, data)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
     if not dispatcher then return end
 
@@ -174,7 +172,7 @@ function BaseRepository:unregister(name, force)
         return nil
     end
 
-    local config = _destroy_instance(self, name, instance, force == true)
+    local config = self:_destroy_instance(name, instance, force == true)
     if not config then
         Logger.error(self._component_name, "unregister: не удалось уничтожить объект '%s'", name)
     end
@@ -255,7 +253,7 @@ function BaseRepository:auto_recover()
                         name, attempts - 1, max_attempts)
                     
                     s.stats.limit_reached = s.stats.limit_reached + 1
-                    _emit_event(self, EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1 })
+                    self:_emit_event(EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1 })
                     
                     if monitor.pause then monitor:pause() end
                     goto next_monitor
@@ -265,7 +263,7 @@ function BaseRepository:auto_recover()
                     "Попытка восстановления зависшего монитора: %s (попытка %d/%d)",
                     name, attempts, max_attempts)
                 
-                _emit_event(self, EVENTS.RECOVERY_ATTEMPT, name, { attempt = attempts, max = max_attempts })
+                self:_emit_event(EVENTS.RECOVERY_ATTEMPT, name, { attempt = attempts, max = max_attempts })
 
                 -- АТОМАРНОЕ ВОССТАНОВЛЕНИЕ (Shadow Copy)
                 local config = monitor.get_config and monitor:get_config()
@@ -285,7 +283,7 @@ function BaseRepository:auto_recover()
                         s.stats.total_recovered = s.stats.total_recovered + 1
                         
                         Logger.info(self._component_name, "Монитор %s успешно восстановлен (атомарно)", name)
-                        _emit_event(self, EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts })
+                        self:_emit_event(EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts })
                     else
                         -- Неудача старта нового экземпляра
                         failed = failed + 1
@@ -294,7 +292,7 @@ function BaseRepository:auto_recover()
                         
                         Logger.error(self._component_name,
                             "Не удалось перезапустить новый экземпляр %s при восстановлении", name)
-                        _emit_event(self, EVENTS.RECOVERY_FAILED, name, { attempt = attempts, error = "start_failed" })
+                        self:_emit_event(EVENTS.RECOVERY_FAILED, name, { attempt = attempts, error = "start_failed" })
                     end
                 else
                     failed = failed + 1
