@@ -75,6 +75,7 @@ end
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriptionManager"
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
+local CONNECTION_CLOSE = "Connection: close"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
 local MAX_RETRIES = 5
 local RETRY_DELAY = 5
@@ -201,7 +202,7 @@ local Transport = {
             timeout = HTTP_TIMEOUT,
             headers = {
                 get_user_agent(), "Host: " .. config.host .. ":" .. config.port,
-                CONTENT_TYPE, "Content-Length: " .. #content, "Connection: close"
+                CONTENT_TYPE, "Content-Length: " .. #content, CONNECTION_CLOSE
             },
             callback = function(s, response)
                 -- Ретрай при ошибке соединения (not s) или HTTP 5xx

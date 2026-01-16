@@ -188,11 +188,12 @@ local function _check_condition(data, condition, sub_id, cond_idx)
         local key = tostring(cond_idx)
 
         if is_match then
-            if not d_state[key] then
+            local start_time = d_state[key]
+            if not start_time then
                 d_state[key] = os_time()
                 return false
             end
-            return (os_time() - d_state[key]) >= duration
+            return (os_time() - start_time) >= duration
         else
             d_state[key] = nil
             return false

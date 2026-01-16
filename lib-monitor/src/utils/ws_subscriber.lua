@@ -109,10 +109,12 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
             -- Инкремент счетчика ошибок
             error_count = error_count + 1
             clients[client] = error_count
-            
+
             -- Если ошибок слишком много (например, 5 подряд), удаляем клиента
             if error_count >= 5 then
                 clients[client] = nil
+                -- Принудительное закрытие сокета, если метод доступен
+                if server.close then pcall(server.close, server, client) end
                 Logger.debug(COMPONENT_NAME, "Клиент WS удален после 5 ошибок: %s", tostring(err))
             else
                 Logger.debug(COMPONENT_NAME, "Ошибка отправки клиенту WS (попытка %d): %s", error_count, tostring(err))

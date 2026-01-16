@@ -36,6 +36,8 @@ local MAX_LVC_SIZE = 1000
 local MAX_QUEUE_SIZE = 1000
 --- Лимит обработки событий за один тик планировщика
 local DEFAULT_BATCH_LIMIT = 100
+--- Максимальный лимит при высокой нагрузке
+local MAX_BATCH_LIMIT = 500
 --- TTL для записей LVC по умолчанию (1 час)
 local DEFAULT_LVC_TTL = 3600
 
@@ -74,7 +76,7 @@ local function _generate_event_id()
     return "evt_" .. state.event_counter
 end
 
---- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности.
+--- Копирует таблицу, используя пул для всех уровней вложенности.
 --- Оптимизировано: итеративный подход для предотвращения переполнения стека.
 --- @private
 --- @param data any Данные для копирования (таблица или примитив)
@@ -88,16 +90,18 @@ local function _deep_copy_to_pool(data)
 
     while stack_ptr > 0 do
         local curr = stack[stack_ptr]
+        local src = curr.src
+        local dst = curr.dst
         stack_ptr = stack_ptr - 1
 
-        for k, v in pairs(curr.src) do
+        for k, v in pairs(src) do
             if type(v) == "table" then
                 local v_copy = TablePool.get("lvc_sub")
-                curr.dst[k] = v_copy
+                dst[k] = v_copy
                 stack_ptr = stack_ptr + 1
                 stack[stack_ptr] = {src = v, dst = v_copy}
             else
-                curr.dst[k] = v
+                dst[k] = v
             end
         end
     end
@@ -387,13 +391,13 @@ function EventDispatcher:_process_queue()
     local sub_mgr = self.subscription_manager
 
     -- Инкрементальная очистка старых записей LVC (TTL)
-    -- Оптимизация: проверяем по 5 записей за тик вместо полного перебора раз в минуту.
+    -- Оптимизация: проверяем по 10 записей за тик вместо полного перебора раз в минуту.
     -- Используем безопасный метод удаления при итерации через next().
     local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
     local checked = 0
     local current_key = self._last_lvc_check_key
     
-    while checked < 5 do
+    while checked < 10 do
         local k, entry = next(self._lvc, current_key)
         if not k then 
             current_key = nil
@@ -419,7 +423,7 @@ function EventDispatcher:_process_queue()
     for _, q in pairs(self.event_queues) do current_total_size = current_total_size + q.size end
     
     if current_total_size > (MAX_QUEUE_SIZE * 0.5) then
-        limit = limit * 2
+        limit = math.min(MAX_BATCH_LIMIT, limit * 2)
     end
 
     local processed_in_batch = 0
