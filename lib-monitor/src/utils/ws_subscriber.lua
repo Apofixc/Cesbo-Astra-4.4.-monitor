@@ -167,7 +167,7 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
     for client, info in pairs(clients) do
         if info.batch then
             -- Режим батчинга: добавляем в буфер
-            message = message or '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
+            message = message or ('{"event":"' .. event_type .. '","data":' .. json_data .. '}')
             table_insert(info.buffer, message)
             
             -- Если буфер слишком большой, сбрасываем немедленно
@@ -179,7 +179,7 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
             end
         else
             -- Обычный режим: немедленная отправка
-            message = message or '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
+            message = message or ('{"event":"' .. event_type .. '","data":' .. json_data .. '}')
             local ok, err = pcall(send, server, client, message)
             if not ok then
                 info.error_count = info.error_count + 1
