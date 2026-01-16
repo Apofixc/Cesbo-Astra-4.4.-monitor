@@ -6,18 +6,22 @@
 -- и правила валидации для мониторов.
 -- ===========================================================================
 
--- [ 1. Стандартные Lua функции ]
+-- 1. Стандартные Lua функции
+local io_open = _G.io.open
 local os_time = _G.os.time
 local pairs = _G.pairs
-local type = _G.type
-local tostring = _G.tostring
 local pcall = _G.pcall
-local io_open = _G.io.open
+local tostring = _G.tostring
+local type = _G.type
 
--- [ 2. Функции из ModuleManager ]
+-- 2. Функции из ModuleManager.get_module()
 local ModuleManager = _G.ModuleManager
 
--- [ 3. Константы ]
+-- 3. Глобальные зависимости Astra
+-- (Глобальные зависимости загружаются динамически в _load_from_file)
+
+-- 4. Константы и конфигурации
+local COMPONENT_NAME = "MonitorConfig"
 local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 local GLOBAL_CONFIG_PATH = "/opt/config.json"
 
@@ -27,72 +31,7 @@ local GLOBAL_CONFIG_PATH = "/opt/config.json"
 --- @field max number|nil Максимальное значение (для чисел)
 --- @field default any Значение по умолчанию
 
---- @class MonitorConfig
---- @field STREAM table<string, string> Карта имен потоков по их IP-адресам
---- @field LogLevel string Уровень логирования ("DEBUG"|"INFO"|"WARN"|"ERROR"|"NONE")
---- @field LogFormat string Формат логирования ("TEXT"|"JSON")
---- @field LogBatchEnabled boolean Включить пакетное логирование
---- @field LogBufferSize number Размер буфера логов (0 - выключено)
---- @field MaxPayloadSize number Максимальный размер полезной нагрузки HTTP
---- @field CorsAllowOrigin string Настройки CORS
---- @field HttpTimeout number Таймаут HTTP-запросов
---- @field ChannelMonitorLimit number Максимальное количество одновременно активных мониторов каналов
---- @field DvbMonitorLimit number Максимальное количество одновременно активных DVB-мониторов
---- @field MaxMonitorNameLength number Максимальная длина имени монитора
---- @field MinRate number Минимальное допустимое значение погрешности
---- @field MaxRate number Максимальное допустимое значение погрешности
---- @field MinTimeCheck number Минимальный интервал между проверками
---- @field MaxTimeCheck number Максимальный интервал между проверками
---- @field MinMethodComparison number Минимальное значение для метода сравнения
---- @field MaxMethodComparison number Максимальное значение для метода сравнения
---- @field ExtraDebug boolean Флаг расширенной отладки
---- @field GcPause number Параметр GC setpause (по умолчанию 100)
---- @field GcStepMul number Параметр GC setstepmul (по умолчанию 500)
---- @field SchedulerInterval number Интервал тика планировщика в секундах
---- @field MemoryLimitMb number Лимит памяти для адаптивного GC (МБ)
---- @field AutoRecoverEnabled boolean Включить автономное восстановление
---- @field AutoRecoverInterval number Интервал авто-восстановления (сек)
---- @field MaxRecoveryAttempts number Максимальное количество попыток восстановления
---- @field RecoveryCooldown number Время стабильной работы для сброса попыток (сек)
---- @field PidStatsLimit number Лимит отслеживаемых PID в ChannelMonitor
---- @field MaxCounterValue number Максимальное значение счетчиков
---- @field MaxErrorCount number Максимальное значение ошибок
---- @field LvcTtl number TTL для Last Value Cache в секундах
---- @field MaxLvcSize number Максимальный размер LVC
---- @field MaxQueueSize number Максимальный размер очереди событий
---- @field EventBatchLimit number Лимит событий за один проход очереди
---- @field MaxBatchLimit number Максимальный лимит событий при высокой нагрузке
---- @field MaxRetryQueueSize number Лимит очереди повторов HTTP
---- @field MaxRetries number Максимальное количество попыток HTTP
---- @field RetryDelay number Базовая задержка повтора HTTP (сек)
---- @field BatchEnabled boolean Включить пакетную отправку событий
---- @field BatchFlushInterval number Интервал сброса буфера в секундах
---- @field BatchMaxSize number Максимальный размер пачки событий
---- @field DefaultBatchMode string Режим по умолчанию ("single" или "array")
---- @field MaxPoolSize number Максимальный размер пула таблиц
---- @field PoolLimits table<string, number> Индивидуальные лимиты для типов пулов
---- @field PoolDebug boolean Режим отладки пулов
---- @field CpuThreshold number Порог использования CPU (%)
---- @field RamThresholdPct number Порог использования RAM (%)
---- @field FdThreshold number Порог открытых файловых дескрипторов
---- @field HysteresisFactor number Коэффициент гистерезиса для событий
---- @field NetworkCheckInterval number Интервал проверки сети (сек)
---- @field ConfigRefreshInterval number Интервал обновления кэша конфига в модулях (сек)
---- @field AdaptiveTickThresholdCpu number Порог CPU для адаптивного интервала (%)
---- @field AdaptiveTickThresholdRam number Порог RAM для адаптивного интервала (%)
---- @field TickIntervalNormal number Обычный интервал опроса ресурсов (сек)
---- @field TickIntervalFast number Ускоренный интервал опроса ресурсов (сек)
---- @field RareMetricInterval number Интервал для редких метрик (FD, Threads)
---- @field MaxCpuJump number Максимальный скачок CPU за тик (%)
---- @field MaxRamJumpPct number Максимальный скачок RAM за тик (%)
---- @field CpuMovingAverageWindow number Окно скользящего среднего для CPU
---- @field MaxCacheSize table<string, number> Лимиты кэшей для разных модулей
---- @field subscribers table<string, table[]> Список подписчиков
---- @field ValidationSchema table<string, ValidationRule> Схема валидации параметров
-local MonitorConfig = {}
-
--- [ 4. Внутреннее состояние ]
-
+-- 5. Внутреннее состояние (Private State)
 --- @class MonitorConfigState
 --- @field cache table<string, any> Кэш вычисляемых значений
 --- @field cache_ttl number Время жизни кэша (сек)
@@ -103,7 +42,12 @@ local _state = {
     cache_timestamp = 0
 }
 
--- [ 5. Конфигурация по умолчанию ]
+--- @class MonitorConfig
+local MonitorConfig = {}
+
+-- ===========================================================================
+-- Конфигурация по умолчанию
+-- ===========================================================================
 
 -- Имена потоков
 MonitorConfig.STREAM = {
@@ -192,6 +136,10 @@ MonitorConfig.DefaultBatchMode = "single"
 MonitorConfig.MaxPoolSize = 100
 MonitorConfig.PoolLimits = {}
 MonitorConfig.PoolDebug = false
+MonitorConfig.PoolAdaptiveThreshold = 0.2
+MonitorConfig.PoolAdaptiveStep = 0.25
+MonitorConfig.PoolMinLimit = 10
+MonitorConfig.PoolMaintenanceInterval = 300
 MonitorConfig.MaxCacheSize = {
     wildcard = 1000,
     filter_engine = 500,
@@ -204,9 +152,12 @@ MonitorConfig.MaxCounterValue = 1000000000
 MonitorConfig.MaxErrorCount = 1000000
 MonitorConfig.subscribers = {}
 
--- [ 6. Внутренние функции ]
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
 
---- Загружает конфигурацию из внешних JSON файлов
+--- Загружает конфигурацию из внешних JSON файлов.
+--- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
 --- @private
 local function _load_from_file()
     if not ModuleManager then return end
@@ -222,6 +173,7 @@ local function _load_from_file()
             local success, data = pcall(json_decode, content)
             if success and type(data) == "table" then
                 for k, v in pairs(data) do
+                    -- Обновляем только существующие ключи для защиты от мусора в JSON
                     if MonitorConfig[k] ~= nil then
                         MonitorConfig[k] = v
                     end
@@ -246,18 +198,22 @@ local function _load_from_file()
     end
 end
 
--- [ 7. Публичное API ]
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
 
---- Перезагружает конфигурацию из файлов и выполняет валидацию
---- @return boolean success, string|nil error_message
+--- Перезагружает конфигурацию из файлов и выполняет валидацию.
+--- @return boolean success Статус успеха
+--- @return string|nil error_message Сообщение об ошибке при неудаче
 function MonitorConfig.reload()
     _load_from_file()
     _state.cache = {} -- Сброс кэша при перезагрузке
     return MonitorConfig.validate()
 end
 
---- Валидирует текущую конфигурацию
---- @return boolean success, string|nil error_message
+--- Валидирует текущую конфигурацию на соответствие типам и диапазонам.
+--- @return boolean success Статус валидности
+--- @return string|nil error_message Описание первой найденной ошибки
 function MonitorConfig.validate()
     -- 1. Логирование
     if type(MonitorConfig.LogLevel) ~= "string" then return false, "LogLevel must be a string" end
@@ -315,13 +271,19 @@ function MonitorConfig.validate()
         return false, "Invalid DefaultBatchMode: " .. tostring(MonitorConfig.DefaultBatchMode)
     end
 
+    -- 6. Пулы
+    if type(MonitorConfig.PoolAdaptiveThreshold) ~= "number" then return false, "PoolAdaptiveThreshold must be a number" end
+    if type(MonitorConfig.PoolAdaptiveStep) ~= "number" then return false, "PoolAdaptiveStep must be a number" end
+    if type(MonitorConfig.PoolMinLimit) ~= "number" then return false, "PoolMinLimit must be a number" end
+    if type(MonitorConfig.PoolMaintenanceInterval) ~= "number" then return false, "PoolMaintenanceInterval must be a number" end
+
     return true
 end
 
---- Возвращает значение из кэша или генерирует новое
+--- Возвращает значение из кэша или генерирует новое, если кэш просрочен.
 --- @param key string Уникальный ключ кэша
---- @param generator function Функция для генерации значения
---- @return any Значение
+--- @param generator function Функция для генерации значения при промахе
+--- @return any Значение из кэша или сгенерированное
 function MonitorConfig.get_cached(key, generator)
     local now = os_time()
     if _state.cache_timestamp + _state.cache_ttl < now then
@@ -336,16 +298,17 @@ function MonitorConfig.get_cached(key, generator)
     return _state.cache[key]
 end
 
---- Возвращает имя потока по IP с использованием кэширования
---- @param ip string IP-адрес потока
---- @return string Имя потока или IP
+--- Возвращает человекочитаемое имя потока по его IP-адресу.
+--- Использует кэширование для оптимизации частых вызовов.
+--- @param ip string IP-адрес
+--- @return string Имя потока или исходный IP
 function MonitorConfig.get_stream_name_cached(ip)
     return MonitorConfig.get_cached("stream_" .. ip, function()
         return MonitorConfig.STREAM[ip] or ip
     end)
 end
 
---- Возвращает текущее окружение системы
+--- Определяет текущее окружение системы на основе файла /opt/astra/environment.
 --- @return string "development" или "production"
 function MonitorConfig.get_environment()
     local env_file = io_open("/opt/astra/environment", "r")
@@ -359,14 +322,15 @@ function MonitorConfig.get_environment()
     return "production"
 end
 
---- Проверяет, является ли текущее окружение средой разработки
---- @return boolean
+--- Проверяет, запущена ли система в режиме разработки.
+--- @return boolean true если разработка
 function MonitorConfig.is_development()
     return MonitorConfig.get_environment() == "development"
 end
 
---- Сохраняет текущую конфигурацию в JSON файл
---- @return boolean Статус выполнения
+--- Сохраняет текущую конфигурацию в JSON файл.
+--- Исключает служебные поля, такие как ValidationSchema и функции.
+--- @return boolean success Статус выполнения
 function MonitorConfig.save()
     if not ModuleManager then return false end
     local json_encode = ModuleManager.get_global_dependency("json.encode")
@@ -390,20 +354,23 @@ function MonitorConfig.save()
     return true
 end
 
--- [ 8. Инициализация ]
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
--- Вызов загрузки при инициализации модуля
+-- Первичная загрузка из файлов
 _load_from_file()
 
--- Настройка окружения
+-- Автоматическая настройка уровней логирования для режима разработки
 if MonitorConfig.is_development() then
     MonitorConfig.ExtraDebug = true
     MonitorConfig.LogLevel = "DEBUG"
 end
 
--- [ 9. Схема валидации ]
+-- [ Схема валидации для параметров мониторов ]
 
 --- Схема валидации для параметров мониторов.
+--- Используется в BaseMonitor для проверки входящих настроек конкретных экземпляров.
 --- @type table<string, ValidationRule>
 MonitorConfig.ValidationSchema = {
     channel_rate = {
