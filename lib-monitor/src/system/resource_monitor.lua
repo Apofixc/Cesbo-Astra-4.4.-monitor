@@ -95,6 +95,10 @@ local state = {
     last_post_gc_mem = 0,
     pid = 0,
     
+    -- Persistent File Handles
+    stat_file = nil,
+    status_file = nil,
+    
     -- Статический отчет (Static Table Reuse)
     report = {
         pid = 0,
@@ -139,6 +143,11 @@ local state = {
     mem_history_idx = 0
 }
 
+-- Пре-аллокация слотов для сети (минимизация аллокаций при первом запуске)
+for i = 1, 10 do
+    state.report.network[i] = { interface = "", ip = "" }
+end
+
 -- ===========================================================================
 -- Внутренние функции (Private)
 -- ===========================================================================
@@ -166,53 +175,23 @@ end
 --- @param report SystemReport Таблица отчета для заполнения
 --- @return boolean Успех
 local function _parse_status(report)
-    local f = io_open(PROC_STATUS, "r")
-    if not f then return false end
+    local f = state.status_file
+    if not f then 
+        state.status_file = io_open(PROC_STATUS, "r")
+        f = state.status_file
+        if not f then return false end
+    end
 
+    f:seek("set", 0)
     local content = f:read(STATUS_READ_BUFFER)
-    f:close()
     if not content then return false end
 
-    local pos = 1
-    
-    -- Поиск FDSize
-    local s, e = string_find(content, "FDSize:%s+", pos)
-    if s then
-        local ns, ne = string_find(content, "%d+", e + 1)
-        if ns then 
-            report.fd_size = tonumber(string_sub(content, ns, ne)) or 0 
-            pos = ne + 1
-        end
-    end
-
-    -- Поиск VmSize
-    s, e = string_find(content, "VmSize:%s+", pos)
-    if s then
-        local ns, ne = string_find(content, "%d+", e + 1)
-        if ns then 
-            report.memory.virtual = tonumber(string_sub(content, ns, ne)) or 0 
-            pos = ne + 1
-        end
-    end
-
-    -- Поиск VmRSS
-    s, e = string_find(content, "VmRSS:%s+", pos)
-    if s then
-        local ns, ne = string_find(content, "%d+", e + 1)
-        if ns then 
-            report.memory.resident = tonumber(string_sub(content, ns, ne)) or 0 
-            pos = ne + 1
-        end
-    end
-    
-    -- Поиск Threads
-    s, e = string_find(content, "Threads:%s+", pos)
-    if s then
-        local ns, ne = string_find(content, "%d+", e + 1)
-        if ns then 
-            report.cpu.threads = tonumber(string_sub(content, ns, ne)) or 0 
-        end
-    end
+    -- Однопроходный поиск ключевых метрик
+    -- Используем string.match с захватом для максимальной скорости
+    report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
+    report.memory.virtual = tonumber(string_match(content, "VmSize:%s+(%d+)")) or report.memory.virtual
+    report.memory.resident = tonumber(string_match(content, "VmRSS:%s+(%d+)")) or report.memory.resident
+    report.cpu.threads = tonumber(string_match(content, "Threads:%s+(%d+)")) or report.cpu.threads
 
     return true
 end
@@ -220,33 +199,37 @@ end
 --- Парсит /proc/self/stat (Zero-allocation parsing)
 --- @return number, number
 local function _parse_stat()
-    local f = io_open(PROC_STAT, "r")
-    if not f then return 0, 0 end
+    local f = state.stat_file
+    if not f then 
+        state.stat_file = io_open(PROC_STAT, "r")
+        f = state.stat_file
+        if not f then return 0, 0 end
+    end
 
+    f:seek("set", 0)
     local content = f:read(STAT_READ_BUFFER)
-    f:close()
     if not content then return 0, 0 end
 
-    -- Находим конец имени процесса (может содержать пробелы)
+    -- Находим конец имени процесса (может содержать пробелы и скобки)
     local _, last_paren = string_find(content, ".*%)")
     if not last_paren then return 0, 0 end
     
-    -- utime и stime - это 14-й и 15-й параметры.
-    -- После имени процесса (2-й параметр) идет еще 11 параметров до utime.
+    -- Извлекаем utime и stime (14-й и 15-й параметры)
+    -- Пропускаем 11 параметров после закрывающей скобки имени процесса
     local pos = last_paren + 2
     for i = 1, 11 do
-        local s, e = string_find(content, "%s+", pos)
-        if not s then return 0, 0 end
+        local _, e = string_find(content, "%s+", pos)
+        if not e then return 0, 0 end
         pos = e + 1
     end
 
-    -- Читаем 14-й параметр (utime)
+    -- Читаем utime
     local s, e = string_find(content, "%d+", pos)
     if not s then return 0, 0 end
     local utime = tonumber(string_sub(content, s, e)) or 0
     pos = e + 1
 
-    -- Читаем 15-й параметр (stime)
+    -- Читаем stime
     s, e = string_find(content, "%d+", pos)
     if not s then return utime, 0 end
     local stime = tonumber(string_sub(content, s, e)) or 0
@@ -383,7 +366,7 @@ local function _check_thresholds(report)
         for i = 1, 9 do
             local curr = state.mem_history[((state.mem_history_idx - i - 1) % 10) + 1]
             local prev = state.mem_history[((state.mem_history_idx - i) % 10) + 1]
-            if curr and prev and curr >= prev then
+            if curr and prev and curr <= prev then -- Исправлено: curr должен быть > prev для роста
                 is_growing = false
                 break
             end
@@ -394,6 +377,8 @@ local function _check_thresholds(report)
                 status = "warning",
                 message = "Обнаружен тренд роста памяти Lua (возможна утечка)"
             })
+            -- GC Smoothing: выполняем микро-шаг сборки мусора для сглаживания пиков
+            collectgarbage("step", 100)
         end
     end
 end
@@ -519,7 +504,9 @@ function ResourceMonitor.start(interval)
         return
     end
 
-    local run_interval = interval or (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
+    local run_interval = interval or (MonitorConfig and MonitorConfig.SchedulerInterval) or TICK_INTERVAL_NORMAL
+    state.current_tick_interval = run_interval
+
     scheduler:add_task("resource_monitor", function()
         ResourceMonitor.check()
     end, run_interval)
@@ -530,6 +517,16 @@ function ResourceMonitor.stop()
     local scheduler = Scheduler and Scheduler.get_instance()
     if scheduler then
         scheduler:remove_task("resource_monitor")
+    end
+    
+    -- Закрытие постоянных дескрипторов
+    if state.stat_file then
+        state.stat_file:close()
+        state.stat_file = nil
+    end
+    if state.status_file then
+        state.status_file:close()
+        state.status_file = nil
     end
 end
 
