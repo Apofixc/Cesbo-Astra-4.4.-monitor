@@ -25,7 +25,15 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
--- (Используем Scheduler вместо прямого обращения к timer)
+local _json_encode = nil
+
+--- Возвращает функцию json.encode
+--- @return function|nil
+local function get_json_encode()
+    if _json_encode then return _json_encode end
+    _json_encode = ModuleManager.get_global_dependency("json.encode")
+    return _json_encode
+end
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "EventDispatcher"
@@ -213,6 +221,29 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
 
     local now = os_time()
+    local p = priority or self.PRIORITIES.MEDIUM
+
+    -- Load Shedding: защита от перегрузок (сброс низкоприоритетных событий)
+    local total_capacity = MAX_QUEUE_SIZE * 4
+    if self._total_queued_count > (total_capacity * 0.9) then
+        if p == self.PRIORITIES.LOW then
+            self.stats.dropped = self.stats.dropped + 1
+            if TablePool and options and options.is_table then
+                TablePool.release(event_data, nil, true)
+            end
+            return nil
+        end
+    end
+    if self._total_queued_count > (total_capacity * 0.95) then
+        if p == self.PRIORITIES.MEDIUM then
+            self.stats.dropped = self.stats.dropped + 1
+            if TablePool and options and options.is_table then
+                TablePool.release(event_data, nil, true)
+            end
+            return nil
+        end
+    end
+
     local sub_mgr = self.subscription_manager
 
     -- Оптимизация: Subscription-aware Emitting
@@ -243,12 +274,23 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
 
         local cache_data = event_data
+        local cache_json = nil
+
         if type(event_data) == "table" then
             -- Глубокое копирование данных в пул для LVC
             cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
                 cache_data[k] = _deep_copy_to_pool(v)
             end
+
+            -- Предварительное кодирование в JSON для внешних подписчиков (Hybrid LVC)
+            local encode = get_json_encode()
+            if encode then
+                local ok, res = pcall(encode, event_data)
+                if ok then cache_json = res end
+            end
+        else
+            cache_json = tostring(event_data)
         end
 
         -- Если в LVC уже есть данные для этого типа, возвращаем их в пул
@@ -257,11 +299,11 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
         local entry = TablePool and TablePool.get("lvc_wrapper") or {}
         entry.data = cache_data
+        entry.json = cache_json
         entry.timestamp = now
         self._lvc[event_type] = entry
     end
 
-    local p = priority or self.PRIORITIES.MEDIUM
     local event = TablePool and TablePool.get("event") or {}
 
     event.id = _generate_event_id()
@@ -534,7 +576,7 @@ if tp then
         "id", "type", "data", "priority", "timestamp", "options", "is_table"
     }, 100, 10)
     tp.register_type("event_options", nil, 100, 10)
-    tp.register_type("lvc_wrapper", { "data", "timestamp" }, 50, 5)
+    tp.register_type("lvc_wrapper", { "data", "json", "timestamp" }, 50, 5)
     tp.register_type("lvc_entry", nil, 50, 5)
     tp.register_type("lvc_sub", nil, 20, 2)
 end

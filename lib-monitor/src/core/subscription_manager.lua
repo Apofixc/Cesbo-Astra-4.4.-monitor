@@ -655,27 +655,31 @@ end
 
 --- Отправляет событие конкретному подписчику по его ID.
 --- Используется для инициализации (LVC) или отладки.
+--- Оптимизировано: использует Hybrid LVC (предварительно закодированный JSON).
 --- @param sub_id string ID подписки
 --- @param event_type string Имя события
---- @param event_data table Данные события
+--- @param event_entry table Запись LVC (содержит .data и .json)
 --- @return boolean Статус выполнения
-function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
+function SubscriptionManager:publish_to_single(sub_id, event_type, event_entry)
     for _, subs in pairs(self.subscriptions) do
         local sub = subs[sub_id]
         if sub then
+            local transport = sub.transport
+            local payload = event_entry.data
+            local event_json = event_entry.json
+
             -- Smart Packaging для LVC: если режим array, оборачиваем в массив
-            local payload = event_data
             if sub.batch_mode == "array" then
-                payload = { event_data }
+                if transport == "LUA_CALLBACK" then
+                    payload = { event_entry.data }
+                else
+                    -- Дешевая упаковка JSON в массив без перекодирования
+                    event_json = "[" .. (event_entry.json or "null") .. "]"
+                    payload = event_json
+                end
             end
 
-            -- Для одиночной отправки (LVC) готовим JSON если нужно
-            local event_json = nil
-            if sub.transport ~= "LUA_CALLBACK" then
-                local encode = get_json_encode()
-                event_json = (type(payload) == "table") and (encode and encode(payload) or nil) or tostring(payload)
-            end
-            Transport[sub.transport](self, sub.callback, payload, event_type, nil, event_json)
+            Transport[transport](self, sub.callback, payload, event_type, nil, event_json)
             return true
         end
     end
