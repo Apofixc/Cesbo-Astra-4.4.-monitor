@@ -97,7 +97,7 @@ local state = {
     last_stime = 0,
     last_lua_mem = 0,
     last_post_gc_mem = 0,
-    pid = 0,
+    pid = nil,
     
     -- Persistent File Handles
     stat_file = nil,
@@ -105,7 +105,7 @@ local state = {
     
     -- Статический отчет (Static Table Reuse)
     report = {
-        pid = 0,
+        pid = nil,
         uptime = 0,
         fd_size = 0,
         cpu = { usage = 0, user = 0, system = 0, threads = 0 },
@@ -229,8 +229,9 @@ local function _parse_status(report)
     end
 
     -- Однопроходный поиск ключевых метрик
-    -- Rare-Metric Throttling: FDSize и Threads парсим не каждый раз
-    local update_rare = (state.iteration_count % RARE_METRIC_INTERVAL == 0)
+    -- Rare-Metric Throttling: FDSize и Threads парсим не каждый раз.
+    -- Используем == 1, чтобы первая итерация всегда собирала полные данные.
+    local update_rare = (state.iteration_count % RARE_METRIC_INTERVAL == 1)
     
     if update_rare then
         report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
