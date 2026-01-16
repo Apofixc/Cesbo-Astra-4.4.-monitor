@@ -1,39 +1,21 @@
---- @class CpuMetrics
---- @field usage number Суммарное использование CPU (%)
---- @field user number Использование CPU пользователем (%)
---- @field system number Использование CPU системой (%)
---- @field threads number Количество потоков процесса
-
---- @class MemoryMetrics
---- @field lua number Использование памяти Lua (КБ)
---- @field resident number Резидентная память (RSS, КБ)
---- @field virtual number Виртуальная память (VSZ, КБ)
-
---- @class NetworkItem
---- @field interface string Имя интерфейса
---- @field ip string IP-адрес
-
---- @class SystemReport
---- @field pid number Идентификатор процесса
---- @field uptime number Время работы процесса (сек)
---- @field cpu CpuMetrics Метрики процессора
---- @field memory MemoryMetrics Метрики памяти
---- @field network NetworkItem[] Список сетевых интерфейсов
-
---- @class ResourceMonitor
-local ResourceMonitor = {}
+-- ===========================================================================
+-- Модуль `system.resource_monitor`
+--
+-- Высокопроизводительный мониторинг системных ресурсов процесса Astra.
+-- Сбор метрик CPU, RAM, потоков и сетевых интерфейсов из /proc.
+-- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local collectgarbage = collectgarbage
-local io_open = io.open
-local ipairs = ipairs
-local os_clock = os.clock
-local os_time = os.time
-local pairs = pairs
-local table_insert = table.insert
-local table_remove = table.remove
-local tonumber = tonumber
-local type = type
+local collectgarbage = _G.collectgarbage
+local io_open = _G.io.open
+local ipairs = _G.ipairs
+local os_clock = _G.os.clock
+local os_time = _G.os.time
+local pairs = _G.pairs
+local table_insert = _G.table.insert
+local table_remove = _G.table.remove
+local tonumber = _G.tonumber
+local type = _G.type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -41,35 +23,30 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 local TablePool = ModuleManager.get_module("table_pool")
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- 3. Глобальные зависимости Astra
 local utils_ifaddrs = ModuleManager.get_global_dependency("utils.ifaddrs")
 
 -- 4. Константы и конфигурации
+local COMPONENT_NAME = "ResourceMonitor"
 local PROC_STAT = "/proc/self/stat"
 local PROC_STATUS = "/proc/self/status"
 local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
 
--- 5. Инициализация объектов и внутреннего состояния
-local log = Logger and Logger.new("resource-monitor")
-ResourceMonitor._start_time = os_time()
-ResourceMonitor._last_clock = 0
-ResourceMonitor._last_utime = 0
-ResourceMonitor._last_stime = 0
-ResourceMonitor._pid = nil
-ResourceMonitor._report = nil
-ResourceMonitor._cpu_buffer = {} -- Кольцевой буфер для Moving Average
+-- 5. Внутреннее состояние (Private State)
+local state = {
+    log = nil,
+    start_time = os_time(),
+    last_clock = 0,
+    last_utime = 0,
+    last_stime = 0,
+    pid = nil,
+    report = nil,
+    cpu_buffer = {} -- Кольцевой буфер для Moving Average
+}
 
--- Инициализация PID при загрузке
-local f_pid = io_open(PROC_STAT, "r")
-if f_pid then
-    local content = f_pid:read(64)
-    if content then
-        ResourceMonitor._pid = tonumber(content:match("^(%d+)"))
-    end
-    f_pid:close()
-end
-
--- 6. Приватные функции
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
 
 --- Парсит /proc/self/status с ранним выходом
 --- @return table|nil
@@ -129,19 +106,45 @@ local function _moving_average(val)
     local window = (MonitorConfig and MonitorConfig.CpuMovingAverageWindow) or 0
     if window <= 1 then return val end
 
-    table_insert(ResourceMonitor._cpu_buffer, val)
-    while #ResourceMonitor._cpu_buffer > window do
-        table_remove(ResourceMonitor._cpu_buffer, 1)
+    table_insert(state.cpu_buffer, val)
+    while #state.cpu_buffer > window do
+        table_remove(state.cpu_buffer, 1)
     end
 
     local sum = 0
-    for _, v in ipairs(ResourceMonitor._cpu_buffer) do
+    for _, v in ipairs(state.cpu_buffer) do
         sum = sum + v
     end
-    return sum / #ResourceMonitor._cpu_buffer
+    return sum / #state.cpu_buffer
 end
 
--- 7. Публичный API
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
+--- @class CpuMetrics
+--- @field usage number Суммарное использование CPU (%)
+--- @field user number Использование CPU пользователем (%)
+--- @field system number Использование CPU системой (%)
+--- @field threads number Количество потоков процесса
+
+--- @class MemoryMetrics
+--- @field lua number Использование памяти Lua (КБ)
+--- @field resident number Резидентная память (RSS, КБ)
+--- @field virtual number Виртуальная память (VSZ, КБ)
+
+--- @class NetworkItem
+--- @field interface string Имя интерфейса
+--- @field ip string IP-адрес
+
+--- @class SystemReport
+--- @field pid number Идентификатор процесса
+--- @field uptime number Время работы процесса (сек)
+--- @field cpu CpuMetrics Метрики процессора
+--- @field memory MemoryMetrics Метрики памяти
+--- @field network NetworkItem[] Список сетевых интерфейсов
+--- @class ResourceMonitor
+local ResourceMonitor = {}
 
 --- Собирает актуальные метрики системы
 --- @return SystemReport|nil
@@ -151,14 +154,14 @@ function ResourceMonitor.check()
     local status = _parse_status() or {}
 
     -- Освобождение старого отчета в пул
-    if ResourceMonitor._report and TablePool then
-        TablePool.release(ResourceMonitor._report, "report_sys", true)
+    if state.report and TablePool then
+        TablePool.release(state.report, "report_sys", true)
     end
 
     -- Получение нового отчета из пула
     local report = TablePool and TablePool.get("report_sys") or {}
-    report.pid = ResourceMonitor._pid
-    report.uptime = os_time() - ResourceMonitor._start_time
+    report.pid = state.pid
+    report.uptime = os_time() - state.start_time
 
     -- Метрики CPU
     report.cpu = report.cpu or (TablePool and TablePool.get("sys_cpu") or {})
@@ -167,11 +170,11 @@ function ResourceMonitor.check()
     report.cpu.system = 0
     report.cpu.usage = 0
 
-    if ResourceMonitor._last_clock > 0 then
-        local delta_clock = now_clock - ResourceMonitor._last_clock
+    if state.last_clock > 0 then
+        local delta_clock = now_clock - state.last_clock
         if delta_clock > 0 then
-            local u_usage = ((utime - ResourceMonitor._last_utime) / TICK_RATE / delta_clock) * 100
-            local s_usage = ((stime - ResourceMonitor._last_stime) / TICK_RATE / delta_clock) * 100
+            local u_usage = ((utime - state.last_utime) / TICK_RATE / delta_clock) * 100
+            local s_usage = ((stime - state.last_stime) / TICK_RATE / delta_clock) * 100
             
             report.cpu.user = u_usage
             report.cpu.system = s_usage
@@ -179,9 +182,9 @@ function ResourceMonitor.check()
         end
     end
 
-    ResourceMonitor._last_clock = now_clock
-    ResourceMonitor._last_utime = utime
-    ResourceMonitor._last_stime = stime
+    state.last_clock = now_clock
+    state.last_utime = utime
+    state.last_stime = stime
 
     -- Метрики памяти
     report.memory = report.memory or (TablePool and TablePool.get("sys_mem") or {})
@@ -203,17 +206,17 @@ function ResourceMonitor.check()
         end
     end
 
-    ResourceMonitor._report = report
+    state.report = report
     return report
 end
 
 --- Возвращает последний собранный отчет
 --- @return SystemReport|nil
 function ResourceMonitor.get_report()
-    if not ResourceMonitor._report then
+    if not state.report then
         return ResourceMonitor.check()
     end
-    return ResourceMonitor._report
+    return state.report
 end
 
 --- Запускает периодический мониторинг
@@ -221,7 +224,7 @@ end
 function ResourceMonitor.start(interval)
     local scheduler = Scheduler and Scheduler.get_instance()
     if not scheduler then
-        if log then log:error("ResourceMonitor", "Scheduler not available") end
+        if state.log then state.log:error(COMPONENT_NAME, "Scheduler not available") end
         return
     end
 
@@ -243,6 +246,23 @@ end
 --- @return boolean
 function ResourceMonitor.is_running()
     return true
+end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
+
+-- Инициализация логгера
+state.log = Logger and Logger.new("resource-monitor")
+
+-- Инициализация PID
+local f_pid = io_open(PROC_STAT, "r")
+if f_pid then
+    local content = f_pid:read(64)
+    if content then
+        state.pid = tonumber(content:match("^(%d+)"))
+    end
+    f_pid:close()
 end
 
 -- Регистрация типов в TablePool
