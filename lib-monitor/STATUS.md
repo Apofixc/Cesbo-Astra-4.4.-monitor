@@ -12,7 +12,7 @@
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
 | **ModuleManager** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
-| **Scheduler** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
+| **Scheduler** | 100% | **Готов (Ultra-Extreme) + Dynamic** | 16.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
 | **TablePool** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
 | **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Zero-copy** | 16.01.2026 |
@@ -43,7 +43,7 @@
 | :--- | :---: | :--- | :--- |
 | **BaseMonitor** | 90% | Стабилен | - |
 | **ChannelMonitor** | 75% | Требует длительных тестов | - |
-| **ResourceMonitor** | 0% | Сломан | 16.01.2026 |
+| **ResourceMonitor** | 100% | **Готов (Ultra-Extreme) + Adaptive Ticking** | 16.01.2026 |
 
 ---
 

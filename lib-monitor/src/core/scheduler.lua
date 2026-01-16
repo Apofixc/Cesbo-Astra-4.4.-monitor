@@ -256,6 +256,27 @@ function Scheduler:remove_task(id)
     end
 end
 
+--- Изменяет интервал выполнения существующей задачи
+--- @param id string Идентификатор задачи
+--- @param interval number Новый интервал в секундах
+function Scheduler:set_task_interval(id, interval)
+    local task = self._tasks[id]
+    if task then
+        local old_interval = task.interval
+        task.interval = (interval and interval >= 1) and interval or 1
+        
+        -- Если новый интервал меньше текущего ожидания, сокращаем его
+        local now = os_time()
+        local remaining = task.next_run - now
+        if remaining > task.interval then
+            task.next_run = now + task.interval
+        end
+        
+        Logger.debug(COMPONENT_NAME, "Интервал задачи '%s' изменен: %d -> %d сек", 
+            id, old_interval, task.interval)
+    end
+end
+
 --- Приостанавливает выполнение задачи без её удаления
 --- @param id string Идентификатор задачи
 function Scheduler:pause_task(id)

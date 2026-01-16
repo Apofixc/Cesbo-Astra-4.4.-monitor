@@ -46,7 +46,6 @@
 -- 1. Стандартные Lua функции
 local collectgarbage = _G.collectgarbage
 local io_open = _G.io.open
-local ipairs = _G.ipairs
 local os_clock = _G.os.clock
 local os_time = _G.os.time
 local pairs = _G.pairs
@@ -54,6 +53,7 @@ local table_insert = _G.table.insert
 local table_remove = _G.table.remove
 local tonumber = _G.tonumber
 local type = _G.type
+local math_min = _G.math.min
 local string_find = _G.string.find
 local string_sub = _G.string.sub
 local string_match = _G.string.match
@@ -83,6 +83,10 @@ local DEFAULT_RAM_THRESHOLD_PCT = 80
 local HYSTERESIS_FACTOR = 0.95
 local NETWORK_CHECK_INTERVAL = 30
 local CONFIG_REFRESH_INTERVAL = 10
+local ADAPTIVE_TICK_THRESHOLD_CPU = 50
+local ADAPTIVE_TICK_THRESHOLD_RAM = 70
+local TICK_INTERVAL_NORMAL = 5
+local TICK_INTERVAL_FAST = 1
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
@@ -98,6 +102,9 @@ local state = {
     -- Moving Average O(1)
     cpu_buffer = {},
     cpu_sum = 0,
+    cpu_index = 0,
+    cpu_count = 0,
+    last_cpu_usage = 0,
     
     -- Сеть
     last_network_check = 0,
@@ -114,15 +121,18 @@ local state = {
         cpu_threshold = DEFAULT_CPU_THRESHOLD,
         ram_threshold_pct = DEFAULT_RAM_THRESHOLD_PCT,
         last_refresh = 0
-    }
+    },
+
+    -- Адаптивный интервал
+    current_tick_interval = TICK_INTERVAL_NORMAL
 }
 
 -- ===========================================================================
 -- Внутренние функции (Private)
 -- ===========================================================================
 
---- Обновляет кэш конфигурации
-local function _refresh_config()
+--- Обновляет кэш конфигурации (внутренняя версия с проверкой интервала)
+local function _auto_refresh_config()
     local now = os_time()
     if now - state.config_cache.last_refresh < CONFIG_REFRESH_INTERVAL then return end
     
@@ -152,20 +162,32 @@ local function _parse_status()
     local status = TablePool and TablePool.get("sys_status_temp") or {}
     
     -- Поиск VmRSS
-    local _, e, val = string_find(content, "VmRSS:%s+(%d+)")
-    if val then status.resident = tonumber(val) or 0 end
+    local s, e = string_find(content, "VmRSS:%s+")
+    if s then
+        local ns, ne = string_find(content, "%d+", e + 1)
+        if ns then status.resident = tonumber(string_sub(content, ns, ne)) or 0 end
+    end
     
     -- Поиск VmSize
-    _, e, val = string_find(content, "VmSize:%s+(%d+)")
-    if val then status.virtual = tonumber(val) or 0 end
+    s, e = string_find(content, "VmSize:%s+")
+    if s then
+        local ns, ne = string_find(content, "%d+", e + 1)
+        if ns then status.virtual = tonumber(string_sub(content, ns, ne)) or 0 end
+    end
     
     -- Поиск Threads
-    _, e, val = string_find(content, "Threads:%s+(%d+)")
-    if val then status.threads = tonumber(val) or 0 end
+    s, e = string_find(content, "Threads:%s+")
+    if s then
+        local ns, ne = string_find(content, "%d+", e + 1)
+        if ns then status.threads = tonumber(string_sub(content, ns, ne)) or 0 end
+    end
 
     -- Поиск FDSize
-    _, e, val = string_find(content, "FDSize:%s+(%d+)")
-    if val then status.fd_size = tonumber(val) or 0 end
+    s, e = string_find(content, "FDSize:%s+")
+    if s then
+        local ns, ne = string_find(content, "%d+", e + 1)
+        if ns then status.fd_size = tonumber(string_sub(content, ns, ne)) or 0 end
+    end
 
     return status
 end
@@ -180,10 +202,14 @@ local function _parse_stat()
     f:close()
     if not content then return 0, 0 end
 
+    -- Находим конец имени процесса (может содержать пробелы)
+    local _, last_paren = string_find(content, ".*%)")
+    if not last_paren then return 0, 0 end
+    
     -- utime и stime - это 14-й и 15-й параметры.
-    -- Пропускаем первые 13 пробелов.
-    local pos = 1
-    for i = 1, 13 do
+    -- После имени процесса (2-й параметр) идет еще 11 параметров до utime.
+    local pos = last_paren + 2
+    for i = 1, 11 do
         local s, e = string_find(content, "%s+", pos)
         if not s then return 0, 0 end
         pos = e + 1
@@ -210,15 +236,13 @@ local function _moving_average(val)
     local window = (MonitorConfig and MonitorConfig.CpuMovingAverageWindow) or 0
     if window <= 1 then return val end
 
-    table_insert(state.cpu_buffer, val)
-    state.cpu_sum = state.cpu_sum + val
+    state.cpu_index = (state.cpu_index % window) + 1
+    local old_val = state.cpu_buffer[state.cpu_index] or 0
+    state.cpu_buffer[state.cpu_index] = val
+    state.cpu_sum = state.cpu_sum - old_val + val
     
-    if #state.cpu_buffer > window then
-        local old_val = table_remove(state.cpu_buffer, 1)
-        state.cpu_sum = state.cpu_sum - old_val
-    end
-
-    return state.cpu_sum / #state.cpu_buffer
+    state.cpu_count = math_min(state.cpu_count + 1, window)
+    return state.cpu_sum / state.cpu_count
 end
 
 --- Проверяет пороги и генерирует события при необходимости (с гистерезисом)
@@ -227,9 +251,28 @@ local function _check_thresholds(report)
     local ed = _get_event_dispatcher()
     if not ed then return end
 
-    _refresh_config()
+    _auto_refresh_config()
     local cpu_threshold = state.config_cache.cpu_threshold
     local ram_threshold_pct = state.config_cache.ram_threshold_pct
+
+    -- Адаптивный интервал опроса
+    local ram_limit_mb = (MonitorConfig and MonitorConfig.MemoryLimitMb) or 50
+    local ram_limit_kb = ram_limit_mb * 1024
+    local ram_usage_pct = (report.memory.lua / ram_limit_kb) * 100
+    local cpu_val = report.cpu.usage
+
+    local target_interval = TICK_INTERVAL_NORMAL
+    if cpu_val > ADAPTIVE_TICK_THRESHOLD_CPU or ram_usage_pct > ADAPTIVE_TICK_THRESHOLD_RAM then
+        target_interval = TICK_INTERVAL_FAST
+    end
+
+    if target_interval ~= state.current_tick_interval then
+        state.current_tick_interval = target_interval
+        local scheduler = Scheduler and Scheduler.get_instance()
+        if scheduler and scheduler.set_task_interval then
+            scheduler:set_task_interval("resource_monitor", target_interval)
+        end
+    end
     
     -- 1. Проверка CPU
     local cpu_val = report.cpu.usage
@@ -294,6 +337,15 @@ end
 --- @class ResourceMonitor
 local ResourceMonitor = {}
 
+--- Явное обновление конфигурации из MonitorConfig
+function ResourceMonitor.refresh_config()
+    if MonitorConfig then
+        state.config_cache.cpu_threshold = MonitorConfig.CpuThreshold or DEFAULT_CPU_THRESHOLD
+        state.config_cache.ram_threshold_pct = MonitorConfig.RamThresholdPct or DEFAULT_RAM_THRESHOLD_PCT
+    end
+    state.config_cache.last_refresh = os_time()
+end
+
 --- Собирает актуальные метрики системы
 --- @return SystemReport|nil
 function ResourceMonitor.check()
@@ -321,7 +373,7 @@ function ResourceMonitor.check()
     report.cpu.threads = status.threads or 0
     report.cpu.user = 0
     report.cpu.system = 0
-    report.cpu.usage = 0
+    report.cpu.usage = state.last_cpu_usage
 
     if state.last_clock > 0 then
         local delta_clock = now_clock - state.last_clock
@@ -332,6 +384,7 @@ function ResourceMonitor.check()
             report.cpu.user = u_usage
             report.cpu.system = s_usage
             report.cpu.usage = _moving_average(u_usage + s_usage)
+            state.last_cpu_usage = report.cpu.usage
         end
     end
 
