@@ -3,7 +3,32 @@
 --
 -- Высокопроизводительный мониторинг системных ресурсов процесса Astra.
 -- Сбор метрик CPU, RAM, потоков и сетевых интерфейсов из /proc.
+-- Интеграция с EventDispatcher для генерации предупреждений по порогам.
 -- ===========================================================================
+
+--- @class CpuMetrics
+--- @field usage number Суммарное использование CPU (%)
+--- @field user number Использование CPU пользователем (%)
+--- @field system number Использование CPU системой (%)
+--- @field threads number Количество потоков процесса
+
+--- @class MemoryMetrics
+--- @field lua number Использование памяти Lua (КБ)
+--- @field lua_delta number Изменение памяти Lua с последней проверки (КБ)
+--- @field lua_post_gc number Объем памяти после последней сборки мусора (КБ)
+--- @field resident number Резидентная память (RSS, КБ)
+--- @field virtual number Виртуальная память (VSZ, КБ)
+
+--- @class NetworkItem
+--- @field interface string Имя интерфейса
+--- @field ip string IP-адрес
+
+--- @class SystemReport
+--- @field pid number Идентификатор процесса
+--- @field uptime number Время работы процесса (сек)
+--- @field cpu CpuMetrics Метрики процессора
+--- @field memory MemoryMetrics Метрики памяти
+--- @field network NetworkItem[] Список сетевых интерфейсов
 
 -- 1. Стандартные Lua функции
 local collectgarbage = _G.collectgarbage
@@ -32,6 +57,10 @@ local PROC_STAT = "/proc/self/stat"
 local PROC_STATUS = "/proc/self/status"
 local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
 
+-- Пороги для уведомлений
+local CPU_THRESHOLD = 90 -- %
+local RAM_THRESHOLD_PCT = 80 -- % от лимита
+
 -- 5. Внутреннее состояние (Private State)
 local state = {
     log = nil,
@@ -39,6 +68,8 @@ local state = {
     last_clock = 0,
     last_utime = 0,
     last_stime = 0,
+    last_lua_mem = 0,
+    last_post_gc_mem = 0,
     pid = nil,
     report = nil,
     cpu_buffer = {} -- Кольцевой буфер для Moving Average
@@ -47,6 +78,11 @@ local state = {
 -- ===========================================================================
 -- Внутренние функции (Private)
 -- ===========================================================================
+
+--- Возвращает EventDispatcher (ленивая загрузка)
+local function _get_event_dispatcher()
+    return ModuleManager.get_module("core.event_dispatcher")
+end
 
 --- Парсит /proc/self/status с ранним выходом
 --- @return table|nil
@@ -118,31 +154,43 @@ local function _moving_average(val)
     return sum / #state.cpu_buffer
 end
 
+--- Проверяет пороги и генерирует события при необходимости
+--- @param report SystemReport
+local function _check_thresholds(report)
+    local ed = _get_event_dispatcher()
+    if not ed then return end
+
+    -- Проверка CPU
+    if report.cpu.usage > CPU_THRESHOLD then
+        ed:emit("sys:resource_warning", {
+            type = "cpu",
+            value = report.cpu.usage,
+            threshold = CPU_THRESHOLD,
+            message = string.format("Высокая нагрузка на CPU: %.1f%%", report.cpu.usage)
+        })
+    end
+
+    -- Проверка RAM (Lua)
+    local ram_limit_mb = (MonitorConfig and MonitorConfig.MemoryLimitMb) or 50
+    local ram_limit_kb = ram_limit_mb * 1024
+    local ram_usage_pct = (report.memory.lua / ram_limit_kb) * 100
+
+    if ram_usage_pct > RAM_THRESHOLD_PCT then
+        ed:emit("sys:resource_warning", {
+            type = "ram",
+            value = ram_usage_pct,
+            threshold = RAM_THRESHOLD_PCT,
+            current_kb = report.memory.lua,
+            limit_kb = ram_limit_kb,
+            message = string.format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
+        })
+    end
+end
+
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
 
---- @class CpuMetrics
---- @field usage number Суммарное использование CPU (%)
---- @field user number Использование CPU пользователем (%)
---- @field system number Использование CPU системой (%)
---- @field threads number Количество потоков процесса
-
---- @class MemoryMetrics
---- @field lua number Использование памяти Lua (КБ)
---- @field resident number Резидентная память (RSS, КБ)
---- @field virtual number Виртуальная память (VSZ, КБ)
-
---- @class NetworkItem
---- @field interface string Имя интерфейса
---- @field ip string IP-адрес
-
---- @class SystemReport
---- @field pid number Идентификатор процесса
---- @field uptime number Время работы процесса (сек)
---- @field cpu CpuMetrics Метрики процессора
---- @field memory MemoryMetrics Метрики памяти
---- @field network NetworkItem[] Список сетевых интерфейсов
 --- @class ResourceMonitor
 local ResourceMonitor = {}
 
@@ -152,6 +200,7 @@ function ResourceMonitor.check()
     local now_clock = os_clock()
     local utime, stime = _parse_stat()
     local status = _parse_status() or {}
+    local current_lua_mem = collectgarbage("count")
 
     -- Освобождение старого отчета в пул
     if state.report and TablePool then
@@ -188,9 +237,19 @@ function ResourceMonitor.check()
 
     -- Метрики памяти
     report.memory = report.memory or (TablePool and TablePool.get("sys_mem") or {})
-    report.memory.lua = collectgarbage("count")
+    report.memory.lua = current_lua_mem
+    report.memory.lua_delta = (state.last_lua_mem > 0) and (current_lua_mem - state.last_lua_mem) or 0
+    
+    -- Диагностика GC: если память уменьшилась, значит была сборка
+    if current_lua_mem < state.last_lua_mem then
+        state.last_post_gc_mem = current_lua_mem
+    end
+    report.memory.lua_post_gc = state.last_post_gc_mem
+    
     report.memory.resident = status.resident or 0
     report.memory.virtual = status.virtual or 0
+
+    state.last_lua_mem = current_lua_mem
 
     -- Метрики сети
     report.network = report.network or (TablePool and TablePool.get("sys_net") or {})
@@ -205,6 +264,9 @@ function ResourceMonitor.check()
             end
         end
     end
+
+    -- Проверка порогов
+    _check_thresholds(report)
 
     state.report = report
     return report
@@ -269,7 +331,7 @@ end
 if TablePool then
     TablePool.register_type("report_sys", { "pid", "uptime", "cpu", "memory", "network" }, 10, 2)
     TablePool.register_type("sys_cpu", { "usage", "user", "system", "threads" }, 10, 2)
-    TablePool.register_type("sys_mem", { "lua", "resident", "virtual" }, 10, 2)
+    TablePool.register_type("sys_mem", { "lua", "lua_delta", "lua_post_gc", "resident", "virtual" }, 10, 2)
     TablePool.register_type("sys_net", nil, 10, 2)
     TablePool.register_type("sys_net_item", { "interface", "ip" }, 20, 5)
 end
