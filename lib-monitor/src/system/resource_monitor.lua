@@ -84,10 +84,14 @@ local ADAPTIVE_TICK_THRESHOLD_CPU = 50
 local ADAPTIVE_TICK_THRESHOLD_RAM = 70
 local TICK_INTERVAL_NORMAL = 5
 local TICK_INTERVAL_FAST = 1
+local RARE_METRIC_INTERVAL = 5 -- Интервал для FD и Threads
+local MAX_CPU_JUMP = 50        -- Максимальный скачок CPU за тик (%)
+local MAX_RAM_JUMP_PCT = 20    -- Максимальный скачок RAM за тик (%)
 
 -- 5. Внутреннее состояние (Private State)
 local state = {
     start_time = os_time(),
+    iteration_count = 0,
     last_clock = 0,
     last_utime = 0,
     last_stime = 0,
@@ -152,18 +156,39 @@ end
 -- Внутренние функции (Private)
 -- ===========================================================================
 
+--- Обновляет кэш конфигурации (внутренняя версия)
+local function _refresh_config_internal()
+    if MonitorConfig then
+        -- Усиленная валидация (Data Sanity & Type Safety)
+        local cpu = tonumber(MonitorConfig.CpuThreshold)
+        if cpu and cpu > 0 and cpu <= 100 then
+            state.config_cache.cpu_threshold = cpu
+        end
+
+        local ram_pct = tonumber(MonitorConfig.RamThresholdPct)
+        if ram_pct and ram_pct > 0 and ram_pct <= 100 then
+            state.config_cache.ram_threshold_pct = ram_pct
+        end
+
+        local ram_limit = tonumber(MonitorConfig.MemoryLimitMb)
+        if ram_limit and ram_limit > 0 and ram_limit < 4096 then
+            state.config_cache.ram_limit_kb = ram_limit * 1024
+        end
+
+        local fd = tonumber(MonitorConfig.FdThreshold)
+        if fd and fd > 0 and fd < 65535 then
+            state.config_cache.fd_threshold = fd
+        end
+    end
+    state.config_cache.last_refresh = os_time()
+end
+
 --- Обновляет кэш конфигурации (внутренняя версия с проверкой интервала)
 local function _auto_refresh_config()
     local now = os_time()
     if now - state.config_cache.last_refresh < CONFIG_REFRESH_INTERVAL then return end
     
-    if MonitorConfig then
-        state.config_cache.cpu_threshold = MonitorConfig.CpuThreshold or DEFAULT_CPU_THRESHOLD
-        state.config_cache.ram_threshold_pct = MonitorConfig.RamThresholdPct or DEFAULT_RAM_THRESHOLD_PCT
-        state.config_cache.ram_limit_kb = (MonitorConfig.MemoryLimitMb or 50) * 1024
-        state.config_cache.fd_threshold = MonitorConfig.FdThreshold or 800
-    end
-    state.config_cache.last_refresh = now
+    _refresh_config_internal()
 end
 
 --- Возвращает EventDispatcher (ленивая загрузка)
@@ -182,16 +207,38 @@ local function _parse_status(report)
         if not f then return false end
     end
 
-    f:seek("set", 0)
+    local ok, err = f:seek("set", 0)
+    if not ok then
+        -- Self-Healing: пробуем переоткрыть файл
+        f:close()
+        state.status_file = io_open(PROC_STATUS, "r")
+        f = state.status_file
+        if not f then return false end
+        f:seek("set", 0)
+    end
+
     local content = f:read(STATUS_READ_BUFFER)
-    if not content then return false end
+    if not content then 
+        -- Self-Healing: повторная попытка при ошибке чтения
+        f:close()
+        state.status_file = io_open(PROC_STATUS, "r")
+        f = state.status_file
+        if not f then return false end
+        content = f:read(STATUS_READ_BUFFER)
+        if not content then return false end
+    end
 
     -- Однопроходный поиск ключевых метрик
-    -- Используем string.match с захватом для максимальной скорости
-    report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
+    -- Rare-Metric Throttling: FDSize и Threads парсим не каждый раз
+    local update_rare = (state.iteration_count % RARE_METRIC_INTERVAL == 0)
+    
+    if update_rare then
+        report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
+        report.cpu.threads = tonumber(string_match(content, "Threads:%s+(%d+)")) or report.cpu.threads
+    end
+    
     report.memory.virtual = tonumber(string_match(content, "VmSize:%s+(%d+)")) or report.memory.virtual
     report.memory.resident = tonumber(string_match(content, "VmRSS:%s+(%d+)")) or report.memory.resident
-    report.cpu.threads = tonumber(string_match(content, "Threads:%s+(%d+)")) or report.cpu.threads
 
     return true
 end
@@ -206,9 +253,26 @@ local function _parse_stat()
         if not f then return 0, 0 end
     end
 
-    f:seek("set", 0)
+    local ok, err = f:seek("set", 0)
+    if not ok then
+        -- Self-Healing
+        f:close()
+        state.stat_file = io_open(PROC_STAT, "r")
+        f = state.stat_file
+        if not f then return 0, 0 end
+        f:seek("set", 0)
+    end
+
     local content = f:read(STAT_READ_BUFFER)
-    if not content then return 0, 0 end
+    if not content then 
+        -- Self-Healing
+        f:close()
+        state.stat_file = io_open(PROC_STAT, "r")
+        f = state.stat_file
+        if not f then return 0, 0 end
+        content = f:read(STAT_READ_BUFFER)
+        if not content then return 0, 0 end
+    end
 
     -- Находим конец имени процесса (может содержать пробелы и скобки)
     local _, last_paren = string_find(content, ".*%)")
@@ -268,6 +332,20 @@ local function _check_thresholds(report)
     -- Адаптивный интервал опроса
     local ram_usage_pct = (report.memory.lua / ram_limit_kb) * 100
     local cpu_val = report.cpu.usage
+
+    -- Data Sanity Checks: игнорируем неправдоподобные скачки
+    if state.last_cpu_usage > 0 and math_min(cpu_val, 100) - state.last_cpu_usage > MAX_CPU_JUMP then
+        if Logger and Logger.warn then Logger.warn(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f", state.last_cpu_usage, cpu_val) end
+        cpu_val = state.last_cpu_usage + (MAX_CPU_JUMP * 0.5) -- Сглаживаем вместо полного игнорирования
+        report.cpu.usage = cpu_val
+    end
+
+    local last_ram_pct = (state.last_lua_mem / ram_limit_kb) * 100
+    if state.last_lua_mem > 0 and ram_usage_pct - last_ram_pct > MAX_RAM_JUMP_PCT then
+        if Logger and Logger.warn then Logger.warn(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%", last_ram_pct, ram_usage_pct) end
+        ram_usage_pct = last_ram_pct + (MAX_RAM_JUMP_PCT * 0.5)
+        report.memory.lua = (ram_usage_pct / 100) * ram_limit_kb
+    end
 
     local target_interval = TICK_INTERVAL_NORMAL
     if cpu_val > ADAPTIVE_TICK_THRESHOLD_CPU or ram_usage_pct > ADAPTIVE_TICK_THRESHOLD_RAM then
@@ -392,17 +470,15 @@ local ResourceMonitor = {}
 
 --- Явное обновление конфигурации из MonitorConfig
 function ResourceMonitor.refresh_config()
-    if MonitorConfig then
-        state.config_cache.cpu_threshold = MonitorConfig.CpuThreshold or DEFAULT_CPU_THRESHOLD
-        state.config_cache.ram_threshold_pct = MonitorConfig.RamThresholdPct or DEFAULT_RAM_THRESHOLD_PCT
-    end
-    state.config_cache.last_refresh = os_time()
+    _refresh_config_internal()
 end
 
 --- Собирает актуальные метрики системы
 --- @return SystemReport|nil
 function ResourceMonitor.check()
     local ok, err = _G.pcall(function()
+        state.iteration_count = state.iteration_count + 1
+        
         local now_clock = os_clock()
         local now_time = os_time()
         local utime, stime = _parse_stat()
@@ -479,7 +555,7 @@ function ResourceMonitor.check()
     end)
 
     if not ok then
-        if Logger then Logger.error(COMPONENT_NAME, "Ошибка при сборе метрик: %s", _G.tostring(err)) end
+        if Logger and Logger.error then Logger.error(COMPONENT_NAME, "Ошибка при сборе метрик: %s", _G.tostring(err)) end
         return nil
     end
 
@@ -500,7 +576,7 @@ end
 function ResourceMonitor.start(interval)
     local scheduler = Scheduler and Scheduler.get_instance()
     if not scheduler then
-        if Logger then Logger.error(COMPONENT_NAME, "Scheduler not available") end
+        if Logger and Logger.error then Logger.error(COMPONENT_NAME, "Scheduler not available") end
         return
     end
 
