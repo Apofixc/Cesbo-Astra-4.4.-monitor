@@ -95,6 +95,7 @@ MonitorConfig.GcPause = 100
 MonitorConfig.GcStepMul = 500
 MonitorConfig.SchedulerInterval = 1
 MonitorConfig.MemoryLimitMb = 50 -- Лимит памяти для адаптивного GC (МБ)
+MonitorConfig.AutoRecoverEnabled = false -- Включить автономное восстановление через планировщик
 MonitorConfig.AutoRecoverInterval = 300 -- Интервал авто-восстановления в репозитории (сек)
 MonitorConfig.MaxRecoveryAttempts = 3 -- Максимальное количество попыток восстановления монитора
 MonitorConfig.PidStatsLimit = 100 -- Лимит отслеживаемых PID в ChannelMonitor
@@ -142,6 +143,7 @@ function MonitorConfig.validate()
         return false, "LogBatchEnabled must be a boolean"
     end
 
+    if type(MonitorConfig.AutoRecoverEnabled) ~= "boolean" then return false, "AutoRecoverEnabled must be a boolean" end
     if type(MonitorConfig.AutoRecoverInterval) ~= "number" then return false, "AutoRecoverInterval must be a number" end
     if type(MonitorConfig.MaxRecoveryAttempts) ~= "number" then return false, "MaxRecoveryAttempts must be a number" end
     if type(MonitorConfig.PidStatsLimit) ~= "number" then return false, "PidStatsLimit must be a number" end

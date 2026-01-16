@@ -7,12 +7,12 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local pairs = _G.pairs
 local ipairs = _G.ipairs
-local tostring = _G.tostring
-local type = _G.type
+local pairs = _G.pairs
 local pcall = _G.pcall
 local table_insert = _G.table.insert
+local tostring = _G.tostring
+local type = _G.type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -24,6 +24,31 @@ local channel_list = ModuleManager.get_global_dependency("channel_list")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
+
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Вспомогательная функция для безопасного запуска одного канала
+--- @param conf table Конфигурация канала
+--- @return boolean success
+local function _safe_make_stream(conf)
+    local Channel = ModuleManager.get_module("channel")
+    if not Channel then return false end
+    
+    local name = conf.name or "Unknown"
+    Logger.debug(COMPONENT_NAME, "Попытка запуска канала: %s", name)
+
+    local ok, res = pcall(Channel.make_stream, conf)
+    if ok and res then
+        Logger.debug(COMPONENT_NAME, "Канал %s успешно запущен", name)
+        return true
+    end
+
+    Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", 
+        name, tostring(res or "unknown error"))
+    return false
+end
 
 -- ===========================================================================
 -- Инициализация репозитория
@@ -60,12 +85,6 @@ end
 function ChannelRepository:start_dependent_channels(configs)
     if not configs or type(configs) ~= "table" then return end
     
-    local Channel = ModuleManager.get_module("channel")
-    if not Channel then
-        Logger.error(COMPONENT_NAME, "start_dependent_channels: модуль 'channel' не найден")
-        return
-    end
-
     local total = #configs
     if total == 0 then return end
 
@@ -73,16 +92,8 @@ function ChannelRepository:start_dependent_channels(configs)
     local success_count = 0
 
     for _, conf in ipairs(configs) do
-        local name = conf.name or "Unknown"
-        Logger.debug(COMPONENT_NAME, "Попытка запуска канала: %s", name)
-
-        local ok, res = pcall(Channel.make_stream, conf)
-        if ok and res then
+        if _safe_make_stream(conf) then
             success_count = success_count + 1
-            Logger.debug(COMPONENT_NAME, "Канал %s успешно запущен", name)
-        else
-            Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", 
-                name, tostring(res or "unknown error"))
         end
     end
 
