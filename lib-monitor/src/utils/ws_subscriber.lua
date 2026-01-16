@@ -85,25 +85,29 @@ function WsSubscriber.on_message(server, client, request)
     end
 end
 
---- Рассылает уже готовый JSON всем подключенным клиентам
---- Данные оборачиваются в структуру события {event, data}
+--- Рассылает уже готовый JSON всем подключенным клиентам.
+--- Данные оборачиваются в структуру события {event, data}.
+--- Оптимизировано: кэширование ссылки на метод send.
 --- @param event_type string Тип события
 --- @param json_data string JSON-строка с данными
 function WsSubscriber.broadcast_raw(event_type, json_data)
-    if not state.http_server_instance or not json_data then
+    local server = state.http_server_instance
+    if not server or not json_data then
         return
     end
 
     -- Оптимизация: Проверяем наличие клиентов перед сборкой сообщения
-    if not next(state.clients) then return end
+    local clients = state.clients
+    if not next(clients) then return end
 
     local message = '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
+    local send = server.send
     
-    for client, _ in pairs(state.clients) do
-        local ok, err = pcall(state.http_server_instance.send, state.http_server_instance, client, message)
+    for client, _ in pairs(clients) do
+        local ok, err = pcall(send, server, client, message)
         if not ok then
             -- Если отправка не удалась, вероятно клиент отключился некорректно
-            state.clients[client] = nil
+            clients[client] = nil
             Logger.debug(COMPONENT_NAME, "Ошибка отправки клиенту WS (удален): %s", tostring(err))
         end
     end

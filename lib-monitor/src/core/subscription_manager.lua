@@ -82,6 +82,12 @@ local MAX_ROUTE_CACHE_SIZE = 1000
 local MAX_RETRY_QUEUE_SIZE = 500
 
 -- 5. Инициализация объектов и внутреннее состояние
+--- @class SubscriptionManagerState
+--- @field transport_cache table<any, string> Кэш типов транспорта
+local state = {
+    transport_cache = {},
+}
+
 --- @class SubscriptionStats
 --- @field delivered number Количество успешно доставленных событий
 --- @field failed number Количество проваленных доставок
@@ -500,18 +506,6 @@ function SubscriptionManager:match(pattern, name)
     return pattern == name
 end
 
---- Рассылает событие всем подписчикам (устаревший метод).
---- @param event_type string Точное имя события
---- @param event_data table Данные события
---- @return number, number Количество успешно доставленных и проваленных уведомлений
-function SubscriptionManager:publish(event_type, event_data)
-    return self:publish_event({
-        type = event_type,
-        data = event_data,
-        timestamp = os_time()
-    })
-end
-
 --- Рассылает объект события всем подписчикам.
 --- @param event table Объект события (из EventDispatcher)
 --- @param now? number [Текущее время (опционально, для оптимизации)]
@@ -524,10 +518,10 @@ function SubscriptionManager:publish_event(event, now)
     local event_json = nil -- Кэш JSON для текущей рассылки
 
     -- Оптимизация: Fast Path через кэш маршрутизации
-    local targets = type(self._route_cache) == "table" and self._route_cache[event_type] or nil
+    local targets = self._route_cache[event_type]
     if not targets then
         -- Ограничение размера кэша для предотвращения утечек памяти
-        if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE or type(self._route_cache) ~= "table" then
+        if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE then
             self._route_cache = {}
             self._route_cache_size = 0
         end
@@ -536,7 +530,7 @@ function SubscriptionManager:publish_event(event, now)
         for pattern, subs in pairs(self.subscriptions) do
             if self:match(pattern, event_type) then
                 for _, sub in pairs(subs) do
-                    table_insert(targets, sub)
+                    targets[#targets + 1] = sub
                 end
             end
         end
@@ -544,21 +538,29 @@ function SubscriptionManager:publish_event(event, now)
         self._route_cache_size = self._route_cache_size + 1
     end
 
-    for i = 1, #targets do
+    local num_targets = #targets
+    if num_targets == 0 then return 0, 0 end
+
+    local batch_enabled = MonitorConfig and MonitorConfig.BatchEnabled
+
+    for i = 1, num_targets do
         local sub = targets[i]
         if sub.active then
             local should_send = true
+            -- Троттлинг (проверка времени)
             if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
                 should_send = false
             end
-            if should_send and sub.filters and next(sub.filters) ~= nil then
+            -- Фильтрация
+            if should_send and sub.filters and (sub.filters.conditions or sub.filters.script) then
                 if FilterEngine and not FilterEngine.match(event_data, sub.filters, sub.id) then
                     should_send = false
                 end
             end
+
             if should_send then
                 -- Пакетная отправка (Batching)
-                if MonitorConfig and MonitorConfig.BatchEnabled and
+                if batch_enabled and
                    (sub.transport == "HTTP" or sub.transport == "WS") and
                    sub.batch_mode ~= "single"
                 then
@@ -626,16 +628,29 @@ function SubscriptionManager:publish_to_single(sub_id, event_type, event_data)
 end
 
 --- Определяет тип транспорта на основе конфигурации callback.
+--- Оптимизировано: использование кэша для предотвращения повторного разбора.
 --- @param cfg function|table Конфигурация коллбэка или функция
 --- @return string|nil Тип транспорта (HTTP, WS, CONSOLE, LUA_CALLBACK)
 function SubscriptionManager:detect_transport(cfg)
-    if type(cfg) == "function" then return "LUA_CALLBACK" end
-    if type(cfg) == "table" then
-        local t = cfg.type and cfg.type:upper()
-        if t == "HTTP" or t == "WS" or t == "CONSOLE" or t == "LUA_CALLBACK" then return t end
-        if cfg.host and cfg.port then return "HTTP" end
+    local cached = state.transport_cache[cfg]
+    if cached then return cached end
+
+    local t
+    if type(cfg) == "function" then
+        t = "LUA_CALLBACK"
+    elseif type(cfg) == "table" then
+        t = cfg.type and cfg.type:upper()
+        if not (t == "HTTP" or t == "WS" or t == "CONSOLE" or t == "LUA_CALLBACK") then
+            if cfg.host and cfg.port then
+                t = "HTTP"
+            else
+                t = nil
+            end
+        end
     end
-    return nil
+
+    if t then state.transport_cache[cfg] = t end
+    return t
 end
 
 --- Добавляет событие в пакетную очередь подписчика

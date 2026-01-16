@@ -98,6 +98,7 @@ end
 
 --- Создает матчер для сложных масок с множественными сегментами (только "*")
 --- Например: "prefix*middle*suffix"
+--- Оптимизировано: использование локальных переменных для ускорения цикла.
 --- @private
 --- @param pattern string Маска
 --- @return function Функция-матчер
@@ -124,26 +125,30 @@ local function _create_segments_matcher(pattern)
     local last_seg = segments[num_segments]
     local last_seg_len = segment_lens[num_segments]
 
+    -- Кэшируем функции для Fast Path
+    local find = string_find
+
     return function(name)
         if not name or type(name) ~= "string" then return false end
         local pos = 1
 
         -- 1. Проверка первого сегмента (если маска не начинается со звезды)
         if not first_is_star then
-            if string_find(name, first_seg, 1, true) ~= 1 then return false end
+            if find(name, first_seg, 1, true) ~= 1 then return false end
             pos = first_seg_len + 1
         end
 
         -- 2. Проверка промежуточных сегментов (поиск по порядку)
         for i = start_idx, end_idx do
-            local s, e = string_find(name, segments[i], pos, true)
+            local s, e = find(name, segments[i], pos, true)
             if not s then return false end
             pos = e + 1
         end
 
         -- 3. Проверка последнего сегмента (если маска не заканчивается звездой)
         if not last_is_star and num_segments > (first_is_star and 0 or 1) then
-            if string_find(name, last_seg, -last_seg_len, true) == nil then return false end
+            local s = find(name, last_seg, -last_seg_len, true)
+            if not s or (s + last_seg_len - 1) ~= #name then return false end
         end
 
         return true

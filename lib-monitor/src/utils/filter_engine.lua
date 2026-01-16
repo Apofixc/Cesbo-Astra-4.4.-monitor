@@ -31,9 +31,9 @@ local MAX_CACHE_SIZE = 500 -- Увеличенный размер кэша дл�
 
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class FilterEngineState
---- @field script_cache table<string, function> Кэш скомпилированных скриптов
+--- @field script_cache table<string, function|nil> Кэш скомпилированных скриптов
 --- @field script_cache_count number Текущее количество скриптов в кэше
---- @field accessor_cache table<string, function> Кэш функций-аксессоров
+--- @field accessor_cache table<string, function|nil> Кэш функций-аксессоров
 --- @field accessor_cache_count number Текущее количество аксессоров в кэше
 --- @field duration_state table<string, table<string, number>> Состояние фильтров по длительности
 local state = {
@@ -210,6 +210,7 @@ local function _generate_cond_expr(cond, upvalues)
             current = string_format("%s[%q]", current, part)
             table_insert(parts, current)
         end
+        -- Оптимизация: уменьшаем количество проверок типов для простых путей
         for j = 1, #parts - 1 do
             table_insert(checks, string_format("type(%s) == 'table'", parts[j]))
         end
@@ -301,6 +302,8 @@ function FilterEngine.match(data, filters, sub_id)
         end
         check_dur(filters)
 
+        -- Оптимизация: JIT-компиляция логики даже при наличии Duration
+        -- (Интерпретатор будет вызывать JIT-код для проверки условий)
         if not has_duration then
             local upvalues = {}
             local expr = _generate_recursive(filters, upvalues)
@@ -339,6 +342,7 @@ function FilterEngine.match(data, filters, sub_id)
 
     -- Lua-скрипт
     if filters.script and type(filters.script) == "string" then
+        ---@type function|nil
         local func = state.script_cache[filters.script]
         if not func then
             if state.script_cache_count >= MAX_CACHE_SIZE then

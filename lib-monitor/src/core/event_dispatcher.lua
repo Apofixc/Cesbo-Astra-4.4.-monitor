@@ -55,6 +55,7 @@ local state = {
 --- @field private _lvc_head number Индекс головы очереди ключей LVC
 --- @field private _lvc_tail number Индекс хвоста очереди ключей LVC
 --- @field private _lvc_size number Текущий размер LVC
+--- @field private _last_lvc_check_key any Последний проверенный ключ в LVC (для инкрементальной очистки)
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
 --- @field private stats table Статистика диспетчера
 --- @field private active boolean Флаг активности обработки
@@ -73,18 +74,35 @@ local function _generate_event_id()
     return "evt_" .. state.event_counter
 end
 
---- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности
+--- Рекурсивно копирует таблицу, используя пул для всех уровней вложенности.
+--- Оптимизировано: итеративный подход для предотвращения переполнения стека.
 --- @private
---- @param data any Данные для копирования
---- @return any Копия данных
+--- @param data any Данные для копирования (таблица или примитив)
+--- @return any Глубокая копия данных, размещенная в пуле таблиц
 local function _deep_copy_to_pool(data)
     if type(data) ~= "table" then return data end
 
-    local copy = TablePool.get("lvc_sub")
-    for k, v in pairs(data) do
-        copy[k] = _deep_copy_to_pool(v)
+    local root_copy = TablePool.get("lvc_sub")
+    local stack = { {src = data, dst = root_copy} }
+    local stack_ptr = 1
+
+    while stack_ptr > 0 do
+        local curr = stack[stack_ptr]
+        stack_ptr = stack_ptr - 1
+
+        for k, v in pairs(curr.src) do
+            if type(v) == "table" then
+                local v_copy = TablePool.get("lvc_sub")
+                curr.dst[k] = v_copy
+                stack_ptr = stack_ptr + 1
+                stack[stack_ptr] = {src = v, dst = v_copy}
+            else
+                curr.dst[k] = v
+            end
+        end
     end
-    return copy
+
+    return root_copy
 end
 
 --- Инициализирует диспетчер событий, создает менеджер подписок и запускает обработчик очереди
@@ -178,9 +196,8 @@ end
 --- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
 --- @param event_type string Тип события (например, "channel:error")
 --- @param event_data table|string Данные события
---- @param priority? number [Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).]
---- @param options? table [Дополнительные параметры: source (источник), no_cache (не сохранять в LVC),
---- is_table (данные из пула).]
+--- @param priority? number Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).
+--- @param options? table Дополнительные параметры: source (источник), no_cache (не сохранять в LVC), is_table (данные из пула).
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
@@ -356,24 +373,38 @@ function EventDispatcher:_start_queue_processor()
     end, interval)
 end
 
---- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager
+--- Извлекает события из очередей в порядке приоритета и передает их в SubscriptionManager.
+--- Реализует инкрементальную очистку LVC и обработку батчей событий.
 --- @private
 function EventDispatcher:_process_queue()
     local now = os_time()
     local sub_mgr = self.subscription_manager
 
-    -- Периодическая очистка старых записей LVC (TTL)
-    -- Выполняется раз в минуту для снижения нагрузки
-    if now % 60 == 0 then
-        local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
-        for name, entry in pairs(self._lvc) do
-            if now - entry.timestamp > lvc_ttl then
-                self:_release_lvc_entry(entry)
-                self._lvc[name] = nil
-                self._lvc_size = self._lvc_size - 1
-            end
+    -- Инкрементальная очистка старых записей LVC (TTL)
+    -- Оптимизация: проверяем по 5 записей за тик вместо полного перебора раз в минуту.
+    -- Используем безопасный метод удаления при итерации через next().
+    local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
+    local checked = 0
+    local current_key = self._last_lvc_check_key
+    
+    while checked < 5 do
+        local k, entry = next(self._lvc, current_key)
+        if not k then 
+            current_key = nil
+            break 
         end
+        
+        if entry and now - entry.timestamp > lvc_ttl then
+            self:_release_lvc_entry(entry)
+            self._lvc[k] = nil
+            self._lvc_size = self._lvc_size - 1
+            -- После удаления ключа current_key остается прежним для следующего вызова next()
+        else
+            current_key = k
+        end
+        checked = checked + 1
     end
+    self._last_lvc_check_key = current_key
 
     local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
     local processed_in_batch = 0
