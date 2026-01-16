@@ -1,7 +1,17 @@
+-- ===========================================================================
+-- Модуль `repository.channel_repository`
+--
+-- Репозиторий для управления мониторами каналов.
+-- Наследуется от BaseRepository и добавляет специфичную логику поиска
+-- каналов по адаптерам и управления зависимыми потоками.
+-- ===========================================================================
+
 -- 1. Стандартные Lua функции
 local pairs = _G.pairs
 local ipairs = _G.ipairs
 local tostring = _G.tostring
+local type = _G.type
+local pcall = _G.pcall
 local table_insert = _G.table.insert
 
 -- 2. Функции из ModuleManager.get_module()
@@ -15,9 +25,16 @@ local channel_list = ModuleManager.get_global_dependency("channel_list")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
 
--- 5. Инициализация объектов из загруженных модулей
+-- ===========================================================================
+-- Инициализация репозитория
+-- ===========================================================================
+
 --- @class ChannelRepository : BaseRepository
 local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
+
+-- ===========================================================================
+-- Публичное API: Управление зависимыми каналами
+-- ===========================================================================
 
 --- Останавливает все каналы, использующие указанный адаптер.
 --- @param adapter_name string Имя адаптера
@@ -34,6 +51,7 @@ function ChannelRepository:stop_dependent_channels(adapter_name)
             table_insert(saved_configs, ch_config)
         end
     end
+
     return saved_configs
 end
 
@@ -41,6 +59,7 @@ end
 --- @param configs table Список конфигураций каналов
 function ChannelRepository:start_dependent_channels(configs)
     if not configs or type(configs) ~= "table" then return end
+    
     local Channel = ModuleManager.get_module("channel")
     if not Channel then
         Logger.error(COMPONENT_NAME, "start_dependent_channels: модуль 'channel' не найден")
@@ -62,16 +81,22 @@ function ChannelRepository:start_dependent_channels(configs)
             success_count = success_count + 1
             Logger.debug(COMPONENT_NAME, "Канал %s успешно запущен", name)
         else
-            Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", name, tostring(res or "unknown error"))
+            Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", 
+                name, tostring(res or "unknown error"))
         end
     end
 
     if success_count == total then
         Logger.info(COMPONENT_NAME, "Все зависимые каналы (%d/%d) успешно запущены", success_count, total)
     else
-        Logger.warn(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", success_count, total)
+        Logger.warn(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", 
+            success_count, total)
     end
 end
+
+-- ===========================================================================
+-- Публичное API: Поиск
+-- ===========================================================================
 
 --- Находит все каналы в системе Astra, использующие указанный DVB-адаптер
 --- @param adapter_name string Имя адаптера (например, "0" или "0.1")
@@ -90,6 +115,7 @@ function ChannelRepository:find_by_adapter(adapter_name)
         if type(inputs) == "table" then
             for i = 1, #inputs do
                 local input = inputs[i]
+                
                 -- В Astra ch_data.input[i] может быть строкой URL или таблицей с полем config
                 local cfg
                 if type(input) == "table" then
@@ -114,6 +140,7 @@ function ChannelRepository:find_by_adapter(adapter_name)
             end
         end
     end
+    
     return result
 end
 
