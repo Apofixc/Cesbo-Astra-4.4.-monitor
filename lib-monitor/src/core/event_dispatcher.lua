@@ -59,6 +59,8 @@ local state = {
 --- @field private _lvc_size number Текущий размер LVC
 --- @field private _last_lvc_check_key any Последний проверенный ключ в LVC (для инкрементальной очистки)
 --- @field private event_queues table<number, table> Очереди событий по приоритетам
+--- @field private _total_queued_count number Общее количество событий в очередях
+--- @field private _active_queues_mask number Битовая маска активных очередей
 --- @field private stats table Статистика диспетчера
 --- @field private active boolean Флаг активности обработки
 local EventDispatcher = {}
@@ -130,13 +132,16 @@ function EventDispatcher:_initialize()
 
     -- Очереди событий по приоритетам (FIFO круговые буферы)
     self.event_queues = {}
+    self._total_queued_count = 0
+    self._active_queues_mask = 0
     for _, p in pairs(self.PRIORITIES) do
         self.event_queues[p] = {
             data = {},
             head = 1,
             tail = 1,
             size = 0,
-            max_size = MAX_QUEUE_SIZE
+            max_size = MAX_QUEUE_SIZE,
+            priority_bit = 2 ^ (p - 1)
         }
     end
 
@@ -281,6 +286,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             queue.data[queue.head] = nil
             queue.head = (queue.head % queue.max_size) + 1
             queue.size = queue.size - 1
+            self._total_queued_count = self._total_queued_count - 1
 
             if dropped_event then
                 -- Если данные были из пула, возвращаем их
@@ -295,6 +301,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         queue.data[queue.tail] = event
         queue.tail = (queue.tail % queue.max_size) + 1
         queue.size = queue.size + 1
+        self._total_queued_count = self._total_queued_count + 1
+        self._active_queues_mask = bit32.bor(self._active_queues_mask, queue.priority_bit)
     end
 
     self.stats.emitted = self.stats.emitted + 1
@@ -419,45 +427,52 @@ function EventDispatcher:_process_queue()
     local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
     
     -- Адаптивная частота: если суммарный размер очередей > 50%, увеличиваем лимит
-    local current_total_size = 0
-    for _, q in pairs(self.event_queues) do current_total_size = current_total_size + q.size end
-    
-    if current_total_size > (MAX_QUEUE_SIZE * 0.5) then
+    -- Оптимизировано: используем _total_queued_count вместо цикла
+    if self._total_queued_count > (MAX_QUEUE_SIZE * 0.5) then
         limit = math.min(MAX_BATCH_LIMIT, limit * 2)
     end
 
     local processed_in_batch = 0
     local priorities = self.PRIORITIES
+    local mask = self._active_queues_mask
 
     for p = priorities.CRITICAL, priorities.LOW do
         local queue = self.event_queues[p]
-        local q_data = queue.data
-        local q_max = queue.max_size
+        
+        -- Оптимизация: проверяем маску перед входом в цикл очереди
+        if bit32.band(mask, queue.priority_bit) ~= 0 then
+            local q_data = queue.data
+            local q_max = queue.max_size
 
-        while queue.size > 0 do
-            local event = q_data[queue.head]
-            q_data[queue.head] = nil
-            queue.head = (queue.head % q_max) + 1
-            queue.size = queue.size - 1
+            while queue.size > 0 do
+                local event = q_data[queue.head]
+                q_data[queue.head] = nil
+                queue.head = (queue.head % q_max) + 1
+                queue.size = queue.size - 1
 
-            if event then
-                local ok, err = pcall(sub_mgr.publish_event, sub_mgr, event, now)
+                if event then
+                    local ok, err = pcall(sub_mgr.publish_event, sub_mgr, event, now)
 
-                if not ok then
-                    Logger.error(COMPONENT_NAME, "Не удалось обработать событие %s: %s",
-                        event.id or "неизвестно", tostring(err))
-                else
-                    self.stats.processed = self.stats.processed + 1
+                    if not ok then
+                        Logger.error(COMPONENT_NAME, "Не удалось обработать событие %s: %s",
+                            event.id or "неизвестно", tostring(err))
+                    else
+                        self.stats.processed = self.stats.processed + 1
+                    end
+
+                    -- Возврат в пул
+                    self:_safe_return_to_pool(event)
                 end
 
-                -- Возврат в пул
-                self:_safe_return_to_pool(event)
+                self._total_queued_count = self._total_queued_count - 1
+                processed_in_batch = processed_in_batch + 1
+                if processed_in_batch >= limit then
+                    return -- Прерываем обработку до следующего тика
+                end
             end
-
-            processed_in_batch = processed_in_batch + 1
-            if processed_in_batch >= limit then
-                return -- Прерываем обработку до следующего тика
-            end
+            
+            -- Если очередь пуста, сбрасываем бит в маске
+            self._active_queues_mask = bit32.band(self._active_queues_mask, bit32.bnot(queue.priority_bit))
         end
     end
 end

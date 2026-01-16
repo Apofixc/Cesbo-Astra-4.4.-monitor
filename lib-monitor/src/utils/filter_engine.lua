@@ -290,9 +290,10 @@ function FilterEngine.match(data, filters, sub_id)
     if not filters or next(filters) == nil then return true end
 
     -- JIT-компиляция
-    if filters.conditions and not filters.script and not filters._compiled_func then
+    if not filters.script and not filters._compiled_func then
         local has_duration = false
         local function check_dur(f)
+            if not f.conditions then return end
             for _, c in ipairs(f.conditions) do
                 if c.duration and c.duration > 0 then 
                     has_duration = true
@@ -319,22 +320,29 @@ function FilterEngine.match(data, filters, sub_id)
         -- (Интерпретатор будет вызывать JIT-код для проверки условий)
         if not has_duration then
             local upvalues = {}
-            local expr = _generate_recursive(filters, upvalues)
+            local expr
             
-            local uv_decl = {}
+            if filters.conditions then
+                expr = _generate_recursive(filters, upvalues)
+            else
+                -- JIT для простых фильтров по полям
+                local parts = {}
+                for k, v in pairs(filters) do
+                    if not k:find("^_") then
+                        local val_expr = type(v) == "string" and string_format("%q", v) or tostring(v)
+                        table_insert(parts, string_format("(data[%q] == %s)", k, val_expr))
+                    end
+                end
+                expr = #parts > 0 and table_concat(parts, " and ") or "true"
+            end
+            
             local uv_env = { 
                 type = type, tostring = tostring, 
                 string_find = string_find, string_match = string_match 
             }
-            for _, uv in ipairs(upvalues) do
-                table_insert(uv_decl, uv.name)
-                uv_env[uv.name] = uv.value
-            end
+            for _, uv in ipairs(upvalues) do uv_env[uv.name] = uv.value end
             
-            local code = string_format(
-                "return function(data) return %s end",
-                expr
-            )
+            local code = string_format("return function(data) return %s end", expr)
             
             local factory, err = load(code, "=(filter_jit)", "t", uv_env)
             if factory then

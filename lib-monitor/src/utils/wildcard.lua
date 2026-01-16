@@ -98,60 +98,56 @@ end
 
 --- Создает матчер для сложных масок с множественными сегментами (только "*")
 --- Например: "prefix*middle*suffix"
---- Оптимизировано: использование локальных переменных для ускорения цикла.
+--- Оптимизировано: JIT-компиляция логики поиска сегментов.
 --- @private
 --- @param pattern string Маска
 --- @return function Функция-матчер
 local function _create_segments_matcher(pattern)
     local segments = {}
-    local segment_lens = {}
     for seg in string_gmatch(pattern, "[^*]+") do
         segments[#segments + 1] = seg
-        segment_lens[#segment_lens + 1] = #seg
     end
 
     local num_segments = #segments
-    if num_segments == 0 then -- Только звезды
-        return _create_any_matcher()
-    end
+    if num_segments == 0 then return _create_any_matcher() end
 
     local first_is_star = string_sub(pattern, 1, 1) == "*"
     local last_is_star = string_sub(pattern, -1, -1) == "*"
 
-    local start_idx = first_is_star and 1 or 2
-    local end_idx = last_is_star and num_segments or num_segments - 1
-    local first_seg = segments[1]
-    local first_seg_len = segment_lens[1]
-    local last_seg = segments[num_segments]
-    local last_seg_len = segment_lens[num_segments]
+    local code_parts = { "return function(name)" }
+    table_insert(code_parts, "if not name or type(name) ~= 'string' then return false end")
+    table_insert(code_parts, "local pos = 1")
+    table_insert(code_parts, "local s, e")
 
-    -- Кэшируем функции для Fast Path
-    local find = string_find
+    local uv_env = { type = type, string_find = string_find }
 
-    return function(name)
-        if not name or type(name) ~= "string" then return false end
-        local pos = 1
+    for i = 1, num_segments do
+        local seg = segments[i]
+        local uv_name = "seg" .. i
+        uv_env[uv_name] = seg
 
-        -- 1. Проверка первого сегмента (если маска не начинается со звезды)
-        if not first_is_star then
-            if find(name, first_seg, 1, true) ~= 1 then return false end
-            pos = first_seg_len + 1
+        if i == 1 and not first_is_star then
+            table_insert(code_parts, string_format("if string_find(name, %s, 1, true) ~= 1 then return false end", uv_name))
+            table_insert(code_parts, string_format("pos = %d", #seg + 1))
+        elseif i == num_segments and not last_is_star then
+            table_insert(code_parts, string_format("s = string_find(name, %s, -%d, true)", uv_name, #seg))
+            table_insert(code_parts, string_format("if not s or (s + %d) ~= #name then return false end", #seg - 1))
+        else
+            table_insert(code_parts, string_format("s, e = string_find(name, %s, pos, true)", uv_name))
+            table_insert(code_parts, "if not s then return false end")
+            table_insert(code_parts, "pos = e + 1")
         end
+    end
 
-        -- 2. Проверка промежуточных сегментов (поиск по порядку)
-        for i = start_idx, end_idx do
-            local s, e = find(name, segments[i], pos, true)
-            if not s then return false end
-            pos = e + 1
-        end
+    table_insert(code_parts, "return true")
+    table_insert(code_parts, "end")
 
-        -- 3. Проверка последнего сегмента (если маска не заканчивается звездой)
-        if not last_is_star and num_segments > (first_is_star and 0 or 1) then
-            local s = find(name, last_seg, -last_seg_len, true)
-            if not s or (s + last_seg_len - 1) ~= #name then return false end
-        end
-
-        return true
+    local factory, err = load(table_concat(code_parts, "\n"), "=(wildcard_jit)", "t", uv_env)
+    if factory then
+        return factory()
+    else
+        -- Fallback на старую логику при ошибке JIT
+        return function(name) return false end
     end
 end
 

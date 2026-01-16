@@ -100,6 +100,7 @@ local state = {
 --- @field event_type string Тип события или маска
 --- @field callback function|table Конфигурация коллбэка
 --- @field transport string Тип транспорта (HTTP, WS, CONSOLE, LUA_CALLBACK)
+--- @field host_header string|nil Кэшированный заголовок Host (для HTTP)
 --- @field filters table Фильтры события
 --- @field batch_mode string Режим батчинга (single, array)
 --- @field throttle_ms number Троттлинг в мс
@@ -196,12 +197,15 @@ local Transport = {
 
         retry_count = retry_count or 0
 
+        -- Оптимизация: используем кэшированный заголовок Host если доступен
+        local host_header = config._host_header or ("Host: " .. config.host .. ":" .. config.port)
+
         request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
             timeout = HTTP_TIMEOUT,
             headers = {
-                get_user_agent(), "Host: " .. config.host .. ":" .. config.port,
+                get_user_agent(), host_header,
                 CONTENT_TYPE, "Content-Length: " .. #content, CONNECTION_CLOSE
             },
             callback = function(s, response)
@@ -472,6 +476,12 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         last_event_at = 0, stats = { delivered = 0, failed = 0, consecutive_failures = 0 }
     }
 
+    -- Кэширование заголовка Host для HTTP транспорта
+    if transport == "HTTP" and type(subscription.callback) == "table" then
+        local cb = subscription.callback
+        cb._host_header = "Host: " .. tostring(cb.host) .. ":" .. tostring(cb.port)
+    end
+
     if not self.subscriptions[event_type] then
         self.subscriptions[event_type] = {}
         -- Предкомпиляция маски
@@ -549,6 +559,42 @@ function SubscriptionManager:publish_event(event, now)
 
     local num_targets = #targets
     if num_targets == 0 then return 0, 0 end
+
+    -- Оптимизация: Fast Path для одиночного подписчика
+    if num_targets == 1 then
+        local sub = targets[1]
+        if sub.active then
+            local should_send = true
+            if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
+                should_send = false
+            end
+            if should_send and sub.filters and (sub.filters.conditions or sub.filters.script) then
+                if FilterEngine and not FilterEngine.match(event_data, sub.filters, sub.id) then
+                    should_send = false
+                end
+            end
+
+            if should_send then
+                if sub.transport ~= "LUA_CALLBACK" then
+                    event_json = _get_event_json(event)
+                end
+                local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
+                if success then
+                    sub.stats.delivered = sub.stats.delivered + 1
+                    sub.stats.consecutive_failures = 0
+                    sub.last_event_at = now
+                    self.stats.delivered = self.stats.delivered + 1
+                    return 1, 0
+                else
+                    sub.stats.failed = sub.stats.failed + 1
+                    sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
+                    self.stats.failed = self.stats.failed + 1
+                    return 0, 1
+                end
+            end
+        end
+        return 0, 0
+    end
 
     local batch_enabled = MonitorConfig and MonitorConfig.BatchEnabled
 

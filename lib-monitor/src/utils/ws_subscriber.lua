@@ -98,10 +98,12 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
 
     -- Оптимизация: Проверяем наличие клиентов перед сборкой сообщения
     local clients = state.clients
-    if not next(clients) then return end
+    local next_client = next(clients)
+    if not next_client then return end
 
     local message = '{"event":"' .. event_type .. '","data":' .. json_data .. '}'
     local send = server.send
+    local close = server.close
     
     for client, error_count in pairs(clients) do
         local ok, err = pcall(send, server, client, message)
@@ -114,7 +116,7 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
             if error_count >= 5 then
                 clients[client] = nil
                 -- Принудительное закрытие сокета, если метод доступен
-                if server.close then pcall(server.close, server, client) end
+                if close then pcall(close, server, client) end
                 Logger.debug(COMPONENT_NAME, "Клиент WS удален после 5 ошибок: %s", tostring(err))
             else
                 Logger.debug(COMPONENT_NAME, "Ошибка отправки клиенту WS (попытка %d): %s", error_count, tostring(err))
