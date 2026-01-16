@@ -528,7 +528,7 @@ end
 --- Рассылает объект события всем подписчикам.
 --- @param event table Объект события (из EventDispatcher)
 --- @param now? number [Текущее время (опционально, для оптимизации)]
---- @return number, number Количество успешно доставленных и проваленных уведомлений
+--- @return boolean Статус выполнения
 function SubscriptionManager:publish_event(event, now)
     local delivered, failed = 0, 0
     now = now or os_time()
@@ -558,7 +558,7 @@ function SubscriptionManager:publish_event(event, now)
     end
 
     local num_targets = #targets
-    if num_targets == 0 then return 0, 0 end
+    if num_targets == 0 then return false end
 
     -- Оптимизация: Fast Path для одиночного подписчика
     if num_targets == 1 then
@@ -582,7 +582,7 @@ function SubscriptionManager:publish_event(event, now)
                 then
                     self:add_to_batch(sub, event)
                     self.stats.delivered = self.stats.delivered + 1
-                    return 1, 0
+                    return true
                 end
 
                 if sub.transport ~= "LUA_CALLBACK" then
@@ -594,16 +594,16 @@ function SubscriptionManager:publish_event(event, now)
                     sub.stats.consecutive_failures = 0
                     sub.last_event_at = now
                     self.stats.delivered = self.stats.delivered + 1
-                    return 1, 0
+                    return true
                 else
                     sub.stats.failed = sub.stats.failed + 1
                     sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
                     self.stats.failed = self.stats.failed + 1
-                    return 0, 1
+                    return false
                 end
             end
         end
-        return 0, 0
+        return false
     end
 
     local batch_enabled = MonitorConfig and MonitorConfig.BatchEnabled
@@ -660,7 +660,7 @@ function SubscriptionManager:publish_event(event, now)
     end
     self.stats.delivered = self.stats.delivered + delivered
     self.stats.failed = self.stats.failed + failed
-    return delivered, failed
+    return true
 end
 
 --- Отправляет событие конкретному подписчику по его ID.
