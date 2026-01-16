@@ -7,7 +7,7 @@ local type = _G.type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local DvbTuner = ModuleManager.get_module("dvb_tuner")
+local TunerMonitor = ModuleManager.get_module("tuner_monitor")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
 local Channel = ModuleManager.get_module("channel")
@@ -39,14 +39,14 @@ local function dvb_tuner_monitor(conf)
         return false
     end
 
-    local tuner = DvbTuner.new(conf)
+    local tuner = TunerMonitor.new(conf)
     if not tuner then
         return false
     end
 
     local instance = tuner:start()
     if instance then
-        DvbRepository:register(conf.name_adapter, tuner, DvbTuner)
+        DvbRepository:register(conf.name_adapter, tuner, TunerMonitor)
         _G[conf.name_adapter] = instance
         return true
     else
@@ -58,7 +58,7 @@ end
 
 --- Находит объект DVB-тюнера по имени адаптера.
 --- @param name_adapter string Уникальное имя адаптера
---- @return DvbTuner|nil Объект тюнера или nil
+--- @return TunerMonitor|nil Объект тюнера или nil
 local function find_dvb_monitor(name_adapter)
     return DvbRepository:find(name_adapter)
 end
@@ -77,7 +77,7 @@ local function update_dvb_monitor_parameters(name_adapter, params)
 end
 
 --- Возвращает список всех активных мониторов тюнеров.
---- @return table<string, DvbTuner> Список мониторов
+--- @return table<string, TunerMonitor> Список мониторов
 local function get_all_dvb_monitors()
     return DvbRepository:get_all()
 end

@@ -144,12 +144,12 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
 end)
 
 initialize_phase(INIT_PHASES.ADAPTERS, function()
-    ModuleManager.register_module("dvb_tuner", path_prefix .. "src.adapters.dvb_tuner",
+    ModuleManager.register_module("tuner_monitor", path_prefix .. "src.adapters.tuner_monitor",
         {"logger", "utils", "monitor_config", "core.base_monitor"})
     ModuleManager.register_module("dvb_repository", path_prefix .. "src.repository.dvb_repository",
         {"logger", "core.base_repository"})
     ModuleManager.register_module("adapter", path_prefix .. "src.adapters.adapter",
-        {"logger", "monitor_config", "dvb_tuner", "dvb_repository", "core.event_dispatcher"})
+        {"logger", "monitor_config", "tuner_monitor", "dvb_repository", "core.event_dispatcher"})
 
     ModuleManager.register_module("channel_monitor", path_prefix .. "src.channel.channel_monitor",
         {"logger", "utils", "monitor_config", "core.base_monitor", "table_pool"})

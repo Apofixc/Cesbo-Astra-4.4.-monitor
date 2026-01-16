@@ -1,3 +1,30 @@
+-- ===========================================================================
+-- Модуль `core.base_monitor`
+--
+-- Базовый класс для всех мониторов в системе. Предоставляет общую логику
+-- управления состоянием, таймерами, кэшированием JSON и публикацией событий.
+-- ===========================================================================
+
+-- 1. Стандартные Lua функции
+local setmetatable = _G.setmetatable
+local tostring = _G.tostring
+local os_time = _G.os.time
+local collectgarbage = _G.collectgarbage
+
+-- 2. Функции из ModuleManager.get_module()
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+local Logger = ModuleManager.get_module("logger")
+local Utils = ModuleManager.get_module("utils")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
+local TablePool = ModuleManager.get_module("utils.table_pool")
+
+-- 3. Глобальные зависимости Astra
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+
+-- ===========================================================================
+-- Константы и конфигурации
+-- ===========================================================================
+
 --- @class BaseMonitor
 --- @field protected _name string Технический идентификатор монитора
 --- @field protected _config table Конфигурация монитора
@@ -16,23 +43,6 @@
 local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
--- 1. Стандартные Lua функции
-local setmetatable = _G.setmetatable
-local tostring = _G.tostring
-local os_time = _G.os.time
-local collectgarbage = _G.collectgarbage
-
--- 2. Функции из ModuleManager.get_module()
-local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
-local Logger = ModuleManager.get_module("logger")
-local Utils = ModuleManager.get_module("utils")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
-local TablePool = ModuleManager.get_module("utils.table_pool")
-
--- 3. Глобальные зависимости Astra
-local json_encode = ModuleManager.get_global_dependency("json.encode")
-
--- 4. Константы
 BaseMonitor.STATE = {
     IDLE = 1,
     RUNNING = 2,
@@ -43,51 +53,15 @@ BaseMonitor.STATE = {
 -- Ключ: prefix .. param_name
 local CONFIG_KEY_CACHE = {}
 
---- Конструктор базового монитора
---- @param config table Конфигурация монитора
---- @param component_name string Имя компонента для логирования
---- @return BaseMonitor Экземпляр базового монитора
-function BaseMonitor.new(config, component_name)
-    --- @type BaseMonitor
-    local self = setmetatable({}, BaseMonitor)
-    self._config = config
-    self._name = self._config.name or "Unknown"
-    self._component_name = component_name or "BaseMonitor"
-    self._active = false
-    self._state = BaseMonitor.STATE.IDLE
-    self._instance = nil
-    self._json_cache = nil
-    self._current_method = nil
-    self._psi = {}
-    self._check_timer = 0
-    self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
-    self._force_timer = self._force_interval -- Сразу готов к отправке
-    self._last_update = os_time()
-    self._table_pool = TablePool
-    return self
-end
+-- ===========================================================================
+-- Внутреннее состояние (Private State)
+-- ===========================================================================
 
---- Возвращает таблицу из пула указанного типа.
---- Если пул пуст, создает новую таблицу.
---- @param type_name? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
---- @return table Свободная таблица
-function BaseMonitor:get_table_from_pool(type_name)
-    if self._table_pool then
-        return self._table_pool.get(type_name)
-    end
-    return {}
-end
+-- (Для классов состояние инкапсулировано в экземпляре, создаваемом в .new)
 
---- Возвращает таблицу в пул для повторного использования.
---- Перед возвратом таблица полностью очищается.
---- @param t table Таблица для возврата
---- @param type_name? string [Тип пула. По умолчанию "generic"]
---- @param deep? boolean [Флаг глубокой очистки. По умолчанию false]
-function BaseMonitor:return_table_to_pool(t, type_name, deep)
-    if self._table_pool then
-        self._table_pool.release(t, type_name, deep)
-    end
-end
+-- ===========================================================================
+-- Внутренние функции (Private/Protected)
+-- ===========================================================================
 
 --- Вспомогательная функция для установки параметра конфигурации
 --- @protected
@@ -128,6 +102,130 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     return true
 end
 
+--- Обновляет JSON-кэш на основе предоставленных данных.
+--- @protected
+--- @param data table Данные для сериализации
+function BaseMonitor:_refresh_cache(data)
+    if not data then return end
+    if json_encode then
+        self._json_cache = json_encode(data)
+    else
+        self._json_cache = tostring(data)
+    end
+end
+
+--- Сбрасывает кэш JSON-представления.
+--- Вызывается при обновлении данных монитора.
+--- @protected
+function BaseMonitor:_clear_json_cache()
+    self._json_cache = nil
+end
+
+--- Обрабатывает входящие PSI данные и сохраняет их в кэш
+--- @protected
+--- @param data table Данные от анализатора Astra
+function BaseMonitor:_process_psi_data(data)
+    local name = data.psi
+    if name then
+        self._psi[name:upper()] = data
+    end
+end
+
+--- Очищает кэш PSI данных
+--- @protected
+function BaseMonitor:_clear_psi()
+    self._psi = {}
+end
+
+--- Проверяет, прошел ли интервал времени для выполнения проверки.
+--- @protected
+--- @param time_check number Интервал проверки из конфигурации
+--- @return boolean true если интервал прошел, иначе false
+function BaseMonitor:_should_send(time_check)
+    self._force_timer = self._force_timer + 1
+
+    if self._check_timer < (time_check or 0) then
+        self._check_timer = self._check_timer + 1
+        return false
+    end
+
+    self._check_timer = 0
+    return true
+end
+
+--- Проверяет, пора ли выполнять принудительную отправку данных
+--- @protected
+--- @return boolean true если пора, иначе false
+function BaseMonitor:_is_force()
+    return self._force_timer >= self._force_interval
+end
+
+--- Сбрасывает таймер принудительной отправки
+--- @protected
+function BaseMonitor:_reset_force_timer()
+    self._force_timer = 0
+    self._last_update = os_time()
+end
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
+--- Конструктор базового монитора
+--- @param config table Конфигурация монитора
+--- @param component_name string Имя компонента для логирования
+--- @return BaseMonitor Экземпляр базового монитора
+function BaseMonitor.new(config, component_name)
+    --- @type BaseMonitor
+    local self = setmetatable({}, BaseMonitor)
+
+    -- 1. Конфигурация и идентификация
+    self._config = config
+    self._name = self._config.name or "Unknown"
+    self._component_name = component_name or "BaseMonitor"
+
+    -- 2. Состояние процесса
+    self._active = false
+    self._state = BaseMonitor.STATE.IDLE
+    self._instance = nil
+
+    -- 3. Таймеры и интервалы
+    self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
+    self._force_timer = self._force_interval -- Сразу готов к отправке
+    self._check_timer = 0
+    self._last_update = os_time()
+
+    -- 4. Кэш и вспомогательные объекты
+    self._json_cache = nil
+    self._current_method = nil
+    self._psi = {}
+    self._table_pool = TablePool
+
+    return self
+end
+
+--- Возвращает таблицу из пула указанного типа.
+--- Если пул пуст, создает новую таблицу.
+--- @param type_name? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
+--- @return table Свободная таблица
+function BaseMonitor:get_table_from_pool(type_name)
+    if self._table_pool then
+        return self._table_pool.get(type_name)
+    end
+    return {}
+end
+
+--- Возвращает таблицу в пул для повторного использования.
+--- Перед возвратом таблица полностью очищается.
+--- @param t table Таблица для возврата
+--- @param type_name? string [Тип пула. По умолчанию "generic"]
+--- @param deep? boolean [Флаг глубокой очистки. По умолчанию false]
+function BaseMonitor:return_table_to_pool(t, type_name, deep)
+    if self._table_pool then
+        self._table_pool.release(t, type_name, deep)
+    end
+end
+
 --- Публикует данные через EventDispatcher.
 --- Использует пул для таблицы опций (Zero-Allocation Path).
 --- @param data table|string Данные события
@@ -157,18 +255,6 @@ function BaseMonitor:get_status_table()
     return nil
 end
 
---- Обновляет JSON-кэш на основе предоставленных данных.
---- @protected
---- @param data table Данные для сериализации
-function BaseMonitor:_refresh_cache(data)
-    if not data then return end
-    if json_encode then
-        self._json_cache = json_encode(data)
-    else
-        self._json_cache = tostring(data)
-    end
-end
-
 --- Возвращает актуальные данные в виде JSON-строки.
 --- Гарантирует возврат актуальной строки (из кэша или создав её).
 --- @return string|nil JSON-строка
@@ -180,13 +266,6 @@ function BaseMonitor:get_status_json()
 
     self:_refresh_cache(data)
     return self._json_cache
-end
-
---- Сбрасывает кэш JSON-представления.
---- Вызывается при обновлении данных монитора.
---- @protected
-function BaseMonitor:_clear_json_cache()
-    self._json_cache = nil
 end
 
 --- Возвращает оригинальную конфигурацию
@@ -242,16 +321,6 @@ function BaseMonitor:pause()
     Logger.info(self._component_name, "[%s] Мониторинг приостановлен", tostring(self._name))
 end
 
---- Обрабатывает входящие PSI данные и сохраняет их в кэш
---- @protected
---- @param data table Данные от анализатора Astra
-function BaseMonitor:_process_psi_data(data)
-    local name = data.psi
-    if name then
-        self._psi[name:upper()] = data
-    end
-end
-
 --- Возвращает закэшированные PSI данные
 --- @param table_name string|nil Имя таблицы (например, "PMT"). Если nil, вернет весь кэш.
 --- @return table|nil Данные PSI или nil
@@ -261,43 +330,6 @@ function BaseMonitor:get_psi(table_name)
         return self._psi[table_name:upper()]
     end
     return self._psi
-end
-
---- Очищает кэш PSI данных
---- @protected
-function BaseMonitor:_clear_psi()
-    self._psi = {}
-end
-
---- Проверяет, прошел ли интервал времени для выполнения проверки.
---- @protected
---- @param time_check number Интервал проверки из конфигурации
---- @return boolean true если интервал прошел, иначе false
-function BaseMonitor:_should_send(time_check)
-    self._force_timer = self._force_timer + 1
-
-    if self._check_timer < (time_check or 0) then
-        self._check_timer = self._check_timer + 1
-        return false
-    end
-
-    self._check_timer = 0
-    return true
-end
-
-
---- Проверяет, пора ли выполнять принудительную отправку данных
---- @protected
---- @return boolean true если пора, иначе false
-function BaseMonitor:_is_force()
-    return self._force_timer >= self._force_interval
-end
-
---- Сбрасывает таймер принудительной отправки
---- @protected
-function BaseMonitor:_reset_force_timer()
-    self._force_timer = 0
-    self._last_update = os_time()
 end
 
 --- Возвращает данные о состоянии здоровья монитора
@@ -321,6 +353,10 @@ function BaseMonitor:resume()
     Logger.info(self._component_name, "[%s] Мониторинг возобновлен", tostring(self._name))
     return true
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")

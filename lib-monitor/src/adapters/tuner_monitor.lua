@@ -1,3 +1,10 @@
+-- ===========================================================================
+-- Модуль `adapters.tuner_monitor`
+--
+-- Класс для мониторинга физических DVB-адаптеров. Отслеживает уровень сигнала,
+-- SNR, ошибки BER/UNC и рассчитывает интегральный показатель качества.
+-- ===========================================================================
+
 -- 1. Стандартные Lua функции
 local math_max = math.max
 local os_time = os.time
@@ -17,13 +24,13 @@ local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- 3. Глобальные зависимости Astra
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
 local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local analyze = ModuleManager.get_global_dependency("analyze")
 
 -- 4. Константы и конфигурации
-local COMPONENT_NAME = "DvbTuner"
+local COMPONENT_NAME = "TunerMonitor"
 local MAX_STATS_COUNT = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000
 
 -- Предварительно рассчитанная таблица состояний для всех возможных значений статуса (0-31)
@@ -44,19 +51,19 @@ local METHOD_ALWAYS = 1
 local METHOD_STRICT = 2
 local METHOD_RATIO = 3
 
---- @class DvbTuner : BaseMonitor
+-- 5. Внутреннее состояние (Private State)
+--- @class TunerMonitor : BaseMonitor
 --- @field private _status table|nil Текущий статус (signal, snr, ber, unc)
 --- @field private _current_flags table|nil Текущие битовые флаги состояния
 --- @field private _last_status_num number|nil Последнее числовое значение статуса
---- @field private _check_timer number|nil Счетчик для интервала проверки
 --- @field private _stats table|nil Накопленная статистика для расчета качества
 --- @field private _astra_conf table|nil Рабочая конфигурация для Astra
 --- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
 --- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
-local DvbTuner = setmetatable({}, BaseMonitor)
-DvbTuner.__index = DvbTuner
+--- @field private _current_status_table table Таблица для Pull-запросов
+local TunerMonitor = setmetatable({}, BaseMonitor)
+TunerMonitor.__index = TunerMonitor
 
--- 5. Инициализация объектов из загруженных модулей
 local ratio = Utils.ratio
 
 local COMPARISON_METHODS = {
@@ -77,9 +84,13 @@ local COMPARISON_METHODS = {
     end
 }
 
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
 --- Вспомогательная функция для очистки ресурсов PSI
 --- @private
-function DvbTuner:_clear_psi_resources()
+function TunerMonitor:_clear_psi_resources()
     if self._temp_analyzer then
         -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
         if type(self._temp_analyzer.__options) == "table" then
@@ -92,132 +103,10 @@ function DvbTuner:_clear_psi_resources()
     end
 end
 
---- Создает новый экземпляр DvbTuner
---- @param conf table Конфигурация тюнера
---- @return DvbTuner|nil Экземпляр DvbTuner или nil
-function DvbTuner.new(conf)
-    if not conf or type(conf) ~= "table" then
-        Logger.error(COMPONENT_NAME, "new: конфигурация обязательна")
-        return nil
-    end
-
-    if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
-        Logger.error(COMPONENT_NAME, "new: name_adapter обязателен")
-        return nil
-    end
-
-    local self = setmetatable(BaseMonitor.new(conf, COMPONENT_NAME), DvbTuner)
-    self._name = conf.name_adapter
-
-    -- Валидация и установка параметров
-    if not self:_set_config_param("dvb_rate", conf.rate, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_time_check", conf.time_check, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_method_comparison", conf.method_comparison, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
-
-    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
-    self._stats = {
-        ber_sum = 0,
-        unc_sum = 0,
-        count = 0
-    }
-    self._status = {
-        type = "dvb",
-        server = Utils.get_server_name(),
-        format = conf.type or "",
-        modulation = conf.modulation or "",
-        source = conf.tp or conf.frequency,
-        name_adapter = self._name,
-        status = -1,
-        signal = -1,
-        snr = -1,
-        ber = -1,
-        unc = -1,
-        quality = -1
-    }
-    self._temp_analyzer = nil
-    self._backup = nil
-    self._last_status_num = -1
-    self._current_flags = STATUS_LOOKUP[0]
-
-    -- Таблица для Pull-запросов (всегда актуальное состояние)
-    self._current_status_table = {}
-    Utils.init_report(self._current_status_table, "dvb", self._name)
-    self._current_status_table.name_adapter = self._name
-    self._current_status_table.format = conf.type or ""
-    self._current_status_table.modulation = conf.modulation or ""
-    self._current_status_table.source = conf.tp or conf.frequency
-
-    return self
-end
-
---- Сохраняет бэкап предыдущего состояния
---- @param config table Предыдущая конфигурация
---- @param channels table Список конфигураций каналов
-function DvbTuner:set_backup(config, channels)
-    self._backup = {
-        config = Utils.deep_copy(config),
-        channels = Utils.deep_copy(channels)
-    }
-end
-
---- Возвращает бэкап предыдущего состояния
---- @return table|nil Бэкап или nil
-function DvbTuner:get_backup()
-    return self._backup
-end
-
---- Запускает тюнер и инициализирует callback для мониторинга.
---- Автоматически создает рабочую копию конфигурации для Astra.
---- @return any|nil Экземпляр dvb_tune Astra или nil
-function DvbTuner:start()
-    if self._state == BaseMonitor.STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Тюнер уже запущен", tostring(self._name))
-        return self._instance
-    end
-
-    if not self._current_method then
-        Logger.error(COMPONENT_NAME, string_format("start: некорректный метод сравнения %s",
-            tostring(self._config.method_comparison)))
-        return nil
-    end
-
-    -- Создаем рабочую копию конфига для Astra
-    self._astra_conf = Utils.table_copy(self._config)
-
-    -- Оптимизация: используем именованный метод и передаем его в pcall напрямую
-    self._astra_conf.callback = function(data)
-        if not self._active then return end
-        local ok, err = pcall(self._on_astra_data, self, data)
-        if not ok then
-            Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
-        end
-    end
-
-    local instance = dvb_tune(self._astra_conf)
-    if not instance then
-        Logger.error(COMPONENT_NAME, "[%s] start: dvb_tune вернул nil", tostring(self._name))
-        return nil
-    end
-
-    self._instance = instance
-    self._state = BaseMonitor.STATE.RUNNING
-    self._active = true
-
-    -- Безопасное управление счетчиком каналов Astra
-    if self._instance and type(self._instance.__options) == "table" then
-        local opts = self._instance.__options
-        opts.channels = (opts.channels or 0) + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Счетчик каналов тюнера увеличен: %d", tostring(self._name), opts.channels)
-    end
-
-    return self._instance
-end
-
 --- Обработчик данных от тюнера Astra (горячий путь)
 --- @private
 --- @param data table Данные от тюнера
-function DvbTuner:_on_astra_data(data)
+function TunerMonitor:_on_astra_data(data)
     if type(data) ~= "table" then return end
 
     -- Накопление статистики для расчета качества (упрощенно)
@@ -292,10 +181,161 @@ function DvbTuner:_on_astra_data(data)
     end
 end
 
+--- Внутренний метод для сборки таблицы полного статуса.
+--- @private
+--- @param t table Целевая таблица для заполнения
+--- @return table Таблица статуса
+function TunerMonitor:_build_status_table(t)
+    local status = self._status or {}
+    t.status = status.status or 0
+    t.signal = status.signal or 0
+    t.snr = status.snr or 0
+    t.ber = status.ber or 0
+    t.unc = status.unc or 0
+    t.quality = status.quality or 0
+
+    t.timestamp = os_time()
+    return t
+end
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
+--- Создает новый экземпляр TunerMonitor
+--- @param conf table Конфигурация тюнера
+--- @return TunerMonitor|nil Экземпляр TunerMonitor или nil
+function TunerMonitor.new(conf)
+    if not conf or type(conf) ~= "table" then
+        Logger.error(COMPONENT_NAME, "new: конфигурация обязательна")
+        return nil
+    end
+
+    if not conf.name_adapter or type(conf.name_adapter) ~= "string" then
+        Logger.error(COMPONENT_NAME, "new: name_adapter обязателен")
+        return nil
+    end
+
+    local self = setmetatable(BaseMonitor.new(conf, COMPONENT_NAME), TunerMonitor)
+
+    -- 1. Идентификация
+    self._name = conf.name_adapter
+
+    -- 2. Валидация и установка параметров конфигурации
+    if not self:_set_config_param("dvb_rate", conf.rate, "dvb_") then return nil end
+    if not self:_set_config_param("dvb_time_check", conf.time_check, "dvb_") then return nil end
+    if not self:_set_config_param("dvb_method_comparison", conf.method_comparison, "dvb_") then return nil end
+    if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
+
+    -- 3. Состояние тюнера и флаги
+    self._status = {
+        type = "dvb",
+        server = Utils.get_server_name(),
+        format = conf.type or "",
+        modulation = conf.modulation or "",
+        source = conf.tp or conf.frequency,
+        name_adapter = self._name,
+        status = -1,
+        signal = -1,
+        snr = -1,
+        ber = -1,
+        unc = -1,
+        quality = -1
+    }
+    self._current_flags = STATUS_LOOKUP[0]
+    self._last_status_num = -1
+    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
+
+    -- 4. Статистика качества
+    self._stats = {
+        ber_sum = 0,
+        unc_sum = 0,
+        count = 0
+    }
+
+    -- 5. Вспомогательные объекты и бэкап
+    self._astra_conf = nil
+    self._temp_analyzer = nil
+    self._backup = nil
+
+    -- 6. Таблица для Pull-запросов (всегда актуальное состояние)
+    self._current_status_table = {}
+    Utils.init_report(self._current_status_table, "dvb", self._name)
+    self._current_status_table.name_adapter = self._name
+    self._current_status_table.format = conf.type or ""
+    self._current_status_table.modulation = conf.modulation or ""
+    self._current_status_table.source = conf.tp or conf.frequency
+
+    return self
+end
+
+--- Сохраняет бэкап предыдущего состояния
+--- @param config table Предыдущая конфигурация
+--- @param channels table Список конфигураций каналов
+function TunerMonitor:set_backup(config, channels)
+    self._backup = {
+        config = Utils.deep_copy(config),
+        channels = Utils.deep_copy(channels)
+    }
+end
+
+--- Возвращает бэкап предыдущего состояния
+--- @return table|nil Бэкап или nil
+function TunerMonitor:get_backup()
+    return self._backup
+end
+
+--- Запускает тюнер и инициализирует callback для мониторинга.
+--- Автоматически создает рабочую копию конфигурации для Astra.
+--- @return any|nil Экземпляр dvb_tune Astra или nil
+function TunerMonitor:start()
+    if self._state == BaseMonitor.STATE.RUNNING then
+        Logger.warn(COMPONENT_NAME, "[%s] Тюнер уже запущен", tostring(self._name))
+        return self._instance
+    end
+
+    if not self._current_method then
+        Logger.error(COMPONENT_NAME, string_format("start: некорректный метод сравнения %s",
+            tostring(self._config.method_comparison)))
+        return nil
+    end
+
+    -- Создаем рабочую копию конфига для Astra
+    self._astra_conf = Utils.table_copy(self._config)
+
+    -- Оптимизация: используем именованный метод и передаем его в pcall напрямую
+    self._astra_conf.callback = function(data)
+        if not self._active then return end
+        local ok, err = pcall(self._on_astra_data, self, data)
+        if not ok then
+            Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
+        end
+    end
+
+    local instance = dvb_tune(self._astra_conf)
+    if not instance then
+        Logger.error(COMPONENT_NAME, "[%s] start: dvb_tune вернул nil", tostring(self._name))
+        return nil
+    end
+
+    self._instance = instance
+    self._state = BaseMonitor.STATE.RUNNING
+    self._active = true
+
+    -- Безопасное управление счетчиком каналов Astra
+    if self._instance and type(self._instance.__options) == "table" then
+        local opts = self._instance.__options
+        opts.channels = (opts.channels or 0) + 1
+        Logger.debug(COMPONENT_NAME, "[%s] Счетчик каналов тюнера увеличен: %d", tostring(self._name), opts.channels)
+    end
+
+    return self._instance
+end
+
 --- Обновляет параметры мониторинга тюнера
 --- @param params table Новые параметры (rate, time_check, method_comparison)
 --- @return boolean Статус выполнения
-function DvbTuner:update_parameters(params)
+function TunerMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
         Logger.error(COMPONENT_NAME, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
         return false
@@ -330,33 +370,15 @@ function DvbTuner:update_parameters(params)
     return true
 end
 
-
---- Внутренний метод для сборки таблицы полного статуса.
---- @private
---- @param t table Целевая таблица для заполнения
---- @return table Таблица статуса
-function DvbTuner:_build_status_table(t)
-    local status = self._status or {}
-    t.status = status.status or 0
-    t.signal = status.signal or 0
-    t.snr = status.snr or 0
-    t.ber = status.ber or 0
-    t.unc = status.unc or 0
-    t.quality = status.quality or 0
-
-    t.timestamp = os_time()
-    return t
-end
-
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
 --- @return table|nil Таблица данных
-function DvbTuner:get_status_table()
+function TunerMonitor:get_status_table()
     return self._current_status_table
 end
 
 --- Возвращает детальные флаги состояния тюнера (has_signal, has_lock и т.д.)
 --- @return table Таблица флагов
-function DvbTuner:get_status_flags()
+function TunerMonitor:get_status_flags()
     local flags = self._current_flags or STATUS_LOOKUP[0]
     local result = {
         name_adapter = self._name
@@ -369,7 +391,7 @@ end
 
 --- Запускает сбор PSI таблиц на 10 секунд
 --- @return boolean Статус запуска процесса
-function DvbTuner:psi_update()
+function TunerMonitor:psi_update()
     if not self._instance or self._temp_analyzer then
         return false
     end
@@ -406,7 +428,7 @@ end
 --- Освобождает ресурсы и возвращает оригинальную конфигурацию.
 --- @param force boolean Принудительная остановка (игнорировать счетчик каналов)
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
-function DvbTuner:destroy(force)
+function TunerMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
         return nil
     end
@@ -487,10 +509,14 @@ function DvbTuner:destroy(force)
     return original_config
 end
 
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
+
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
 if tp then
     tp.register_type("report_dvb")
 end
 
-return DvbTuner
+return TunerMonitor

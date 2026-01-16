@@ -1,3 +1,10 @@
+-- ===========================================================================
+-- Модуль `channel.channel_monitor`
+--
+-- Класс для мониторинга MPEG-TS потоков каналов. Анализирует ошибки CC/PES,
+-- битрейт, скремблирование и PSI-таблицы. Поддерживает Pull и Push модели.
+-- ===========================================================================
+
 -- 1. Стандартные Lua функции
 local ipairs = _G.ipairs
 local pairs = _G.pairs
@@ -13,7 +20,7 @@ local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 
--- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
+-- 3. Глобальные зависимости Astra
 local analyze = ModuleManager.get_global_dependency("analyze")
 local kill_input = ModuleManager.get_global_dependency("kill_input")
 
@@ -30,9 +37,7 @@ local METHOD_STRICT = 2
 local METHOD_RATIO = 3
 local METHOD_ON_AIR = 4
 
--- 5. Инициализация объектов из загруженных модулей
-local ratio = Utils.ratio
-
+-- 5. Внутреннее состояние (Private State)
 --- @class ChannelMonitor : BaseMonitor
 --- @field private _display_name string Отображаемое имя монитора
 --- @field private _input_instance any|nil Экземпляр входного потока (для IP мониторов)
@@ -44,8 +49,11 @@ local ratio = Utils.ratio
 --- @field private _upstream any Объект апстрима
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
+--- @field private _current_status_table table Таблица для Pull-запросов
 local ChannelMonitor = setmetatable({}, BaseMonitor)
 ChannelMonitor.__index = ChannelMonitor
+
+local ratio = Utils.ratio
 
 -- Методы сравнения
 local COMPARISON_METHODS = {
@@ -71,6 +79,247 @@ local COMPARISON_METHODS = {
     end
 }
 
+-- ===========================================================================
+-- Внутренние функции (Private)
+-- ===========================================================================
+
+--- Возвращает закэшированные данные об источнике
+--- @private
+--- @return table Данные об источнике
+function ChannelMonitor:_get_cached_source()
+    local active_id = self._channel_data and self._channel_data.active_input_id or 1
+    if active_id ~= self._last_active_id then
+        self._last_active_id = active_id
+        self._cached_source = self._stream_json[active_id] or DEFAULT_SOURCE_TEMPLATE
+    end
+    return self._cached_source
+end
+
+--- Обработка ошибок потока
+--- @private
+--- @param data table Данные ошибки
+function ChannelMonitor:_process_error_data(data)
+    local r = self:get_table_from_pool("report_error")
+    Utils.init_report(r, "Channel", self._name)
+    r.display_name = self._display_name
+    r.monitor = self._config.monitor
+    r.error = data.error
+    r.timestamp = os_time()
+    self:publish(r, "error", true)
+end
+
+--- Обработчик данных от анализатора Astra (горячий путь)
+--- @private
+--- @param data table Данные от анализатора
+function ChannelMonitor:_on_astra_data(data)
+    if type(data) ~= "table" then return end
+
+    if data.error then
+        self:_process_error_data(data)
+        return
+    end
+
+    if data.psi then
+        self:_process_psi_data_internal(data)
+        return
+    end
+
+    if data.analyze then
+        self:_process_analyze_data(data)
+    end
+
+    if data.total then
+        self:_process_total_data(data)
+    end
+end
+
+--- Обработка PSI данных
+--- @private
+--- @param data table Данные PSI
+function ChannelMonitor:_process_psi_data_internal(data)
+    -- Сохраняем таблицу в базовое хранилище
+    self:_process_psi_data(data)
+
+    local table_id = data.psi and data.psi:upper()
+    if table_id == "PMT" and type(data.streams) == "table" then
+        for _, stream in ipairs(data.streams) do
+            local pid = stream.pid
+            if pid then
+                local type_name = stream.type_name or "UNKNOWN"
+                local stats = self._stats[pid]
+                if not stats then
+                    -- Лимит на количество отслеживаемых PID
+                    if self._stats_count >= PID_LIMIT then
+                        self:_clear_stats()
+                        Logger.warn(COMPONENT_NAME,
+                            "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
+                            tostring(self._name))
+                    end
+
+                    stats = self:get_table_from_pool("pid_stats")
+                    stats.type = type_name
+                    stats.cc = 0
+                    stats.pes = 0
+                    stats.sc = 0
+
+                    self._stats[pid] = stats
+                    self._stats_count = self._stats_count + 1
+                else
+                    stats.type = type_name
+                end
+            end
+        end
+    end
+end
+
+--- Обработка данных анализа (статистика по PID)
+--- @private
+--- @param data table Данные анализа
+function ChannelMonitor:_process_analyze_data(data)
+    if not self._config.analyze or type(data.analyze) ~= "table" then return end
+
+    for _, pid_data in ipairs(data.analyze) do
+        local pid = pid_data.pid
+        if pid then
+            local cc = pid_data.cc_error or 0
+            local pes = pid_data.pes_error or 0
+            local sc = pid_data.sc_error or 0
+
+            if cc > 0 or pes > 0 or sc > 0 then
+                local stats = self._stats[pid]
+                if not stats then
+                    -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
+                    -- Если лимит превышен, сбрасываем статистику для очистки места
+                    if self._stats_count >= PID_LIMIT then
+                        self:_clear_stats()
+                        Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
+                            tostring(self._name))
+                    end
+
+                    stats = self:get_table_from_pool("pid_stats")
+                    stats.type = "UNKNOWN"
+                    stats.cc = cc
+                    stats.pes = pes
+                    stats.sc = sc
+
+                    self._stats[pid] = stats
+                    self._stats_count = self._stats_count + 1
+                else
+                    -- Защита от переполнения
+                    stats.cc = (stats.cc + cc) > MAX_COUNTER and MAX_COUNTER or (stats.cc + cc)
+                    stats.pes = (stats.pes + pes) > MAX_COUNTER and MAX_COUNTER or (stats.pes + pes)
+                    stats.sc = (stats.sc + sc) > MAX_COUNTER and MAX_COUNTER or (stats.sc + sc)
+                end
+            end
+        end
+    end
+end
+
+--- Обработка суммарных данных потока
+--- @private
+--- @param data table Суммарные данные
+function ChannelMonitor:_process_total_data(data)
+    local total = data.total
+    if not total then return end
+
+    local status = self._status
+    local cc_inc = total.cc_errors or 0
+    local pes_inc = total.pes_errors or 0
+
+    status.cc_errors = status.cc_errors + cc_inc
+    status.pes_errors = status.pes_errors + pes_inc
+
+    -- Защита от переполнения счетчиков
+    if status.cc_errors > MAX_ERROR_COUNT then status.cc_errors = MAX_ERROR_COUNT end
+    if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
+
+    local active_id = self._channel_data and self._channel_data.active_input_id or 1
+
+    -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
+    if self:_should_send(self._config.time_check) and
+       (active_id ~= self._last_active_id or self:_is_force() or
+        self._current_method(status, data, self._config.rate))
+    then
+        self:_reset_force_timer()
+
+        -- Обновляем Master State (таблица для Pull-запросов)
+        self:_build_status_table(self._current_status_table, data)
+
+        -- Сбрасываем кэш JSON, так как данные изменились.
+        -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
+        self:_clear_json_cache()
+
+        -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
+        local r = self:get_table_from_pool("report_channel")
+        Utils.init_report(r, "Channel", self._name)
+        r.display_name = self._display_name
+        r.monitor = self._config.monitor
+
+        -- Копируем данные из Master State
+        Utils.table_merge(r, self._current_status_table)
+
+        -- Публикуем таблицу с передачей горячего кэша
+        self:publish(r, "channels", true)
+
+        -- Обновление состояния для следующего сравнения
+        status.ready = data.on_air
+        status.scrambled = data.total.scrambled
+        status.bitrate = data.total.bitrate or 0
+        status.cc_errors = 0
+        status.pes_errors = 0
+        self._last_active_id = active_id
+    end
+end
+
+--- Очищает статистику анализа
+--- @private
+function ChannelMonitor:_clear_stats()
+    if self._stats then
+        for pid, stats in pairs(self._stats) do
+            self:return_table_to_pool(stats, "pid_stats")
+        end
+    end
+    self._stats = {}
+    self._stats_count = 0
+end
+
+--- Внутренний метод для сборки таблицы полного статуса.
+--- @private
+--- @param t table Целевая таблица для заполнения
+--- @param data table|nil Текущие данные (если есть)
+--- @return table Таблица статуса
+function ChannelMonitor:_build_status_table(t, data)
+    local source = self:_get_cached_source()
+    local status = self._status or {}
+
+    -- Добавить проверку на nil для всех полей
+    local ready = (data and data.on_air) or (status.ready or false)
+    local bitrate = (data and data.total and data.total.bitrate) or (status.bitrate or 0)
+    local scrambled = (data and data.total and data.total.scrambled) or (status.scrambled or false)
+    local cc = status.cc_errors or 0
+    local pes = status.pes_errors or 0
+    local rate_stat = data and data.rate_stat or nil
+
+    -- Защита от nil
+    t.status = ready
+    t.bitrate = bitrate or 0
+    t.cc_errors = cc
+    t.pes_errors = pes
+    t.scrambled = scrambled
+    t.ready = ready
+    t.rate_stat = rate_stat
+    t.stream = source and source.stream or "Unknown"
+    t.format = source and source.format or "Unknown"
+    t.addr = source and source.addr or "Unknown"
+    t.timestamp = os_time()
+
+    return t
+end
+
+-- ===========================================================================
+-- Публичное API (Public API)
+-- ===========================================================================
+
 --- Создает новый экземпляр ChannelMonitor
 --- @param config table Конфигурация монитора
 --- @param channel_data table|nil Данные канала (необязательно)
@@ -92,13 +341,13 @@ function ChannelMonitor.new(config, channel_data)
     end
 
     local self = setmetatable(BaseMonitor.new(config, COMPONENT_NAME), ChannelMonitor)
-    self._channel_data = type(channel_data) == "table" and channel_data or nil
 
-    -- Инициализация имен с учетом возможного отсутствия channel_data
+    -- 1. Данные канала и идентификация
+    self._channel_data = type(channel_data) == "table" and channel_data or nil
     self._name = config.name or (self._channel_data and self._channel_data.name) or config.monitor
     self._display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self._name
 
-    -- Валидация и установка параметров
+    -- 2. Валидация и установка параметров конфигурации
     if not self:_set_config_param("channel_rate", config.rate, "channel_") then return nil end
     if not self:_set_config_param("channel_time_check", config.time_check, "channel_") then return nil end
     if not self:_set_config_param("channel_method_comparison", config.method_comparison, "channel_") then return nil end
@@ -108,17 +357,7 @@ function ChannelMonitor.new(config, channel_data)
     if not self:_set_config_param("channel_rate_stat", config.rate_stat, "channel_") then return nil end
     if not self:_set_config_param("channel_join_pid", config.join_pid, "channel_") then return nil end
 
-    self._stream_json = config.stream_json or {}
-    self._upstream = config.upstream
-    self._last_active_id = nil
-    self._cached_source = nil
-
-    -- Таблица для Pull-запросов (всегда актуальное состояние)
-    self._current_status_table = {}
-    Utils.init_report(self._current_status_table, "Channel", self._name)
-    self._current_status_table.display_name = self._display_name
-    self._current_status_table.monitor = self._config.monitor
-
+    -- 3. Состояние мониторинга и статистика
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -129,6 +368,19 @@ function ChannelMonitor.new(config, channel_data)
     self._stats = {}
     self._stats_count = 0
     self._current_method = COMPARISON_METHODS[self._config.method_comparison]
+
+    -- 4. Источники и апстрим
+    self._stream_json = config.stream_json or {}
+    self._upstream = config.upstream
+    self._input_instance = nil
+    self._last_active_id = nil
+    self._cached_source = nil
+
+    -- 5. Таблица для Pull-запросов (всегда актуальное состояние)
+    self._current_status_table = {}
+    Utils.init_report(self._current_status_table, "Channel", self._name)
+    self._current_status_table.display_name = self._display_name
+    self._current_status_table.monitor = self._config.monitor
 
     return self
 end
@@ -191,190 +443,6 @@ function ChannelMonitor:start()
     return self._instance
 end
 
---- Возвращает закэшированные данные об источнике
---- @return table Данные об источнике
-function ChannelMonitor:get_cached_source()
-    local active_id = self._channel_data and self._channel_data.active_input_id or 1
-    if active_id ~= self._last_active_id then
-        self._last_active_id = active_id
-        self._cached_source = self._stream_json[active_id] or DEFAULT_SOURCE_TEMPLATE
-    end
-    return self._cached_source
-end
-
-
---- Обработка ошибок потока
---- @param data table Данные ошибки
-function ChannelMonitor:process_error_data(data)
-    local r = self:get_table_from_pool("report_error")
-    Utils.init_report(r, "Channel", self._name)
-    r.display_name = self._display_name
-    r.monitor = self._config.monitor
-    r.error = data.error
-    r.timestamp = os_time()
-    self:publish(r, "error", true)
-end
-
---- Обработчик данных от анализатора Astra (горячий путь)
---- @private
---- @param data table Данные от анализатора
-function ChannelMonitor:_on_astra_data(data)
-    if type(data) ~= "table" then return end
-
-    if data.error then
-        self:process_error_data(data)
-        return
-    end
-
-    if data.psi then
-        self:process_psi_data(data)
-        return
-    end
-
-    if data.analyze then
-        self:process_analyze_data(data)
-    end
-
-    if data.total then
-        self:process_total_data(data)
-    end
-end
-
---- Обработка PSI данных
---- @param data table Данные PSI
-function ChannelMonitor:process_psi_data(data)
-    -- Сохраняем таблицу в базовое хранилище
-    self:_process_psi_data(data)
-
-    local table_id = data.psi and data.psi:upper()
-    if table_id == "PMT" and type(data.streams) == "table" then
-        for _, stream in ipairs(data.streams) do
-            local pid = stream.pid
-            if pid then
-                local type_name = stream.type_name or "UNKNOWN"
-                local stats = self._stats[pid]
-                if not stats then
-                    -- Лимит на количество отслеживаемых PID
-                    if self._stats_count >= PID_LIMIT then
-                        self:clear_stats()
-                        Logger.warn(COMPONENT_NAME,
-                            "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
-                            tostring(self._name))
-                    end
-
-                    stats = self:get_table_from_pool("pid_stats")
-                    stats.type = type_name
-                    stats.cc = 0
-                    stats.pes = 0
-                    stats.sc = 0
-
-                    self._stats[pid] = stats
-                    self._stats_count = self._stats_count + 1
-                else
-                    stats.type = type_name
-                end
-            end
-        end
-    end
-end
-
---- Обработка данных анализа (статистика по PID)
---- @param data table Данные анализа
-function ChannelMonitor:process_analyze_data(data)
-    if not self._config.analyze or type(data.analyze) ~= "table" then return end
-
-    for _, pid_data in ipairs(data.analyze) do
-        local pid = pid_data.pid
-        if pid then
-            local cc = pid_data.cc_error or 0
-            local pes = pid_data.pes_error or 0
-            local sc = pid_data.sc_error or 0
-
-            if cc > 0 or pes > 0 or sc > 0 then
-                local stats = self._stats[pid]
-                if not stats then
-                    -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
-                    -- Если лимит превышен, сбрасываем статистику для очистки места
-                    if self._stats_count >= PID_LIMIT then
-                        self:clear_stats()
-                        Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
-                            tostring(self._name))
-                    end
-
-                    stats = self:get_table_from_pool("pid_stats")
-                    stats.type = "UNKNOWN"
-                    stats.cc = cc
-                    stats.pes = pes
-                    stats.sc = sc
-
-                    self._stats[pid] = stats
-                    self._stats_count = self._stats_count + 1
-                else
-                    -- Защита от переполнения
-                    stats.cc = (stats.cc + cc) > MAX_COUNTER and MAX_COUNTER or (stats.cc + cc)
-                    stats.pes = (stats.pes + pes) > MAX_COUNTER and MAX_COUNTER or (stats.pes + pes)
-                    stats.sc = (stats.sc + sc) > MAX_COUNTER and MAX_COUNTER or (stats.sc + sc)
-                end
-            end
-        end
-    end
-end
-
---- Обработка суммарных данных потока
---- @param data table Суммарные данные
-function ChannelMonitor:process_total_data(data)
-    local total = data.total
-    if not total then return end
-
-    local status = self._status
-    local cc_inc = total.cc_errors or 0
-    local pes_inc = total.pes_errors or 0
-
-    status.cc_errors = status.cc_errors + cc_inc
-    status.pes_errors = status.pes_errors + pes_inc
-
-    -- Защита от переполнения счетчиков
-    if status.cc_errors > MAX_ERROR_COUNT then status.cc_errors = MAX_ERROR_COUNT end
-    if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
-
-    local active_id = self._channel_data and self._channel_data.active_input_id or 1
-
-    -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-    if self:_should_send(self._config.time_check) and
-       (active_id ~= self._last_active_id or self:_is_force() or
-        self._current_method(status, data, self._config.rate))
-    then
-        self:_reset_force_timer()
-
-        -- Обновляем Master State (таблица для Pull-запросов)
-        self:_build_status_table(self._current_status_table, data)
-
-        -- Сбрасываем кэш JSON, так как данные изменились.
-        -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
-        self:_clear_json_cache()
-
-        -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
-        local r = self:get_table_from_pool("report_channel")
-        Utils.init_report(r, "Channel", self._name)
-        r.display_name = self._display_name
-        r.monitor = self._config.monitor
-
-        -- Копируем данные из Master State
-        Utils.table_merge(r, self._current_status_table)
-
-        -- Публикуем таблицу с передачей горячего кэша
-        self:publish(r, "channels", true)
-
-        -- Обновление состояния для следующего сравнения
-        status.ready = data.on_air
-        status.scrambled = data.total.scrambled
-        status.bitrate = data.total.bitrate or 0
-        status.cc_errors = 0
-        status.pes_errors = 0
-        self._last_active_id = active_id
-    end
-end
-
 --- Устанавливает экземпляр входного потока
 --- @param instance any Экземпляр входа
 function ChannelMonitor:set_input_instance(instance)
@@ -399,48 +467,9 @@ function ChannelMonitor:get_stats()
     return stats
 end
 
---- Очищает статистику анализа
+--- Очищает статистику анализа (публичный метод)
 function ChannelMonitor:clear_stats()
-    if self._stats then
-        for pid, stats in pairs(self._stats) do
-            self:return_table_to_pool(stats, "pid_stats")
-        end
-    end
-    self._stats = {}
-    self._stats_count = 0
-end
-
---- Внутренний метод для сборки таблицы полного статуса.
---- @private
---- @param t table Целевая таблица для заполнения
---- @param data table|nil Текущие данные (если есть)
---- @return table Таблица статуса
-function ChannelMonitor:_build_status_table(t, data)
-    local source = self:get_cached_source()
-    local status = self._status or {}
-
-    -- Добавить проверку на nil для всех полей
-    local ready = (data and data.on_air) or (status.ready or false)
-    local bitrate = (data and data.total and data.total.bitrate) or (status.bitrate or 0)
-    local scrambled = (data and data.total and data.total.scrambled) or (status.scrambled or false)
-    local cc = status.cc_errors or 0
-    local pes = status.pes_errors or 0
-    local rate_stat = data and data.rate_stat or nil
-
-    -- Защита от nil
-    t.status = ready
-    t.bitrate = bitrate or 0
-    t.cc_errors = cc
-    t.pes_errors = pes
-    t.scrambled = scrambled
-    t.ready = ready
-    t.rate_stat = rate_stat
-    t.stream = source and source.stream or "Unknown"
-    t.format = source and source.format or "Unknown"
-    t.addr = source and source.addr or "Unknown"
-    t.timestamp = os_time()
-
-    return t
+    self:_clear_stats()
 end
 
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
@@ -464,7 +493,7 @@ function ChannelMonitor:destroy(force)
     local original_config = self._config and Utils.table_copy(self._config) or nil
 
     -- 1. Очистка специфических ресурсов
-    self:clear_stats()
+    self:_clear_stats()
 
     if self._instance then
         -- 1. Сначала обнуляем ссылку на инстанс в объекте Lua
@@ -558,6 +587,10 @@ function ChannelMonitor:update_parameters(params)
 
     return true
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")
