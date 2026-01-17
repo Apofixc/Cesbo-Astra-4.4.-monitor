@@ -367,6 +367,7 @@ function BaseRepository:auto_recover()
                 else
                     failed = failed + 1
                     s.stats.total_failed = s.stats.total_failed + 1
+                    s.recovery.attempts[name] = attempts
                     Logger.error(self._component_name,
                         "Не удалось восстановить монитор %s: отсутствует конфиг или класс", name)
                 end
