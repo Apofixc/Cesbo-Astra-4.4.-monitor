@@ -152,6 +152,12 @@ MonitorConfig.MaxCounterValue = 1000000000
 MonitorConfig.MaxErrorCount = 1000000
 MonitorConfig.subscribers = {}
 
+-- Watchdog
+MonitorConfig.WatchdogEnabled = false
+MonitorConfig.WatchdogMaxRetries = 3
+MonitorConfig.WatchdogThreshold = 15
+MonitorConfig.WatchdogCasThreshold = 60
+
 -- ===========================================================================
 -- Внутренние функции (Private)
 -- ===========================================================================

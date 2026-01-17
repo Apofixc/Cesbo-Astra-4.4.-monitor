@@ -43,6 +43,7 @@ local EVENTS = {
 --- @class BaseRepository
 --- @field protected _state table Внутреннее состояние репозитория
 --- @field protected _component_name string Имя компонента для логирования
+--- @field protected _watchdog_task_id string|nil ID задачи Watchdog в планировщике
 local BaseRepository = {}
 BaseRepository.__index = BaseRepository
 
@@ -128,6 +129,7 @@ function BaseRepository.new(component_name)
     }
 
     self._component_name = component_name or COMPONENT_NAME
+    self._watchdog_task_id = nil
 
     -- Опциональная инициализация автономного мониторинга
     if MonitorConfig and MonitorConfig.AutoRecoverEnabled then
@@ -135,6 +137,66 @@ function BaseRepository.new(component_name)
     end
 
     return self
+end
+
+--- Выполняет проверку Watchdog для всех мониторов в репозитории
+--- @protected
+function BaseRepository:_watchdog_tick()
+    local now = os_time()
+    local s = self._state
+    
+    -- Глобальные настройки из конфига
+    local enabled = MonitorConfig and MonitorConfig.WatchdogEnabled
+    if not enabled then return end
+
+    for name, monitor in pairs(s.monitors) do
+        if monitor.get_status_table and monitor.get_state then
+            local state = monitor:get_state()
+            if state == BaseMonitor.STATE.RUNNING then
+                local status = monitor:get_status_table()
+                if status then
+                    self:_check_monitor_watchdog(name, monitor, status, now)
+                end
+            end
+        end
+    end
+end
+
+--- Проверяет конкретный монитор (должно быть переопределено в наследниках)
+--- @protected
+--- @param name string Имя монитора
+--- @param monitor any Экземпляр монитора
+--- @param status table Текущий статус
+--- @param now number Текущее время
+function BaseRepository:_check_monitor_watchdog(name, monitor, status, now)
+    -- Базовая реализация пустая
+end
+
+--- Включает механизм Watchdog
+--- @param interval? number Интервал проверки в секундах
+function BaseRepository:enable_watchdog(interval)
+    local scheduler = Scheduler and Scheduler.get_instance()
+    if not scheduler then return end
+
+    interval = interval or 5
+    local task_id = "watchdog_" .. self._component_name
+    
+    scheduler:add_task(task_id, function()
+        self:_watchdog_tick()
+    end, interval)
+    
+    self._watchdog_task_id = task_id
+    Logger.info(self._component_name, "Watchdog включен (интервал: %d сек)", interval)
+end
+
+--- Выключает механизм Watchdog
+function BaseRepository:disable_watchdog()
+    local scheduler = Scheduler and Scheduler.get_instance()
+    if scheduler and self._watchdog_task_id then
+        scheduler:remove_task(self._watchdog_task_id)
+        self._watchdog_task_id = nil
+        Logger.info(self._component_name, "Watchdog выключен")
+    end
 end
 
 -- ===========================================================================

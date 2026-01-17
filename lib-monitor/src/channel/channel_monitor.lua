@@ -156,11 +156,13 @@ function ChannelMonitor:_process_psi_data_internal(data)
                             tostring(self._name))
                     end
 
-                    stats = self:get_table_from_pool("pid_stats")
-                    stats.type = type_name
-                    stats.cc = 0
-                    stats.pes = 0
-                    stats.sc = 0
+                    -- Статическое создание таблицы вместо пула
+                    stats = {
+                        type = type_name,
+                        cc = 0,
+                        pes = 0,
+                        sc = 0
+                    }
 
                     self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
@@ -196,11 +198,13 @@ function ChannelMonitor:_process_analyze_data(data)
                             tostring(self._name))
                     end
 
-                    stats = self:get_table_from_pool("pid_stats")
-                    stats.type = "UNKNOWN"
-                    stats.cc = cc
-                    stats.pes = pes
-                    stats.sc = sc
+                    -- Статическое создание таблицы вместо пула
+                    stats = {
+                        type = "UNKNOWN",
+                        cc = cc,
+                        pes = pes,
+                        sc = sc
+                    }
 
                     self._stats[pid] = stats
                     self._stats_count = self._stats_count + 1
@@ -274,11 +278,7 @@ end
 --- Очищает статистику анализа
 --- @private
 function ChannelMonitor:_clear_stats()
-    if self._stats then
-        for pid, stats in pairs(self._stats) do
-            self:return_table_to_pool(stats, "pid_stats")
-        end
-    end
+    -- Больше не возвращаем в пул, так как таблицы статические
     self._stats = {}
     self._stats_count = 0
 end

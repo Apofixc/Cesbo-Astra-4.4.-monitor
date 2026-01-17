@@ -3,7 +3,7 @@
 --
 -- Единый планировщик задач для системы мониторинга.
 -- Использует один системный таймер Astra для выполнения всех периодических задач.
--- Реализует балансировку нагрузки (Load Balancing) для предотвращения пиковых нагрузок.
+-- Реализует бинарную кучу (Min-Heap) для эффективного управления тысячами задач.
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
@@ -15,6 +15,7 @@ local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local collectgarbage = _G.collectgarbage
 local tostring = _G.tostring
+local math_floor = _G.math.floor
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -39,15 +40,16 @@ local DEFAULT_MEMORY_LIMIT_KB = 50 * 1024
 --- @field next_run number Время следующего запуска (os.time)
 --- @field active boolean Флаг активности задачи
 --- @field priority number Приоритет (1 - высокий, 2 - нормальный, 3 - низкий)
+--- @field heap_idx number Индекс в бинарной куче
 
 --- @class Scheduler
---- @field private _tasks table<string, SchedulerTask> Реестр зарегистрированных задач
+--- @field private _tasks table<string, SchedulerTask> Реестр зарегистрированных задач (по ID)
+--- @field private _heap SchedulerTask[] Бинарная куча задач (Min-Heap по next_run)
 --- @field private _timer any|nil Системный таймер Astra
 --- @field private _active boolean Флаг работы планировщика
---- @field private _task_count number Общее количество добавленных задач (для балансировки)
+--- @field private _task_count number Общее количество добавленных задач
 --- @field private _memory_limit_kb number Лимит памяти для автоматической очистки
 --- @field private _current_interval number Текущий интервал таймера
---- @field private _next_tick_at number Время следующего ожидаемого тика
 local Scheduler = {}
 Scheduler.__index = Scheduler
 
@@ -63,11 +65,11 @@ local instance = nil
 function Scheduler:_initialize()
     -- Группировка переменных состояния
     self._tasks = {}
+    self._heap = {}
     self._active = true
     self._task_count = 0
     self._memory_limit_kb = DEFAULT_MEMORY_LIMIT_KB
     self._current_interval = 1
-    self._next_tick_at = os_time() + 1
 
     -- Запуск основного цикла (раз в секунду)
     if timer then
@@ -84,7 +86,6 @@ function Scheduler:_initialize()
         end
 
         -- Регистрация системной задачи обслуживания (раз в минуту)
-        -- Выполняет сборку мусора и сброс логов
         self:add_task("gc_maintenance", function()
             local mem_kb = collectgarbage("count")
 
@@ -93,95 +94,120 @@ function Scheduler:_initialize()
                     "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.",
                     mem_kb, self._memory_limit_kb)
 
-                -- Очистка пулов таблиц перед GC для максимального эффекта
                 if TablePool and TablePool.clear_all then
                     TablePool.clear_all()
                 end
 
                 collectgarbage("collect")
             else
-                -- Выполняем небольшой шаг сборки мусора для поддержания стабильности
                 collectgarbage("step", 50)
             end
 
-            -- Сброс накопленных логов (Batch Logging)
             if Logger and Logger.flush then
                 Logger.flush()
             end
         end, 60)
 
-        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Timer: OK, GC Limit: %d KB)", self._memory_limit_kb)
+        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Min-Heap: OK, GC Limit: %d KB)", self._memory_limit_kb)
     else
         Logger.error(COMPONENT_NAME, "Критическая ошибка: зависимость Astra 'timer' не найдена!")
     end
 end
 
+--- Всплытие элемента в куче
+--- @private
+function Scheduler:_heap_up(idx)
+    while idx > 1 do
+        local parent = math_floor(idx / 2)
+        if self._heap[idx].next_run < self._heap[parent].next_run then
+            self._heap[idx], self._heap[parent] = self._heap[parent], self._heap[idx]
+            self._heap[idx].heap_idx = idx
+            self._heap[parent].heap_idx = parent
+            idx = parent
+        else
+            break
+        end
+    end
+end
+
+--- Погружение элемента в куче
+--- @private
+function Scheduler:_heap_down(idx)
+    local size = #self._heap
+    while true do
+        local left = idx * 2
+        local right = left + 1
+        local smallest = idx
+
+        if left <= size and self._heap[left].next_run < self._heap[smallest].next_run then
+            smallest = left
+        end
+        if right <= size and self._heap[right].next_run < self._heap[smallest].next_run then
+            smallest = right
+        end
+
+        if smallest ~= idx then
+            self._heap[idx], self._heap[smallest] = self._heap[smallest], self._heap[idx]
+            self._heap[idx].heap_idx = idx
+            self._heap[smallest].heap_idx = smallest
+            idx = smallest
+        else
+            break
+        end
+    end
+end
+
 --- Выполняет одну конкретную задачу
---- @param id string Идентификатор задачи
 --- @param task SchedulerTask Объект задачи
 --- @param now number Текущее время (os.time)
 --- @private
-function Scheduler:_run_task(id, task, now)
+function Scheduler:_run_task(task, now)
     local start_clock = os_clock()
     local ok, err = pcall(task.callback)
     local duration = os_clock() - start_clock
 
     if not ok then
-        Logger.error(COMPONENT_NAME, "Ошибка при выполнении задачи '%s': %s", id, tostring(err))
+        Logger.error(COMPONENT_NAME, "Ошибка при выполнении задачи '%s': %s", task.id, tostring(err))
     end
 
-    -- Мониторинг производительности: предупреждаем, если задача блокирует поток
-    if duration > 0.1 then -- 100ms
+    if duration > 0.1 then
         Logger.warn(COMPONENT_NAME,
-            "Задача '%s' выполнялась слишком долго: %.3f сек (возможна блокировка стриминга)", 
-            id, duration)
+            "Задача '%s' выполнялась слишком долго: %.3f сек", 
+            task.id, duration)
     end
 
     task.last_run = now
     task.next_run = now + task.interval
+    
+    -- После обновления времени следующего запуска, перестраиваем кучу
+    self:_heap_down(task.heap_idx)
 end
 
---- Основной цикл планировщика, вызываемый каждую секунду
+--- Основной цикл планировщика
 --- @private
 function Scheduler:_tick()
     local now = os_time()
-    local min_next_run = now + 3600 -- По умолчанию через час
-
-    -- Списки задач по приоритетам для упорядоченного выполнения
-    local p1, p2, p3 = {}, {}, {}
     
-    for id, task in pairs(self._tasks) do
-        if task.active then
-            if now >= task.next_run then
-                local p = task.priority or 2
-                if p == 1 then p1[#p1+1] = id
-                elseif p == 3 then p3[#p3+1] = id
-                else p2[#p2+1] = id end
+    -- Выполняем все задачи, время которых пришло
+    while #self._heap > 0 do
+        local task = self._heap[1]
+        if now >= task.next_run then
+            if task.active then
+                self:_run_task(task, now)
+            else
+                task.next_run = now + task.interval
+                self:_heap_down(1)
             end
-            if task.next_run < min_next_run then
-                min_next_run = task.next_run
-            end
+        else
+            break
         end
     end
 
-    -- Выполнение в порядке приоритета
-    -- Проверка на nil обязательна, так как задача могла быть удалена другой задачей в этом же тике
-    for i = 1, #p1 do
-        local t = self._tasks[p1[i]]
-        if t then self:_run_task(p1[i], t, now) end
-    end
-    for i = 1, #p2 do
-        local t = self._tasks[p2[i]]
-        if t then self:_run_task(p2[i], t, now) end
-    end
-    for i = 1, #p3 do
-        local t = self._tasks[p3[i]]
-        if t then self:_run_task(p3[i], t, now) end
-    end
-
-    -- Adaptive Ticking: регулируем интервал таймера
+    -- Adaptive Ticking
+    local min_next_run = (#self._heap > 0) and self._heap[1].next_run or (now + 3600)
     local wait_time = min_next_run - now
     local new_interval = 1
+    
     if wait_time > 5 then
         new_interval = 5
     elseif wait_time > 1 then
@@ -190,10 +216,6 @@ function Scheduler:_tick()
 
     if new_interval ~= self._current_interval and self._timer then
         self._current_interval = new_interval
-        -- В Astra API таймер может не поддерживать смену интервала на лету,
-        -- поэтому мы просто полагаемся на то, что следующий тик будет через 1с,
-        -- если API не позволяет пересоздать таймер эффективно.
-        -- Но для архитектуры закладываем это здесь.
     end
 end
 
@@ -224,32 +246,46 @@ function Scheduler:add_task(id, callback, interval, options)
 
     local now = os_time()
     local interval_val = (interval and interval >= 1) and interval or 1
-
-    -- Балансировка нагрузки (Load Balancing):
-    -- Добавляем небольшой временной сдвиг (jitter) для новых задач на основе их порядкового номера.
-    -- Это предотвращает ситуацию, когда множество задач с одинаковым интервалом 
-    -- запускаются одновременно в одну и ту же секунду.
     local jitter = (options and options.immediate) and 0 or (self._task_count % interval_val)
 
-    self._tasks[id] = {
+    local task = {
         id = id,
         callback = callback,
         interval = interval_val,
         last_run = 0,
         next_run = now + jitter,
         active = true,
-        priority = options and options.priority or 2
+        priority = options and options.priority or 2,
+        heap_idx = #self._heap + 1
     }
 
+    self._tasks[id] = task
+    self._heap[#self._heap + 1] = task
+    self:_heap_up(#self._heap)
+
     self._task_count = self._task_count + 1
-    Logger.debug(COMPONENT_NAME, "Задача зарегистрирована: %s (интервал: %d сек, jitter: %d)", 
-        id, interval_val, jitter)
+    Logger.debug(COMPONENT_NAME, "Задача зарегистрирована: %s (интервал: %d сек)", id, interval_val)
 end
 
 --- Удаляет задачу из реестра
 --- @param id string Идентификатор задачи
 function Scheduler:remove_task(id)
-    if self._tasks[id] then
+    local task = self._tasks[id]
+    if task then
+        local idx = task.heap_idx
+        local size = #self._heap
+        
+        if idx < size then
+            self._heap[idx] = self._heap[size]
+            self._heap[idx].heap_idx = idx
+            self._heap[size] = nil
+            
+            self:_heap_down(idx)
+            if self._heap[idx] then self:_heap_up(idx) end
+        else
+            self._heap[size] = nil
+        end
+
         self._tasks[id] = nil
         self._task_count = self._task_count - 1
         Logger.debug(COMPONENT_NAME, "Задача удалена: %s", id)
@@ -265,11 +301,11 @@ function Scheduler:set_task_interval(id, interval)
         local old_interval = task.interval
         task.interval = (interval and interval >= 1) and interval or 1
         
-        -- Если новый интервал меньше текущего ожидания, сокращаем его
         local now = os_time()
         local remaining = task.next_run - now
         if remaining > task.interval then
             task.next_run = now + task.interval
+            self:_heap_up(task.heap_idx)
         end
         
         Logger.debug(COMPONENT_NAME, "Интервал задачи '%s' изменен: %d -> %d сек", 
@@ -277,7 +313,7 @@ function Scheduler:set_task_interval(id, interval)
     end
 end
 
---- Приостанавливает выполнение задачи без её удаления
+--- Приостанавливает выполнение задачи
 --- @param id string Идентификатор задачи
 function Scheduler:pause_task(id)
     if self._tasks[id] then 
@@ -286,31 +322,28 @@ function Scheduler:pause_task(id)
     end
 end
 
---- Возобновляет выполнение ранее приостановленной задачи
+--- Возобновляет выполнение задачи
 --- @param id string Идентификатор задачи
 function Scheduler:resume_task(id)
     local task = self._tasks[id]
     if task then
         task.active = true
-        task.next_run = os_time() -- Запустить при следующем тике планировщика
+        task.next_run = os_time()
+        self:_heap_up(task.heap_idx)
         Logger.debug(COMPONENT_NAME, "Задача возобновлена: %s", id)
     end
 end
 
---- Полная остановка планировщика и освобождение системных ресурсов
+--- Полная остановка планировщика
 function Scheduler:shutdown()
     self._active = false
-    
-    -- Закрытие системного таймера Astra
     if self._timer then
         if self._timer.close then self._timer:close() end
         self._timer = nil
     end
-    
     self._tasks = {}
-    Logger.info(COMPONENT_NAME, "Планировщик остановлен, ресурсы очищены")
-    
-    -- Принудительный запуск GC для очистки остатков
+    self._heap = {}
+    Logger.info(COMPONENT_NAME, "Планировщик остановлен")
     collectgarbage()
 end
 

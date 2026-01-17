@@ -40,6 +40,8 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 --- @field protected _force_interval number Интервал принудительной отправки
 --- @field protected _last_update number Время последнего обновления данных
 --- @field protected _table_pool table|nil Прямая ссылка на TablePool (для удобства)
+--- @field protected _load_shedding_active boolean Флаг активного снижения нагрузки
+--- @field protected _original_time_check number Оригинальный интервал проверки
 local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
@@ -201,7 +203,53 @@ function BaseMonitor.new(config, component_name)
     self._psi = {}
     self._table_pool = TablePool
 
+    -- 5. Адаптивность
+    self._load_shedding_active = false
+    self._original_time_check = 0
+
+    -- Подписка на события снижения нагрузки
+    if EventDispatcher then
+        local dispatcher = EventDispatcher.get_instance()
+        dispatcher:subscribe("sys:resource_warning", function(data)
+            if data.type == "cpu" then
+                if data.status == "critical" then
+                    self:_enable_load_shedding()
+                elseif data.status == "ok" then
+                    self:_disable_load_shedding()
+                end
+            end
+        end)
+    end
+
     return self
+end
+
+--- Включает режим снижения нагрузки
+--- @protected
+function BaseMonitor:_enable_load_shedding()
+    if self._load_shedding_active then return end
+    
+    self._load_shedding_active = true
+    self._original_time_check = self._config.time_check or 0
+    
+    -- Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
+    local new_check = math.max(5, self._original_time_check * 3)
+    self._config.time_check = new_check
+    
+    Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
+        tostring(self._name), self._original_time_check, new_check)
+end
+
+--- Выключает режим снижения нагрузки
+--- @protected
+function BaseMonitor:_disable_load_shedding()
+    if not self._load_shedding_active then return end
+    
+    self._load_shedding_active = false
+    self._config.time_check = self._original_time_check
+    
+    Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
+        tostring(self._name), self._original_time_check)
 end
 
 --- Возвращает таблицу из пула указанного типа.
