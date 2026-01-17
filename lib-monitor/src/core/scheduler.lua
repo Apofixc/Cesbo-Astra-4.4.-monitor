@@ -244,6 +244,12 @@ function Scheduler:add_task(id, callback, interval, options)
         return 
     end
 
+    -- Если задача с таким ID уже существует, удаляем её перед добавлением новой.
+    -- Это предотвращает дублирование задач в куче при перерегистрации.
+    if self._tasks[id] then
+        self:remove_task(id)
+    end
+
     local now = os_time()
     local interval_val = (interval and interval >= 1) and interval or 1
     local jitter = (options and options.immediate) and 0 or (self._task_count % interval_val)

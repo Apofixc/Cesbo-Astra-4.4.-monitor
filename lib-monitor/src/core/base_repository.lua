@@ -81,7 +81,10 @@ end
 --- @param data? table Дополнительные данные
 function BaseRepository:_emit_event(event_type, name, data)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
-    if not dispatcher then return end
+    if not dispatcher then 
+        print("[DEBUG] No dispatcher found in _emit_event")
+        return 
+    end
 
     local event_data = {
         repo = self._component_name,
@@ -134,6 +137,11 @@ function BaseRepository.new(component_name)
     -- Опциональная инициализация автономного мониторинга
     if MonitorConfig and MonitorConfig.AutoRecoverEnabled then
         self:enable_auto_recovery()
+    end
+
+    -- Опциональная инициализация Watchdog
+    if MonitorConfig and MonitorConfig.WatchdogEnabled then
+        self:enable_watchdog()
     end
 
     return self

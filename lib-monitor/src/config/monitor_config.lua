@@ -442,6 +442,44 @@ MonitorConfig.ValidationSchema = {
     dvb_analyze = {
         type = "boolean",
         default = true
+    },
+    WatchdogEnabled = {
+        type = "boolean",
+        default = false
+    },
+    WatchdogMaxRetries = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 3
+    },
+    WatchdogThreshold = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 15
+    },
+    WatchdogCasThreshold = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 60
+    },
+    channel_watchdog_enabled = {
+        type = "boolean",
+        default = false
+    },
+    channel_watchdog_timeout = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 15
+    },
+    channel_watchdog_cas_timeout = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 60
     }
 }
 
