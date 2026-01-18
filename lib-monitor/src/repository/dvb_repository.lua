@@ -44,9 +44,9 @@ local DvbRepository = BaseRepository.new(COMPONENT_NAME)
 function DvbRepository:_on_before_recreate(name, reason)
     if reason == "watchdog" or reason == "silence" then
         local Adapter = ModuleManager.get_module("adapter")
-        if Adapter and Adapter.restart then
+        if Adapter and Adapter.restart_dvb_monitor then
             Logger.info(COMPONENT_NAME, "[%s] Перезапуск адаптера (причина: %s)", name, reason)
-            Adapter.restart(name)
+            Adapter.restart_dvb_monitor(name)
         end
     end
     return true

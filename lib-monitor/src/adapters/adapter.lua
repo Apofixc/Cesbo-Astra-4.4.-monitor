@@ -317,15 +317,34 @@ function Adapter.switch_transponder(name_adapter, new_tuner_params, reserve_inpu
     -- 3. Запуск новых каналов с сохранением выходов (если переданы)
     if reserve_input and type(reserve_input) == "table" then
         if Channel then
+            local ChannelRepository = ModuleManager.get_module("channel_repository")
             for _, item in ipairs(reserve_input) do
-                -- Находим старый конфиг через репозиторий
-                local ChannelRepository = ModuleManager.get_module("channel_repository")
-                local old_ch = ChannelRepository and ChannelRepository:find(item.name)
-                local old_conf = old_ch and old_ch:get_config()
+                -- Гарантируем удаление старого монитора, если он еще жив
+                if ChannelRepository and ChannelRepository:find(item.name) then
+                    Logger.warn(COMPONENT_NAME, "switch_transponder: принудительное удаление старого монитора '%s'", item.name)
+                    Channel.kill_stream(item.name)
+                end
 
-                if old_conf and item.input then
-                    local final_conf = Utils.table_copy(old_conf)
-                    final_conf.input = item.input
+                -- Находим старый конфиг (он мог быть сохранен в событии before_restart)
+                -- Но здесь мы полагаемся на переданный reserve_input
+                if item.input then
+                    -- Пытаемся найти базовый конфиг в репозитории (если он там остался)
+                    -- или используем минимальный конфиг
+                    local final_conf = {
+                        name = item.name,
+                        input = item.input
+                    }
+                    
+                    -- Если есть старый конфиг в репозитории, копируем его параметры (output и т.д.)
+                    local old_ch = ChannelRepository and ChannelRepository:find(item.name)
+                    if old_ch then
+                        local old_conf = old_ch:get_config()
+                        if old_conf then
+                            final_conf = Utils.table_copy(old_conf)
+                            final_conf.input = item.input
+                        end
+                    end
+
                     Channel.make_stream(final_conf)
                 end
             end

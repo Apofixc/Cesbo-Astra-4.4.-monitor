@@ -566,7 +566,8 @@ end
 function EventDispatcher:_safe_return_to_pool(event)
     if not TablePool or not event then return end
 
-    local ok, err = pcall(TablePool.release, event, "event", event.is_table == true)
+    -- Всегда используем deep=true для возврата вложенных options и data в их пулы
+    local ok, err = pcall(TablePool.release, event, "event", true)
 
     if not ok then
         Logger.warn(COMPONENT_NAME, "Не удалось вернуть событие в пул: %s", tostring(err))

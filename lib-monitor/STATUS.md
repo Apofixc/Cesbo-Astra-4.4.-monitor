@@ -15,7 +15,7 @@
 | **Scheduler** | 100% | **Оптимизирован (Min-Heap) + Stress Tested** | 18.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme)** | 18.01.2026 |
 | **TablePool** | 100% | **Готов (Ultra-Extreme) + Drain System** | 18.01.2026 |
-| **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Smart Emit (Hybrid) + Ghost Protection** | 18.01.2026 |
+| **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Smart Emit (Hybrid) + Ghost Protection + Pool Leak Fixed** | 18.01.2026 |
 
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
@@ -34,7 +34,7 @@
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + 4 уровня тестов** | 18.01.2026 |
+| **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + Verified Restart Scenarios** | 18.01.2026 |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + 7 Comparison Methods + Zero-duplication** | 18.01.2026 |
 | **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Async Multicast + Ghost Protection** | 18.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching** | 18.01.2026 |
