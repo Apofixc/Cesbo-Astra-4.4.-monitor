@@ -34,7 +34,7 @@
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **TunerMonitor** | 100% | **Оптимизирован (Static Stats) + Verified** | 17.01.2026 |
+| **TunerMonitor** | 100% | **Оптимизирован (Static Stats) + Unified API** | 18.01.2026 |
 | **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Routing Tree** | 16.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching** | 16.01.2026 |
 

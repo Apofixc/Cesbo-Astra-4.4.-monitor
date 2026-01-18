@@ -159,7 +159,7 @@ function TunerMonitor:_on_astra_data(data)
         end
 
         -- Обновляем Master State (таблица для Pull-запросов)
-        self:_build_status_table(self._current_status_table)
+        self:_build_status_table(self._current_status_table, data)
 
         -- Сбрасываем кэш JSON, так как данные изменились.
         -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
@@ -173,8 +173,15 @@ function TunerMonitor:_on_astra_data(data)
         r.modulation = self._config.modulation or ""
         r.source = self._config.tp or self._config.frequency
 
-        -- Копируем данные из Master State
-        Utils.table_merge(r, self._current_status_table)
+        -- Оптимизация: прямое копирование полей вместо Utils.table_merge (горячий путь)
+        local master = self._current_status_table
+        r.status = master.status
+        r.signal = master.signal
+        r.snr = master.snr
+        r.ber = master.ber
+        r.unc = master.unc
+        r.quality = master.quality
+        r.timestamp = master.timestamp
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "dvb", true)
@@ -184,14 +191,16 @@ end
 --- Внутренний метод для сборки таблицы полного статуса.
 --- @private
 --- @param t table Целевая таблица для заполнения
+--- @param data table|nil Текущие данные (если есть)
 --- @return table Таблица статуса
-function TunerMonitor:_build_status_table(t)
+function TunerMonitor:_build_status_table(t, data)
     local status = self._status or {}
-    t.status = status.status or 0
-    t.signal = status.signal or 0
-    t.snr = status.snr or 0
-    t.ber = status.ber or 0
-    t.unc = status.unc or 0
+
+    t.status = (data and data.status) or status.status or 0
+    t.signal = (data and data.signal) or status.signal or 0
+    t.snr = (data and data.snr) or status.snr or 0
+    t.ber = (data and data.ber) or status.ber or 0
+    t.unc = (data and data.unc) or status.unc or 0
     t.quality = status.quality or 0
 
     t.timestamp = os_time()

@@ -246,6 +246,14 @@ function ChannelMonitor:_process_total_data(data)
     then
         self:_reset_force_timer()
 
+        -- Обновление состояния для следующего сравнения
+        status.ready = data.on_air
+        status.scrambled = data.total.scrambled
+        status.bitrate = data.total.bitrate or 0
+        status.cc_errors = 0
+        status.pes_errors = 0
+        self._last_active_id = active_id
+
         -- Обновляем Master State (таблица для Pull-запросов)
         local master = self._current_status_table
         self:_build_status_table(master, data)
@@ -275,14 +283,6 @@ function ChannelMonitor:_process_total_data(data)
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "channels", true)
-
-        -- Обновление состояния для следующего сравнения
-        status.ready = data.on_air
-        status.scrambled = data.total.scrambled
-        status.bitrate = data.total.bitrate or 0
-        status.cc_errors = 0
-        status.pes_errors = 0
-        self._last_active_id = active_id
     end
 end
 
