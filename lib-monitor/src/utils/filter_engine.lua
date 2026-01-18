@@ -30,7 +30,7 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 local COMPONENT_NAME = "FilterEngine"
 local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.filter_engine) or 500
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class FilterEngineState
 --- @field script_cache table<string, function|nil> Кэш скомпилированных скриптов
 --- @field script_cache_count number Текущее количество скриптов в кэше
@@ -73,6 +73,12 @@ local OPERATORS = {
         return false
     end,
 }
+
+-- ===========================================================================
+-- Внутренние функции (Private/Protected)
+-- ===========================================================================
+
+-- (Внутренние функции будут ниже)
 
 -- ===========================================================================
 -- Публичное API (Public API)
@@ -140,7 +146,7 @@ function FilterEngine.clear_state(sub_id)
 end
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Проверяет соответствие данных конкретному условию (интерпретируемый режим)
@@ -424,5 +430,9 @@ function FilterEngine.match(data, filters, sub_id)
 
     return true
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return FilterEngine

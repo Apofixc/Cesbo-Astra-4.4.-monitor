@@ -45,6 +45,23 @@ local LEVEL_MAP = {
 }
 
 -- 5. Внутреннее состояние (Private State)
+
+--- @class LoggerState
+--- @field last_errors table<number, string> Контекстное хранение ошибок
+--- @field context_stack number[] Стек контекстов
+--- @field current_context_id number|nil Текущий ID контекста
+--- @field context_counter number Счетчик контекстов
+--- @field active_contexts number Количество активных контекстов
+--- @field component_list string[] Список компонентов в буфере
+--- @field context_buffer table<string, table[]> Буфер логов по компонентам
+--- @field buffer_size number Размер буфера
+--- @field log_queue table[] Очередь пакетной записи
+--- @field cached_log_level number Кэшированный уровень лога
+--- @field cached_log_format string Кэшированный формат лога
+--- @field cached_log_buffer_size number Кэшированный размер буфера
+--- @field cached_log_batch_enabled boolean Флаг пакетной записи
+--- @field last_config_refresh number Время последнего обновления конфига
+
 local state = {
     -- Контекстное хранение ошибок
     last_errors = {},
@@ -70,7 +87,7 @@ local state = {
 }
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Возвращает модуль конфигурации (ленивая загрузка)

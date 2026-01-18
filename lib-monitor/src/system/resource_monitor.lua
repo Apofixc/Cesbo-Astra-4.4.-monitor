@@ -89,6 +89,31 @@ local MAX_CPU_JUMP = (MonitorConfig and MonitorConfig.MaxCpuJump) or 50
 local MAX_RAM_JUMP_PCT = (MonitorConfig and MonitorConfig.MaxRamJumpPct) or 20
 
 -- 5. Внутреннее состояние (Private State)
+
+--- @class ResourceMonitorState
+--- @field start_time number Время запуска
+--- @field iteration_count number Счетчик итераций
+--- @field last_clock number Последний замер os.clock
+--- @field last_utime number Последний замер utime
+--- @field last_stime number Последний замер stime
+--- @field last_lua_mem number Последний замер памяти Lua
+--- @field last_post_gc_mem number Память после последнего GC
+--- @field pid number|nil PID процесса
+--- @field stat_file any|nil Дескриптор /proc/self/stat
+--- @field status_file any|nil Дескриптор /proc/self/status
+--- @field report SystemReport Статический отчет
+--- @field cpu_buffer number[] Буфер для скользящего среднего
+--- @field cpu_sum number Сумма в буфере
+--- @field cpu_index number Текущий индекс в буфере
+--- @field cpu_count number Количество элементов в буфере
+--- @field last_cpu_usage number Последнее значение CPU
+--- @field last_network_check number Время последней проверки сети
+--- @field active_warnings table<string, boolean> Активные предупреждения
+--- @field config_cache table Кэш конфигурации
+--- @field current_tick_interval number Текущий интервал опроса
+--- @field mem_history number[] История памяти
+--- @field mem_history_idx number Индекс в истории памяти
+
 local state = {
     start_time = os_time(),
     iteration_count = 0,
@@ -153,7 +178,7 @@ for i = 1, 10 do
 end
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Обновляет кэш конфигурации (внутренняя версия)
@@ -630,5 +655,9 @@ end
 
 -- Автоматический запуск при загрузке
 ResourceMonitor.start()
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return ResourceMonitor

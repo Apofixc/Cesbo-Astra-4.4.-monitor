@@ -83,7 +83,7 @@ local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
 local MAX_ROUTE_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxRouteCacheSize) or 1000
 local MAX_RETRY_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxRetryQueueSize) or 500
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class SubscriptionManagerState
 --- @field transport_cache table<any, string> Кэш типов транспорта
 --- @field plan_cache table<string, table> Кэш планов доставки
@@ -124,7 +124,7 @@ local SubscriptionManager = {}
 SubscriptionManager.__index = SubscriptionManager
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Генерирует уникальный идентификатор (UUID v4) для подписки
@@ -1033,6 +1033,10 @@ function SubscriptionManager:get_all_subscriptions()
     end
     return res
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")

@@ -27,7 +27,7 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 --- Максимальный размер кэша скомпилированных функций
 local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.wildcard) or 1000
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class WildcardState
 --- @field compile_cache table<string, function> Кэш скомпилированных функций
 --- @field cache_size number Текущее количество элементов в кэше
@@ -42,7 +42,7 @@ local state = {
 local Wildcard = {}
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Создает матчер для любого значения (маска "*")
@@ -289,5 +289,9 @@ function Wildcard.compile(pattern)
 
     return matcher
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return Wildcard

@@ -36,7 +36,7 @@ local ADAPTIVE_STEP = (MonitorConfig and MonitorConfig.PoolAdaptiveStep) or 0.25
 local MIN_LIMIT = (MonitorConfig and MonitorConfig.PoolMinLimit) or 10
 local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInterval) or 300
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class TablePoolState
 --- @field pools table<string, table[]> Таблицы пулов: type -> { t1, t2, ... }
 --- @field cleaners table<string, function> Кастомные функции очистки: type -> function
@@ -61,7 +61,7 @@ local state = {
 local TablePool = {}
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Очищает кэш посещенных объектов
@@ -428,5 +428,9 @@ function TablePool.get_stats()
     end
     return result
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return TablePool

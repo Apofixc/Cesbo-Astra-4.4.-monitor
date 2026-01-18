@@ -49,7 +49,7 @@ local MAX_BATCH_LIMIT = (MonitorConfig and MonitorConfig.MaxBatchLimit) or 1000
 --- TTL для записей LVC по умолчанию (1 час)
 local DEFAULT_LVC_TTL = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class EventDispatcherState
 --- @field instance EventDispatcher|nil Единственный экземпляр (Singleton)
 --- @field event_counter number Счетчик для генерации ID событий
@@ -75,7 +75,7 @@ local EventDispatcher = {}
 EventDispatcher.__index = EventDispatcher
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Генерация уникального ID события
@@ -610,6 +610,10 @@ function EventDispatcher:shutdown()
     self._lvc_tail = 1
     self._lvc_size = 0
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
 local tp = ModuleManager.get_module("table_pool")

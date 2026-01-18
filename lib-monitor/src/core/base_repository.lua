@@ -27,6 +27,9 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "BaseRepository"
 
+-- 5. Внутреннее состояние (Private State)
+-- (Для классов состояние инкапсулировано в экземпляре, создаваемом в .new)
+
 --- Настройки по умолчанию
 local DEFAULT_RECOVER_INTERVAL = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
 local DEFAULT_MAX_ATTEMPTS = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or 3
@@ -49,7 +52,7 @@ local BaseRepository = {}
 BaseRepository.__index = BaseRepository
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Выполняет очистку ресурсов монитора при удалении
@@ -103,7 +106,7 @@ function BaseRepository:_emit_event(event_type, name, data)
 end
 
 -- ===========================================================================
--- Конструктор
+-- Публичное API (Public API)
 -- ===========================================================================
 
 --- Создает новый экземпляр базового репозитория
@@ -399,10 +402,6 @@ function BaseRepository:disable_watchdog()
     Logger.info(self._component_name, "Watchdog выключен")
 end
 
--- ===========================================================================
--- Публичное API: Управление объектами
--- ===========================================================================
-
 --- Регистрирует новый объект в репозитории
 --- @param name string Имя объекта
 --- @param instance any Экземпляр объекта
@@ -460,10 +459,6 @@ end
 function BaseRepository:count()
     return self._state.stats.active
 end
-
--- ===========================================================================
--- Публичное API: Жизненный цикл и восстановление
--- ===========================================================================
 
 --- Выполняет принудительный запуск цикла обслуживания (для тестов или API)
 --- @return number

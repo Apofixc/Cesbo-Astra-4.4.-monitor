@@ -33,6 +33,7 @@ local GLOBAL_CONFIG_PATH = "/opt/config.json"
 --- @field default any Значение по умолчанию
 
 -- 5. Внутреннее состояние (Private State)
+
 --- @class MonitorConfigState
 --- @field cache table<string, any> Кэш вычисляемых значений
 --- @field cache_ttl number Время жизни кэша (сек)
@@ -162,7 +163,7 @@ MonitorConfig.WatchdogThreshold = 15
 MonitorConfig.WatchdogCasThreshold = 60
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Загружает конфигурацию из внешних JSON файлов.

@@ -19,7 +19,7 @@ local Logger = ModuleManager.get_module("logger")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "WsSubscriber"
 
--- 5. Инициализация объектов и внутреннее состояние
+-- 5. Внутреннее состояние (Private State)
 --- @class WsClientInfo
 --- @field error_count number Счетчик ошибок
 --- @field batch boolean Включен ли режим батчинга
@@ -39,7 +39,7 @@ local state = {
 local WsSubscriber = {}
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Сбрасывает накопленные буферы для всех клиентов с включенным батчингом
@@ -201,5 +201,9 @@ function WsSubscriber.get_clients_count()
     for _ in pairs(state.clients) do count = count + 1 end
     return count
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return WsSubscriber

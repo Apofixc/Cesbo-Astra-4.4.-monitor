@@ -34,6 +34,14 @@ local COMPONENT_NAME = "Utils"
 local HOSTNAME = utils_hostname and utils_hostname() or "unknown"
 
 -- 5. Внутреннее состояние (Private State)
+
+--- @class PerformanceStats
+--- @field count number Количество вызовов функции
+--- @field total_time number Суммарное время выполнения в секундах
+--- @field avg_time number Среднее время выполнения в секундах
+--- @field max_time number Максимальное зафиксированное время выполнения
+--- @field min_time number Минимальное зафиксированное время выполнения
+
 local state = {
     --- Хранилище статистики производительности
     --- @type table<string, PerformanceStats>
@@ -41,7 +49,7 @@ local state = {
 }
 
 -- ===========================================================================
--- Внутренние функции (Private)
+-- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
 --- Возвращает модуль логгера (ленивая загрузка)
@@ -85,13 +93,6 @@ end
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
-
---- @class PerformanceStats
---- @field count number Количество вызовов функции
---- @field total_time number Суммарное время выполнения в секундах
---- @field avg_time number Среднее время выполнения в секундах
---- @field max_time number Максимальное зафиксированное время выполнения
---- @field min_time number Минимальное зафиксированное время выполнения
 
 --- @class Utils
 local Utils = {}
@@ -393,5 +394,9 @@ end
 function Utils.get_performance_stats()
     return Utils.deep_copy(state.performance_stats)
 end
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
 
 return Utils
