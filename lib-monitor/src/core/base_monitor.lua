@@ -273,17 +273,24 @@ function BaseMonitor.new(config, component_name, config_prefix, comparison_metho
     if EventDispatcher then
         local dispatcher = EventDispatcher.get_instance()
         self._resource_sub_id = dispatcher:subscribe("sys:resource_warning", function(data)
-            if data.type == "cpu" then
-                if data.status == "critical" then
-                    self:_enable_load_shedding()
-                elseif data.status == "ok" then
-                    self:_disable_load_shedding()
-                end
-            end
+            BaseMonitor._handle_resource_warning(self, data)
         end)
     end
 
     return self
+end
+
+--- Обработчик системных предупреждений о ресурсах.
+--- @protected
+--- @param data table Данные события (type, status)
+function BaseMonitor:_handle_resource_warning(data)
+    if not data or data.type ~= "cpu" then return end
+
+    if data.status == "critical" then
+        self:_enable_load_shedding()
+    elseif data.status == "ok" then
+        self:_disable_load_shedding()
+    end
 end
 
 --- Инициализирует таблицу статуса базовыми полями.
