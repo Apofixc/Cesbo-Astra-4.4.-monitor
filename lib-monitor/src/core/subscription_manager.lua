@@ -86,8 +86,10 @@ local MAX_RETRY_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxRetryQueueSize)
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class SubscriptionManagerState
 --- @field transport_cache table<any, string> Кэш типов транспорта
+--- @field plan_cache table<string, table> Кэш планов доставки
 local state = {
     transport_cache = {},
+    plan_cache = {},
 }
 
 --- @class SubscriptionStats
@@ -114,6 +116,7 @@ local state = {
 --- @field private _matchers table<string, function> Кэш скомпилированных матчеров
 --- @field private _route_cache table<string, Subscription[]> Кэш маршрутизации
 --- @field private _route_cache_size number Текущий размер кэша маршрутизации
+--- @field private _plan_cache table<string, table> Кэш планов доставки (Smart Emit)
 --- @field private _save_pending boolean Флаг отложенного сохранения
 --- @field private _batch_queues table<string, table> Очереди для пакетной отправки
 --- @field private _retry_queue table Очередь на повторную отправку
@@ -308,6 +311,7 @@ function SubscriptionManager.new()
     self._matchers = {} -- [pattern] = function
     self._route_cache = {} -- [event_type] = { sub1, sub2, ... }
     self._route_cache_size = 0
+    self._plan_cache = {} -- [event_type] = { simple_groups = {}, complex_subs = {} }
     self._save_pending = false
     self._batch_queues = {} -- [sub_id] = { events = {}, last_flush = T }
     self._retry_queue = {}
@@ -423,8 +427,10 @@ function SubscriptionManager:load()
     local data = decode(content)
     if type(data) ~= "table" then return end
     for event_type, subs in pairs(data) do
-        for id, sub_data in pairs(subs) do
-            self:subscribe(event_type, sub_data, id)
+        if type(subs) == "table" then
+            for id, sub_data in pairs(subs) do
+                self:subscribe(event_type, sub_data, id)
+            end
         end
     end
 end
@@ -488,7 +494,7 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     self.subscriptions[event_type][sub_id] = subscription
     self.stats.total = self.stats.total + 1
 
-    -- Оптимизация: Гранулярный сброс кэша маршрутизации
+    -- Оптимизация: Гранулярный сброс кэша маршрутизации и планов
     if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
         -- Если добавлена маска, нужно проверить все записи в кэше, которые могут ей соответствовать
         local to_remove = {}
@@ -499,12 +505,14 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         end
         for _, k in pairs(to_remove) do
             self._route_cache[k] = nil
+            self._plan_cache[k] = nil
             self._route_cache_size = self._route_cache_size - 1
         end
         -- Сброс дерева решений Wildcard
         if Wildcard and Wildcard.clear_tree then Wildcard.clear_tree() end
     elseif self._route_cache[event_type] then
         self._route_cache[event_type] = nil
+        self._plan_cache[event_type] = nil
         self._route_cache_size = self._route_cache_size - 1
     end
 
@@ -527,6 +535,48 @@ function SubscriptionManager:match(pattern, name)
     return pattern == name
 end
 
+--- Возвращает список подписчиков для указанного типа события, используя кэш.
+--- @private
+--- @param self SubscriptionManager
+--- @param event_type string Тип события
+--- @return Subscription[] Список подписчиков
+function SubscriptionManager._get_targets(self, event_type)
+    local targets = self._route_cache[event_type]
+    if targets then return targets end
+
+    -- Ограничение размера кэша для предотвращения утечек памяти
+    if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE then
+        self._route_cache = {}
+        self._route_cache_size = 0
+    end
+
+    targets = {}
+    -- Оптимизация: использование Decision Tree для поиска всех масок за один проход
+    if Wildcard and Wildcard.match_multiple then
+        local matched_patterns = Wildcard.match_multiple(event_type, self.subscriptions)
+        for _, pattern in ipairs(matched_patterns) do
+            local subs = self.subscriptions[pattern]
+            if subs then
+                for _, sub in pairs(subs) do
+                    table_insert(targets, sub)
+                end
+            end
+        end
+    else
+        -- Fallback на обычный перебор
+        for pattern, subs in pairs(self.subscriptions) do
+            if self:match(pattern, event_type) then
+                for _, sub in pairs(subs) do
+                    table_insert(targets, sub)
+                end
+            end
+        end
+    end
+    self._route_cache[event_type] = targets
+    self._route_cache_size = self._route_cache_size + 1
+    return targets
+end
+
 --- Рассылает объект события всем подписчикам.
 --- @param event table Объект события (из EventDispatcher)
 --- @param now? number [Текущее время (опционально, для оптимизации)]
@@ -539,39 +589,7 @@ function SubscriptionManager:publish_event(event, now)
     local event_json = nil -- Кэш JSON для текущей рассылки
 
     -- Оптимизация: Fast Path через кэш маршрутизации
-    local targets = self._route_cache[event_type]
-    if not targets then
-        -- Ограничение размера кэша для предотвращения утечек памяти
-        if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE then
-            self._route_cache = {}
-            self._route_cache_size = 0
-        end
-
-        targets = {}
-        -- Оптимизация: использование Decision Tree для поиска всех масок за один проход
-        if Wildcard and Wildcard.match_multiple then
-            local matched_patterns = Wildcard.match_multiple(event_type, self.subscriptions)
-            for _, pattern in ipairs(matched_patterns) do
-                local subs = self.subscriptions[pattern]
-                if subs then
-                    for _, sub in pairs(subs) do
-                        table_insert(targets, sub)
-                    end
-                end
-            end
-        else
-            -- Fallback на обычный перебор
-            for pattern, subs in pairs(self.subscriptions) do
-                if self:match(pattern, event_type) then
-                    for _, sub in pairs(subs) do
-                        table_insert(targets, sub)
-                    end
-                end
-            end
-        end
-        self._route_cache[event_type] = targets
-        self._route_cache_size = self._route_cache_size + 1
-    end
+    local targets = self:_get_targets(event_type)
 
     local num_targets = #targets
     if num_targets == 0 then return false end
@@ -894,26 +912,134 @@ function SubscriptionManager:unsubscribe(sub_id)
     return false
 end
 
+--- Возвращает план доставки для указанного типа события.
+--- План разделяет подписчиков на "простые" группы (для мультикастинга) и "сложные" (индивидуальные).
+--- @param event_type string Тип события
+--- @return table|nil План доставки или nil если подписчиков нет
+function SubscriptionManager:get_delivery_plan(event_type)
+    local plan = self._plan_cache[event_type]
+    if plan then return plan end
+
+    -- Если плана нет в кэше, получаем список всех целей
+    local targets = self:_get_targets(event_type)
+
+    if not targets or #targets == 0 then return nil end
+
+    plan = {
+        simple_groups = {}, -- [signature] = { transport, config, subs = {sub1, ...} }
+        complex_subs = {},  -- { sub1, sub2, ... }
+        has_complex = false,
+        total_simple = 0
+    }
+
+    for i = 1, #targets do
+        local sub = targets[i]
+        if sub.active then
+            -- Критерий "сложного" подписчика:
+            -- 1. Есть фильтры
+            -- 2. Включен троттлинг
+            -- 3. Включен батчинг (кроме "single")
+            -- 4. Транспорт LUA_CALLBACK (всегда сложный из-за pcall и передачи данных)
+            local is_complex = (sub.filters and (sub.filters.conditions or sub.filters.script)) or
+                               (sub.throttle_ms > 0) or
+                               (sub.batch_mode ~= "single") or
+                               (sub.transport == "LUA_CALLBACK")
+
+            if is_complex then
+                table_insert(plan.complex_subs, sub)
+                plan.has_complex = true
+            else
+                -- Группировка простых подписчиков по сигнатуре доставки
+                local sig
+                local cb = sub.callback
+                if sub.transport == "HTTP" then
+                    sig = "H:" .. tostring(cb.host) .. ":" .. tostring(cb.port) .. ":" .. tostring(cb.path or "/")
+                elseif sub.transport == "WS" then
+                    sig = "W"
+                elseif sub.transport == "CONSOLE" then
+                    sig = "C"
+                end
+
+                if sig then
+                    if not plan.simple_groups[sig] then
+                        plan.simple_groups[sig] = {
+                            transport = sub.transport,
+                            config = cb,
+                            subs = {}
+                        }
+                    end
+                    table_insert(plan.simple_groups[sig].subs, sub)
+                    plan.total_simple = plan.total_simple + 1
+                else
+                    -- На всякий случай, если транспорт не определен
+                    table_insert(plan.complex_subs, sub)
+                    plan.has_complex = true
+                end
+            end
+        end
+    end
+
+    self._plan_cache[event_type] = plan
+    return plan
+end
+
+--- Выполняет прямую рассылку события по группам простых подписчиков.
+--- Оптимизировано: JSON кодируется один раз.
+--- @param plan table План доставки (из get_delivery_plan)
+--- @param event_type string Тип события
+--- @param event_data table|string Данные события
+--- @param now number Текущее время
+function SubscriptionManager:multicast_direct(plan, event_type, event_data, now)
+    local event_json = nil
+    local encode = get_json_encode()
+    
+    -- Кодируем JSON один раз для всех групп
+    if type(event_data) == "table" then
+        local ok, res = pcall(encode, event_data)
+        if ok then event_json = res end
+    else
+        event_json = tostring(event_data)
+    end
+
+    if not event_json then return end
+
+    for _, group in pairs(plan.simple_groups) do
+        local transport_func = Transport[group.transport]
+        if transport_func then
+            -- Отправляем группе. Так как подписчики простые, мы просто вызываем транспорт.
+            -- Статистику обновляем для каждого подписчика в группе.
+            local success, _ = transport_func(self, group.config, event_data, event_type, nil, event_json)
+            
+            local subs = group.subs
+            for i = 1, #subs do
+                local sub = subs[i]
+                if success then
+                    sub.stats.delivered = sub.stats.delivered + 1
+                    sub.stats.consecutive_failures = 0
+                    sub.last_event_at = now
+                else
+                    sub.stats.failed = sub.stats.failed + 1
+                    sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
+                end
+            end
+            
+            if success then
+                self.stats.delivered = self.stats.delivered + #subs
+            else
+                self.stats.failed = self.stats.failed + #subs
+            end
+        end
+    end
+end
+
 --- Проверяет наличие активных подписок на указанный тип события.
 --- @param event_type string Тип события
 --- @return boolean true если есть хотя бы один активный подписчик
 function SubscriptionManager:has_subscriptions(event_type)
     -- Проверка через кэш маршрутизации (самый быстрый путь)
-    local targets = self._route_cache[event_type]
-    if targets then
-        for i = 1, #targets do
-            if targets[i].active then return true end
-        end
-        return false
-    end
-
-    -- Если в кэше нет, проверяем все паттерны
-    for pattern, subs in pairs(self.subscriptions) do
-        if self:match(pattern, event_type) then
-            for _, sub in pairs(subs) do
-                if sub.active then return true end
-            end
-        end
+    local targets = self:_get_targets(event_type)
+    for i = 1, #targets do
+        if targets[i].active then return true end
     end
     return false
 end

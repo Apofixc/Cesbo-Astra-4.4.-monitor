@@ -211,7 +211,10 @@ function EventDispatcher:_release_lvc_entry(entry)
     end
 end
 
---- Публикует событие в систему. Событие попадает в очередь и обрабатывается асинхронно.
+--- Публикует событие в систему.
+--- Реализует гибридную модель доставки:
+--- 1. Fast Path (Direct Multicast): мгновенная отправка простым подписчикам.
+--- 2. Queue Path (Event-Driven): асинхронная обработка через очередь для сложных подписчиков.
 --- @param event_type string Тип события (например, "channel:error")
 --- @param event_data table|string Данные события
 --- @param priority? number Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).
@@ -222,6 +225,27 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
     local now = os_time()
     local p = priority or self.PRIORITIES.MEDIUM
+    local sub_mgr = self.subscription_manager
+
+    -- Оптимизация: Smart Emit (Fast Path)
+    -- Проверяем план доставки перед созданием объекта события
+    local plan = sub_mgr:get_delivery_plan(event_type)
+    if not plan then
+        -- Если нет подписчиков и не нужно кэшировать в LVC, выходим немедленно
+        if options and options.no_cache then return nil end
+    else
+        -- Если есть простые подписчики и нет сложных (или их мало), используем Direct Multicast
+        -- Лимит в 10 простых групп для предотвращения блокировки основного потока
+        if not plan.has_complex and plan.total_simple > 0 and plan.total_simple <= 10 then
+            sub_mgr:multicast_direct(plan, event_type, event_data, now)
+            
+            -- Если не нужно кэшировать в LVC, задача выполнена без создания объектов
+            if options and options.no_cache then
+                self.stats.emitted = self.stats.emitted + 1
+                return "direct_push"
+            end
+        end
+    end
 
     -- Load Shedding: защита от перегрузок (сброс низкоприоритетных событий)
     local total_capacity = MAX_QUEUE_SIZE * 4
