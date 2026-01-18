@@ -129,7 +129,7 @@ function BaseRepository.new(component_name)
             watchdog = {
                 enabled = (MonitorConfig and MonitorConfig.WatchdogEnabled) or false,
                 max_attempts = (MonitorConfig and MonitorConfig.WatchdogMaxRetries) or 3,
-                interval = DEFAULT_WATCHDOG_INTERVAL
+                interval = (MonitorConfig and MonitorConfig.WatchdogInterval) or DEFAULT_WATCHDOG_INTERVAL
             }
         },
 
@@ -212,7 +212,7 @@ function BaseRepository:_maintenance_tick()
         local class = s.classes[name]
         if not monitor or not class then goto next_monitor end
 
-        local health = monitor.health_check and monitor:health_check()
+        local health = monitor.get_software_status and monitor:get_software_status()
         if not health then goto next_monitor end
 
         -- 1. Механизм Cooldown: сброс попыток при стабильной работе
