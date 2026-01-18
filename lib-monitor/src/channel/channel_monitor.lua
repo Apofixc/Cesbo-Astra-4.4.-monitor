@@ -36,30 +36,82 @@ local METHOD_ALWAYS = 1
 local METHOD_RATIO = 2
 local METHOD_ON_AIR = 3
 local METHOD_CC_THRESHOLD = 4
+local METHOD_ERROR_ONLY = 5
+local METHOD_BITRATE_DROP = 6
+local METHOD_PES_STRICT = 7
+local METHOD_VIDEO_ONLY = 8
 
 local ratio = Utils.ratio
 
 -- Методы сравнения
 local COMPARISON_METHODS = {
-    [METHOD_ALWAYS] = function(prev, curr, rate, cc_threshold)
+    -- 1. Всегда отправлять отчет при каждой проверке
+    [METHOD_ALWAYS] = function(prev, curr, rate, cc_threshold, stats)
         return true
     end,
-    [METHOD_RATIO] = function(prev, curr, rate, cc_threshold)
+
+    -- 2. Любые изменения (битрейт по ratio, CC > 0)
+    [METHOD_RATIO] = function(prev, curr, rate, cc_threshold, stats)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
                (prev.cc_errors or 0) > 0 or
                (prev.pes_errors or 0) > 0 or
                ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
-    [METHOD_ON_AIR] = function(prev, curr, rate, cc_threshold)
+
+    -- 3. Только изменение статуса On Air
+    [METHOD_ON_AIR] = function(prev, curr, rate, cc_threshold, stats)
         return prev.ready ~= curr.on_air
     end,
-    [METHOD_CC_THRESHOLD] = function(prev, curr, rate, cc_threshold)
+
+    -- 4. Изменения с учетом порога CC
+    [METHOD_CC_THRESHOLD] = function(prev, curr, rate, cc_threshold, stats)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
                (prev.cc_errors or 0) > (cc_threshold or 0) or
                (prev.pes_errors or 0) > 0 or
                ratio(prev.bitrate, curr.total.bitrate) > rate
+    end,
+
+    -- 5. Игнорировать битрейт, только ошибки (CC > threshold, PES, Scrambled)
+    [METHOD_ERROR_ONLY] = function(prev, curr, rate, cc_threshold, stats)
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               (prev.cc_errors or 0) > (cc_threshold or 0) or
+               (prev.pes_errors or 0) > 0
+    end,
+
+    -- 6. Только при падении битрейта (игнорировать рост)
+    [METHOD_BITRATE_DROP] = function(prev, curr, rate, cc_threshold, stats)
+        local is_drop = (prev.bitrate > curr.total.bitrate) and
+                        (ratio(prev.bitrate, curr.total.bitrate) > rate)
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               (prev.cc_errors or 0) > (cc_threshold or 0) or
+               (prev.pes_errors or 0) > 0 or
+               is_drop
+    end,
+
+    -- 7. Реакция на любую PES-ошибку (> 0), не дожидаясь порога Astra
+    [METHOD_PES_STRICT] = function(prev, curr, rate, cc_threshold, stats)
+        return prev.ready ~= curr.on_air or
+               (prev.pes_errors or 0) > 0
+    end,
+
+    -- 8. Проверка ошибок только на видео-PID (игнорировать ошибки в аудио/телетексте)
+    [METHOD_VIDEO_ONLY] = function(prev, curr, rate, cc_threshold, stats)
+        if prev.ready ~= curr.on_air or prev.scrambled ~= curr.total.scrambled then
+            return true
+        end
+        -- Проверяем ошибки только в видео-потоках из накопленной статистики
+        if stats then
+            for _, s in pairs(stats) do
+                if s.type == "VIDEO" and (s.cc > 0 or s.pes > 0) then
+                    return true
+                end
+            end
+        end
+        return ratio(prev.bitrate, curr.total.bitrate) > rate
     end
 }
 
@@ -244,7 +296,7 @@ function ChannelMonitor:_process_total_data(data)
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(conf.time_check) and
        (active_id ~= self._last_active_id or self:_is_force() or
-        self._current_method(master, data, conf.rate, conf.cc_threshold))
+        self._current_method(master, data, conf.rate, conf.cc_threshold, self._stats))
     then
         self:_reset_force_timer()
 

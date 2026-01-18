@@ -48,26 +48,68 @@ end
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
-local METHOD_STRICT = 2
-local METHOD_RATIO = 3
+local METHOD_RATIO = 2
+local METHOD_LOCK_ONLY = 3
+local METHOD_ERROR_CRITICAL = 4
+local METHOD_QUALITY_RATIO = 5
+local METHOD_STATUS_ANY = 6
+local METHOD_SIGNAL_DROP = 7
 
 local ratio = Utils.ratio
 
 local COMPARISON_METHODS = {
-    [METHOD_ALWAYS] = function() return true end,
-    [METHOD_STRICT] = function(prev, curr)
-        return (prev.status or -1) ~= (curr.status or -1) or
-               (prev.signal or -1) ~= (curr.signal or -1) or
-               (prev.snr or -1) ~= (curr.snr or -1) or
-               (prev.ber or -1) ~= (curr.ber or -1) or
-               (prev.unc or -1) ~= (curr.unc or -1)
+    -- 1. Всегда отправлять отчет при каждой проверке
+    [METHOD_ALWAYS] = function(prev, curr, rate, quality)
+        return true
     end,
-    [METHOD_RATIO] = function(prev, curr, rate)
+
+    -- 2. Любые изменения параметров через ratio
+    [METHOD_RATIO] = function(prev, curr, rate, quality)
         return (prev.status or -1) ~= (curr.status or -1) or
                ratio(prev.signal or 0, curr.signal or 0) > rate or
                ratio(prev.snr or 0, curr.snr or 0) > rate or
                (prev.ber or -1) ~= (curr.ber or -1) or
                (prev.unc or -1) ~= (curr.unc or -1)
+    end,
+
+    -- 3. Только изменение бита Lock
+    [METHOD_LOCK_ONLY] = function(prev, curr, rate, quality)
+        local prev_lock = bit32.band(prev.status or 0, 0x10) ~= 0
+        local curr_lock = bit32.band(curr.status or 0, 0x10) ~= 0
+        return prev_lock ~= curr_lock
+    end,
+
+    -- 4. Изменение Lock или появление ошибок BER/UNC
+    [METHOD_ERROR_CRITICAL] = function(prev, curr, rate, quality)
+        local prev_lock = bit32.band(prev.status or 0, 0x10) ~= 0
+        local curr_lock = bit32.band(curr.status or 0, 0x10) ~= 0
+        return prev_lock ~= curr_lock or (curr.ber or 0) > 0 or (curr.unc or 0) > 0
+    end,
+
+    -- 5. Изменение Lock или расчетного показателя Quality
+    [METHOD_QUALITY_RATIO] = function(prev, curr, rate, quality)
+        local prev_lock = bit32.band(prev.status or 0, 0x10) ~= 0
+        local curr_lock = bit32.band(curr.status or 0, 0x10) ~= 0
+        return prev_lock ~= curr_lock or ratio(prev.quality or 0, quality or 0) > rate
+    end,
+
+    -- 6. Любое изменение битовой маски статуса (Signal, Carrier, Viterbi, Sync, Lock)
+    [METHOD_STATUS_ANY] = function(prev, curr, rate, quality)
+        return (prev.status or -1) ~= (curr.status or -1)
+    end,
+
+    -- 7. Изменение Lock или только падение уровня сигнала/SNR
+    [METHOD_SIGNAL_DROP] = function(prev, curr, rate, quality)
+        local prev_lock = bit32.band(prev.status or 0, 0x10) ~= 0
+        local curr_lock = bit32.band(curr.status or 0, 0x10) ~= 0
+        if prev_lock ~= curr_lock then return true end
+
+        local is_signal_drop = (prev.signal or 0) > (curr.signal or 0) and
+                               ratio(prev.signal or 0, curr.signal or 0) > rate
+        local is_snr_drop = (prev.snr or 0) > (curr.snr or 0) and
+                            ratio(prev.snr or 0, curr.snr or 0) > rate
+
+        return is_signal_drop or is_snr_drop or (curr.ber or 0) > 0 or (curr.unc or 0) > 0
     end
 }
 
@@ -120,22 +162,27 @@ function TunerMonitor:_on_astra_data(data)
         end
     end
 
+    -- Расчет качества (quality) для метода сравнения
+    local current_quality = -1
+    if conf.analyze and self._stats.count > 0 then
+        local avg_ber = self._stats.ber_sum / self._stats.count
+        if avg_ber > 0 or self._stats.unc_sum > 0 then
+            current_quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
+        else
+            current_quality = 100
+        end
+    else
+        current_quality = master.quality or -1
+    end
+
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(conf.time_check) and
-       (self:_is_force() or self._current_method(master, data, conf.rate))
+       (self:_is_force() or self._current_method(master, data, conf.rate, current_quality))
     then
         self:_reset_force_timer()
 
-        -- Расчет качества (quality) на основе ошибок
-        local quality = -1
-        if conf.analyze and self._stats.count > 0 then
-            local avg_ber = self._stats.ber_sum / self._stats.count
-            if avg_ber > 0 or self._stats.unc_sum > 0 then
-                quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
-            else
-                quality = 100
-            end
-            -- Сброс статистики после отправки
+        -- Сброс статистики после отправки отчета
+        if conf.analyze then
             self._stats.ber_sum = 0
             self._stats.unc_sum = 0
             self._stats.count = 0
@@ -147,7 +194,7 @@ function TunerMonitor:_on_astra_data(data)
         master.snr = data.snr or -1
         master.ber = data.ber or -1
         master.unc = data.unc or -1
-        master.quality = quality
+        master.quality = current_quality
         master.timestamp = os_time()
 
         local s_num = data.status

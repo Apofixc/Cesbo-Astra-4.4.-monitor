@@ -90,7 +90,7 @@ MonitorConfig.MaxRate = 0.3
 MonitorConfig.MinTimeCheck = 0
 MonitorConfig.MaxTimeCheck = 300
 MonitorConfig.MinMethodComparison = 1
-MonitorConfig.MaxMethodComparison = 4
+MonitorConfig.MaxMethodComparison = 8
 MonitorConfig.ChannelCcThreshold = 1
 MonitorConfig.ForceSendInterval = 300
 
@@ -440,7 +440,7 @@ MonitorConfig.ValidationSchema = {
     dvb_method_comparison = {
         type = "number",
         min = 1,
-        max = 3,
+        max = 7,
         default = 3
     },
     dvb_analyze = {
