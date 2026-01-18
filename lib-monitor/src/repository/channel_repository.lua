@@ -56,62 +56,26 @@ end
 -- ===========================================================================
 
 --- @class ChannelRepository : BaseRepository
---- @field private _watchdog_retries table<string, number> Счетчики попыток перезапуска
 local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
-ChannelRepository._watchdog_retries = {}
 
---- Очистка специфичных данных при удалении монитора
+--- Хук, вызываемый перед пересозданием монитора.
+--- Выполняет перезапуск стрима в Astra.
 --- @protected
-function ChannelRepository:_on_instance_destroyed(name)
-    if self._watchdog_retries[name] then
-        self._watchdog_retries[name] = nil
-    end
-end
-
---- Проверка Watchdog для канала
---- @protected
-function ChannelRepository:_check_monitor_watchdog(name, monitor, status, now)
-    local watchdog_enabled = MonitorConfig and MonitorConfig.WatchdogEnabled
-    if not watchdog_enabled then return end
-
-    -- 1. Проверка Bitrate (No Data)
-    local bitrate = status.bitrate or 0
-    local is_failed = (bitrate == 0)
-    
-    -- 2. Проверка Scrambled (CAS Error)
-    if not is_failed and status.scrambled then
-        is_failed = true
-    end
-
-    if is_failed then
-        local retries = (self._watchdog_retries[name] or 0) + 1
-        local max_retries = (MonitorConfig and MonitorConfig.WatchdogMaxRetries) or 3
-        
-        if retries <= max_retries then
-            Logger.warn(COMPONENT_NAME, "[%s] Watchdog: обнаружен сбой, попытка перезапуска %d/%d", 
-                name, retries, max_retries)
-            
-            self._watchdog_retries[name] = retries
-            
-            local Channel = ModuleManager.get_module("channel")
-            if Channel then
-                local conf = Channel.kill_stream(name)
-                if conf then
-                    Channel.make_stream(conf)
-                end
+--- @param name string Имя монитора
+--- @param reason string Причина ("silence" или "watchdog")
+--- @return boolean success
+function ChannelRepository:_on_before_recreate(name, reason)
+    if reason == "watchdog" or reason == "silence" then
+        local Channel = ModuleManager.get_module("channel")
+        if Channel then
+            Logger.info(COMPONENT_NAME, "[%s] Перезапуск стрима (причина: %s)", name, reason)
+            local conf = Channel.kill_stream(name)
+            if conf then
+                return Channel.make_stream(conf) ~= nil
             end
-        else
-            Logger.error(COMPONENT_NAME, "[%s] Watchdog: превышен лимит перезапусков. Блокировка.", name)
-            -- Генерируем критическое событие
-            self:_emit_event("sys:watchdog_failed", name, { retries = retries - 1 })
-        end
-    else
-        -- Сброс счетчика при стабильной работе
-        if self._watchdog_retries[name] then
-            self._watchdog_retries[name] = nil
-            Logger.info(COMPONENT_NAME, "[%s] Watchdog: работа стабилизировалась, счетчик сброшен", name)
         end
     end
+    return true
 end
 
 -- ===========================================================================

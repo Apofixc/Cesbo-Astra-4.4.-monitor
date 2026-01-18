@@ -155,6 +155,7 @@ MonitorConfig.subscribers = {}
 -- Watchdog
 MonitorConfig.WatchdogEnabled = false
 MonitorConfig.WatchdogMaxRetries = 3
+MonitorConfig.WatchdogInterval = 5
 MonitorConfig.WatchdogThreshold = 15
 MonitorConfig.WatchdogCasThreshold = 60
 
@@ -452,6 +453,12 @@ MonitorConfig.ValidationSchema = {
         min = 1,
         max = 100,
         default = 3
+    },
+    WatchdogInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 5
     },
     WatchdogThreshold = {
         type = "number",

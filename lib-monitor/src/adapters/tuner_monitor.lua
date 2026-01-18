@@ -370,6 +370,18 @@ function TunerMonitor:update_parameters(params)
     return true
 end
 
+--- Проверяет функциональное здоровье тюнера (наличие Lock)
+--- @return boolean|nil is_healthy
+function TunerMonitor:check_infrastructure_health()
+    if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
+    
+    local flags = self._current_flags
+    if not flags then return false end
+
+    -- Проверка Lock (0x10)
+    return flags.has_lock == true
+end
+
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
 --- @return table|nil Таблица данных
 function TunerMonitor:get_status_table()

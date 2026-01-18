@@ -31,6 +31,7 @@ local COMPONENT_NAME = "BaseRepository"
 local DEFAULT_RECOVER_INTERVAL = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
 local DEFAULT_MAX_ATTEMPTS = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or 3
 local DEFAULT_COOLDOWN_TIME = (MonitorConfig and MonitorConfig.RecoveryCooldown) or 3600 -- 1 час стабильной работы для сброса попыток
+local DEFAULT_WATCHDOG_INTERVAL = 5
 
 --- Типы событий репозитория
 local EVENTS = {
@@ -43,7 +44,7 @@ local EVENTS = {
 --- @class BaseRepository
 --- @field protected _state table Внутреннее состояние репозитория
 --- @field protected _component_name string Имя компонента для логирования
---- @field protected _watchdog_task_id string|nil ID задачи Watchdog в планировщике
+--- @field protected _maintenance_task_id string|nil ID задачи обслуживания в планировщике
 local BaseRepository = {}
 BaseRepository.__index = BaseRepository
 
@@ -117,12 +118,26 @@ function BaseRepository.new(component_name)
         monitors = {},           -- Активные экземпляры мониторов: name -> instance
         classes = {},            -- Классы (мета-таблицы) для пересоздания: name -> class
 
+        -- Настройки (копируются из MonitorConfig для поддержки API)
+        settings = {
+            auto_recover = {
+                enabled = (MonitorConfig and MonitorConfig.AutoRecoverEnabled) or false,
+                interval = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or DEFAULT_RECOVER_INTERVAL,
+                max_attempts = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or DEFAULT_MAX_ATTEMPTS,
+                cooldown = (MonitorConfig and MonitorConfig.RecoveryCooldown) or DEFAULT_COOLDOWN_TIME
+            },
+            watchdog = {
+                enabled = (MonitorConfig and MonitorConfig.WatchdogEnabled) or false,
+                max_attempts = (MonitorConfig and MonitorConfig.WatchdogMaxRetries) or 3,
+                interval = DEFAULT_WATCHDOG_INTERVAL
+            }
+        },
+
         -- Состояние восстановления
         recovery = {
             attempts = {},       -- История попыток восстановления: name -> count
             last_success = {},   -- Время последнего успешного восстановления: name -> timestamp
-            last_check = 0,      -- Время последней проверки auto_recover
-            task_id = nil        -- ID задачи в планировщике
+            last_check = 0
         },
 
         -- Статистика
@@ -135,87 +150,238 @@ function BaseRepository.new(component_name)
     }
 
     self._component_name = component_name or COMPONENT_NAME
-    self._watchdog_task_id = nil
+    self._maintenance_task_id = nil
 
-    -- Опциональная инициализация автономного мониторинга
-    if MonitorConfig and MonitorConfig.AutoRecoverEnabled then
-        self:enable_auto_recovery()
-    end
-
-    -- Опциональная инициализация Watchdog
-    if MonitorConfig and MonitorConfig.WatchdogEnabled then
-        self:enable_watchdog()
-    end
+    -- Инициализация единого цикла обслуживания
+    self:_start_maintenance_task()
 
     return self
 end
 
+--- Запускает единую задачу обслуживания в планировщике
+--- @private
+function BaseRepository:_start_maintenance_task()
+    local scheduler = Scheduler and Scheduler.get_instance()
+    if not scheduler then return end
+
+    local task_id = "maintenance_" .. self._component_name
+    local interval = self._state.settings.watchdog.interval
+
+    -- Используем immediate = true для мгновенного запуска первого тика
+    scheduler:add_task(task_id, function()
+        self:_maintenance_tick()
+    end, interval, { immediate = true })
+
+    self._maintenance_task_id = task_id
+end
+
+--- Хук, вызываемый перед пересозданием экземпляра монитора.
+--- Переопределяется в наследниках для выполнения инфраструктурных действий (restart stream/adapter).
+--- @protected
+--- @param name string Имя монитора
+--- @param reason string Причина восстановления ("silence" или "watchdog")
+--- @return boolean success Если false, восстановление будет прервано
+function BaseRepository:_on_before_recreate(name, reason)
+    return true
+end
+
 --- Хук, вызываемый после удаления экземпляра монитора.
---- Переопределяется в наследниках для очистки специфичных данных (например, Watchdog retries).
 --- @protected
 --- @param name string Имя монитора
 function BaseRepository:_on_instance_destroyed(name)
     -- Базовая реализация пустая
 end
 
---- Выполняет проверку Watchdog для всех мониторов в репозитории
---- @protected
-function BaseRepository:_watchdog_tick()
+--- Единый цикл обслуживания: проверка тишины и здоровья мониторов
+--- @private
+function BaseRepository:_maintenance_tick()
     local now = os_time()
     local s = self._state
+    local settings = s.settings
     
-    -- Глобальные настройки из конфига
-    local enabled = MonitorConfig and MonitorConfig.WatchdogEnabled
-    if not enabled then return end
+    s.recovery.last_check = now
 
-    for name, monitor in pairs(s.monitors) do
-        if monitor.get_status_table and monitor.get_state then
-            local state = monitor:get_state()
-            if state == BaseMonitor.STATE.RUNNING then
-                local status = monitor:get_status_table()
-                if status then
-                    self:_check_monitor_watchdog(name, monitor, status, now)
-                end
+    -- Создаем список имен для безопасной итерации (т.к. внутри можем удалять/добавлять)
+    local names = {}
+    for name in pairs(s.monitors) do
+        names[#names + 1] = name
+    end
+
+    for _, name in ipairs(names) do
+        local monitor = s.monitors[name]
+        local class = s.classes[name]
+        if not monitor or not class then goto next_monitor end
+
+        local health = monitor.health_check and monitor:health_check()
+        if not health then goto next_monitor end
+
+        -- 1. Механизм Cooldown: сброс попыток при стабильной работе
+        local last_success = s.recovery.last_success[name] or 0
+        if last_success > 0 and now - last_success > settings.auto_recover.cooldown then
+            if (s.recovery.attempts[name] or 0) > 0 then
+                Logger.info(self._component_name, "Сброс счетчика попыток для %s (стабильная работа)", name)
+                s.recovery.attempts[name] = nil
             end
         end
+
+        local needs_recovery = false
+        local reason = nil
+
+        -- 2. Проверка "Тишины" (Auto-recover)
+        if settings.auto_recover.enabled and health.state == BaseMonitor.STATE.RUNNING then
+            if now - (health.last_update or 0) > settings.auto_recover.interval then
+                needs_recovery = true
+                reason = "silence"
+            end
+        end
+
+        -- 3. Проверка "Здоровья" (Watchdog) - только если монитор не молчит
+        if not needs_recovery and settings.watchdog.enabled and health.state == BaseMonitor.STATE.RUNNING then
+            -- Используем новый метод check_infrastructure_health()
+            local is_healthy = monitor.check_infrastructure_health and monitor:check_infrastructure_health()
+            if is_healthy == false then
+                needs_recovery = true
+                reason = "watchdog"
+            end
+        end
+
+        -- 4. Выполнение восстановления
+        if needs_recovery then
+            self:_perform_recovery(name, monitor, class, reason, now)
+        end
+
+        ::next_monitor::
     end
 end
 
---- Проверяет конкретный монитор (должно быть переопределено в наследниках)
---- @protected
+--- Выполняет процедуру восстановления монитора
+--- @private
 --- @param name string Имя монитора
---- @param monitor any Экземпляр монитора
---- @param status table Текущий статус
+--- @param monitor any Текущий экземпляр
+--- @param class table Класс для пересоздания
+--- @param reason string Причина ("silence" или "watchdog")
 --- @param now number Текущее время
-function BaseRepository:_check_monitor_watchdog(name, monitor, status, now)
-    -- Базовая реализация пустая
+function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
+    local s = self._state
+    local settings = s.settings
+    
+    local attempts = (s.recovery.attempts[name] or 0) + 1
+    local max_attempts = (reason == "watchdog") and settings.watchdog.max_attempts or settings.auto_recover.max_attempts
+
+    if attempts > max_attempts then
+        Logger.error(self._component_name,
+            "[%s] Превышен лимит восстановления (%d/%d, причина: %s). Остановка.",
+            name, attempts - 1, max_attempts, reason)
+        
+        s.stats.limit_reached = s.stats.limit_reached + 1
+        self:_emit_event(EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1, reason = reason })
+        
+        if monitor.pause then monitor:pause() end
+        return
+    end
+
+    Logger.warn(self._component_name,
+        "[%s] Попытка восстановления (%d/%d, причина: %s)",
+        name, attempts, max_attempts, reason)
+    
+    self:_emit_event(EVENTS.RECOVERY_ATTEMPT, name, { attempt = attempts, max = max_attempts, reason = reason })
+
+    -- АТОМАРНОЕ ВОССТАНОВЛЕНИЕ (Shadow Copy)
+    -- 1. Вызов хука для инфраструктурных действий (restart stream/adapter)
+    local ok = self:_on_before_recreate(name, reason)
+    if not ok then
+        Logger.error(self._component_name, "[%s] Хук восстановления вернул ошибку", name)
+        return
+    end
+
+    -- 2. Получение конфига и пересоздание объекта
+    local config = monitor.get_config and monitor:get_config()
+    if config and class.new then
+        local new_monitor = class.new(config)
+        
+        if new_monitor and new_monitor.start and new_monitor:start() then
+            -- Успех: заменяем старый на новый (unregister сам вызовет destroy)
+            self:unregister(name, true)
+            self:register(name, new_monitor, class)
+            
+            s.recovery.attempts[name] = attempts
+            s.recovery.last_success[name] = now
+            
+            s.stats.total_recovered = s.stats.total_recovered + 1
+            Logger.info(self._component_name, "[%s] Монитор успешно восстановлен", name)
+            self:_emit_event(EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts, reason = reason })
+        else
+            s.stats.total_failed = s.stats.total_failed + 1
+            s.recovery.attempts[name] = attempts
+            Logger.error(self._component_name, "[%s] Не удалось запустить новый экземпляр", name)
+            self:_emit_event(EVENTS.RECOVERY_FAILED, name, { attempt = attempts, reason = reason, error = "start_failed" })
+        end
+    else
+        s.stats.total_failed = s.stats.total_failed + 1
+        s.recovery.attempts[name] = attempts
+        Logger.error(self._component_name, "[%s] Отсутствует конфиг или класс для пересоздания", name)
+    end
+end
+
+--- Включает механизм Auto-recover
+function BaseRepository:enable_auto_recovery()
+    self._state.settings.auto_recover.enabled = true
+    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) включено")
+end
+
+--- Выключает механизм Auto-recover
+function BaseRepository:disable_auto_recovery()
+    self._state.settings.auto_recover.enabled = false
+    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) выключено")
+end
+
+--- Обновляет настройки репозитория (лимиты, интервалы, флаги)
+--- @param params table Таблица параметров
+--- @return boolean success
+function BaseRepository:update_settings(params)
+    if type(params) ~= "table" then return false end
+    local s = self._state
+    local settings = s.settings
+    local changed_interval = false
+
+    -- 1. Auto-recover settings
+    if params.auto_recover_enabled ~= nil then settings.auto_recover.enabled = params.auto_recover_enabled end
+    if params.auto_recover_interval ~= nil then settings.auto_recover.interval = params.auto_recover_interval end
+    if params.auto_recover_max_attempts ~= nil then settings.auto_recover.max_attempts = params.auto_recover_max_attempts end
+    if params.auto_recover_cooldown ~= nil then settings.auto_recover.cooldown = params.auto_recover_cooldown end
+
+    -- 2. Watchdog settings
+    if params.watchdog_enabled ~= nil then settings.watchdog.enabled = params.watchdog_enabled end
+    if params.watchdog_max_attempts ~= nil then settings.watchdog.max_attempts = params.watchdog_max_attempts end
+    if params.watchdog_interval ~= nil then
+        if params.watchdog_interval ~= settings.watchdog.interval then
+            settings.watchdog.interval = params.watchdog_interval
+            changed_interval = true
+        end
+    end
+
+    -- 3. Обновление задачи в планировщике при изменении интервала
+    if changed_interval and self._maintenance_task_id then
+        local scheduler = Scheduler and Scheduler.get_instance()
+        if scheduler then
+            scheduler:set_task_interval(self._maintenance_task_id, settings.watchdog.interval)
+        end
+    end
+
+    Logger.info(self._component_name, "Настройки репозитория обновлены")
+    return true
 end
 
 --- Включает механизм Watchdog
---- @param interval? number Интервал проверки в секундах
-function BaseRepository:enable_watchdog(interval)
-    local scheduler = Scheduler and Scheduler.get_instance()
-    if not scheduler then return end
-
-    interval = interval or 5
-    local task_id = "watchdog_" .. self._component_name
-    
-    scheduler:add_task(task_id, function()
-        self:_watchdog_tick()
-    end, interval)
-    
-    self._watchdog_task_id = task_id
-    Logger.info(self._component_name, "Watchdog включен (интервал: %d сек)", interval)
+function BaseRepository:enable_watchdog()
+    self._state.settings.watchdog.enabled = true
+    Logger.info(self._component_name, "Watchdog включен")
 end
 
 --- Выключает механизм Watchdog
 function BaseRepository:disable_watchdog()
-    local scheduler = Scheduler and Scheduler.get_instance()
-    if scheduler and self._watchdog_task_id then
-        scheduler:remove_task(self._watchdog_task_id)
-        self._watchdog_task_id = nil
-        Logger.info(self._component_name, "Watchdog выключен")
-    end
+    self._state.settings.watchdog.enabled = false
+    Logger.info(self._component_name, "Watchdog выключен")
 end
 
 -- ===========================================================================
@@ -284,140 +450,26 @@ end
 -- Публичное API: Жизненный цикл и восстановление
 -- ===========================================================================
 
---- Выполняет автоматическое восстановление зависших мониторов.
---- Реализует атомарный подход (Shadow Copy) и механизм Cooldown.
---- @return number recovered Количество восстановленных мониторов
---- @return number failed Количество неудачных попыток
+--- Выполняет принудительный запуск цикла обслуживания (для тестов или API)
 function BaseRepository:auto_recover()
-    local recovered = 0
-    local failed = 0
-    local now = os_time()
-    local s = self._state
-    s.recovery.last_check = now
-
-    -- Создаем список имен для итерации
-    local names = {}
-    for name in pairs(s.monitors) do
-        names[#names + 1] = name
-    end
-
-    local recover_interval = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or DEFAULT_RECOVER_INTERVAL
-    local max_attempts = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or DEFAULT_MAX_ATTEMPTS
-    local cooldown_time = (MonitorConfig and MonitorConfig.RecoveryCooldown) or DEFAULT_COOLDOWN_TIME
-
-    for _, name in ipairs(names) do
-        local monitor = s.monitors[name]
-        local class = s.classes[name]
-
-        if monitor and monitor.health_check and class then
-            local health = monitor:health_check()
-
-            -- Механизм Cooldown: если монитор долго работает стабильно, сбрасываем попытки
-            local last_success = s.recovery.last_success[name] or 0
-            if last_success > 0 and now - last_success > cooldown_time then
-                if (s.recovery.attempts[name] or 0) > 0 then
-                    Logger.info(self._component_name, "Сброс счетчика попыток для %s (Cooldown пройден)", name)
-                    s.recovery.attempts[name] = nil
-                end
-            end
-
-            -- Проверка на "зависшие" мониторы (RUNNING, но нет обновлений)
-            if health.state == BaseMonitor.STATE.RUNNING and
-               now - (health.last_update or 0) > recover_interval then
-
-                local attempts = (s.recovery.attempts[name] or 0) + 1
-                
-                -- Проверка лимита попыток
-                if attempts > max_attempts then
-                    Logger.error(self._component_name,
-                        "Превышен лимит попыток восстановления для %s (%d/%d). Монитор остановлен.",
-                        name, attempts - 1, max_attempts)
-                    
-                    s.stats.limit_reached = s.stats.limit_reached + 1
-                    self:_emit_event(EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1 })
-                    
-                    if monitor.pause then monitor:pause() end
-                    goto next_monitor
-                end
-
-                Logger.warn(self._component_name,
-                    "Попытка восстановления зависшего монитора: %s (попытка %d/%d)",
-                    name, attempts, max_attempts)
-                
-                self:_emit_event(EVENTS.RECOVERY_ATTEMPT, name, { attempt = attempts, max = max_attempts })
-
-                -- АТОМАРНОЕ ВОССТАНОВЛЕНИЕ (Shadow Copy)
-                local config = monitor.get_config and monitor:get_config()
-                
-                if config and class.new then
-                    local new_monitor = class.new(config)
-                    
-                    if new_monitor and new_monitor.start and new_monitor:start() then
-                        -- Успех: заменяем старый на новый
-                        self:unregister(name, true)
-                        self:register(name, new_monitor, class)
-                        
-                        s.recovery.attempts[name] = attempts
-                        s.recovery.last_success[name] = now
-                        
-                        recovered = recovered + 1
-                        s.stats.total_recovered = s.stats.total_recovered + 1
-                        
-                        Logger.info(self._component_name, "Монитор %s успешно восстановлен (атомарно)", name)
-                        self:_emit_event(EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts })
-                    else
-                        -- Неудача старта нового экземпляра
-                        failed = failed + 1
-                        s.stats.total_failed = s.stats.total_failed + 1
-                        s.recovery.attempts[name] = attempts
-                        
-                        Logger.error(self._component_name,
-                            "Не удалось перезапустить новый экземпляр %s при восстановлении", name)
-                        self:_emit_event(EVENTS.RECOVERY_FAILED, name, { attempt = attempts, error = "start_failed" })
-                    end
-                else
-                    failed = failed + 1
-                    s.stats.total_failed = s.stats.total_failed + 1
-                    s.recovery.attempts[name] = attempts
-                    Logger.error(self._component_name,
-                        "Не удалось восстановить монитор %s: отсутствует конфиг или класс", name)
-                end
-            end
-        end
-        ::next_monitor::
-    end
-
-    return recovered, failed
+    self:_maintenance_tick()
 end
 
 --- Включает автономное восстановление через планировщик
 --- @param interval? number Интервал проверки в секундах
 function BaseRepository:enable_auto_recovery(interval)
-    if not Scheduler then return end
-    
-    local s = Scheduler.get_instance()
-    if not s then return end
-
-    interval = interval or (MonitorConfig and MonitorConfig.AutoRecoverInterval) or DEFAULT_RECOVER_INTERVAL
-    
-    local task_name = "auto_recover_" .. self._component_name
-    self._state.recovery.task_id = s:add_task(task_name, function()
-        self:auto_recover()
-    end, interval)
-
-    Logger.info(self._component_name, "Автономное восстановление включено (интервал: %d сек)", interval)
+    local s = self._state
+    s.settings.auto_recover.enabled = true
+    if interval then
+        s.settings.auto_recover.interval = interval
+    end
+    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) включено")
 end
 
 --- Выключает автономное восстановление
 function BaseRepository:disable_auto_recovery()
-    local s_mgr = Scheduler and Scheduler.get_instance()
-    local task_id = self._state.recovery.task_id
-    
-    if s_mgr and task_id then
-        s_mgr:remove_task(task_id)
-        self._state.recovery.task_id = nil
-        Logger.info(self._component_name, "Автономное восстановление выключено")
-    end
+    self._state.settings.auto_recover.enabled = false
+    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) выключено")
 end
 
 --- Возвращает детальную статистику репозитория
@@ -459,6 +511,13 @@ function BaseRepository:shutdown()
     Logger.info(self._component_name, "Остановка репозитория: завершение работы %d мониторов", self._state.stats.active)
     
     self:disable_auto_recovery()
+    self:disable_watchdog()
+
+    if self._maintenance_task_id then
+        local scheduler = Scheduler and Scheduler.get_instance()
+        if scheduler then scheduler:remove_task(self._maintenance_task_id) end
+        self._maintenance_task_id = nil
+    end
 
     local names = {}
     for name in pairs(self._state.monitors) do

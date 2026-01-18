@@ -472,6 +472,23 @@ function ChannelMonitor:clear_stats()
     self:_clear_stats()
 end
 
+--- Проверяет функциональное здоровье канала (битрейт и скремблирование)
+--- @return boolean|nil is_healthy
+function ChannelMonitor:check_infrastructure_health()
+    if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
+    
+    local status = self._status
+    if not status then return false end
+
+    -- 1. Проверка Bitrate (No Data)
+    if (status.bitrate or 0) == 0 then return false end
+    
+    -- 2. Проверка Scrambled (CAS Error)
+    if status.scrambled then return false end
+
+    return true
+end
+
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
 --- @return table|nil Таблица данных
 function ChannelMonitor:get_status_table()

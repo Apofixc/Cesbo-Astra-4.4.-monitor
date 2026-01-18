@@ -387,14 +387,21 @@ function BaseMonitor:get_psi(table_name)
     return self._psi
 end
 
---- Возвращает данные о состоянии здоровья монитора
+--- Возвращает данные о состоянии здоровья монитора (программный слой)
 --- @return table Данные о состоянии (state, active, last_update)
-function BaseMonitor:health_check()
+function BaseMonitor:get_software_status()
     return {
         state = self._state,
         active = self._active,
         last_update = self._last_update
     }
+end
+
+--- Проверяет функциональное здоровье монитора (инфраструктурный слой)
+--- Должен быть переопределен в наследниках (например, проверка битрейта или Lock).
+--- @return boolean|nil is_healthy true если всё в порядке, false если обнаружен сбой, nil если проверка не применима
+function BaseMonitor:check_infrastructure_health()
+    return nil
 end
 
 --- Возобновляет мониторинг

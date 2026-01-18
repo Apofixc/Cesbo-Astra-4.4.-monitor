@@ -27,9 +27,9 @@
 ## 3. Уровень данных (Repositories)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseRepository** | 100% | **Оптимизирован (Async Watchdog) + Verified** | 18.01.2026 |
-| **ChannelRepository** | 100% | **Оптимизирован (Watchdog Logic) + Verified** | 18.01.2026 |
-| **DvbRepository** | 100% | **Оптимизирован (Watchdog Logic) + Verified** | 18.01.2026 |
+| **BaseRepository** | 100% | **Унифицирован (Recovery System) + API Ready** | 18.01.2026 |
+| **ChannelRepository** | 100% | **Унифицирован (Hook-based) + Verified** | 18.01.2026 |
+| **DvbRepository** | 100% | **Унифицирован (Hook-based) + Verified** | 18.01.2026 |
 
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
