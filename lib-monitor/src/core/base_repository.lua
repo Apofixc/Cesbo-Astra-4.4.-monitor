@@ -67,6 +67,9 @@ function BaseRepository:_destroy_instance(name, instance, force)
         s.recovery.last_success[name] = nil
         s.stats.active = s.stats.active - 1
         
+        -- Вызов хука для очистки специфичных данных в наследниках
+        self:_on_instance_destroyed(name)
+
         Logger.debug(self._component_name,
             "Объект '%s' удален и остановлен (принудительно: %s).",
             name, tostring(force))
@@ -145,6 +148,14 @@ function BaseRepository.new(component_name)
     end
 
     return self
+end
+
+--- Хук, вызываемый после удаления экземпляра монитора.
+--- Переопределяется в наследниках для очистки специфичных данных (например, Watchdog retries).
+--- @protected
+--- @param name string Имя монитора
+function BaseRepository:_on_instance_destroyed(name)
+    -- Базовая реализация пустая
 end
 
 --- Выполняет проверку Watchdog для всех мониторов в репозитории

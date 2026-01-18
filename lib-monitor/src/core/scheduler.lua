@@ -186,6 +186,9 @@ end
 --- Основной цикл планировщика
 --- @private
 function Scheduler:_tick()
+    -- Оптимизация: быстрый выход если задач нет
+    if #self._heap == 0 then return end
+
     local now = os_time()
     
     -- Выполняем все задачи, время которых пришло

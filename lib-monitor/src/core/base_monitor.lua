@@ -42,6 +42,7 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 --- @field protected _table_pool table|nil Прямая ссылка на TablePool (для удобства)
 --- @field protected _load_shedding_active boolean Флаг активного снижения нагрузки
 --- @field protected _original_time_check number Оригинальный интервал проверки
+--- @field protected _resource_sub_id string|nil ID подписки на системные ресурсы
 local BaseMonitor = {}
 BaseMonitor.__index = BaseMonitor
 
@@ -210,7 +211,7 @@ function BaseMonitor.new(config, component_name)
     -- Подписка на события снижения нагрузки
     if EventDispatcher then
         local dispatcher = EventDispatcher.get_instance()
-        dispatcher:subscribe("sys:resource_warning", function(data)
+        self._resource_sub_id = dispatcher:subscribe("sys:resource_warning", function(data)
             if data.type == "cpu" then
                 if data.status == "critical" then
                     self:_enable_load_shedding()
@@ -343,6 +344,12 @@ end
 --- Полностью очищает базовое состояние монитора.
 --- Вызывается в конце методов destroy наследников.
 function BaseMonitor:destroy()
+    -- Отписка от системных событий для предотвращения утечек памяти
+    if self._resource_sub_id and EventDispatcher then
+        EventDispatcher.get_instance():unsubscribe(self._resource_sub_id)
+        self._resource_sub_id = nil
+    end
+
     self._active = false
     self._state = BaseMonitor.STATE.STOPPED
     self._instance = nil

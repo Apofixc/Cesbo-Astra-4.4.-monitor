@@ -30,6 +30,14 @@ local COMPONENT_NAME = "DvbRepository"
 local DvbRepository = BaseRepository.new(COMPONENT_NAME)
 DvbRepository._watchdog_retries = {}
 
+--- Очистка специфичных данных при удалении монитора
+--- @protected
+function DvbRepository:_on_instance_destroyed(name)
+    if self._watchdog_retries[name] then
+        self._watchdog_retries[name] = nil
+    end
+end
+
 --- Проверка Watchdog для DVB-адаптера
 --- @protected
 function DvbRepository:_check_monitor_watchdog(name, monitor, status, now)

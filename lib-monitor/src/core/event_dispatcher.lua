@@ -412,6 +412,14 @@ function EventDispatcher:subscribe(event_type, callback, filters, options)
     return sub_id
 end
 
+--- Удаляет подписку на события.
+--- @param sub_id string ID подписки
+--- @return boolean Статус выполнения
+function EventDispatcher:unsubscribe(sub_id)
+    if not self.subscription_manager then return false end
+    return self.subscription_manager:unsubscribe(sub_id)
+end
+
 --- Запускает фоновый таймер для обработки очереди событий через планировщик
 --- @private
 function EventDispatcher:_start_queue_processor()

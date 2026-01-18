@@ -60,6 +60,14 @@ end
 local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
 ChannelRepository._watchdog_retries = {}
 
+--- Очистка специфичных данных при удалении монитора
+--- @protected
+function ChannelRepository:_on_instance_destroyed(name)
+    if self._watchdog_retries[name] then
+        self._watchdog_retries[name] = nil
+    end
+end
+
 --- Проверка Watchdog для канала
 --- @protected
 function ChannelRepository:_check_monitor_watchdog(name, monitor, status, now)
