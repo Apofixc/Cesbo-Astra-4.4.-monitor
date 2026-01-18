@@ -193,6 +193,38 @@ function BaseMonitor:_reset_force_timer()
     self._last_update = os_time()
 end
 
+--- Включает режим снижения нагрузки
+--- @protected
+function BaseMonitor:_enable_load_shedding()
+    if self._load_shedding_active then return end
+
+    self._load_shedding_active = true
+    self._original_time_check = self._config.time_check or 0
+
+    -- 1. Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
+    local new_check = math_max(5, self._original_time_check * 3)
+    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
+
+    Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
+        tostring(self._name), self._original_time_check, new_check)
+
+    self:_on_config_updated("time_check", new_check)
+end
+
+--- Выключает режим снижения нагрузки
+--- @protected
+function BaseMonitor:_disable_load_shedding()
+    if not self._load_shedding_active then return end
+
+    self._load_shedding_active = false
+    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
+
+    Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
+        tostring(self._name), self._original_time_check)
+
+    self:_on_config_updated("time_check", self._original_time_check)
+end
+
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
@@ -254,38 +286,6 @@ function BaseMonitor.new(config, component_name, config_prefix, comparison_metho
     return self
 end
 
---- Включает режим снижения нагрузки
---- @protected
-function BaseMonitor:_enable_load_shedding()
-    if self._load_shedding_active then return end
-
-    self._load_shedding_active = true
-    self._original_time_check = self._config.time_check or 0
-
-    -- 1. Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
-    local new_check = math_max(5, self._original_time_check * 3)
-    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
-
-    Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
-        tostring(self._name), self._original_time_check, new_check)
-
-    self:_on_config_updated("time_check", new_check)
-end
-
---- Выключает режим снижения нагрузки
---- @protected
-function BaseMonitor:_disable_load_shedding()
-    if not self._load_shedding_active then return end
-
-    self._load_shedding_active = false
-    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
-
-    Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
-        tostring(self._name), self._original_time_check)
-
-    self:_on_config_updated("time_check", self._original_time_check)
-end
-
 --- Инициализирует таблицу статуса базовыми полями.
 --- @protected
 --- @param type_name string Тип монитора ("dvb", "Channel" и т.д.)
@@ -295,7 +295,7 @@ end
 
 --- Возвращает таблицу из пула указанного типа.
 --- Если пул пуст, создает новую таблицу.
---- @param type_name? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
+--- @param type_name? string Тип пула (например, "report", "event"). По умолчанию "generic"
 --- @return table Свободная таблица
 function BaseMonitor:get_table_from_pool(type_name)
     if self._table_pool then
@@ -307,8 +307,8 @@ end
 --- Возвращает таблицу в пул для повторного использования.
 --- Перед возвратом таблица полностью очищается.
 --- @param t table Таблица для возврата
---- @param type_name? string [Тип пула. По умолчанию "generic"]
---- @param deep? boolean [Флаг глубокой очистки. По умолчанию false]
+--- @param type_name? string Тип пула. По умолчанию "generic"
+--- @param deep? boolean Флаг глубокой очистки. По умолчанию false
 function BaseMonitor:return_table_to_pool(t, type_name, deep)
     if self._table_pool then
         self._table_pool.release(t, type_name, deep)
@@ -319,7 +319,7 @@ end
 --- Использует пул для таблицы опций (Zero-Allocation Path).
 --- @param data table|string Данные события
 --- @param event_type string Тип события
---- @param is_table? boolean [Флаг, что данные из пула таблиц]
+--- @param is_table? boolean Флаг, что данные из пула таблиц
 function BaseMonitor:publish(data, event_type, is_table)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
     if not dispatcher then return end

@@ -24,6 +24,7 @@ local SystemRoutes = ModuleManager.get_module("system_routes")
 local SubscriberRoutes = ModuleManager.get_module("subscriber_routes")
 local RoutesUtils = ModuleManager.get_module("routes_utils")
 local WsSubscriber = ModuleManager.get_module("ws_subscriber")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 local http_server = ModuleManager.get_global_dependency("http_server")

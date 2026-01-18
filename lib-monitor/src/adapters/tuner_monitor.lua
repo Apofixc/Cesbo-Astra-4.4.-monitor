@@ -361,7 +361,7 @@ end
 
 
 --- Проверяет функциональное здоровье тюнера (наличие Lock)
---- @return boolean|nil is_healthy
+--- @return boolean|nil true если всё в порядке, false если обнаружен сбой, nil если проверка не применима
 function TunerMonitor:check_infrastructure_health()
     if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
 

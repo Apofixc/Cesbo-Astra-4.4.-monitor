@@ -27,7 +27,7 @@
 ## 3. Уровень данных (Repositories)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseRepository** | 100% | **Унифицирован (Recovery System) + API Ready** | 18.01.2026 |
+| **BaseRepository** | 100% | **Унифицирован (Recovery System) + API Ready + Исправлены предупреждения типов** | 18.01.2026 |
 | **ChannelRepository** | 100% | **Унифицирован (Hook-based) + Verified** | 18.01.2026 |
 | **DvbRepository** | 100% | **Унифицирован (Hook-based) + Verified** | 18.01.2026 |
 

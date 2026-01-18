@@ -281,13 +281,13 @@ end
 
 --- Возвращает экземпляр загруженного модуля.
 --- @param name string Имя модуля.
---- @return any|nil # Экземпляр модуля или nil, если он не загружен.
+--- @return any|nil Экземпляр модуля или nil, если он не загружен.
 function ModuleManager.get_module(name)
     return _loaded_modules[name]
 end
 
 --- Проверяет целостность графа зависимостей (все ли зависимости зарегистрированы).
---- @return boolean # true, если все зависимости найдены в реестре.
+--- @return boolean Статус валидации (true, если все зависимости найдены в реестре).
 function ModuleManager.validate_dependencies()
     local all_met = true
     for name, module_info in pairs(_registered_modules) do
@@ -350,7 +350,7 @@ end
 
 --- Удаляет глобальную зависимость из кэша.
 --- @param name string Имя зависимости.
---- @return boolean # true, если зависимость была удалена.
+--- @return boolean Статус удаления (true, если зависимость была удалена).
 function ModuleManager.remove_global_dependency(name)
     if _global_dependencies[name] ~= nil then
         _global_dependencies[name] = nil

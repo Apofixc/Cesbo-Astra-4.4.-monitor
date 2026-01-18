@@ -86,7 +86,7 @@ local OPERATORS = {
 
 --- Компилирует строковый путь в функцию-аксессор для быстрого доступа к данным
 --- @param path string Путь к полю через точку (например, "total.bitrate")
---- @return function Функция-аксессор: function(data) return value end
+--- @return function Функция-аксессор
 function FilterEngine.compile_accessor(path)
     if not path or path == "" then
         return function(d) return d end

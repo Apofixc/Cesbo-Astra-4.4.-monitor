@@ -500,7 +500,7 @@ function ResourceMonitor.refresh_config()
 end
 
 --- Собирает актуальные метрики системы
---- @return SystemReport|nil
+--- @return SystemReport|nil Актуальный отчет
 function ResourceMonitor.check()
     local ok, err = _G.pcall(function()
         state.iteration_count = state.iteration_count + 1
@@ -589,7 +589,7 @@ function ResourceMonitor.check()
 end
 
 --- Возвращает последний собранный отчет
---- @return SystemReport|nil
+--- @return SystemReport|nil Последний отчет
 function ResourceMonitor.get_report()
     if not state.report then
         return ResourceMonitor.check()

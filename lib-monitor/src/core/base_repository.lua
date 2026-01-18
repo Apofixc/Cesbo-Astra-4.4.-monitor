@@ -111,7 +111,7 @@ end
 
 --- Создает новый экземпляр базового репозитория
 --- @param component_name string Имя компонента для логирования
---- @return BaseRepository
+--- @return BaseRepository Экземпляр репозитория
 function BaseRepository.new(component_name)
     local self = setmetatable({}, BaseRepository)
 
@@ -183,7 +183,7 @@ end
 --- @protected
 --- @param name string Имя монитора
 --- @param reason string Причина восстановления ("silence" или "watchdog")
---- @return boolean success Если false, восстановление будет прервано
+--- @return boolean Если false, восстановление будет прервано
 function BaseRepository:_on_before_recreate(name, reason)
     return true
 end
@@ -197,8 +197,8 @@ end
 
 --- Единый цикл обслуживания: проверка тишины и здоровья мониторов
 --- @private
---- @return number recovered Количество восстановленных
---- @return number failed Количество неудачных попыток
+--- @return number Количество восстановленных
+--- @return number Количество неудачных попыток
 function BaseRepository:_maintenance_tick()
     local now = os_time()
     local s = self._state
@@ -232,7 +232,7 @@ function BaseRepository:_maintenance_tick()
         end
 
         local needs_recovery = false
-        local reason = nil
+        local reason = ""
 
         -- 2. Проверка "Тишины" (Auto-recover)
         if settings.auto_recover.enabled and health.state == BaseMonitor.STATE.RUNNING then
@@ -275,7 +275,7 @@ end
 --- @param class table Класс для пересоздания
 --- @param reason string Причина ("silence" или "watchdog")
 --- @param now number Текущее время
---- @return boolean success
+--- @return boolean Статус выполнения
 function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     local s = self._state
     local settings = s.settings
@@ -292,7 +292,7 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
         self:_emit_event(EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1, reason = reason })
         
         if monitor.pause then monitor:pause() end
-        return
+        return false
     end
 
     Logger.warn(self._component_name,
@@ -306,7 +306,7 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     local ok = self:_on_before_recreate(name, reason)
     if not ok then
         Logger.error(self._component_name, "[%s] Хук восстановления вернул ошибку", name)
-        return
+        return false
     end
 
     -- 2. Получение конфига и пересоздание объекта
@@ -341,21 +341,9 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     end
 end
 
---- Включает механизм Auto-recover
-function BaseRepository:enable_auto_recovery()
-    self._state.settings.auto_recover.enabled = true
-    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) включено")
-end
-
---- Выключает механизм Auto-recover
-function BaseRepository:disable_auto_recovery()
-    self._state.settings.auto_recover.enabled = false
-    Logger.info(self._component_name, "Автономное восстановление (Auto-recover) выключено")
-end
-
 --- Обновляет настройки репозитория (лимиты, интервалы, флаги)
---- @param params table
---- @return boolean
+--- @param params table Таблица параметров
+--- @return boolean Статус выполнения
 function BaseRepository:update_settings(params)
     if type(params) ~= "table" then return false end
     local s = self._state
@@ -461,14 +449,14 @@ function BaseRepository:count()
 end
 
 --- Выполняет принудительный запуск цикла обслуживания (для тестов или API)
---- @return number
---- @return number
+--- @return number Количество восстановленных
+--- @return number Количество неудачных
 function BaseRepository:auto_recover()
     return self:_maintenance_tick()
 end
 
 --- Включает автономное восстановление через планировщик
---- @param interval? number
+--- @param interval? number Интервал восстановления
 function BaseRepository:enable_auto_recovery(interval)
     local s = self._state
     s.settings.auto_recover.enabled = true

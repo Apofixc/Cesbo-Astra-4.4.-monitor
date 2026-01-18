@@ -242,7 +242,7 @@ end
 --- Компилирует маску в функцию сопоставления.
 --- Поддерживает оптимизированные пути для частых случаев (префиксы, суффиксы, сегменты).
 --- @param pattern string Маска (например, "channel:*", "adapter:1", "*", "a?c")
---- @return function Функция вида function(name: string) -> boolean
+--- @return function Функция-матчер
 function Wildcard.compile(pattern)
     if not pattern or type(pattern) ~= "string" then
         return function() return false end

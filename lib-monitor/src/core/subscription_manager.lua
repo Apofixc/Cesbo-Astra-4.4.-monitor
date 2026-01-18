@@ -181,8 +181,8 @@ local Transport = {
     --- @param config table Параметры (host, port, path)
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    --- @param retry_count? number [Текущая попытка повтора]
-    --- @param event_json? string [Предварительно подготовленный JSON]
+--- @param retry_count? number Текущая попытка повтора
+--- @param event_json? string Предварительно подготовленный JSON
     HTTP = function(self, config, event, event_type, retry_count, event_json)
         local request = get_http_request()
         if not request then return false, "http_request недоступен" end
@@ -226,7 +226,7 @@ local Transport = {
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    --- @param event_json? string [Предварительно подготовленный JSON]
+    --- @param event_json? string Предварительно подготовленный JSON
     WS = function(self, config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
@@ -254,7 +254,7 @@ local Transport = {
     --- @param config table Параметры транспорта
     --- @param event table|string Объект события или данные
     --- @param event_type string Тип события
-    --- @param event_json? string [Предварительно подготовленный JSON]
+    --- @param event_json? string Предварительно подготовленный JSON
     CONSOLE = function(self, config, event, event_type, event_json)
         local encode = get_json_encode()
         local message = event_json or
@@ -438,7 +438,7 @@ end
 --- Регистрирует новую подписку на события
 --- @param event_type string Тип события или маска
 --- @param sub_data table|function Данные подписки (callback, filters, throttle_ms) или функция коллбэка
---- @param existing_id? string [Использовать существующий ID (для загрузки из файла)]
+--- @param existing_id? string Использовать существующий ID (для загрузки из файла)
 --- @return string|nil ID подписки (UUID) или nil при ошибке
 function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
     -- Ограничение размера кэша транспортов для предотвращения утечек
@@ -600,7 +600,7 @@ end
 --- Рассылает объект события всем подписчикам.
 --- Оптимизировано: использует DeliveryPlan для ускорения рассылки и мультикастинга.
 --- @param event table Объект события (из EventDispatcher)
---- @param now? number [Текущее время (опционально, для оптимизации)]
+--- @param now? number Текущее время (опционально, для оптимизации)
 --- @return boolean Статус выполнения
 function SubscriptionManager:publish_event(event, now)
     now = now or os_time()
@@ -962,7 +962,7 @@ end
 --- @param event_type string Тип события
 --- @param event_data table|string Данные события
 --- @param now number Текущее время
---- @param event_json? string [Предварительно подготовленный JSON]
+--- @param event_json? string Предварительно подготовленный JSON
 function SubscriptionManager:multicast_direct(plan, event_type, event_data, now, event_json)
     if not event_json then
         local encode = get_json_encode()

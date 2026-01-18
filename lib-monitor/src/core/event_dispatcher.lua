@@ -429,9 +429,8 @@ end
 --- Регистрирует новую подписку на события.
 --- @param event_type string Тип события или маска (например, "adapter:*")
 --- @param callback function|table Функция-обработчик или конфигурация транспорта
---- @param filters? table [Схема фильтрации (условия, операторы или Lua-скрипт)]
---- @param options? table [Дополнительные опции: throttle_ms (ограничение частоты),
---- send_lvc (отправить последнее состояние сразу)]
+--- @param filters? table Схема фильтрации (условия, операторы или Lua-скрипт)
+--- @param options? table Дополнительные опции: throttle_ms (ограничение частоты), send_lvc (отправить последнее состояние сразу)
 --- @return string|nil ID подписки (UUID)
 function EventDispatcher:subscribe(event_type, callback, filters, options)
     local sub_id = self.subscription_manager:subscribe(event_type, {
