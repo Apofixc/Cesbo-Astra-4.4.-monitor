@@ -113,6 +113,26 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     return true
 end
 
+--- Инициализирует конфигурацию монитора на основе переданных параметров и списка ключей.
+--- @protected
+--- @param params table Таблица входящих параметров
+--- @param keys table Список ключей (без префикса) для инициализации
+function BaseMonitor:_init_config(params, keys)
+    if type(params) ~= "table" or type(keys) ~= "table" then return end
+
+    local prefix = self._config_prefix
+    for _, key in ipairs(keys) do
+        local param_name = prefix .. key
+        local value = params[key]
+        -- Если значение не передано в params, пытаемся взять из params[param_name]
+        -- или полагаемся на default в схеме валидации внутри _set_config_param
+        if value == nil then
+            value = params[param_name]
+        end
+        self:_set_config_param(param_name, value, prefix)
+    end
+end
+
 --- Обновляет JSON-кэш на основе предоставленных данных.
 --- @protected
 --- @param data table Данные для сериализации

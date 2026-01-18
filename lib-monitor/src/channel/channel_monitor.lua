@@ -33,33 +33,33 @@ local PID_LIMIT = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
-local METHOD_STRICT = 2
-local METHOD_RATIO = 3
-local METHOD_ON_AIR = 4
+local METHOD_RATIO = 2
+local METHOD_ON_AIR = 3
+local METHOD_CC_THRESHOLD = 4
 
 local ratio = Utils.ratio
 
 -- Методы сравнения
 local COMPARISON_METHODS = {
-    [METHOD_ALWAYS] = function(prev, curr, rate)
+    [METHOD_ALWAYS] = function(prev, curr, rate, cc_threshold)
         return true
     end,
-    [METHOD_STRICT] = function(prev, curr, rate)
-        return prev.ready ~= curr.on_air or
-               prev.scrambled ~= curr.total.scrambled or
-               (prev.cc_errors or 0) > 0 or
-               (prev.pes_errors or 0) > 0 or
-               prev.bitrate ~= curr.total.bitrate
-    end,
-    [METHOD_RATIO] = function(prev, curr, rate)
+    [METHOD_RATIO] = function(prev, curr, rate, cc_threshold)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
                (prev.cc_errors or 0) > 0 or
                (prev.pes_errors or 0) > 0 or
                ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
-    [METHOD_ON_AIR] = function(prev, curr, rate)
+    [METHOD_ON_AIR] = function(prev, curr, rate, cc_threshold)
         return prev.ready ~= curr.on_air
+    end,
+    [METHOD_CC_THRESHOLD] = function(prev, curr, rate, cc_threshold)
+        return prev.ready ~= curr.on_air or
+               prev.scrambled ~= curr.total.scrambled or
+               (prev.cc_errors or 0) > (cc_threshold or 0) or
+               (prev.pes_errors or 0) > 0 or
+               ratio(prev.bitrate, curr.total.bitrate) > rate
     end
 }
 
@@ -244,7 +244,7 @@ function ChannelMonitor:_process_total_data(data)
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(conf.time_check) and
        (active_id ~= self._last_active_id or self:_is_force() or
-        self._current_method(master, data, conf.rate))
+        self._current_method(master, data, conf.rate, conf.cc_threshold))
     then
         self:_reset_force_timer()
 
@@ -333,14 +333,17 @@ function ChannelMonitor.new(config, channel_data)
     -- 2. Рабочая конфигурация (инициализируется при старте)
     self._astra_conf = nil
 
-    -- 3. Валидация и установка параметров конфигурации
-    if not self:_set_config_param("channel_rate", config.rate, "channel_") then return nil end
-    if not self:_set_config_param("channel_time_check", config.time_check, "channel_") then return nil end
-    if not self:_set_config_param("channel_method_comparison", config.method_comparison, "channel_") then return nil end
-    if not self:_set_config_param("channel_analyze", config.analyze, "channel_") then return nil end
-    if not self:_set_config_param("channel_cc_limit", config.cc_limit, "channel_") then return nil end
-    if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit, "channel_") then return nil end
-    if not self:_set_config_param("channel_join_pid", config.join_pid, "channel_") then return nil end
+    -- 3. Унифицированная инициализация конфигурации
+    self:_init_config(config, {
+        "rate",
+        "time_check",
+        "method_comparison",
+        "cc_threshold",
+        "analyze",
+        "cc_limit",
+        "bitrate_limit",
+        "join_pid"
+    })
 
     -- 4. Состояние мониторинга и статистика
     self:_init_status_table("Channel")

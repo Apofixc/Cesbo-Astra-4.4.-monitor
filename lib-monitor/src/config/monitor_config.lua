@@ -91,6 +91,7 @@ MonitorConfig.MinTimeCheck = 0
 MonitorConfig.MaxTimeCheck = 300
 MonitorConfig.MinMethodComparison = 1
 MonitorConfig.MaxMethodComparison = 4
+MonitorConfig.ChannelCcThreshold = 1
 MonitorConfig.ForceSendInterval = 300
 
 -- Системные ресурсы и GC
@@ -401,6 +402,12 @@ MonitorConfig.ValidationSchema = {
         min = MonitorConfig.MinMethodComparison,
         max = MonitorConfig.MaxMethodComparison,
         default = 3
+    },
+    channel_cc_threshold = {
+        type = "number",
+        min = 0,
+        max = 65535,
+        default = MonitorConfig.ChannelCcThreshold
     },
     channel_cc_limit = {
         type = "number",

@@ -41,8 +41,8 @@
 ## 5. Бизнес-логика (Monitors)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Logic + Read-only Config** | 18.01.2026 |
-| **ChannelMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + Zero-duplication** | 18.01.2026 |
+| **BaseMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Logic + Unified Init + Read-only Config** | 18.01.2026 |
+| **ChannelMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + CC Threshold + Zero-duplication** | 18.01.2026 |
 | **ResourceMonitor** | 100% | **Готов (Hardcore+ Zero-alloc) + Self-Healing** | 16.01.2026 |
 
 ---

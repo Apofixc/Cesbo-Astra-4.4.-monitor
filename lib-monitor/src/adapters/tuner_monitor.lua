@@ -208,11 +208,13 @@ function TunerMonitor.new(conf)
     -- 1. Идентификация
     self._name = conf.name_adapter
 
-    -- 2. Валидация и установка параметров конфигурации
-    if not self:_set_config_param("dvb_rate", conf.rate, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_time_check", conf.time_check, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_method_comparison", conf.method_comparison, "dvb_") then return nil end
-    if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
+    -- 2. Унифицированная инициализация конфигурации
+    self:_init_config(conf, {
+        "rate",
+        "time_check",
+        "method_comparison",
+        "analyze"
+    })
 
     -- 3. Состояние тюнера и флаги
     self:_init_status_table("dvb")
