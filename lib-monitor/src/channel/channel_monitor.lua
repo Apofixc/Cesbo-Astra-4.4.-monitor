@@ -258,7 +258,7 @@ function ChannelMonitor:_process_total_data(data)
         master.format = source.format
         master.addr = source.addr
         master.timestamp = os_time()
-        
+
         self._last_active_id = active_id
 
         -- Сбрасываем кэш JSON, так как данные изменились.
@@ -404,12 +404,13 @@ function ChannelMonitor:start()
         callback = function(data)
             -- Защита от вызова после destroy или во время очистки
             if not self._active or not self._instance then return end
-            
+
             local ok, err = pcall(self._on_astra_data, self, data)
             if not ok then
                 -- В экстремальных условиях логируем только критические ошибки
                 if self._active then
-                    Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s", tostring(self._name), tostring(err))
+                    Logger.error(COMPONENT_NAME, "[%s] Ошибка в callback: %s",
+                        tostring(self._name), tostring(err))
                 end
             end
         end
@@ -459,13 +460,13 @@ end
 --- @return boolean|nil is_healthy
 function ChannelMonitor:check_infrastructure_health()
     if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
-    
+
     local master = self._current_status_table
     if not master then return false end
 
     -- 1. Проверка Bitrate (No Data)
     if (master.bitrate or 0) == 0 then return false end
-    
+
     -- 2. Проверка Scrambled (CAS Error)
     if master.scrambled then return false end
 
@@ -480,9 +481,9 @@ function ChannelMonitor:_on_destroy()
     if self._input_instance then
         -- kill_input самостоятельно очищает callback и ресурсы
         kill_input(self._input_instance)
-        self._input_instance = nil        
     end
 
+    self._input_instance = nil
     self._channel_data = nil
     self._stream_json = nil
     self._stats = nil
@@ -491,6 +492,7 @@ function ChannelMonitor:_on_destroy()
     self._last_active_id = nil
     self._cached_source = nil
     self._display_name = nil
+    self._astra_conf = nil
 
     -- Очистка пулов таблиц, связанных с этим монитором
     if self._table_pool then

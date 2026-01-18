@@ -291,7 +291,8 @@ function TunerMonitor:start()
 
     local instance = dvb_tune(self._astra_conf)
     if not instance then
-        Logger.error(COMPONENT_NAME, "[%s] start: dvb_tune вернул nil", tostring(self._name))
+        Logger.error(COMPONENT_NAME, "[%s] start: dvb_tune вернул nil",
+            tostring(self._name))
         return nil
     end
 
@@ -314,7 +315,7 @@ end
 --- @return boolean|nil is_healthy
 function TunerMonitor:check_infrastructure_health()
     if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
-    
+
     local flags = self._current_flags
     if not flags then return false end
 
@@ -333,7 +334,7 @@ function TunerMonitor:_on_config_updated(key, value)
 
     -- Если рабочая копия еще не создана (до start), мы ничего не делаем.
     if not self._astra_conf then return end
-    
+
     -- Синхронизируем рабочую копию
     self._astra_conf[key] = value
 
@@ -443,7 +444,8 @@ function TunerMonitor:_on_destroy()
         local adapter = opts.adapter
         local device = opts.device or "0"
         if adapter ~= nil then
-            local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
+            local instance_id = string_format("%s.%s", tostring(adapter),
+                tostring(device))
             dvb_input_instance_list[instance_id] = nil
         end
     end
@@ -452,6 +454,7 @@ function TunerMonitor:_on_destroy()
     self._last_status_num = nil
     self._stats = nil
     self._backup = nil
+    self._astra_conf = nil
 end
 
 -- ===========================================================================

@@ -212,7 +212,8 @@ function BaseMonitor.new(config, component_name, config_prefix, comparison_metho
     -- 4. Кэш и вспомогательные объекты
     self._json_cache = nil
     self._comparison_methods = comparison_methods
-    self._current_method = comparison_methods and config.method_comparison and comparison_methods[config.method_comparison] or nil
+    self._current_method = comparison_methods and config.method_comparison and
+                           comparison_methods[config.method_comparison] or nil
     self._psi = {}
     self._current_status_table = {}
     self._table_pool = TablePool
@@ -242,17 +243,17 @@ end
 --- @protected
 function BaseMonitor:_enable_load_shedding()
     if self._load_shedding_active then return end
-    
+
     self._load_shedding_active = true
     self._original_time_check = self._config.time_check or 0
-    
+
     -- 1. Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
     local new_check = math_max(5, self._original_time_check * 3)
     -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
 
     Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
         tostring(self._name), self._original_time_check, new_check)
-    
+
     self:_on_config_updated("time_check", new_check)
 end
 
@@ -260,13 +261,13 @@ end
 --- @protected
 function BaseMonitor:_disable_load_shedding()
     if not self._load_shedding_active then return end
-    
+
     self._load_shedding_active = false
     -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
 
     Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
         tostring(self._name), self._original_time_check)
-    
+
     self:_on_config_updated("time_check", self._original_time_check)
 end
 
@@ -445,6 +446,8 @@ function BaseMonitor:destroy(...)
     self._force_interval = nil
     self._last_update = nil
     self._table_pool = nil
+    self._load_shedding_active = nil
+    self._original_time_check = nil
 
     -- Согласно astra-api-usage.md: ручное управление памятью обязательно
     collectgarbage()
@@ -503,7 +506,8 @@ end
 --- @return boolean Статус выполнения (true если все параметры обновлены успешно)
 function BaseMonitor:update_parameters(params)
     if not params or type(params) ~= "table" then
-        Logger.error(self._component_name, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
+        Logger.error(self._component_name, "[%s] update_parameters: параметры должны быть таблицей",
+            tostring(self._name))
         return false
     end
 
