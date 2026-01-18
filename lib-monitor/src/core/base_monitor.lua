@@ -102,7 +102,9 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
         CONFIG_KEY_CACHE[cache_id] = key
     end
 
-    self._config[key] = result
+    -- ВАЖНО: Мы НЕ меняем self._config, так как это эталон.
+    -- Изменения применяются только через хук в рабочую копию (astra_conf).
+    self:_on_config_updated(key, result)
     return true
 end
 
@@ -236,10 +238,12 @@ function BaseMonitor:_enable_load_shedding()
     
     -- 1. Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
     local new_check = math_max(5, self._original_time_check * 3)
-    self._config.time_check = new_check
+    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
 
     Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
         tostring(self._name), self._original_time_check, new_check)
+    
+    self:_on_config_updated("time_check", new_check)
 end
 
 --- Выключает режим снижения нагрузки
@@ -248,10 +252,12 @@ function BaseMonitor:_disable_load_shedding()
     if not self._load_shedding_active then return end
     
     self._load_shedding_active = false
-    self._config.time_check = self._original_time_check
+    -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
 
     Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
         tostring(self._name), self._original_time_check)
+    
+    self:_on_config_updated("time_check", self._original_time_check)
 end
 
 --- Возвращает таблицу из пула указанного типа.
@@ -386,6 +392,15 @@ function BaseMonitor:get_psi(table_name)
         return self._psi[table_name:upper()]
     end
     return self._psi
+end
+
+--- Вызывается при обновлении конфигурации.
+--- Должен быть переопределен в наследниках для синхронизации внутреннего состояния.
+--- @protected
+--- @param key string Ключ параметра
+--- @param value any Новое значение
+function BaseMonitor:_on_config_updated(key, value)
+    -- Виртуальный метод
 end
 
 --- Возвращает данные о состоянии здоровья монитора (программный слой)

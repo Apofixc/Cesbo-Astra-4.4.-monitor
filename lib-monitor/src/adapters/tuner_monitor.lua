@@ -109,8 +109,10 @@ end
 function TunerMonitor:_on_astra_data(data)
     if type(data) ~= "table" then return end
 
+    local conf = self._astra_conf or self._config
+
     -- Накопление статистики для расчета качества (упрощенно)
-    if self._config.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
+    if conf.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
         -- Защита от переполнения при длительном отсутствии изменений
         if self._stats.count < MAX_STATS_COUNT then
             self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)
@@ -120,8 +122,8 @@ function TunerMonitor:_on_astra_data(data)
     end
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-    if self:_should_send(self._astra_conf.time_check) and
-       (self:_is_force() or self._current_method(self._status, data, self._astra_conf.rate))
+    if self:_should_send(conf.time_check) and
+       (self:_is_force() or self._current_method(self._status, data, conf.rate))
     then
         self:_reset_force_timer()
 
@@ -350,30 +352,18 @@ function TunerMonitor:update_parameters(params)
         return false
     end
 
-    -- Обновляем self._config (оригинал) и self._astra_conf (живой конфиг)
+    -- Обновляем self._config через базовый метод, который вызовет _on_config_updated
     if params.rate ~= nil then
         self:_set_config_param("dvb_rate", params.rate, "dvb_")
-        if self._astra_conf then self._astra_conf.rate = self._config.rate end
     end
     if params.time_check ~= nil then
         self:_set_config_param("dvb_time_check", params.time_check, "dvb_")
-        if self._astra_conf then self._astra_conf.time_check = self._config.time_check end
     end
     if params.method_comparison ~= nil then
         self:_set_config_param("dvb_method_comparison", params.method_comparison, "dvb_")
-        if self._astra_conf then self._astra_conf.method_comparison = self._config.method_comparison end
-        -- Обновляем прямую ссылку на метод для callback
-        self._current_method = COMPARISON_METHODS[self._config.method_comparison]
     end
     if params.analyze ~= nil then
         self:_set_config_param("dvb_analyze", params.analyze, "dvb_")
-        if self._astra_conf then self._astra_conf.analyze = self._config.analyze end
-        -- Если анализ выключен, сбрасываем накопленную статистику
-        if not self._config.analyze then
-            self._stats.ber_sum = 0
-            self._stats.unc_sum = 0
-            self._stats.count = 0
-        end
     end
 
     return true
@@ -389,6 +379,40 @@ function TunerMonitor:check_infrastructure_health()
 
     -- Проверка Lock (0x10)
     return flags.has_lock == true
+end
+
+--- Вызывается при обновлении конфигурации.
+--- Синхронизирует рабочую конфигурацию Astra.
+--- @protected
+--- @param key string Ключ параметра
+--- @param value any Новое значение
+function TunerMonitor:_on_config_updated(key, value)
+    -- Если рабочая копия еще не создана (до start), мы ничего не делаем.
+    -- При старте она будет создана из актуального состояния.
+    if not self._astra_conf then return end
+    
+    -- Синхронизируем рабочую копию
+    self._astra_conf[key] = value
+
+    -- Если изменился метод сравнения, обновляем прямую ссылку
+    if key == "method_comparison" then
+        self._current_method = COMPARISON_METHODS[value]
+    end
+
+    -- Если анализ выключен, сбрасываем накопленную статистику
+    if key == "analyze" and not value then
+        self._stats.ber_sum = 0
+        self._stats.unc_sum = 0
+        self._stats.count = 0
+    end
+
+    -- Обновление параметров в работающем экземпляре тюнера Astra (если применимо)
+    if self._instance and type(self._instance.__options) == "table" then
+        local opts = self._instance.__options
+        -- Примечание: dvb_tune в Astra обычно не поддерживает динамическую смену TP без перезапуска,
+        -- но мы обновляем метаданные для согласованности.
+        if opts[key] ~= nil then opts[key] = value end
+    end
 end
 
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
@@ -453,10 +477,11 @@ end
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function TunerMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
-        return nil
+        -- Даже если не запущен, возвращаем эталонный конфиг
+        return self._config
     end
 
-    local original_config = self._config and Utils.table_copy(self._config) or nil
+    local original_config = self._config
     local opts = self._instance and self._instance.__options
     local channels = (type(opts) == "table") and (opts.channels or 0) or 0
 

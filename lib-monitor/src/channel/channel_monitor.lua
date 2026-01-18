@@ -49,6 +49,7 @@ local METHOD_ON_AIR = 4
 --- @field private _upstream any Объект апстрима
 --- @field private _last_active_id number|nil ID последнего активного входа
 --- @field private _cached_source table|nil Кэшированные данные текущего источника
+--- @field private _astra_conf table|nil Рабочая конфигурация для Astra
 --- @field private _current_status_table table Таблица для Pull-запросов
 local ChannelMonitor = setmetatable({}, BaseMonitor)
 ChannelMonitor.__index = ChannelMonitor
@@ -238,11 +239,12 @@ function ChannelMonitor:_process_total_data(data)
     if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
 
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
+    local conf = self._astra_conf or self._config
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
-    if self:_should_send(self._config.time_check) and
+    if self:_should_send(conf.time_check) and
        (active_id ~= self._last_active_id or self:_is_force() or
-        self._current_method(status, data, self._config.rate))
+        self._current_method(status, data, conf.rate))
     then
         self:_reset_force_timer()
 
@@ -357,7 +359,10 @@ function ChannelMonitor.new(config, channel_data)
     self._name = config.name or (self._channel_data and self._channel_data.name) or config.monitor
     self._display_name = config.display_name or (self._channel_data and self._channel_data.display_name) or self._name
 
-    -- 2. Валидация и установка параметров конфигурации
+    -- 2. Рабочая конфигурация (инициализируется при старте)
+    self._astra_conf = nil
+
+    -- 3. Валидация и установка параметров конфигурации
     if not self:_set_config_param("channel_rate", config.rate, "channel_") then return nil end
     if not self:_set_config_param("channel_time_check", config.time_check, "channel_") then return nil end
     if not self:_set_config_param("channel_method_comparison", config.method_comparison, "channel_") then return nil end
@@ -365,10 +370,8 @@ function ChannelMonitor.new(config, channel_data)
     if not self:_set_config_param("channel_cc_limit", config.cc_limit, "channel_") then return nil end
     if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit, "channel_") then return nil end
     if not self:_set_config_param("channel_join_pid", config.join_pid, "channel_") then return nil end
-    if not self:_set_config_param("channel_cc_limit", config.cc_limit, "channel_") then return nil end
-    if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit, "channel_") then return nil end
 
-    -- 3. Состояние мониторинга и статистика
+    -- 4. Состояние мониторинга и статистика
     self._status = {
         cc_errors = 0,
         pes_errors = 0,
@@ -404,9 +407,12 @@ function ChannelMonitor:start()
         return self._instance
     end
 
+    -- Создаем рабочую копию конфигурации (эталон self._config остается неизменным)
+    self._astra_conf = Utils.table_copy(self._config)
+
     if not self._current_method then
         Logger.error(COMPONENT_NAME, "[%s] start: некорректный метод сравнения %s",
-            self._name, tostring(self._config.method_comparison))
+            self._name, tostring(self._astra_conf.method_comparison))
         return nil
     end
 
@@ -425,9 +431,9 @@ function ChannelMonitor:start()
     self._instance = analyze({
         upstream = stream_data,
         name = "_" .. self._name,
-        cc_limit = self._config.cc_limit,
-        bitrate_limit = self._config.bitrate_limit,
-        join_pid = self._config.join_pid,
+        cc_limit = self._astra_conf.cc_limit,
+        bitrate_limit = self._astra_conf.bitrate_limit,
+        join_pid = self._astra_conf.join_pid,
         callback = function(data)
             -- Защита от вызова после destroy или во время очистки
             if not self._active or not self._instance then return end
@@ -511,13 +517,14 @@ end
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function ChannelMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
-        return nil
+        -- Даже если не запущен, возвращаем эталонный конфиг
+        return self._config
     end
 
     -- 0. Немедленная остановка обработки (предохранитель для callback)
     self._active = false
 
-    local original_config = self._config and Utils.table_copy(self._config) or nil
+    local original_config = self._config
 
     -- 1. Очистка специфических ресурсов
     self:_clear_stats()
@@ -569,6 +576,32 @@ function ChannelMonitor:destroy(force)
     return original_config
 end
 
+--- Вызывается при обновлении конфигурации.
+--- Синхронизирует рабочую конфигурацию и параметры в работающем экземпляре анализатора Astra.
+--- @protected
+--- @param key string Ключ параметра
+--- @param value any Новое значение
+function ChannelMonitor:_on_config_updated(key, value)
+    -- Если рабочая копия еще не создана (до start), мы ничего не делаем.
+    if not self._astra_conf then return end
+
+    -- Синхронизируем рабочую копию
+    self._astra_conf[key] = value
+
+    -- Если изменился метод сравнения, обновляем прямую ссылку
+    if key == "method_comparison" then
+        self._current_method = COMPARISON_METHODS[value]
+    end
+
+    -- Обновление параметров в работающем экземпляре анализатора Astra
+    if self._instance and type(self._instance.__options) == "table" then
+        local opts = self._instance.__options
+        if key == "cc_limit" then opts.cc_limit = value end
+        if key == "bitrate_limit" then opts.bitrate_limit = value end
+        if key == "join_pid" then opts.join_pid = value end
+    end
+end
+
 --- Обновляет параметры монитора
 --- @param params table Таблица новых параметров
 --- @return boolean Статус выполнения
@@ -595,19 +628,6 @@ function ChannelMonitor:update_parameters(params)
                 has_errors = true
             end
         end
-    end
-
-    -- Обновляем прямую ссылку на метод для callback
-    if params.method_comparison ~= nil then
-        self._current_method = COMPARISON_METHODS[self._config.method_comparison]
-    end
-
-    -- Обновление параметров в работающем экземпляре анализатора Astra
-    if self._instance and type(self._instance.__options) == "table" then
-        local opts = self._instance.__options
-        if params.cc_limit ~= nil then opts.cc_limit = self._config.cc_limit end
-        if params.bitrate_limit ~= nil then opts.bitrate_limit = self._config.bitrate_limit end
-        if params.join_pid ~= nil then opts.join_pid = self._config.join_pid end
     end
 
     if has_errors then
