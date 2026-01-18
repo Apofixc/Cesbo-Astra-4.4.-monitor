@@ -29,6 +29,7 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 --- @class BaseMonitor
 --- @field protected _name string Технический идентификатор монитора
 --- @field protected _config table Конфигурация монитора
+--- @field protected _config_prefix string Префикс параметров (например, "dvb_")
 --- @field protected _component_name string Имя компонента для логирования
 --- @field protected _active boolean Флаг активности мониторинга
 --- @field protected _state number Текущее состояние (IDLE, RUNNING, STOPPED)
@@ -36,6 +37,8 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 --- @field protected _json_cache string|nil Кэш последнего отправленного JSON
 --- @field protected _current_method function|nil Прямая ссылка на метод сравнения
 --- @field protected _psi table|nil Кэш PSI данных
+--- @field protected _current_status_table table Актуальное состояние монитора
+--- @field protected _comparison_methods table|nil Таблица методов сравнения
 --- @field protected _check_timer number Таймер интервала проверки
 --- @field protected _force_timer number Таймер принудительной отправки статуса
 --- @field protected _force_interval number Интервал принудительной отправки
@@ -180,13 +183,16 @@ end
 --- Конструктор базового монитора
 --- @param config table Конфигурация монитора
 --- @param component_name string Имя компонента для логирования
+--- @param config_prefix? string Префикс параметров (по умолчанию "")
+--- @param comparison_methods? table Таблица методов сравнения
 --- @return BaseMonitor Экземпляр базового монитора
-function BaseMonitor.new(config, component_name)
+function BaseMonitor.new(config, component_name, config_prefix, comparison_methods)
     --- @type BaseMonitor
     local self = setmetatable({}, BaseMonitor)
 
     -- 1. Конфигурация и идентификация
     self._config = config
+    self._config_prefix = config_prefix or ""
     self._name = self._config.name or "Unknown"
     self._component_name = component_name or "BaseMonitor"
 
@@ -203,8 +209,10 @@ function BaseMonitor.new(config, component_name)
 
     -- 4. Кэш и вспомогательные объекты
     self._json_cache = nil
-    self._current_method = nil
+    self._comparison_methods = comparison_methods
+    self._current_method = comparison_methods and config.method_comparison and comparison_methods[config.method_comparison] or nil
     self._psi = {}
+    self._current_status_table = {}
     self._table_pool = TablePool
 
     -- 5. Адаптивность
@@ -260,6 +268,13 @@ function BaseMonitor:_disable_load_shedding()
     self:_on_config_updated("time_check", self._original_time_check)
 end
 
+--- Инициализирует таблицу статуса базовыми полями.
+--- @protected
+--- @param type_name string Тип монитора ("dvb", "Channel" и т.д.)
+function BaseMonitor:_init_status_table(type_name)
+    Utils.init_report(self._current_status_table, type_name, self._name)
+end
+
 --- Возвращает таблицу из пула указанного типа.
 --- Если пул пуст, создает новую таблицу.
 --- @param type_name? string [Тип пула (например, "report", "event"). По умолчанию "generic"]
@@ -305,10 +320,9 @@ function BaseMonitor:publish(data, event_type, is_table)
 end
 
 --- Возвращает актуальные данные в виде таблицы (сырые данные).
---- Должен быть переопределен в наследниках.
---- @return table|nil Таблица данных
+--- @return table Таблица данных
 function BaseMonitor:get_status_table()
-    return nil
+    return self._current_status_table
 end
 
 --- Возвращает актуальные данные в виде JSON-строки.
@@ -348,24 +362,42 @@ function BaseMonitor:get_state()
     return self._state
 end
 
---- Полностью очищает базовое состояние монитора.
---- Вызывается в конце методов destroy наследников.
+--- Полностью останавливает мониторинг и уничтожает объект.
+--- Освобождает ресурсы и возвращает оригинальную конфигурацию.
+--- @return table|nil Оригинальная конфигурация
 function BaseMonitor:destroy()
-    -- Отписка от системных событий для предотвращения утечек памяти
+    if self._state == BaseMonitor.STATE.STOPPED then
+        return self._config
+    end
+
+    local original_config = self._config
+
+    -- 1. Остановка логики
+    self._active = false
+    self._state = BaseMonitor.STATE.STOPPED
+
+    -- 2. Специфическая очистка наследника
+    self:_on_destroy()
+
+    -- 3. Закрытие инстанса Astra
+    self:_close_instance()
+
+    -- 4. Отписка от системных событий
     if self._resource_sub_id and EventDispatcher then
         EventDispatcher.get_instance():unsubscribe(self._resource_sub_id)
         self._resource_sub_id = nil
     end
 
-    self._active = false
-    self._state = BaseMonitor.STATE.STOPPED
-    self._instance = nil
+    -- 5. Обнуление полей
     self._config = nil
+    self._config_prefix = nil
     self._name = nil
     self._component_name = nil
     self._json_cache = nil
+    self._comparison_methods = nil
     self._current_method = nil
     self._psi = nil
+    self._current_status_table = nil
     self._check_timer = nil
     self._force_timer = nil
     self._force_interval = nil
@@ -373,8 +405,9 @@ function BaseMonitor:destroy()
     self._table_pool = nil
 
     -- Согласно astra-api-usage.md: ручное управление памятью обязательно
-    -- после остановки монитора или закрытия тяжелых модулей.
     collectgarbage()
+
+    return original_config
 end
 
 --- Приостанавливает мониторинг
@@ -395,11 +428,39 @@ function BaseMonitor:get_psi(table_name)
 end
 
 --- Вызывается при обновлении конфигурации.
---- Должен быть переопределен в наследниках для синхронизации внутреннего состояния.
+--- Реализует общую логику синхронизации (например, смену метода сравнения).
 --- @protected
 --- @param key string Ключ параметра
 --- @param value any Новое значение
 function BaseMonitor:_on_config_updated(key, value)
+    if key == "method_comparison" and self._comparison_methods then
+        self._current_method = self._comparison_methods[value]
+    end
+end
+
+--- Вспомогательный метод для безопасного закрытия инстанса Astra.
+--- Очищает callback и вызывает :close().
+--- @protected
+function BaseMonitor:_close_instance()
+    if not self._instance then return end
+
+    local inst = self._instance
+    self._instance = nil
+
+    -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
+    if type(inst.__options) == "table" then
+        inst.__options.callback = nil
+    end
+
+    if inst.close then
+        pcall(inst.close, inst)
+    end
+end
+
+--- Хук, вызываемый при уничтожении монитора.
+--- Должен быть переопределен в наследниках для специфической очистки.
+--- @protected
+function BaseMonitor:_on_destroy()
     -- Виртуальный метод
 end
 
@@ -418,6 +479,35 @@ end
 --- @return boolean|nil is_healthy true если всё в порядке, false если обнаружен сбой, nil если проверка не применима
 function BaseMonitor:check_infrastructure_health()
     return nil
+end
+
+--- Обновляет параметры монитора.
+--- Проходит по таблице параметров и вызывает _set_config_param для каждого.
+--- @param params table Таблица новых параметров
+--- @return boolean Статус выполнения (true если все параметры обновлены успешно)
+function BaseMonitor:update_parameters(params)
+    if not params or type(params) ~= "table" then
+        Logger.error(self._component_name, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
+        return false
+    end
+
+    local prefix = self._config_prefix
+    local has_errors = false
+    for key, value in pairs(params) do
+        -- Формируем полное имя параметра с префиксом для валидации
+        local param_name = prefix .. key
+        if not self:_set_config_param(param_name, value, prefix) then
+            has_errors = true
+        end
+    end
+
+    if has_errors then
+        Logger.error(self._component_name, "[%s] update_parameters: не удалось обновить некоторые параметры",
+            tostring(self._name))
+        return false
+    end
+
+    return true
 end
 
 --- Возобновляет мониторинг

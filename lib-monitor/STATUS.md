@@ -34,15 +34,15 @@
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **TunerMonitor** | 100% | **Оптимизирован (Static Stats) + Unified API + Safe PSI + LoadShedding Fix** | 18.01.2026 |
+| **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + Zero-duplication** | 18.01.2026 |
 | **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Routing Tree** | 16.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching** | 16.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseMonitor** | 100% | **Оптимизирован (Load Shedding) + Refactored + Config Hook** | 18.01.2026 |
-| **ChannelMonitor** | 100% | **Оптимизирован (Zero-alloc Hotpath) + Refactored + Sync Fix** | 18.01.2026 |
+| **BaseMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Logic + Read-only Config** | 18.01.2026 |
+| **ChannelMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + Zero-duplication** | 18.01.2026 |
 | **ResourceMonitor** | 100% | **Готов (Hardcore+ Zero-alloc) + Self-Healing** | 16.01.2026 |
 
 ---

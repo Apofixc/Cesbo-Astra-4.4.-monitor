@@ -37,23 +37,6 @@ local METHOD_STRICT = 2
 local METHOD_RATIO = 3
 local METHOD_ON_AIR = 4
 
--- 5. Внутреннее состояние (Private State)
---- @class ChannelMonitor : BaseMonitor
---- @field private _display_name string Отображаемое имя монитора
---- @field private _input_instance any|nil Экземпляр входного потока (для IP мониторов)
---- @field private _channel_data table|nil Данные канала (Astra)
---- @field private _stream_json table Данные об источниках потока
---- @field private _status table Текущий статус ошибок (CC/PES)
---- @field private _stats table Статистика анализа по PID
---- @field private _stats_count number Текущее количество отслеживаемых PID
---- @field private _upstream any Объект апстрима
---- @field private _last_active_id number|nil ID последнего активного входа
---- @field private _cached_source table|nil Кэшированные данные текущего источника
---- @field private _astra_conf table|nil Рабочая конфигурация для Astra
---- @field private _current_status_table table Таблица для Pull-запросов
-local ChannelMonitor = setmetatable({}, BaseMonitor)
-ChannelMonitor.__index = ChannelMonitor
-
 local ratio = Utils.ratio
 
 -- Методы сравнения
@@ -64,21 +47,36 @@ local COMPARISON_METHODS = {
     [METHOD_STRICT] = function(prev, curr, rate)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
-               prev.cc_errors > 0 or
-               prev.pes_errors > 0 or
+               (prev.cc_errors or 0) > 0 or
+               (prev.pes_errors or 0) > 0 or
                prev.bitrate ~= curr.total.bitrate
     end,
     [METHOD_RATIO] = function(prev, curr, rate)
         return prev.ready ~= curr.on_air or
                prev.scrambled ~= curr.total.scrambled or
-               prev.cc_errors > 0 or
-               prev.pes_errors > 0 or
+               (prev.cc_errors or 0) > 0 or
+               (prev.pes_errors or 0) > 0 or
                ratio(prev.bitrate, curr.total.bitrate) > rate
     end,
     [METHOD_ON_AIR] = function(prev, curr, rate)
         return prev.ready ~= curr.on_air
     end
 }
+
+-- 5. Внутреннее состояние (Private State)
+--- @class ChannelMonitor : BaseMonitor
+--- @field private _display_name string Отображаемое имя монитора
+--- @field private _input_instance any|nil Экземпляр входного потока (для IP мониторов)
+--- @field private _channel_data table|nil Данные канала (Astra)
+--- @field private _stream_json table Данные об источниках потока
+--- @field private _stats table Статистика анализа по PID
+--- @field private _stats_count number Текущее количество отслеживаемых PID
+--- @field private _upstream any Объект апстрима
+--- @field private _last_active_id number|nil ID последнего активного входа
+--- @field private _cached_source table|nil Кэшированные данные текущего источника
+--- @field private _astra_conf table|nil Рабочая конфигурация для Astra
+local ChannelMonitor = setmetatable({}, BaseMonitor)
+ChannelMonitor.__index = ChannelMonitor
 
 -- ===========================================================================
 -- Внутренние функции (Private)
@@ -121,7 +119,7 @@ function ChannelMonitor:_on_astra_data(data)
     end
 
     if data.psi then
-        self:_process_psi_data_internal(data)
+        self:_process_psi_data(data)
         return
     end
 
@@ -134,12 +132,13 @@ function ChannelMonitor:_on_astra_data(data)
     end
 end
 
---- Обработка PSI данных
---- @private
+--- Обработка PSI данных.
+--- Переопределяет базовый метод для извлечения статистики PID.
+--- @protected
 --- @param data table Данные PSI
-function ChannelMonitor:_process_psi_data_internal(data)
-    -- Сохраняем таблицу в базовое хранилище
-    self:_process_psi_data(data)
+function ChannelMonitor:_process_psi_data(data)
+    -- Вызываем базовую логику сохранения в кэш
+    BaseMonitor._process_psi_data(self, data)
 
     local table_id = data.psi and data.psi:upper()
     if table_id == "PMT" and type(data.streams) == "table" then
@@ -179,7 +178,8 @@ end
 --- @private
 --- @param data table Данные анализа
 function ChannelMonitor:_process_analyze_data(data)
-    if not self._config.analyze or type(data.analyze) ~= "table" then return end
+    local conf = self._astra_conf or self._config
+    if not conf.analyze or type(data.analyze) ~= "table" then return end
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -192,7 +192,6 @@ function ChannelMonitor:_process_analyze_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
-                    -- Если лимит превышен, сбрасываем статистику для очистки места
                     if self._stats_count >= PID_LIMIT then
                         self:_clear_stats()
                         Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
@@ -227,16 +226,17 @@ function ChannelMonitor:_process_total_data(data)
     local total = data.total
     if not total then return end
 
-    local status = self._status
+    local master = self._current_status_table
     local cc_inc = total.cc_errors or 0
     local pes_inc = total.pes_errors or 0
 
-    status.cc_errors = status.cc_errors + cc_inc
-    status.pes_errors = status.pes_errors + pes_inc
+    -- Накапливаем ошибки в основной таблице статуса
+    master.cc_errors = (master.cc_errors or 0) + cc_inc
+    master.pes_errors = (master.pes_errors or 0) + pes_inc
 
     -- Защита от переполнения счетчиков
-    if status.cc_errors > MAX_ERROR_COUNT then status.cc_errors = MAX_ERROR_COUNT end
-    if status.pes_errors > MAX_ERROR_COUNT then status.pes_errors = MAX_ERROR_COUNT end
+    if master.cc_errors > MAX_ERROR_COUNT then master.cc_errors = MAX_ERROR_COUNT end
+    if master.pes_errors > MAX_ERROR_COUNT then master.pes_errors = MAX_ERROR_COUNT end
 
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
     local conf = self._astra_conf or self._config
@@ -244,24 +244,24 @@ function ChannelMonitor:_process_total_data(data)
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(conf.time_check) and
        (active_id ~= self._last_active_id or self:_is_force() or
-        self._current_method(status, data, conf.rate))
+        self._current_method(master, data, conf.rate))
     then
         self:_reset_force_timer()
 
-        -- Обновление состояния для следующего сравнения
-        status.ready = data.on_air
-        status.scrambled = data.total.scrambled
-        status.bitrate = data.total.bitrate or 0
-        status.cc_errors = 0
-        status.pes_errors = 0
+        -- Обновление состояния
+        local source = self:_get_cached_source()
+        master.status = data.on_air
+        master.ready = data.on_air
+        master.scrambled = total.scrambled
+        master.bitrate = total.bitrate or 0
+        master.stream = source.stream
+        master.format = source.format
+        master.addr = source.addr
+        master.timestamp = os_time()
+        
         self._last_active_id = active_id
 
-        -- Обновляем Master State (таблица для Pull-запросов)
-        local master = self._current_status_table
-        self:_build_status_table(master, data)
-
         -- Сбрасываем кэш JSON, так как данные изменились.
-        -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
         self:_clear_json_cache()
 
         -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
@@ -270,7 +270,7 @@ function ChannelMonitor:_process_total_data(data)
         r.display_name = self._display_name
         r.monitor = self._config.monitor
 
-        -- Оптимизация: прямое копирование полей вместо Utils.table_merge
+        -- Оптимизация: прямое копирование полей (горячий путь)
         r.status = master.status
         r.bitrate = master.bitrate
         r.cc_errors = master.cc_errors
@@ -281,6 +281,10 @@ function ChannelMonitor:_process_total_data(data)
         r.format = master.format
         r.addr = master.addr
         r.timestamp = master.timestamp
+
+        -- Сбрасываем счетчики ошибок после отправки отчета
+        master.cc_errors = 0
+        master.pes_errors = 0
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "channels", true)
@@ -293,39 +297,6 @@ function ChannelMonitor:_clear_stats()
     -- Больше не возвращаем в пул, так как таблицы статические
     self._stats = {}
     self._stats_count = 0
-end
-
---- Внутренний метод для сборки таблицы полного статуса.
---- @private
---- @param t table Целевая таблица для заполнения
---- @param data table|nil Текущие данные (если есть)
---- @return table Таблица статуса
-function ChannelMonitor:_build_status_table(t, data)
-    local status = self._status
-    local total = data and data.total
-
-    -- Оптимизация: минимизация проверок и локальные переменные
-    local ready = (data and data.on_air)
-    if ready == nil then ready = status.ready or false end
-
-    local bitrate = (total and total.bitrate) or (status.bitrate or 0)
-    local scrambled = (total and total.scrambled)
-    if scrambled == nil then scrambled = status.scrambled or false end
-
-    local source = self:_get_cached_source()
-
-    t.status = ready
-    t.bitrate = bitrate
-    t.cc_errors = status.cc_errors or 0
-    t.pes_errors = status.pes_errors or 0
-    t.scrambled = scrambled
-    t.ready = ready
-    t.stream = source.stream
-    t.format = source.format
-    t.addr = source.addr
-    t.timestamp = os_time()
-
-    return t
 end
 
 -- ===========================================================================
@@ -352,7 +323,7 @@ function ChannelMonitor.new(config, channel_data)
         return nil
     end
 
-    local self = setmetatable(BaseMonitor.new(config, COMPONENT_NAME), ChannelMonitor)
+    local self = setmetatable(BaseMonitor.new(config, COMPONENT_NAME, "channel_", COMPARISON_METHODS), ChannelMonitor)
 
     -- 1. Данные канала и идентификация
     self._channel_data = type(channel_data) == "table" and channel_data or nil
@@ -372,29 +343,25 @@ function ChannelMonitor.new(config, channel_data)
     if not self:_set_config_param("channel_join_pid", config.join_pid, "channel_") then return nil end
 
     -- 4. Состояние мониторинга и статистика
-    self._status = {
-        cc_errors = 0,
-        pes_errors = 0,
-        bitrate = 0,
-        ready = false,
-        scrambled = false,
-    }
+    self:_init_status_table("Channel")
+    local master = self._current_status_table
+    master.display_name = self._display_name
+    master.monitor = self._config.monitor
+    master.cc_errors = 0
+    master.pes_errors = 0
+    master.bitrate = 0
+    master.ready = false
+    master.scrambled = false
+
     self._stats = {}
     self._stats_count = 0
-    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
-    -- 4. Источники и апстрим
+    -- 5. Источники и апстрим
     self._stream_json = config.stream_json or {}
     self._upstream = config.upstream
     self._input_instance = nil
     self._last_active_id = nil
     self._cached_source = nil
-
-    -- 5. Таблица для Pull-запросов (всегда актуальное состояние)
-    self._current_status_table = {}
-    Utils.init_report(self._current_status_table, "Channel", self._name)
-    self._current_status_table.display_name = self._display_name
-    self._current_status_table.monitor = self._config.monitor
 
     return self
 end
@@ -493,87 +460,43 @@ end
 function ChannelMonitor:check_infrastructure_health()
     if self._state ~= BaseMonitor.STATE.RUNNING then return nil end
     
-    local status = self._status
-    if not status then return false end
+    local master = self._current_status_table
+    if not master then return false end
 
     -- 1. Проверка Bitrate (No Data)
-    if (status.bitrate or 0) == 0 then return false end
+    if (master.bitrate or 0) == 0 then return false end
     
     -- 2. Проверка Scrambled (CAS Error)
-    if status.scrambled then return false end
+    if master.scrambled then return false end
 
     return true
 end
 
---- Возвращает актуальные данные в виде таблицы (сырые данные).
---- @return table|nil Таблица данных
-function ChannelMonitor:get_status_table()
-    return self._current_status_table
-end
-
---- Останавливает мониторинг и уничтожает объект.
---- Освобождает все ресурсы и возвращает оригинальную конфигурацию.
---- @param force boolean Принудительная остановка
---- @return table|nil Оригинальная конфигурация при успехе, иначе nil
-function ChannelMonitor:destroy(force)
-    if self._state ~= BaseMonitor.STATE.RUNNING then
-        -- Даже если не запущен, возвращаем эталонный конфиг
-        return self._config
-    end
-
-    -- 0. Немедленная остановка обработки (предохранитель для callback)
-    self._active = false
-
-    local original_config = self._config
-
-    -- 1. Очистка специфических ресурсов
+--- Специфическая очистка ресурсов канала.
+--- @protected
+function ChannelMonitor:_on_destroy()
     self:_clear_stats()
-
-    if self._instance then
-        -- 1. Сначала обнуляем ссылку на инстанс в объекте Lua
-        local inst = self._instance
-        self._instance = nil
-
-        -- 2. Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО
-        if type(inst.__options) == "table" then
-            inst.__options.callback = nil
-        end
-
-        -- 3. Физическое закрытие инстанса Astra
-        if inst.close then
-            pcall(inst.close, inst)
-        end
-    end
 
     if self._input_instance then
         -- kill_input самостоятельно очищает callback и ресурсы
         kill_input(self._input_instance)
     end
 
-    -- 2. Обнуление специфических полей
     self._input_instance = nil
     self._channel_data = nil
     self._stream_json = nil
-    self._status = nil
     self._stats = nil
     self._stats_count = nil
     self._upstream = nil
     self._last_active_id = nil
     self._cached_source = nil
     self._display_name = nil
-    self._current_status_table = nil
 
-    -- 3. Очистка пулов таблиц, связанных с этим монитором
+    -- Очистка пулов таблиц, связанных с этим монитором
     if self._table_pool then
         self._table_pool.drain("report_channel", 5)
         self._table_pool.drain("report_error", 2)
     end
-
-    -- 4. Базовая очистка и смена состояния
-    BaseMonitor.destroy(self)
-
-    Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")
-    return original_config
 end
 
 --- Вызывается при обновлении конфигурации.
@@ -582,16 +505,14 @@ end
 --- @param key string Ключ параметра
 --- @param value any Новое значение
 function ChannelMonitor:_on_config_updated(key, value)
+    -- Вызываем базовый метод для синхронизации метода сравнения
+    BaseMonitor._on_config_updated(self, key, value)
+
     -- Если рабочая копия еще не создана (до start), мы ничего не делаем.
     if not self._astra_conf then return end
 
     -- Синхронизируем рабочую копию
     self._astra_conf[key] = value
-
-    -- Если изменился метод сравнения, обновляем прямую ссылку
-    if key == "method_comparison" then
-        self._current_method = COMPARISON_METHODS[value]
-    end
 
     -- Обновление параметров в работающем экземпляре анализатора Astra
     if self._instance and type(self._instance.__options) == "table" then
@@ -600,43 +521,6 @@ function ChannelMonitor:_on_config_updated(key, value)
         if key == "bitrate_limit" then opts.bitrate_limit = value end
         if key == "join_pid" then opts.join_pid = value end
     end
-end
-
---- Обновляет параметры монитора
---- @param params table Таблица новых параметров
---- @return boolean Статус выполнения
-function ChannelMonitor:update_parameters(params)
-    if not params or type(params) ~= "table" then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
-        return false
-    end
-
-    local param_map = {
-        rate = "channel_rate",
-        time_check = "channel_time_check",
-        method_comparison = "channel_method_comparison",
-        analyze = "channel_analyze",
-        cc_limit = "channel_cc_limit",
-        bitrate_limit = "channel_bitrate_limit",
-        join_pid = "channel_join_pid"
-    }
-
-    local has_errors = false
-    for key, config_name in pairs(param_map) do
-        if params[key] ~= nil then
-            if not self:_set_config_param(config_name, params[key], "channel_") then
-                has_errors = true
-            end
-        end
-    end
-
-    if has_errors then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: не удалось обновить некоторые параметры",
-            tostring(self._name))
-        return false
-    end
-
-    return true
 end
 
 -- ===========================================================================

@@ -51,19 +51,6 @@ local METHOD_ALWAYS = 1
 local METHOD_STRICT = 2
 local METHOD_RATIO = 3
 
--- 5. Внутреннее состояние (Private State)
---- @class TunerMonitor : BaseMonitor
---- @field private _status table|nil Текущий статус (signal, snr, ber, unc)
---- @field private _current_flags table|nil Текущие битовые флаги состояния
---- @field private _last_status_num number|nil Последнее числовое значение статуса
---- @field private _stats table|nil Накопленная статистика для расчета качества
---- @field private _astra_conf table|nil Рабочая конфигурация для Astra
---- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
---- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
---- @field private _current_status_table table Таблица для Pull-запросов
-local TunerMonitor = setmetatable({}, BaseMonitor)
-TunerMonitor.__index = TunerMonitor
-
 local ratio = Utils.ratio
 
 local COMPARISON_METHODS = {
@@ -83,6 +70,17 @@ local COMPARISON_METHODS = {
                (prev.unc or -1) ~= (curr.unc or -1)
     end
 }
+
+-- 5. Внутреннее состояние (Private State)
+--- @class TunerMonitor : BaseMonitor
+--- @field private _current_flags table|nil Текущие битовые флаги состояния
+--- @field private _last_status_num number|nil Последнее числовое значение статуса
+--- @field private _stats table|nil Накопленная статистика для расчета качества
+--- @field private _astra_conf table|nil Рабочая конфигурация для Astra
+--- @field private _temp_analyzer any|nil Временный экземпляр анализатора для PSI
+--- @field private _backup table|nil Бэкап предыдущего состояния (config, channels)
+local TunerMonitor = setmetatable({}, BaseMonitor)
+TunerMonitor.__index = TunerMonitor
 
 -- ===========================================================================
 -- Внутренние функции (Private)
@@ -110,6 +108,7 @@ function TunerMonitor:_on_astra_data(data)
     if type(data) ~= "table" then return end
 
     local conf = self._astra_conf or self._config
+    local master = self._current_status_table
 
     -- Накопление статистики для расчета качества (упрощенно)
     if conf.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
@@ -123,32 +122,33 @@ function TunerMonitor:_on_astra_data(data)
 
     -- Оптимизированная проверка: сначала интервал, затем force или тяжелое условие
     if self:_should_send(conf.time_check) and
-       (self:_is_force() or self._current_method(self._status, data, conf.rate))
+       (self:_is_force() or self._current_method(master, data, conf.rate))
     then
         self:_reset_force_timer()
 
-        local status = self._status
-        status.status = data.status or -1
-        status.signal = data.signal or -1
-        status.snr = data.snr or -1
-        status.ber = data.ber or -1
-        status.unc = data.unc or -1
-
         -- Расчет качества (quality) на основе ошибок
-        if self._config.analyze and self._stats.count > 0 then
+        local quality = -1
+        if conf.analyze and self._stats.count > 0 then
             local avg_ber = self._stats.ber_sum / self._stats.count
             if avg_ber > 0 or self._stats.unc_sum > 0 then
-                status.quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
+                quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
             else
-                status.quality = 100
+                quality = 100
             end
             -- Сброс статистики после отправки
             self._stats.ber_sum = 0
             self._stats.unc_sum = 0
             self._stats.count = 0
-        else
-            status.quality = -1
         end
+
+        -- Обновляем Master State (таблица для Pull-запросов)
+        master.status = data.status or -1
+        master.signal = data.signal or -1
+        master.snr = data.snr or -1
+        master.ber = data.ber or -1
+        master.unc = data.unc or -1
+        master.quality = quality
+        master.timestamp = os_time()
 
         local s_num = data.status
         if s_num and s_num ~= self._last_status_num then
@@ -160,23 +160,18 @@ function TunerMonitor:_on_astra_data(data)
             end
         end
 
-        -- Обновляем Master State (таблица для Pull-запросов)
-        self:_build_status_table(self._current_status_table, data)
-
         -- Сбрасываем кэш JSON, так как данные изменились.
-        -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
         self:_clear_json_cache()
 
         -- Создаем таблицу для Push-уведомления из пула через быстрое копирование
         local r = self:get_table_from_pool("report_dvb")
         Utils.init_report(r, "dvb", self._name)
         r.name_adapter = self._name
-        r.format = self._config.type or ""
-        r.modulation = self._config.modulation or ""
-        r.source = self._config.tp or self._config.frequency
+        r.format = conf.type or ""
+        r.modulation = conf.modulation or ""
+        r.source = conf.tp or conf.frequency
 
-        -- Оптимизация: прямое копирование полей вместо Utils.table_merge (горячий путь)
-        local master = self._current_status_table
+        -- Оптимизация: прямое копирование полей (горячий путь)
         r.status = master.status
         r.signal = master.signal
         r.snr = master.snr
@@ -188,25 +183,6 @@ function TunerMonitor:_on_astra_data(data)
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "dvb", true)
     end
-end
-
---- Внутренний метод для сборки таблицы полного статуса.
---- @private
---- @param t table Целевая таблица для заполнения
---- @param data table|nil Текущие данные (если есть)
---- @return table Таблица статуса
-function TunerMonitor:_build_status_table(t, data)
-    local status = self._status or {}
-
-    t.status = (data and data.status) or status.status or 0
-    t.signal = (data and data.signal) or status.signal or 0
-    t.snr = (data and data.snr) or status.snr or 0
-    t.ber = (data and data.ber) or status.ber or 0
-    t.unc = (data and data.unc) or status.unc or 0
-    t.quality = status.quality or 0
-
-    t.timestamp = os_time()
-    return t
 end
 
 -- ===========================================================================
@@ -227,7 +203,7 @@ function TunerMonitor.new(conf)
         return nil
     end
 
-    local self = setmetatable(BaseMonitor.new(conf, COMPONENT_NAME), TunerMonitor)
+    local self = setmetatable(BaseMonitor.new(conf, COMPONENT_NAME, "dvb_", COMPARISON_METHODS), TunerMonitor)
 
     -- 1. Идентификация
     self._name = conf.name_adapter
@@ -239,23 +215,21 @@ function TunerMonitor.new(conf)
     if not self:_set_config_param("dvb_analyze", conf.analyze, "dvb_") then return nil end
 
     -- 3. Состояние тюнера и флаги
-    self._status = {
-        type = "dvb",
-        server = Utils.get_server_name(),
-        format = conf.type or "",
-        modulation = conf.modulation or "",
-        source = conf.tp or conf.frequency,
-        name_adapter = self._name,
-        status = -1,
-        signal = -1,
-        snr = -1,
-        ber = -1,
-        unc = -1,
-        quality = -1
-    }
+    self:_init_status_table("dvb")
+    local master = self._current_status_table
+    master.name_adapter = self._name
+    master.format = conf.type or ""
+    master.modulation = conf.modulation or ""
+    master.source = conf.tp or conf.frequency
+    master.status = -1
+    master.signal = -1
+    master.snr = -1
+    master.ber = -1
+    master.unc = -1
+    master.quality = -1
+
     self._current_flags = STATUS_LOOKUP[0]
     self._last_status_num = -1
-    self._current_method = COMPARISON_METHODS[self._config.method_comparison]
 
     -- 4. Статистика качества
     self._stats = {
@@ -268,14 +242,6 @@ function TunerMonitor.new(conf)
     self._astra_conf = nil
     self._temp_analyzer = nil
     self._backup = nil
-
-    -- 6. Таблица для Pull-запросов (всегда актуальное состояние)
-    self._current_status_table = {}
-    Utils.init_report(self._current_status_table, "dvb", self._name)
-    self._current_status_table.name_adapter = self._name
-    self._current_status_table.format = conf.type or ""
-    self._current_status_table.modulation = conf.modulation or ""
-    self._current_status_table.source = conf.tp or conf.frequency
 
     return self
 end
@@ -343,31 +309,6 @@ function TunerMonitor:start()
     return self._instance
 end
 
---- Обновляет параметры мониторинга тюнера
---- @param params table Новые параметры (rate, time_check, method_comparison)
---- @return boolean Статус выполнения
-function TunerMonitor:update_parameters(params)
-    if not params or type(params) ~= "table" then
-        Logger.error(COMPONENT_NAME, "[%s] update_parameters: параметры должны быть таблицей", tostring(self._name))
-        return false
-    end
-
-    -- Обновляем self._config через базовый метод, который вызовет _on_config_updated
-    if params.rate ~= nil then
-        self:_set_config_param("dvb_rate", params.rate, "dvb_")
-    end
-    if params.time_check ~= nil then
-        self:_set_config_param("dvb_time_check", params.time_check, "dvb_")
-    end
-    if params.method_comparison ~= nil then
-        self:_set_config_param("dvb_method_comparison", params.method_comparison, "dvb_")
-    end
-    if params.analyze ~= nil then
-        self:_set_config_param("dvb_analyze", params.analyze, "dvb_")
-    end
-
-    return true
-end
 
 --- Проверяет функциональное здоровье тюнера (наличие Lock)
 --- @return boolean|nil is_healthy
@@ -387,17 +328,14 @@ end
 --- @param key string Ключ параметра
 --- @param value any Новое значение
 function TunerMonitor:_on_config_updated(key, value)
+    -- Вызываем базовый метод для синхронизации метода сравнения
+    BaseMonitor._on_config_updated(self, key, value)
+
     -- Если рабочая копия еще не создана (до start), мы ничего не делаем.
-    -- При старте она будет создана из актуального состояния.
     if not self._astra_conf then return end
     
     -- Синхронизируем рабочую копию
     self._astra_conf[key] = value
-
-    -- Если изменился метод сравнения, обновляем прямую ссылку
-    if key == "method_comparison" then
-        self._current_method = COMPARISON_METHODS[value]
-    end
 
     -- Если анализ выключен, сбрасываем накопленную статистику
     if key == "analyze" and not value then
@@ -409,16 +347,8 @@ function TunerMonitor:_on_config_updated(key, value)
     -- Обновление параметров в работающем экземпляре тюнера Astra (если применимо)
     if self._instance and type(self._instance.__options) == "table" then
         local opts = self._instance.__options
-        -- Примечание: dvb_tune в Astra обычно не поддерживает динамическую смену TP без перезапуска,
-        -- но мы обновляем метаданные для согласованности.
         if opts[key] ~= nil then opts[key] = value end
     end
-end
-
---- Возвращает актуальные данные в виде таблицы (сырые данные).
---- @return table|nil Таблица данных
-function TunerMonitor:get_status_table()
-    return self._current_status_table
 end
 
 --- Возвращает детальные флаги состояния тюнера (has_signal, has_lock и т.д.)
@@ -471,17 +401,42 @@ function TunerMonitor:psi_update()
     return true
 end
 
+--- Специфическая очистка ресурсов тюнера.
+--- @protected
+function TunerMonitor:_on_destroy()
+    self:_clear_psi_resources()
+
+    -- Очистка задачи планировщика, если она была запущена через psi_update
+    local scheduler = Scheduler and Scheduler.get_instance()
+    if scheduler then
+        scheduler:remove_task("psi_update_" .. self._name)
+    end
+
+    -- Безопасная очистка внутреннего списка Astra
+    local opts = self._instance and self._instance.__options
+    if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
+        local adapter = opts.adapter
+        local device = opts.device or "0"
+        if adapter ~= nil then
+            local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
+            dvb_input_instance_list[instance_id] = nil
+        end
+    end
+
+    self._current_flags = nil
+    self._last_status_num = nil
+    self._stats = nil
+    self._backup = nil
+end
+
 --- Полностью останавливает мониторинг тюнера и уничтожает объект.
---- Освобождает ресурсы и возвращает оригинальную конфигурацию.
 --- @param force boolean Принудительная остановка (игнорировать счетчик каналов)
 --- @return table|nil Оригинальная конфигурация при успехе, иначе nil
 function TunerMonitor:destroy(force)
     if self._state ~= BaseMonitor.STATE.RUNNING then
-        -- Даже если не запущен, возвращаем эталонный конфиг
         return self._config
     end
 
-    local original_config = self._config
     local opts = self._instance and self._instance.__options
     local channels = (type(opts) == "table") and (opts.channels or 0) or 0
 
@@ -497,64 +452,10 @@ function TunerMonitor:destroy(force)
     -- Декрементируем счетчик, так как монитор отключается
     if type(opts) == "table" then
         opts.channels = (channels > 0) and (channels - 1) or 0
-        channels = opts.channels
     end
 
-    -- 1. Остановка логики мониторинга
-    self._active = false
-    self:_clear_psi_resources()
-
-    -- Очистка задачи планировщика, если она была запущена через psi_update
-    local scheduler = Scheduler and Scheduler.get_instance()
-    if scheduler then
-        scheduler:remove_task("psi_update_" .. self._name)
-    end
-
-    -- 2. Физическое закрытие тюнера (если требуется)
-    if self._instance then
-        -- Очищаем callback во внутренней таблице параметров Astra ОБЯЗАТЕЛЬНО
-        if type(opts) == "table" then
-            opts.callback = nil
-        end
-
-        -- Безопасная очистка внутреннего списка Astra
-        if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
-            local adapter = opts.adapter
-            local device = opts.device or "0"
-            if adapter ~= nil then
-                local instance_id = string_format("%s.%s", tostring(adapter), tostring(device))
-                dvb_input_instance_list[instance_id] = nil
-                Logger.debug(COMPONENT_NAME,
-                "Удален тюнер '%s' из внутреннего списка Astra (id: %s)",
-                    tostring(self._name), instance_id)
-            end
-        end
-
-        -- Физическое закрытие инстанса Astra
-        if self._instance.close then
-            self._instance:close()
-        end
-        Logger.info(COMPONENT_NAME, "[%s] Тюнер физически закрыт", tostring(self._name))
-    end
-
-    -- 3. Обнуление специфических полей
-    if self._astra_conf then
-        self._astra_conf.callback = nil
-        self._astra_conf = nil
-    end
-
-    self._status = nil
-    self._current_flags = nil
-    self._last_status_num = nil
-    self._stats = nil
-    self._backup = nil
-    self._current_status_table = nil
-
-    -- 4. Базовая очистка и смена состояния
-    BaseMonitor.destroy(self)
-
-    Logger.debug(COMPONENT_NAME, "Объект тюнера уничтожен")
-    return original_config
+    -- Вызываем базовый метод для полной очистки
+    return BaseMonitor.destroy(self)
 end
 
 -- ===========================================================================
