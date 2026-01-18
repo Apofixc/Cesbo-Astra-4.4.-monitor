@@ -228,8 +228,13 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     if self._total_queued_count > (total_capacity * 0.9) then
         if p == self.PRIORITIES.LOW then
             self.stats.dropped = self.stats.dropped + 1
-            if TablePool and options and options.is_table then
-                TablePool.release(event_data, nil, true)
+            if TablePool then
+                if options and options.__pool_type then
+                    TablePool.release(options, options.__pool_type, true)
+                end
+                if options and options.is_table then
+                    TablePool.release(event_data, nil, true)
+                end
             end
             return nil
         end
@@ -237,8 +242,13 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     if self._total_queued_count > (total_capacity * 0.95) then
         if p == self.PRIORITIES.MEDIUM then
             self.stats.dropped = self.stats.dropped + 1
-            if TablePool and options and options.is_table then
-                TablePool.release(event_data, nil, true)
+            if TablePool then
+                if options and options.__pool_type then
+                    TablePool.release(options, options.__pool_type, true)
+                end
+                if options and options.is_table then
+                    TablePool.release(event_data, nil, true)
+                end
             end
             return nil
         end

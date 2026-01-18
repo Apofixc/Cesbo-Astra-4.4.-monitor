@@ -10,6 +10,7 @@ local setmetatable = _G.setmetatable
 local tostring = _G.tostring
 local os_time = _G.os.time
 local collectgarbage = _G.collectgarbage
+local math_max = _G.math.max
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -233,10 +234,10 @@ function BaseMonitor:_enable_load_shedding()
     self._load_shedding_active = true
     self._original_time_check = self._config.time_check or 0
     
-    -- Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
-    local new_check = math.max(5, self._original_time_check * 3)
+    -- 1. Увеличиваем интервал проверки в 3 раза (минимум до 5 секунд)
+    local new_check = math_max(5, self._original_time_check * 3)
     self._config.time_check = new_check
-    
+
     Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
         tostring(self._name), self._original_time_check, new_check)
 end
@@ -248,7 +249,7 @@ function BaseMonitor:_disable_load_shedding()
     
     self._load_shedding_active = false
     self._config.time_check = self._original_time_check
-    
+
     Logger.info(self._component_name, "[%s] Load Shedding: интервал проверки восстановлен до %d",
         tostring(self._name), self._original_time_check)
 end

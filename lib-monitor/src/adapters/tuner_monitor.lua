@@ -423,8 +423,10 @@ function TunerMonitor:psi_update()
         join_pid = true,
         callback = function(data)
             if not data or not self._temp_analyzer then return end
-            if data.psi then
-                self:_process_psi_data(data)
+            local ok, err = pcall(self._process_psi_data, self, data)
+            if not ok then
+                Logger.error(COMPONENT_NAME, "[%s] Ошибка в psi_update callback: %s",
+                    tostring(self._name), tostring(err))
             end
         end
     })

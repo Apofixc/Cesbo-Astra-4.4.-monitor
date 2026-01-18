@@ -336,7 +336,6 @@ local function make_stream(conf)
         method_comparison = conf.monitor and conf.monitor.method_comparison,
         cc_limit = conf.monitor and conf.monitor.cc_limit,
         bitrate_limit = conf.monitor and conf.monitor.bitrate_limit,
-        rate_stat = conf.monitor and conf.monitor.rate_stat,
         join_pid = conf.monitor and conf.monitor.join_pid
     }
 

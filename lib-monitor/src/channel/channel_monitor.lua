@@ -275,7 +275,6 @@ function ChannelMonitor:_process_total_data(data)
         r.pes_errors = master.pes_errors
         r.scrambled = master.scrambled
         r.ready = master.ready
-        r.rate_stat = master.rate_stat
         r.stream = master.stream
         r.format = master.format
         r.addr = master.addr
@@ -319,7 +318,6 @@ function ChannelMonitor:_build_status_table(t, data)
     t.pes_errors = status.pes_errors or 0
     t.scrambled = scrambled
     t.ready = ready
-    t.rate_stat = data and data.rate_stat
     t.stream = source.stream
     t.format = source.format
     t.addr = source.addr
@@ -366,8 +364,9 @@ function ChannelMonitor.new(config, channel_data)
     if not self:_set_config_param("channel_analyze", config.analyze, "channel_") then return nil end
     if not self:_set_config_param("channel_cc_limit", config.cc_limit, "channel_") then return nil end
     if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit, "channel_") then return nil end
-    if not self:_set_config_param("channel_rate_stat", config.rate_stat, "channel_") then return nil end
     if not self:_set_config_param("channel_join_pid", config.join_pid, "channel_") then return nil end
+    if not self:_set_config_param("channel_cc_limit", config.cc_limit, "channel_") then return nil end
+    if not self:_set_config_param("channel_bitrate_limit", config.bitrate_limit, "channel_") then return nil end
 
     -- 3. Состояние мониторинга и статистика
     self._status = {
@@ -428,7 +427,6 @@ function ChannelMonitor:start()
         name = "_" .. self._name,
         cc_limit = self._config.cc_limit,
         bitrate_limit = self._config.bitrate_limit,
-        rate_stat = self._config.rate_stat,
         join_pid = self._config.join_pid,
         callback = function(data)
             -- Защита от вызова после destroy или во время очистки
@@ -587,7 +585,6 @@ function ChannelMonitor:update_parameters(params)
         analyze = "channel_analyze",
         cc_limit = "channel_cc_limit",
         bitrate_limit = "channel_bitrate_limit",
-        rate_stat = "channel_rate_stat",
         join_pid = "channel_join_pid"
     }
 
@@ -610,7 +607,6 @@ function ChannelMonitor:update_parameters(params)
         local opts = self._instance.__options
         if params.cc_limit ~= nil then opts.cc_limit = self._config.cc_limit end
         if params.bitrate_limit ~= nil then opts.bitrate_limit = self._config.bitrate_limit end
-        if params.rate_stat ~= nil then opts.rate_stat = self._config.rate_stat end
         if params.join_pid ~= nil then opts.join_pid = self._config.join_pid end
     end
 

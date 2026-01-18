@@ -414,10 +414,6 @@ MonitorConfig.ValidationSchema = {
         max = 1000000,
         default = 0
     },
-    channel_rate_stat = {
-        type = "boolean",
-        default = false
-    },
     channel_join_pid = {
         type = "boolean",
         default = false
