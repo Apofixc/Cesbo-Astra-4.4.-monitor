@@ -336,6 +336,29 @@ function TablePool.release(t, pool_type, deep, depth)
     end
 end
 
+--- Частично или полностью очищает указанный пул.
+--- Помогает GC точечно освобождать память без сброса всей системы.
+--- @param pool_type string Тип пула
+--- @param count? number Количество таблиц для удаления. Если nil, очищается весь пул.
+function TablePool.drain(pool_type, count)
+    local pool = state.pools[pool_type]
+    if not pool then return end
+
+    local size = #pool
+    local to_remove = count or size
+    if to_remove > size then to_remove = size end
+
+    for i = 1, to_remove do
+        local t = pool[size - i + 1]
+        if t then t.__in_pool = nil end
+        pool[size - i + 1] = nil
+    end
+
+    if state.debug_mode then
+        Logger.debug(COMPONENT_NAME, "Пул '%s' частично очищен: удалено %d таблиц", pool_type, to_remove)
+    end
+end
+
 --- Полностью очищает все пулы и вызывает сборщик мусора.
 function TablePool.clear_all()
     for name, pool in pairs(state.pools) do

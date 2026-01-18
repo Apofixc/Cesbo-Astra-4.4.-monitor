@@ -14,7 +14,7 @@
 | **ModuleManager** | 100% | **Готов (Ultra-Extreme)** | 17.01.2026 |
 | **Scheduler** | 100% | **Оптимизирован (Min-Heap) + Stress Tested** | 18.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
-| **TablePool** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
+| **TablePool** | 100% | **Готов (Ultra-Extreme) + Drain System** | 18.01.2026 |
 | **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Zero-copy** | 18.01.2026 |
 
 ## 2. Конфигурация и Утилиты
@@ -42,7 +42,7 @@
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
 | **BaseMonitor** | 100% | **Оптимизирован (Load Shedding) + Refactored** | 18.01.2026 |
-| **ChannelMonitor** | 100% | **Оптимизирован (Static Stats) + Refactored** | 17.01.2026 |
+| **ChannelMonitor** | 100% | **Оптимизирован (Zero-alloc Hotpath) + Refactored** | 18.01.2026 |
 | **ResourceMonitor** | 100% | **Готов (Hardcore+ Zero-alloc) + Self-Healing** | 16.01.2026 |
 
 ---

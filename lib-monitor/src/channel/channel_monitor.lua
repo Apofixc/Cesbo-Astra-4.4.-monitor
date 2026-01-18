@@ -247,7 +247,8 @@ function ChannelMonitor:_process_total_data(data)
         self:_reset_force_timer()
 
         -- Обновляем Master State (таблица для Pull-запросов)
-        self:_build_status_table(self._current_status_table, data)
+        local master = self._current_status_table
+        self:_build_status_table(master, data)
 
         -- Сбрасываем кэш JSON, так как данные изменились.
         -- Новый кэш будет сгенерирован лениво при первом запросе (Pull или Push).
@@ -259,8 +260,18 @@ function ChannelMonitor:_process_total_data(data)
         r.display_name = self._display_name
         r.monitor = self._config.monitor
 
-        -- Копируем данные из Master State
-        Utils.table_merge(r, self._current_status_table)
+        -- Оптимизация: прямое копирование полей вместо Utils.table_merge
+        r.status = master.status
+        r.bitrate = master.bitrate
+        r.cc_errors = master.cc_errors
+        r.pes_errors = master.pes_errors
+        r.scrambled = master.scrambled
+        r.ready = master.ready
+        r.rate_stat = master.rate_stat
+        r.stream = master.stream
+        r.format = master.format
+        r.addr = master.addr
+        r.timestamp = master.timestamp
 
         -- Публикуем таблицу с передачей горячего кэша
         self:publish(r, "channels", true)
@@ -289,28 +300,29 @@ end
 --- @param data table|nil Текущие данные (если есть)
 --- @return table Таблица статуса
 function ChannelMonitor:_build_status_table(t, data)
+    local status = self._status
+    local total = data and data.total
+
+    -- Оптимизация: минимизация проверок и локальные переменные
+    local ready = (data and data.on_air)
+    if ready == nil then ready = status.ready or false end
+
+    local bitrate = (total and total.bitrate) or (status.bitrate or 0)
+    local scrambled = (total and total.scrambled)
+    if scrambled == nil then scrambled = status.scrambled or false end
+
     local source = self:_get_cached_source()
-    local status = self._status or {}
 
-    -- Добавить проверку на nil для всех полей
-    local ready = (data and data.on_air) or (status.ready or false)
-    local bitrate = (data and data.total and data.total.bitrate) or (status.bitrate or 0)
-    local scrambled = (data and data.total and data.total.scrambled) or (status.scrambled or false)
-    local cc = status.cc_errors or 0
-    local pes = status.pes_errors or 0
-    local rate_stat = data and data.rate_stat or nil
-
-    -- Защита от nil
     t.status = ready
-    t.bitrate = bitrate or 0
-    t.cc_errors = cc
-    t.pes_errors = pes
+    t.bitrate = bitrate
+    t.cc_errors = status.cc_errors or 0
+    t.pes_errors = status.pes_errors or 0
     t.scrambled = scrambled
     t.ready = ready
-    t.rate_stat = rate_stat
-    t.stream = source and source.stream or "Unknown"
-    t.format = source and source.format or "Unknown"
-    t.addr = source and source.addr or "Unknown"
+    t.rate_stat = data and data.rate_stat
+    t.stream = source.stream
+    t.format = source.format
+    t.addr = source.addr
     t.timestamp = os_time()
 
     return t
@@ -546,7 +558,13 @@ function ChannelMonitor:destroy(force)
     self._display_name = nil
     self._current_status_table = nil
 
-    -- 3. Базовая очистка и смена состояния
+    -- 3. Очистка пулов таблиц, связанных с этим монитором
+    if self._table_pool then
+        self._table_pool.drain("report_channel", 5)
+        self._table_pool.drain("report_error", 2)
+    end
+
+    -- 4. Базовая очистка и смена состояния
     BaseMonitor.destroy(self)
 
     Logger.debug(COMPONENT_NAME, "Объект монитора уничтожен")
