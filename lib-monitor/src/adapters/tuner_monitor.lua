@@ -401,6 +401,31 @@ function TunerMonitor:psi_update()
     return true
 end
 
+--- Проверяет возможность удаления тюнера (счетчик каналов).
+--- @protected
+--- @param force boolean Принудительное удаление
+--- @return boolean Разрешено ли удаление
+function TunerMonitor:_can_destroy(force)
+    local opts = self._instance and self._instance.__options
+    local channels = (type(opts) == "table") and (opts.channels or 0) or 0
+
+    -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
+    -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
+    if channels > 1 and not force then
+        Logger.warn(COMPONENT_NAME,
+            "[%s] destroy: адаптер занят (%d канала), удаление отменено",
+            tostring(self._name), channels)
+        return false
+    end
+
+    -- Декрементируем счетчик, так как монитор отключается
+    if type(opts) == "table" then
+        opts.channels = (channels > 0) and (channels - 1) or 0
+    end
+
+    return true
+end
+
 --- Специфическая очистка ресурсов тюнера.
 --- @protected
 function TunerMonitor:_on_destroy()
@@ -427,35 +452,6 @@ function TunerMonitor:_on_destroy()
     self._last_status_num = nil
     self._stats = nil
     self._backup = nil
-end
-
---- Полностью останавливает мониторинг тюнера и уничтожает объект.
---- @param force boolean Принудительная остановка (игнорировать счетчик каналов)
---- @return table|nil Оригинальная конфигурация при успехе, иначе nil
-function TunerMonitor:destroy(force)
-    if self._state ~= BaseMonitor.STATE.RUNNING then
-        return self._config
-    end
-
-    local opts = self._instance and self._instance.__options
-    local channels = (type(opts) == "table") and (opts.channels or 0) or 0
-
-    -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
-    -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
-    if channels > 1 and not force then
-        Logger.warn(COMPONENT_NAME,
-            "[%s] destroy: адаптер занят (%d канала), удаление отменено",
-            tostring(self._name), channels)
-        return nil
-    end
-
-    -- Декрементируем счетчик, так как монитор отключается
-    if type(opts) == "table" then
-        opts.channels = (channels > 0) and (channels - 1) or 0
-    end
-
-    -- Вызываем базовый метод для полной очистки
-    return BaseMonitor.destroy(self)
 end
 
 -- ===========================================================================

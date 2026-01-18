@@ -480,9 +480,9 @@ function ChannelMonitor:_on_destroy()
     if self._input_instance then
         -- kill_input самостоятельно очищает callback и ресурсы
         kill_input(self._input_instance)
+        self._input_instance = nil        
     end
 
-    self._input_instance = nil
     self._channel_data = nil
     self._stream_json = nil
     self._stats = nil

@@ -11,6 +11,8 @@ local tostring = _G.tostring
 local os_time = _G.os.time
 local collectgarbage = _G.collectgarbage
 local math_max = _G.math.max
+local type = _G.type
+local pcall = _G.pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -362,33 +364,73 @@ function BaseMonitor:get_state()
     return self._state
 end
 
+--- Проверяет, можно ли уничтожить монитор в данный момент.
+--- @protected
+--- @param ... any Дополнительные аргументы (например, флаг force)
+--- @return boolean true если уничтожение разрешено
+function BaseMonitor:_can_destroy(...)
+    return true
+end
+
+--- Хук, вызываемый при уничтожении монитора.
+--- Должен быть переопределен в наследниках для специфической очистки.
+--- @protected
+function BaseMonitor:_on_destroy()
+    -- Виртуальный метод
+end
+
+--- Вспомогательный метод для безопасного закрытия инстанса Astra.
+--- Очищает callback и вызывает :close().
+--- @protected
+function BaseMonitor:_close_instance()
+    if not self._instance then return end
+
+    local inst = self._instance
+    self._instance = nil
+
+    -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
+    if type(inst.__options) == "table" then
+        inst.__options.callback = nil
+    end
+
+    if inst.close then
+        pcall(inst.close, inst)
+    end
+end
+
 --- Полностью останавливает мониторинг и уничтожает объект.
 --- Освобождает ресурсы и возвращает оригинальную конфигурацию.
---- @return table|nil Оригинальная конфигурация
-function BaseMonitor:destroy()
+--- @param ... any Аргументы для _can_destroy (например, force)
+--- @return table|nil Оригинальная конфигурация или nil, если удаление отклонено
+function BaseMonitor:destroy(...)
     if self._state == BaseMonitor.STATE.STOPPED then
         return self._config
     end
 
+    -- 1. Проверка возможности удаления
+    if not self:_can_destroy(...) then
+        return nil
+    end
+
     local original_config = self._config
 
-    -- 1. Остановка логики
+    -- 2. Остановка логики
     self._active = false
     self._state = BaseMonitor.STATE.STOPPED
 
-    -- 2. Специфическая очистка наследника
+    -- 3. Специфическая очистка наследника
     self:_on_destroy()
 
-    -- 3. Закрытие инстанса Astra
+    -- 4. Закрытие инстанса Astra
     self:_close_instance()
 
-    -- 4. Отписка от системных событий
+    -- 5. Отписка от системных событий
     if self._resource_sub_id and EventDispatcher then
         EventDispatcher.get_instance():unsubscribe(self._resource_sub_id)
         self._resource_sub_id = nil
     end
 
-    -- 5. Обнуление полей
+    -- 6. Обнуление полей
     self._config = nil
     self._config_prefix = nil
     self._name = nil
@@ -436,32 +478,6 @@ function BaseMonitor:_on_config_updated(key, value)
     if key == "method_comparison" and self._comparison_methods then
         self._current_method = self._comparison_methods[value]
     end
-end
-
---- Вспомогательный метод для безопасного закрытия инстанса Astra.
---- Очищает callback и вызывает :close().
---- @protected
-function BaseMonitor:_close_instance()
-    if not self._instance then return end
-
-    local inst = self._instance
-    self._instance = nil
-
-    -- Очистка callback ОБЯЗАТЕЛЬНА перед закрытием (astra-api-usage.md)
-    if type(inst.__options) == "table" then
-        inst.__options.callback = nil
-    end
-
-    if inst.close then
-        pcall(inst.close, inst)
-    end
-end
-
---- Хук, вызываемый при уничтожении монитора.
---- Должен быть переопределен в наследниках для специфической очистки.
---- @protected
-function BaseMonitor:_on_destroy()
-    -- Виртуальный метод
 end
 
 --- Возвращает данные о состоянии здоровья монитора (программный слой)
