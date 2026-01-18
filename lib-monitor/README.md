@@ -219,6 +219,8 @@ lib-monitor/
 *   `pause_dvb_monitor(name_adapter)`: Приостановка мониторинга тюнера.
 *   `resume_dvb_monitor(name_adapter)`: Возобновление мониторинга тюнера.
 *   `switch_transponder(name_adapter, new_tuner_params, reserve_input)`: Сценарий переключения транспондера с сохранением выходов каналов.
+*   `stop_dependent_channels(name_adapter)`: Останавливает все каналы, использующие указанный адаптер.
+*   `start_dependent_channels(configs)`: Запускает каналы на основе предоставленных конфигураций.
 
 ### Функции для мониторинга каналов:
 

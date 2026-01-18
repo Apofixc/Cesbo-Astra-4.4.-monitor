@@ -34,6 +34,7 @@
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
+| **Adapter** | 100% | **Рефакторинг (Читаемость) + API Ready** | 18.01.2026 |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + 7 Comparison Methods + Zero-duplication** | 18.01.2026 |
 | **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Async Multicast + Ghost Protection** | 18.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching** | 16.01.2026 |
