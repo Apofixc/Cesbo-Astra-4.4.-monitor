@@ -469,13 +469,33 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
         end
     end
 
+    -- Предварительный расчет сложности и сигнатуры доставки (Smart Emit)
+    local is_complex = (filters and (filters.conditions or filters.script)) or
+                       (sub_data.throttle_ms and sub_data.throttle_ms > 0) or
+                       (sub_data.batch_mode and sub_data.batch_mode ~= "single") or
+                       (transport == "LUA_CALLBACK")
+
+    local delivery_sig = nil
+    if not is_complex then
+        local cb = sub_data.callback
+        if transport == "HTTP" then
+            delivery_sig = "H:" .. tostring(cb.host) .. ":" .. tostring(cb.port) .. ":" .. tostring(cb.path or "/")
+        elseif transport == "WS" then
+            delivery_sig = "W"
+        elseif transport == "CONSOLE" then
+            delivery_sig = "C"
+        end
+    end
+
     local subscription = {
         id = sub_id, event_type = event_type, callback = sub_data.callback,
         transport = transport, filters = filters,
         batch_mode = sub_data.batch_mode or default_batch_mode,
         -- throttle_ms: 0 - выключено, >0 - минимальный интервал между событиями
         throttle_ms = sub_data.throttle_ms or 0, active = sub_data.active ~= false,
-        last_event_at = 0, stats = { delivered = 0, failed = 0, consecutive_failures = 0 }
+        last_event_at = 0, stats = { delivered = 0, failed = 0, consecutive_failures = 0 },
+        is_complex = is_complex,
+        delivery_sig = delivery_sig
     }
 
     -- Кэширование заголовка Host для HTTP транспорта
@@ -885,7 +905,7 @@ function SubscriptionManager:unsubscribe(sub_id)
                 self._matchers[event_type] = nil
             end
 
-            -- Оптимизация: Гранулярный сброс кэша маршрутизации
+            -- Оптимизация: Гранулярный сброс кэша маршрутизации и планов
             if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
                 -- При удалении маски сбрасываем только те типы, которые ей соответствовали
                 local to_remove = {}
@@ -896,12 +916,14 @@ function SubscriptionManager:unsubscribe(sub_id)
                 end
                 for _, k in pairs(to_remove) do
                     self._route_cache[k] = nil
+                    self._plan_cache[k] = nil
                     self._route_cache_size = self._route_cache_size - 1
                 end
                 -- Сброс дерева решений Wildcard
                 if Wildcard and Wildcard.clear_tree then Wildcard.clear_tree() end
             elseif self._route_cache[event_type] then
                 self._route_cache[event_type] = nil
+                self._plan_cache[event_type] = nil
                 self._route_cache_size = self._route_cache_size - 1
             end
 
@@ -935,43 +957,23 @@ function SubscriptionManager:get_delivery_plan(event_type)
     for i = 1, #targets do
         local sub = targets[i]
         if sub.active then
-            -- Критерий "сложного" подписчика:
-            -- 1. Есть фильтры
-            -- 2. Включен троттлинг
-            -- 3. Включен батчинг (кроме "single")
-            -- 4. Транспорт LUA_CALLBACK (всегда сложный из-за pcall и передачи данных)
-            local is_complex = (sub.filters and (sub.filters.conditions or sub.filters.script)) or
-                               (sub.throttle_ms > 0) or
-                               (sub.batch_mode ~= "single") or
-                               (sub.transport == "LUA_CALLBACK")
-
-            if is_complex then
+            if sub.is_complex then
                 table_insert(plan.complex_subs, sub)
                 plan.has_complex = true
             else
-                -- Группировка простых подписчиков по сигнатуре доставки
-                local sig
-                local cb = sub.callback
-                if sub.transport == "HTTP" then
-                    sig = "H:" .. tostring(cb.host) .. ":" .. tostring(cb.port) .. ":" .. tostring(cb.path or "/")
-                elseif sub.transport == "WS" then
-                    sig = "W"
-                elseif sub.transport == "CONSOLE" then
-                    sig = "C"
-                end
-
+                local sig = sub.delivery_sig
                 if sig then
                     if not plan.simple_groups[sig] then
                         plan.simple_groups[sig] = {
                             transport = sub.transport,
-                            config = cb,
+                            config = sub.callback,
                             subs = {}
                         }
                     end
                     table_insert(plan.simple_groups[sig].subs, sub)
                     plan.total_simple = plan.total_simple + 1
                 else
-                    -- На всякий случай, если транспорт не определен
+                    -- Fallback если сигнатура не была рассчитана
                     table_insert(plan.complex_subs, sub)
                     plan.has_complex = true
                 end
