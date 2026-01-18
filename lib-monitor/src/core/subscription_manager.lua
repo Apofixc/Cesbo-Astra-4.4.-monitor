@@ -895,7 +895,8 @@ function SubscriptionManager:unsubscribe(sub_id)
     end
 
     for event_type, subs in pairs(self.subscriptions) do
-        if subs[sub_id] then
+        local sub = subs[sub_id]
+        if sub then
             subs[sub_id] = nil
             self.stats.total = self.stats.total - 1
 
@@ -905,9 +906,10 @@ function SubscriptionManager:unsubscribe(sub_id)
                 self._matchers[event_type] = nil
             end
 
-            -- Оптимизация: Гранулярный сброс кэша маршрутизации и планов
-            if event_type:find("*", 1, true) or event_type:find("?", 1, true) then
-                -- При удалении маски сбрасываем только те типы, которые ей соответствовали
+            -- Оптимизация: Проактивное обновление планов при удалении
+            local is_wildcard = event_type:find("*", 1, true) or event_type:find("?", 1, true)
+
+            if is_wildcard then
                 local to_remove = {}
                 for cached_type, _ in pairs(self._route_cache) do
                     if self:match(event_type, cached_type) then
@@ -919,9 +921,10 @@ function SubscriptionManager:unsubscribe(sub_id)
                     self._plan_cache[k] = nil
                     self._route_cache_size = self._route_cache_size - 1
                 end
-                -- Сброс дерева решений Wildcard
                 if Wildcard and Wildcard.clear_tree then Wildcard.clear_tree() end
-            elseif self._route_cache[event_type] then
+            else
+                -- Для прямой подписки сбрасываем кэш плана, чтобы он пересчитался при следующем запросе
+                -- (Удаление из вложенных структур групп сложнее, чем просто сброс кэша одного типа)
                 self._route_cache[event_type] = nil
                 self._plan_cache[event_type] = nil
                 self._route_cache_size = self._route_cache_size - 1

@@ -19,11 +19,13 @@ local math_floor = _G.math.floor
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local TablePool = ModuleManager.get_module("utils.table_pool")
+local TablePool = ModuleManager.get_module("table_pool")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
-local timer = ModuleManager.get_global_dependency("timer")
+local function get_timer()
+    return ModuleManager.get_global_dependency("timer")
+end
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Scheduler"
@@ -72,8 +74,9 @@ function Scheduler:_initialize()
     self._current_interval = 1
 
     -- Запуск основного цикла (раз в секунду)
-    if timer then
-        self._timer = timer({
+    local astra_timer = get_timer()
+    if astra_timer then
+        self._timer = astra_timer({
             interval = self._current_interval,
             callback = function()
                 if self._active then self:_tick() end
