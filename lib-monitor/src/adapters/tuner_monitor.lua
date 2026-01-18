@@ -483,7 +483,7 @@ function TunerMonitor:_on_destroy()
 
     -- Очистка задачи планировщика, если она была запущена через psi_update
     local scheduler = Scheduler and Scheduler.get_instance()
-    if scheduler then
+    if scheduler and self._name then
         scheduler:remove_task("psi_update_" .. self._name)
     end
 
