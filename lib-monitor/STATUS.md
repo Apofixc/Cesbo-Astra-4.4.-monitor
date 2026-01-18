@@ -20,7 +20,7 @@
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **MonitorConfig** | 100% | **Готов (Ultra-Extreme) + Centralized** | 18.01.2026 |
+| **MonitorConfig** | 100% | **Готов (Ultra-Extreme) + Centralized Validation Schema** | 18.01.2026 |
 | **Utils / Wildcard** | 100% | **Оптимизирован (Decision Tree) + Refactored** | 17.01.2026 |
 | **FilterEngine** | 100% | **Оптимизирован (JIT Inlining)** | 17.01.2026 |
 

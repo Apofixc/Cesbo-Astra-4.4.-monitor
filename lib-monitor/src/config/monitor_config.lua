@@ -29,6 +29,7 @@ local GLOBAL_CONFIG_PATH = "/opt/config.json"
 --- @field type string Тип данных ("number"|"boolean"|"string"|"table")
 --- @field min number|nil Минимальное значение (для чисел)
 --- @field max number|nil Максимальное значение (для чисел)
+--- @field enum table<string, boolean>|nil Список допустимых значений (для строк)
 --- @field default any Значение по умолчанию
 
 -- 5. Внутреннее состояние (Private State)
@@ -223,67 +224,32 @@ end
 --- @return boolean success Статус валидности
 --- @return string|nil error_message Описание первой найденной ошибки
 function MonitorConfig.validate()
-    -- 1. Логирование
-    if type(MonitorConfig.LogLevel) ~= "string" then return false, "LogLevel must be a string" end
-    local valid_levels = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true}
-    if not valid_levels[MonitorConfig.LogLevel] then
-        return false, "Invalid LogLevel: " .. tostring(MonitorConfig.LogLevel)
-    end
+    local schema = MonitorConfig.ValidationSchema
+    if not schema then return true end
 
-    if type(MonitorConfig.LogFormat) ~= "string" then return false, "LogFormat must be a string" end
-    if type(MonitorConfig.LogBufferSize) ~= "number" or MonitorConfig.LogBufferSize < 0 then
-        return false, "LogBufferSize must be a non-negative number"
-    end
+    for key, rule in pairs(schema) do
+        local value = MonitorConfig[key]
+        -- Пропускаем параметры, которые предназначены только для экземпляров мониторов
+        -- (они начинаются с channel_ или dvb_ и отсутствуют в глобальном MonitorConfig)
+        if value ~= nil then
+            if type(value) ~= rule.type then
+                return false, string.format("Parameter '%s' must be a %s, got %s", key, rule.type, type(value))
+            end
 
-    -- 2. Сеть и HTTP
-    if type(MonitorConfig.HttpTimeout) ~= "number" or MonitorConfig.HttpTimeout <= 0 then
-        return false, "HttpTimeout must be a positive number"
+            if rule.type == "number" then
+                if rule.min and value < rule.min then
+                    return false, string.format("Parameter '%s' is too small (min: %s)", key, tostring(rule.min))
+                end
+                if rule.max and value > rule.max then
+                    return false, string.format("Parameter '%s' is too large (max: %s)", key, tostring(rule.max))
+                end
+            elseif rule.type == "string" and rule.enum then
+                if not rule.enum[value] then
+                    return false, string.format("Invalid value for '%s': %s", key, tostring(value))
+                end
+            end
+        end
     end
-    if type(MonitorConfig.MaxRetries) ~= "number" or MonitorConfig.MaxRetries < 0 then
-        return false, "MaxRetries must be a non-negative number"
-    end
-
-    -- 3. Лимиты мониторов
-    if type(MonitorConfig.ChannelMonitorLimit) ~= "number" or MonitorConfig.ChannelMonitorLimit <= 0 then
-        return false, "ChannelMonitorLimit must be a positive number"
-    end
-    if type(MonitorConfig.DvbMonitorLimit) ~= "number" or MonitorConfig.DvbMonitorLimit <= 0 then
-        return false, "DvbMonitorLimit must be a positive number"
-    end
-
-    -- 4. Системные ресурсы
-    if type(MonitorConfig.CpuThreshold) ~= "number" or MonitorConfig.CpuThreshold <= 0 or MonitorConfig.CpuThreshold > 100 then
-        return false, "CpuThreshold must be between 1 and 100"
-    end
-    if type(MonitorConfig.RamThresholdPct) ~= "number" or MonitorConfig.RamThresholdPct <= 0 or MonitorConfig.RamThresholdPct > 100 then
-        return false, "RamThresholdPct must be between 1 and 100"
-    end
-    if type(MonitorConfig.MemoryLimitMb) ~= "number" or MonitorConfig.MemoryLimitMb <= 0 then
-        return false, "MemoryLimitMb must be a positive number"
-    end
-
-    if type(MonitorConfig.AdaptiveTickThresholdCpu) ~= "number" then return false, "AdaptiveTickThresholdCpu must be a number" end
-    if type(MonitorConfig.AdaptiveTickThresholdRam) ~= "number" then return false, "AdaptiveTickThresholdRam must be a number" end
-    if type(MonitorConfig.TickIntervalNormal) ~= "number" then return false, "TickIntervalNormal must be a number" end
-    if type(MonitorConfig.TickIntervalFast) ~= "number" then return false, "TickIntervalFast must be a number" end
-    if type(MonitorConfig.RareMetricInterval) ~= "number" then return false, "RareMetricInterval must be a number" end
-    if type(MonitorConfig.MaxCpuJump) ~= "number" then return false, "MaxCpuJump must be a number" end
-    if type(MonitorConfig.MaxRamJumpPct) ~= "number" then return false, "MaxRamJumpPct must be a number" end
-
-    -- 5. Пакетная отправка
-    if type(MonitorConfig.BatchMaxSize) ~= "number" or MonitorConfig.BatchMaxSize <= 0 then
-        return false, "BatchMaxSize must be a positive number"
-    end
-    local valid_batch_modes = {single=true, array=true}
-    if not valid_batch_modes[MonitorConfig.DefaultBatchMode] then
-        return false, "Invalid DefaultBatchMode: " .. tostring(MonitorConfig.DefaultBatchMode)
-    end
-
-    -- 6. Пулы
-    if type(MonitorConfig.PoolAdaptiveThreshold) ~= "number" then return false, "PoolAdaptiveThreshold must be a number" end
-    if type(MonitorConfig.PoolAdaptiveStep) ~= "number" then return false, "PoolAdaptiveStep must be a number" end
-    if type(MonitorConfig.PoolMinLimit) ~= "number" then return false, "PoolMinLimit must be a number" end
-    if type(MonitorConfig.PoolMaintenanceInterval) ~= "number" then return false, "PoolMaintenanceInterval must be a number" end
 
     return true
 end
@@ -378,75 +344,412 @@ end
 -- [ Схема валидации для параметров мониторов ]
 
 --- Схема валидации для параметров мониторов.
---- Используется в BaseMonitor для проверки входящих настроек конкретных экземпляров.
+--- Используется в BaseMonitor для проверки входящих настроек конкретных экземпляров,
+--- а также в MonitorConfig.validate() для проверки глобальных настроек.
 --- @type table<string, ValidationRule>
 MonitorConfig.ValidationSchema = {
-    channel_rate = {
-        type = "number",
-        min = MonitorConfig.MinRate,
-        max = MonitorConfig.MaxRate,
-        default = 0.035
+    -- 1. Логирование
+    LogLevel = {
+        type = "string",
+        enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true},
+        default = "INFO"
     },
-    channel_time_check = {
-        type = "number",
-        min = MonitorConfig.MinTimeCheck,
-        max = MonitorConfig.MaxTimeCheck,
-        default = 0
+    LogFormat = {
+        type = "string",
+        enum = {TEXT=true, JSON=true},
+        default = "TEXT"
     },
-    channel_analyze = {
+    LogBatchEnabled = {
         type = "boolean",
         default = false
     },
-    channel_method_comparison = {
-        type = "number",
-        min = MonitorConfig.MinMethodComparison,
-        max = MonitorConfig.MaxMethodComparison,
-        default = 3
-    },
-    channel_cc_threshold = {
+    LogBufferSize = {
         type = "number",
         min = 0,
-        max = 65535,
-        default = MonitorConfig.ChannelCcThreshold
-    },
-    channel_cc_limit = {
-        type = "number",
-        min = 0,
-        max = 65535,
+        max = 1024 * 1024,
         default = 0
     },
-    channel_bitrate_limit = {
+    MaxLogQueueSize = {
         type = "number",
-        min = 0,
-        max = 1000000,
-        default = 0
+        min = 1,
+        max = 10000,
+        default = 200
     },
-    channel_join_pid = {
-        type = "boolean",
-        default = false
-    },
-    dvb_time_check = {
+    MaxLogComponents = {
         type = "number",
-        min = MonitorConfig.MinTimeCheck,
-        max = MonitorConfig.MaxTimeCheck,
+        min = 1,
+        max = 1000,
+        default = 100
+    },
+
+    -- 2. Сеть и HTTP
+    MaxPayloadSize = {
+        type = "number",
+        min = 1024,
+        max = 10 * 1024 * 1024,
+        default = 1024 * 1024
+    },
+    CorsAllowOrigin = {
+        type = "string",
+        default = "*"
+    },
+    HttpTimeout = {
+        type = "number",
+        min = 1,
+        max = 300,
         default = 10
     },
-    dvb_rate = {
+    RateLimitWindow = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 60
+    },
+    RateLimitMaxRequests = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 100
+    },
+    MaxRetryQueueSize = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 500
+    },
+    MaxRetries = {
+        type = "number",
+        min = 0,
+        max = 100,
+        default = 5
+    },
+    RetryDelay = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 5
+    },
+    MaxRouteCacheSize = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 1000
+    },
+
+    -- 3. Лимиты мониторов
+    ChannelMonitorLimit = {
+        type = "number",
+        min = 1,
+        max = 1000,
+        default = 200
+    },
+    DvbMonitorLimit = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 20
+    },
+    MaxMonitorNameLength = {
+        type = "number",
+        min = 1,
+        max = 256,
+        default = 64
+    },
+    MinRate = {
+        type = "number",
+        min = 0.0001,
+        max = 1,
+        default = 0.001
+    },
+    MaxRate = {
         type = "number",
         min = 0.001,
         max = 1,
-        default = 0.015
+        default = 0.3
     },
-    dvb_method_comparison = {
+    MinTimeCheck = {
+        type = "number",
+        min = 0,
+        max = 3600,
+        default = 0
+    },
+    MaxTimeCheck = {
         type = "number",
         min = 1,
-        max = 7,
+        max = 3600,
+        default = 300
+    },
+    MinMethodComparison = {
+        type = "number",
+        min = 1,
+        max = 10,
+        default = 1
+    },
+    MaxMethodComparison = {
+        type = "number",
+        min = 1,
+        max = 10,
+        default = 8
+    },
+    ChannelCcThreshold = {
+        type = "number",
+        min = 0,
+        max = 65535,
+        default = 1
+    },
+    ForceSendInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 300
+    },
+
+    -- 4. Системные ресурсы и GC
+    GcPause = {
+        type = "number",
+        min = 10,
+        max = 1000,
+        default = 100
+    },
+    GcStepMul = {
+        type = "number",
+        min = 10,
+        max = 1000,
+        default = 500
+    },
+    MemoryLimitMb = {
+        type = "number",
+        min = 1,
+        max = 1024,
+        default = 50
+    },
+    SchedulerInterval = {
+        type = "number",
+        min = 0.1,
+        max = 60,
+        default = 1
+    },
+    CpuThreshold = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 90
+    },
+    RamThresholdPct = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 80
+    },
+    FdThreshold = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 800
+    },
+    HysteresisFactor = {
+        type = "number",
+        min = 0.5,
+        max = 0.99,
+        default = 0.95
+    },
+    NetworkCheckInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 30
+    },
+    ConfigRefreshInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 10
+    },
+    AdaptiveTickThresholdCpu = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 50
+    },
+    AdaptiveTickThresholdRam = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 70
+    },
+    TickIntervalNormal = {
+        type = "number",
+        min = 0.1,
+        max = 60,
+        default = 5
+    },
+    TickIntervalFast = {
+        type = "number",
+        min = 0.1,
+        max = 60,
+        default = 1
+    },
+    RareMetricInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 5
+    },
+    MaxCpuJump = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 50
+    },
+    MaxRamJumpPct = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 20
+    },
+    CpuMovingAverageWindow = {
+        type = "number",
+        min = 1,
+        max = 100,
+        default = 5
+    },
+
+    -- 5. Восстановление
+    AutoRecoverEnabled = {
+        type = "boolean",
+        default = false
+    },
+    AutoRecoverInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 300
+    },
+    MaxRecoveryAttempts = {
+        type = "number",
+        min = 1,
+        max = 100,
         default = 3
     },
-    dvb_analyze = {
+    RecoveryCooldown = {
+        type = "number",
+        min = 1,
+        max = 86400,
+        default = 3600
+    },
+
+    -- 6. События и LVC
+    LvcTtl = {
+        type = "number",
+        min = 1,
+        max = 86400,
+        default = 3600
+    },
+    MaxLvcSize = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 1000
+    },
+    MaxQueueSize = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 1000
+    },
+    EventBatchLimit = {
+        type = "number",
+        min = 1,
+        max = 1000,
+        default = 100
+    },
+    MaxBatchLimit = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 1000
+    },
+
+    -- 7. Пакетная отправка
+    BatchEnabled = {
         type = "boolean",
         default = true
     },
+    BatchFlushInterval = {
+        type = "number",
+        min = 0.01,
+        max = 60,
+        default = 0.5
+    },
+    BatchMaxSize = {
+        type = "number",
+        min = 1,
+        max = 1000,
+        default = 50
+    },
+    DefaultBatchMode = {
+        type = "string",
+        enum = {single=true, array=true},
+        default = "single"
+    },
+
+    -- 8. Пулы и кэши
+    MaxPoolSize = {
+        type = "number",
+        min = 1,
+        max = 10000,
+        default = 100
+    },
+    PoolDebug = {
+        type = "boolean",
+        default = false
+    },
+    PoolAdaptiveThreshold = {
+        type = "number",
+        min = 0.01,
+        max = 1,
+        default = 0.2
+    },
+    PoolAdaptiveStep = {
+        type = "number",
+        min = 0.01,
+        max = 1,
+        default = 0.25
+    },
+    PoolMinLimit = {
+        type = "number",
+        min = 1,
+        max = 1000,
+        default = 10
+    },
+    PoolMaintenanceInterval = {
+        type = "number",
+        min = 1,
+        max = 3600,
+        default = 300
+    },
+
+    -- 9. Данные
+    PidStatsLimit = {
+        type = "number",
+        min = 1,
+        max = 8192,
+        default = 100
+    },
+    MaxCounterValue = {
+        type = "number",
+        min = 1,
+        max = 1000000000000,
+        default = 1000000000
+    },
+    MaxErrorCount = {
+        type = "number",
+        min = 1,
+        max = 1000000000,
+        default = 1000000
+    },
+
+    -- 10. Watchdog
     WatchdogEnabled = {
         type = "boolean",
         default = false
@@ -474,6 +777,74 @@ MonitorConfig.ValidationSchema = {
         min = 1,
         max = 3600,
         default = 60
+    },
+
+    -- 11. Параметры экземпляров (Instance Parameters)
+    channel_rate = {
+        type = "number",
+        min = 0.0001,
+        max = 1,
+        default = 0.035
+    },
+    channel_time_check = {
+        type = "number",
+        min = 0,
+        max = 3600,
+        default = 0
+    },
+    channel_analyze = {
+        type = "boolean",
+        default = false
+    },
+    channel_method_comparison = {
+        type = "number",
+        min = 1,
+        max = 10,
+        default = 3
+    },
+    channel_cc_threshold = {
+        type = "number",
+        min = 0,
+        max = 65535,
+        default = 1
+    },
+    channel_cc_limit = {
+        type = "number",
+        min = 0,
+        max = 65535,
+        default = 0
+    },
+    channel_bitrate_limit = {
+        type = "number",
+        min = 0,
+        max = 100000000,
+        default = 0
+    },
+    channel_join_pid = {
+        type = "boolean",
+        default = false
+    },
+    dvb_time_check = {
+        type = "number",
+        min = 0,
+        max = 3600,
+        default = 10
+    },
+    dvb_rate = {
+        type = "number",
+        min = 0.0001,
+        max = 1,
+        default = 0.015
+    },
+    dvb_method_comparison = {
+        type = "number",
+        min = 1,
+        max = 10,
+        default = 3
+    },
+    dvb_analyze = {
+        type = "boolean",
+        default = true
     },
     channel_watchdog_enabled = {
         type = "boolean",
