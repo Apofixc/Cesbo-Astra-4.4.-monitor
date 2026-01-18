@@ -11,6 +11,7 @@ local pairs = _G.pairs
 local string_format = _G.string.format
 local tostring = _G.tostring
 local type = _G.type
+local os_time = _G.os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -26,11 +27,14 @@ local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Adapter"
 
+--- Минимальный интервал между перезапусками одного адаптера (сек)
+local RESTART_DEBOUNCE_TIME = 5
+
 -- 5. Инициализация объектов и внутреннее состояние
 --- @class AdapterState
+--- @field last_restarts table<string, number> Время последнего рестарта адаптеров
 local state = {
-    -- В данный момент модуль не хранит внутреннего состояния,
-    -- делегируя это DvbRepository.
+    last_restarts = {}
 }
 
 --- @class Adapter
@@ -66,6 +70,10 @@ local function _perform_restart(name_adapter, conf, force, old_channels_count, o
             instance.__options.channels = old_channels_count
         end
     end
+
+    -- Обновляем время последнего успешного рестарта
+    state.last_restarts[name_adapter] = os_time()
+
     return true
 end
 
@@ -181,6 +189,16 @@ function Adapter.restart_dvb_monitor(name_adapter, new_params, force)
         return false
     end
 
+    -- Защита от "дребезга" (Debounce)
+    local now = os_time()
+    local last_restart = state.last_restarts[name_adapter] or 0
+    if not force and now - last_restart < RESTART_DEBOUNCE_TIME then
+        Logger.warn(COMPONENT_NAME,
+            "restart_dvb_monitor: пропуск рестарта '%s' (слишком часто, осталось %d сек)",
+            name_adapter, RESTART_DEBOUNCE_TIME - (now - last_restart))
+        return true
+    end
+
     -- 1. Подготовка конфигурации
     local old_conf = Utils.table_copy(tuner:get_config())
     local new_conf = Utils.table_copy(old_conf)
@@ -286,7 +304,7 @@ function Adapter.switch_transponder(name_adapter, new_tuner_params, reserve_inpu
         EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
     end
 
-    -- 2. Перенастройка тюнера
+    -- 2. Перенастройка тюнера (используем force=true для обхода debounce и счетчиков)
     if not Adapter.restart_dvb_monitor(name_adapter, new_tuner_params, true) then
         -- В случае ошибки возвращаем старый конфиг
         Adapter.restart_dvb_monitor(name_adapter, old_tuner_params, true)
@@ -320,6 +338,7 @@ function Adapter.switch_transponder(name_adapter, new_tuner_params, reserve_inpu
     end
 
     Logger.info(COMPONENT_NAME, "Транспондер переключен на адаптере '%s'", name_adapter)
+    
     return { tuner_params = old_tuner_params }
 end
 
