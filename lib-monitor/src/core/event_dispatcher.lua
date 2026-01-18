@@ -223,6 +223,15 @@ end
 function EventDispatcher:emit(event_type, event_data, priority, options)
     if not self.active then return nil end
 
+    -- Защита от "призрачных" вызовов: если монитор-источник уже уничтожен, игнорируем событие
+    if options and options.source_monitor then
+        local monitor = options.source_monitor
+        -- STATE.STOPPED = 3
+        if monitor.get_state and monitor:get_state() == 3 then
+            return nil
+        end
+    end
+
     local now = os_time()
     local p = priority or self.PRIORITIES.MEDIUM
     local sub_mgr = self.subscription_manager
@@ -278,11 +287,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
     end
 
-    local sub_mgr = self.subscription_manager
-
     -- Оптимизация: Subscription-aware Emitting
+    -- Если нет подписчиков (плана) и не нужно кэшировать, выходим
     local no_cache = options and options.no_cache
-    if no_cache and not sub_mgr:has_subscriptions(event_type) then
+    if no_cache and not plan then
         return nil
     end
 

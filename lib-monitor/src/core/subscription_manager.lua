@@ -598,75 +598,46 @@ function SubscriptionManager._get_targets(self, event_type)
 end
 
 --- Рассылает объект события всем подписчикам.
+--- Оптимизировано: использует DeliveryPlan для ускорения рассылки и мультикастинга.
 --- @param event table Объект события (из EventDispatcher)
 --- @param now? number [Текущее время (опционально, для оптимизации)]
 --- @return boolean Статус выполнения
 function SubscriptionManager:publish_event(event, now)
-    local delivered, failed = 0, 0
     now = now or os_time()
     local event_type = event.type
     local event_data = event.data
-    local event_json = nil -- Кэш JSON для текущей рассылки
+    local options = event.options
 
-    -- Оптимизация: Fast Path через кэш маршрутизации
-    local targets = self:_get_targets(event_type)
-
-    local num_targets = #targets
-    if num_targets == 0 then return false end
-
-    -- Оптимизация: Fast Path для одиночного подписчика
-    if num_targets == 1 then
-        local sub = targets[1]
-        if sub.active then
-            local should_send = true
-            if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
-                should_send = false
-            end
-            if should_send and sub.filters and (sub.filters.conditions or sub.filters.script) then
-                if FilterEngine and not FilterEngine.match(event_data, sub.filters, sub.id) then
-                    should_send = false
-                end
-            end
-
-            if should_send then
-                -- Проверка батчинга в Fast Path
-                if MonitorConfig and MonitorConfig.BatchEnabled and
-                   (sub.transport == "HTTP" or sub.transport == "WS") and
-                   sub.batch_mode ~= "single"
-                then
-                    self:add_to_batch(sub, event)
-                    self.stats.delivered = self.stats.delivered + 1
-                    return true
-                end
-
-                if sub.transport ~= "LUA_CALLBACK" then
-                    event_json = _get_event_json(event)
-                end
-                local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
-                if success then
-                    sub.stats.delivered = sub.stats.delivered + 1
-                    sub.stats.consecutive_failures = 0
-                    sub.last_event_at = now
-                    self.stats.delivered = self.stats.delivered + 1
-                    return true
-                else
-                    sub.stats.failed = sub.stats.failed + 1
-                    sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
-                    self.stats.failed = self.stats.failed + 1
-                    return false
-                end
-            end
+    -- Защита от "призрачных" вызовов: если монитор-источник уже уничтожен, игнорируем событие
+    if options and options.source_monitor then
+        local monitor = options.source_monitor
+        -- STATE.STOPPED = 3
+        if monitor.get_state and monitor:get_state() == 3 then
+            return false
         end
-        return false
     end
 
+    -- Получаем план доставки (Smart Emit)
+    local plan = self:get_delivery_plan(event_type)
+    if not plan then return false end
+
+    local delivered, failed = 0, 0
+    local event_json = _get_event_json(event)
+
+    -- 1. Fast Path: Мультикастинг для простых групп
+    if plan.total_simple > 0 then
+        self:multicast_direct(plan, event_type, event_data, now, event_json)
+    end
+
+    -- 2. Обработка сложных подписчиков (фильтры, троттлинг, батчинг)
+    local complex_subs = plan.complex_subs
     local batch_enabled = MonitorConfig and MonitorConfig.BatchEnabled
 
-    for i = 1, num_targets do
-        local sub = targets[i]
+    for i = 1, #complex_subs do
+        local sub = complex_subs[i]
         if sub.active then
             local should_send = true
-            -- Троттлинг (проверка времени)
+            -- Троттлинг
             if sub.throttle_ms > 0 and (now - sub.last_event_at) < (sub.throttle_ms / 1000) then
                 should_send = false
             end
@@ -684,13 +655,9 @@ function SubscriptionManager:publish_event(event, now)
                    sub.batch_mode ~= "single"
                 then
                     self:add_to_batch(sub, event)
-                    delivered = delivered + 1 -- Считаем как доставленное в очередь
+                    delivered = delivered + 1
                 else
-                    -- Обычная немедленная отправка
-                    if sub.transport ~= "LUA_CALLBACK" and not event_json then
-                        event_json = _get_event_json(event)
-                    end
-
+                    -- Обычная отправка
                     local success, _ = Transport[sub.transport](self, sub.callback, event, event_type, nil, event_json)
                     if success then
                         delivered = delivered + 1
@@ -702,7 +669,7 @@ function SubscriptionManager:publish_event(event, now)
                         sub.stats.failed = sub.stats.failed + 1
                         sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
 
-                        -- Автоматическое удаление "мертвых" подписчиков (после 50 ошибок подряд)
+                        -- Автоматическое удаление "мертвых" подписчиков
                         if sub.stats.consecutive_failures > 50 then
                             Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
                             self:unsubscribe(sub.id)
@@ -712,6 +679,7 @@ function SubscriptionManager:publish_event(event, now)
             end
         end
     end
+
     self.stats.delivered = self.stats.delivered + delivered
     self.stats.failed = self.stats.failed + failed
     return true
@@ -994,16 +962,17 @@ end
 --- @param event_type string Тип события
 --- @param event_data table|string Данные события
 --- @param now number Текущее время
-function SubscriptionManager:multicast_direct(plan, event_type, event_data, now)
-    local event_json = nil
-    local encode = get_json_encode()
-    
-    -- Кодируем JSON один раз для всех групп
-    if type(event_data) == "table" then
-        local ok, res = pcall(encode, event_data)
-        if ok then event_json = res end
-    else
-        event_json = tostring(event_data)
+--- @param event_json? string [Предварительно подготовленный JSON]
+function SubscriptionManager:multicast_direct(plan, event_type, event_data, now, event_json)
+    if not event_json then
+        local encode = get_json_encode()
+        -- Кодируем JSON один раз для всех групп
+        if type(event_data) == "table" then
+            local ok, res = pcall(encode, event_data)
+            if ok then event_json = res end
+        else
+            event_json = tostring(event_data)
+        end
     end
 
     if not event_json then return end
@@ -1025,6 +994,12 @@ function SubscriptionManager:multicast_direct(plan, event_type, event_data, now)
                 else
                     sub.stats.failed = sub.stats.failed + 1
                     sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
+
+                    -- Автоматическое удаление "мертвых" подписчиков
+                    if sub.stats.consecutive_failures > 50 then
+                        Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                        self:unsubscribe(sub.id)
+                    end
                 end
             end
             

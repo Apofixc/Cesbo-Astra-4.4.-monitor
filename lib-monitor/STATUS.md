@@ -15,7 +15,7 @@
 | **Scheduler** | 100% | **Оптимизирован (Min-Heap) + Stress Tested** | 18.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme)** | 16.01.2026 |
 | **TablePool** | 100% | **Готов (Ultra-Extreme) + Drain System** | 18.01.2026 |
-| **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Smart Emit (Hybrid)** | 18.01.2026 |
+| **EventDispatcher** | 100% | **Готов (Ultra-Extreme) + Smart Emit (Hybrid) + Ghost Protection** | 18.01.2026 |
 
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
@@ -35,7 +35,7 @@
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + Zero-duplication** | 18.01.2026 |
-| **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Direct Multicast** | 18.01.2026 |
+| **SubscriptionManager** | 100% | **Готов (Ultra-Extreme) + Async Multicast + Ghost Protection** | 18.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching** | 16.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)
