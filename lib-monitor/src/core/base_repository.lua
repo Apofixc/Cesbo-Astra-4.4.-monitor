@@ -194,10 +194,14 @@ end
 
 --- Единый цикл обслуживания: проверка тишины и здоровья мониторов
 --- @private
+--- @return number recovered Количество восстановленных
+--- @return number failed Количество неудачных попыток
 function BaseRepository:_maintenance_tick()
     local now = os_time()
     local s = self._state
     local settings = s.settings
+    local recovered = 0
+    local failed = 0
     
     s.recovery.last_check = now
 
@@ -247,11 +251,18 @@ function BaseRepository:_maintenance_tick()
 
         -- 4. Выполнение восстановления
         if needs_recovery then
-            self:_perform_recovery(name, monitor, class, reason, now)
+            local ok = self:_perform_recovery(name, monitor, class, reason, now)
+            if ok then
+                recovered = recovered + 1
+            else
+                failed = failed + 1
+            end
         end
 
         ::next_monitor::
     end
+
+    return recovered, failed
 end
 
 --- Выполняет процедуру восстановления монитора
@@ -261,6 +272,7 @@ end
 --- @param class table Класс для пересоздания
 --- @param reason string Причина ("silence" или "watchdog")
 --- @param now number Текущее время
+--- @return boolean success
 function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     local s = self._state
     local settings = s.settings
@@ -310,16 +322,19 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
             s.stats.total_recovered = s.stats.total_recovered + 1
             Logger.info(self._component_name, "[%s] Монитор успешно восстановлен", name)
             self:_emit_event(EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts, reason = reason })
+            return true
         else
             s.stats.total_failed = s.stats.total_failed + 1
             s.recovery.attempts[name] = attempts
             Logger.error(self._component_name, "[%s] Не удалось запустить новый экземпляр", name)
             self:_emit_event(EVENTS.RECOVERY_FAILED, name, { attempt = attempts, reason = reason, error = "start_failed" })
+            return false
         end
     else
         s.stats.total_failed = s.stats.total_failed + 1
         s.recovery.attempts[name] = attempts
         Logger.error(self._component_name, "[%s] Отсутствует конфиг или класс для пересоздания", name)
+        return false
     end
 end
 
@@ -336,8 +351,8 @@ function BaseRepository:disable_auto_recovery()
 end
 
 --- Обновляет настройки репозитория (лимиты, интервалы, флаги)
---- @param params table Таблица параметров
---- @return boolean success
+--- @param params table
+--- @return boolean
 function BaseRepository:update_settings(params)
     if type(params) ~= "table" then return false end
     local s = self._state
@@ -451,12 +466,14 @@ end
 -- ===========================================================================
 
 --- Выполняет принудительный запуск цикла обслуживания (для тестов или API)
+--- @return number
+--- @return number
 function BaseRepository:auto_recover()
-    self:_maintenance_tick()
+    return self:_maintenance_tick()
 end
 
 --- Включает автономное восстановление через планировщик
---- @param interval? number Интервал проверки в секундах
+--- @param interval? number
 function BaseRepository:enable_auto_recovery(interval)
     local s = self._state
     s.settings.auto_recover.enabled = true
