@@ -9,7 +9,6 @@
 -- 1. Стандартные Lua функции
 local pairs = _G.pairs
 local type = _G.type
-local os_time = _G.os.time
 local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
@@ -71,9 +70,9 @@ function Scheduler:_initialize()
     self._active = true
     self._task_count = 0
     self._memory_limit_kb = DEFAULT_MEMORY_LIMIT_KB
-    self._current_interval = 1
+    self._current_interval = 0.1 -- Повышаем частоту тиков для точности
 
-    -- Запуск основного цикла (раз в секунду)
+    -- Запуск основного цикла
     local astra_timer = get_timer()
     if astra_timer then
         self._timer = astra_timer({
@@ -123,9 +122,12 @@ function Scheduler:_heap_up(idx)
     while idx > 1 do
         local parent = math_floor(idx / 2)
         if self._heap[idx].next_run < self._heap[parent].next_run then
-            self._heap[idx], self._heap[parent] = self._heap[parent], self._heap[idx]
-            self._heap[idx].heap_idx = idx
-            self._heap[parent].heap_idx = parent
+            local t1 = self._heap[idx]
+            local t2 = self._heap[parent]
+            self._heap[idx] = t2
+            self._heap[parent] = t1
+            t2.heap_idx = idx
+            t1.heap_idx = parent
             idx = parent
         else
             break
@@ -150,9 +152,12 @@ function Scheduler:_heap_down(idx)
         end
 
         if smallest ~= idx then
-            self._heap[idx], self._heap[smallest] = self._heap[smallest], self._heap[idx]
-            self._heap[idx].heap_idx = idx
-            self._heap[smallest].heap_idx = smallest
+            local t1 = self._heap[idx]
+            local t2 = self._heap[smallest]
+            self._heap[idx] = t2
+            self._heap[smallest] = t1
+            t2.heap_idx = idx
+            t1.heap_idx = smallest
             idx = smallest
         else
             break
@@ -162,10 +167,10 @@ end
 
 --- Выполняет одну конкретную задачу
 --- @param task SchedulerTask Объект задачи
---- @param now number Текущее время (os.time)
+--- @param now number Текущее время (os.clock)
 --- @private
 function Scheduler:_run_task(task, now)
-    local start_clock = os_clock()
+    local start_clock = _G.os.clock()
     local ok, err = pcall(task.callback)
     local duration = os_clock() - start_clock
 
@@ -191,13 +196,13 @@ end
 function Scheduler:_tick()
     -- Оптимизация: быстрый выход если задач нет
     if #self._heap == 0 then return end
-
-    local now = os_time()
+    local now = _G.os.clock()
     
     -- Выполняем все задачи, время которых пришло
     while #self._heap > 0 do
         local task = self._heap[1]
         if now >= task.next_run then
+            -- print(string.format("DEBUG: Running task %s (now: %.4f, next: %.4f)", task.id, now, task.next_run))
             if task.active then
                 self:_run_task(task, now)
             else
@@ -242,7 +247,7 @@ end
 --- Регистрирует новую периодическую задачу
 --- @param id string Уникальный идентификатор задачи
 --- @param callback function Функция для выполнения
---- @param interval number Интервал выполнения в секундах (минимум 1)
+--- @param interval number Интервал выполнения в секундах
 --- @param options? table Дополнительные опции: { immediate: boolean, priority: number }
 function Scheduler:add_task(id, callback, interval, options)
     if not id or type(callback) ~= "function" then 
@@ -256,9 +261,9 @@ function Scheduler:add_task(id, callback, interval, options)
         self:remove_task(id)
     end
 
-    local now = os_time()
-    local interval_val = (interval and interval >= 1) and interval or 1
-    local jitter = (options and options.immediate) and 0 or (self._task_count % interval_val)
+    local now = _G.os.clock()
+    local interval_val = (interval and interval > 0) and interval or 1
+    local jitter = (options and options.immediate) and 0 or ((self._task_count * 0.1) % interval_val)
 
     local task = {
         id = id,

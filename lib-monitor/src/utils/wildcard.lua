@@ -200,8 +200,8 @@ function Wildcard.match_multiple(name, patterns)
         local tree = { nodes = {}, patterns = {} }
         for p in pairs(patterns) do
             local current = tree
-            -- Разбиваем паттерн на сегменты по разделителю (например, ":")
-            for segment in p:gmatch("[^:]+") do
+            -- Разбиваем паттерн на сегменты по разделителю (например, ":" или ".")
+            for segment in p:gmatch("[^:.]+") do
                 current.nodes = current.nodes or {}
                 current.nodes[segment] = current.nodes[segment] or { nodes = {}, patterns = {} }
                 current = current.nodes[segment]
@@ -233,7 +233,7 @@ function Wildcard.match_multiple(name, patterns)
     end
 
     local name_segments = {}
-    for s in name:gmatch("[^:]+") do table_insert(name_segments, s) end
+    for s in name:gmatch("[^:.]+") do table_insert(name_segments, s) end
     search(state.decision_tree, name_segments, 1)
 
     return result

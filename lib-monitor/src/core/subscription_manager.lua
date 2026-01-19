@@ -13,7 +13,7 @@ local string_format = _G.string.format
 local pairs = _G.pairs
 local table_insert = _G.table.insert
 local table_remove = _G.table.remove
-local os_time = _G.os.time
+local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local io = _G.io
@@ -282,8 +282,8 @@ function SubscriptionManager:enqueue_retry(config, event, event_type, retry_coun
         return false
     end
 
-    local delay = math_floor(RETRY_DELAY * (2 ^ retry_count))
-    local jitter = math_random(0, 2)
+    local delay = RETRY_DELAY * (2 ^ retry_count)
+    local jitter = math_random() * 2
 
     local item = TablePool and TablePool.get("retry_item") or {}
     item.config = config
@@ -295,7 +295,7 @@ function SubscriptionManager:enqueue_retry(config, event, event_type, retry_coun
     item.data = retry_data
     item.type = event_type
     item.retries = retry_count + 1
-    item.time = os_time() + delay + jitter
+    item.time = os_clock() + delay + jitter
 
     table_insert(self._retry_queue, item)
     return true
@@ -330,7 +330,7 @@ function SubscriptionManager:start_retry_processor()
 
     -- Задача для повторов и сохранения (раз в секунду)
     scheduler:add_task("subscription_manager_maintenance", function()
-        local now = os_time()
+        local now = os_clock()
 
         -- 1. Пакетная отправка (Batch Flush)
         if MonitorConfig and MonitorConfig.BatchEnabled then
@@ -603,7 +603,7 @@ end
 --- @param now? number Текущее время (опционально, для оптимизации)
 --- @return boolean Статус выполнения
 function SubscriptionManager:publish_event(event, now)
-    now = now or os_time()
+    now = now or os_clock()
     local event_type = event.type
     local event_data = event.data
     local options = event.options
@@ -669,9 +669,11 @@ function SubscriptionManager:publish_event(event, now)
                         sub.stats.failed = sub.stats.failed + 1
                         sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
 
-                        -- Автоматическое удаление "мертвых" подписчиков
-                        if sub.stats.consecutive_failures > 50 then
-                            Logger.warning(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                        -- Circuit Breaker: Автоматическое удаление "мертвых" подписчиков
+                        if sub.stats.consecutive_failures >= 20 then
+                            Logger.error(COMPONENT_NAME, 
+                                "Circuit Breaker: Удаление мертвого подписчика %s (%s) после %d ошибок", 
+                                sub.id, sub.transport, sub.stats.consecutive_failures)
                             self:unsubscribe(sub.id)
                         end
                     end
@@ -754,7 +756,7 @@ function SubscriptionManager:add_to_batch(sub, event)
     if not self._batch_queues[sub_id] then
         local q = TablePool and TablePool.get("batch_queue") or {}
         q.events = q.events or {}
-        q.last_flush = os_time()
+        q.last_flush = os_clock()
         self._batch_queues[sub_id] = q
     end
 
@@ -806,7 +808,7 @@ function SubscriptionManager:flush_batch(sub_id)
 
     -- Очищаем массив событий (но не саму таблицу очереди)
     for i = 1, count do events_json[i] = nil end
-    queue.last_flush = os_time()
+    queue.last_flush = os_clock()
 
     -- Отправляем готовую строку. Транспорт HTTP/WS поддерживает передачу event_json.
     -- Для LUA_CALLBACK придется декодировать обратно, но батчинг обычно используется для внешних систем.
@@ -995,9 +997,11 @@ function SubscriptionManager:multicast_direct(plan, event_type, event_data, now,
                     sub.stats.failed = sub.stats.failed + 1
                     sub.stats.consecutive_failures = (sub.stats.consecutive_failures or 0) + 1
 
-                    -- Автоматическое удаление "мертвых" подписчиков
-                    if sub.stats.consecutive_failures > 50 then
-                        Logger.warning(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                    -- Circuit Breaker: Автоматическое удаление "мертвых" подписчиков
+                    if sub.stats.consecutive_failures >= 20 then
+                        Logger.error(COMPONENT_NAME, 
+                            "Circuit Breaker (Multicast): Удаление мертвого подписчика %s (%s) после %d ошибок", 
+                            sub.id, sub.transport, sub.stats.consecutive_failures)
                         self:unsubscribe(sub.id)
                     end
                 end

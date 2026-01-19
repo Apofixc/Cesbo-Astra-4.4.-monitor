@@ -12,7 +12,7 @@ local tostring = _G.tostring
 local pairs = _G.pairs
 local table_insert = _G.table.insert
 local table_remove = _G.table.remove
-local os_time = _G.os.time
+local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local collectgarbage = _G.collectgarbage
@@ -41,11 +41,13 @@ local COMPONENT_NAME = "EventDispatcher"
 --- Максимальный размер LVC (Last Value Cache)
 local MAX_LVC_SIZE = (MonitorConfig and MonitorConfig.MaxLvcSize) or 1000
 --- Максимальный размер очереди событий на один приоритет
-local MAX_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxQueueSize) or 1000
+local MAX_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxQueueSize) or 2000
 --- Лимит обработки событий за один тик планировщика
 local DEFAULT_BATCH_LIMIT = (MonitorConfig and MonitorConfig.EventBatchLimit) or 100
 --- Максимальный лимит при высокой нагрузке
 local MAX_BATCH_LIMIT = (MonitorConfig and MonitorConfig.MaxBatchLimit) or 1000
+--- Максимальное время обработки очереди за один тик (5 мс)
+local MAX_TICK_TIME = (MonitorConfig and MonitorConfig.MaxTickTime) or 0.005
 --- TTL для записей LVC по умолчанию (1 час)
 local DEFAULT_LVC_TTL = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
 
@@ -105,13 +107,16 @@ local function _deep_copy_to_pool(data)
         stack_ptr = stack_ptr - 1
 
         for k, v in pairs(src) do
-            if type(v) == "table" then
-                local v_copy = TablePool.get("lvc_sub")
-                dst[k] = v_copy
-                stack_ptr = stack_ptr + 1
-                stack[stack_ptr] = {src = v, dst = v_copy}
-            else
-                dst[k] = v
+            -- Защита от копирования служебных полей пула
+            if k ~= "__pool_type" and k ~= "__in_pool" then
+                if type(v) == "table" then
+                    local v_copy = TablePool.get("lvc_sub")
+                    dst[k] = v_copy
+                    stack_ptr = stack_ptr + 1
+                    stack[stack_ptr] = {src = v, dst = v_copy}
+                else
+                    dst[k] = v
+                end
             end
         end
     end
@@ -158,7 +163,7 @@ function EventDispatcher:_initialize()
         processed = 0,
         dropped = 0,
         max_queue_size = 0,
-        last_reset = os_time()
+        last_reset = os_clock()
     }
 
     self.active = true
@@ -221,6 +226,7 @@ end
 --- @param options? table Дополнительные параметры: source (источник), no_cache (не сохранять в LVC), is_table (данные из пула).
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
+    -- io.write(string.format("DEBUG: EventDispatcher:emit(%s)\n", tostring(event_type)))
     if not self.active then return nil end
 
     -- Защита от "призрачных" вызовов: если монитор-источник уже уничтожен, игнорируем событие
@@ -232,7 +238,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
     end
 
-    local now = os_time()
+    local now = os_clock()
     local p = priority or self.PRIORITIES.MEDIUM
     local sub_mgr = self.subscription_manager
 
@@ -251,6 +257,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             -- Если не нужно кэшировать в LVC, задача выполнена без создания объектов
             if options and options.no_cache then
                 self.stats.emitted = self.stats.emitted + 1
+                -- Если данные из пула, освобождаем их
+                if options.is_table and TablePool then
+                    TablePool.release(event_data, nil, true)
+                end
                 return "direct_push"
             end
         end
@@ -296,18 +306,22 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
 
     -- Обновляем LVC (если не запрещено в опциях)
     if not no_cache then
-        -- Ограничить размер LVC для предотвращения утечек памяти (O(1) вытеснение через круговой буфер)
+        -- Ограничить размер LVC для предотвращения утечек памяти (Burst Eviction)
         if not self._lvc[event_type] then
             if self._lvc_size >= MAX_LVC_SIZE then
-                local oldest_key = self._lvc_keys[self._lvc_head]
-                self._lvc_keys[self._lvc_head] = nil
-                self._lvc_head = (self._lvc_head % MAX_LVC_SIZE) + 1
-                self._lvc_size = self._lvc_size - 1
+                -- Вытесняем пачкой по 5 записей для стабильности при шторме новых типов
+                for _ = 1, 5 do
+                    local oldest_key = self._lvc_keys[self._lvc_head]
+                    if oldest_key then
+                        self._lvc_keys[self._lvc_head] = nil
+                        self._lvc_head = (self._lvc_head % MAX_LVC_SIZE) + 1
+                        self._lvc_size = self._lvc_size - 1
 
-                if oldest_key then
-                    local old_entry = self._lvc[oldest_key]
-                    self:_release_lvc_entry(old_entry)
-                    self._lvc[oldest_key] = nil
+                        local old_entry = self._lvc[oldest_key]
+                        self:_release_lvc_entry(old_entry)
+                        self._lvc[oldest_key] = nil
+                    end
+                    if self._lvc_size < MAX_LVC_SIZE then break end
                 end
             end
             self._lvc_keys[self._lvc_tail] = event_type
@@ -321,7 +335,10 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             -- Глубокое копирование данных в пул для LVC
             cache_data = TablePool.get("lvc_entry")
             for k, v in pairs(event_data) do
-                cache_data[k] = _deep_copy_to_pool(v)
+                -- Защита от копирования служебных полей пула
+                if k ~= "__pool_type" and k ~= "__in_pool" then
+                    cache_data[k] = _deep_copy_to_pool(v)
+                end
             end
         end
 
@@ -364,11 +381,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
             self._total_queued_count = self._total_queued_count - 1
 
             if dropped_event then
-                -- Если данные были из пула, возвращаем их
-                if dropped_event.is_table and dropped_event.data and TablePool then
-                    TablePool.release(dropped_event.data, nil, true)
-                end
-                if TablePool then TablePool.release(dropped_event, "event") end
+                -- Возврат в пул (рекурсивно если is_table)
+                self:_safe_return_to_pool(dropped_event)
             end
             self.stats.dropped = self.stats.dropped + 1
         end
@@ -478,17 +492,17 @@ end
 --- Реализует инкрементальную очистку LVC и обработку батчей событий.
 --- @private
 function EventDispatcher:_process_queue()
-    local now = os_time()
+    local now = os_clock()
     local sub_mgr = self.subscription_manager
 
     -- Инкрементальная очистка старых записей LVC (TTL)
-    -- Оптимизация: проверяем по 10 записей за тик вместо полного перебора раз в минуту.
-    -- Используем безопасный метод удаления при итерации через next().
+    -- Оптимизация: проверяем по 10-20 записей за тик.
     local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
+    local check_limit = (self._lvc_size > MAX_LVC_SIZE * 0.8) and 20 or 10
     local checked = 0
     local current_key = self._last_lvc_check_key
     
-    while checked < 10 do
+    while checked < check_limit do
         local k, entry = next(self._lvc, current_key)
         if not k then 
             current_key = nil
@@ -499,7 +513,6 @@ function EventDispatcher:_process_queue()
             self:_release_lvc_entry(entry)
             self._lvc[k] = nil
             self._lvc_size = self._lvc_size - 1
-            -- После удаления ключа current_key остается прежним для следующего вызова next()
         else
             current_key = k
         end
@@ -516,6 +529,7 @@ function EventDispatcher:_process_queue()
     end
 
     local processed_in_batch = 0
+    local start_time = os_clock()
     local priorities = self.PRIORITIES
     local mask = self._active_queues_mask
 
@@ -543,16 +557,18 @@ function EventDispatcher:_process_queue()
                         self.stats.processed = self.stats.processed + 1
                     end
 
-                    -- Возврат в пул
-                    self:_safe_return_to_pool(event)
-                end
-
-                self._total_queued_count = self._total_queued_count - 1
-                processed_in_batch = processed_in_batch + 1
-                if processed_in_batch >= limit then
-                    return -- Прерываем обработку до следующего тика
-                end
+                -- Возврат в пул
+                self:_safe_return_to_pool(event)
             end
+
+            self._total_queued_count = self._total_queued_count - 1
+            processed_in_batch = processed_in_batch + 1
+            
+            -- Time-Slicing: прерываем если превышен лимит времени или батча
+            if processed_in_batch >= limit or (os_clock() - start_time) >= MAX_TICK_TIME then
+                return -- Прерываем обработку до следующего тика
+            end
+        end
             
             -- Если очередь пуста, сбрасываем бит в маске
             self._active_queues_mask = bit32.band(self._active_queues_mask, bit32.bnot(queue.priority_bit))
@@ -618,12 +634,13 @@ end
 local tp = ModuleManager.get_module("table_pool")
 if tp then
     tp.register_type("event", {
-        "id", "type", "data", "priority", "timestamp", "options", "is_table"
-    }, 100, 10)
-    tp.register_type("event_options", nil, 100, 10)
-    tp.register_type("lvc_wrapper", { "data", "json", "timestamp" }, 50, 5)
-    tp.register_type("lvc_entry", nil, 50, 5)
-    tp.register_type("lvc_sub", nil, 20, 2)
+        "id", "type", "data", "priority", "timestamp", "options", "is_table", "json_cache"
+    }, 500, 50)
+    tp.register_type("event_options", nil, 500, 50, true)
+    tp.register_type("lvc_wrapper", { "data", "json", "timestamp" }, 200, 20)
+    -- lvc_entry и lvc_sub не должны быть flat, так как могут содержать вложенные таблицы из пула
+    tp.register_type("lvc_entry", nil, 500, 50)
+    tp.register_type("lvc_sub", nil, 200, 20)
 end
 
 return EventDispatcher
