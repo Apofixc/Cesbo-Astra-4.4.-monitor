@@ -316,7 +316,7 @@ end
 --- @return any|nil Экземпляр dvb_tune Astra или nil
 function TunerMonitor:start()
     if self._state == BaseMonitor.STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Тюнер уже запущен", tostring(self._name))
+        Logger.warning(COMPONENT_NAME, "[%s] Тюнер уже запущен", tostring(self._name))
         return self._instance
     end
 
@@ -462,7 +462,7 @@ function TunerMonitor:_can_destroy(force)
     -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
     -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
     if channels > 1 and not force then
-        Logger.warn(COMPONENT_NAME,
+        Logger.warning(COMPONENT_NAME,
             "[%s] destroy: адаптер занят (%d канала), удаление отменено",
             tostring(self._name), channels)
         return false

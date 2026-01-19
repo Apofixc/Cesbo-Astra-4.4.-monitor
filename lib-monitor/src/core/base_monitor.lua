@@ -205,7 +205,7 @@ function BaseMonitor:_enable_load_shedding()
     local new_check = math_max(5, self._original_time_check * 3)
     -- ВАЖНО: Мы НЕ меняем self._config, изменения только в runtime через хук.
 
-    Logger.warn(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
+    Logger.warning(self._component_name, "[%s] Load Shedding: интервал проверки увеличен %d -> %d",
         tostring(self._name), self._original_time_check, new_check)
 
     self:_on_config_updated("time_check", new_check)

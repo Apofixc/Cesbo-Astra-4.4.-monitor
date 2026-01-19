@@ -93,7 +93,7 @@ function Scheduler:_initialize()
             local mem_kb = collectgarbage("count")
 
             if mem_kb > self._memory_limit_kb then
-                Logger.warn(COMPONENT_NAME,
+                Logger.warning(COMPONENT_NAME,
                     "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.",
                     mem_kb, self._memory_limit_kb)
 
@@ -174,7 +174,7 @@ function Scheduler:_run_task(task, now)
     end
 
     if duration > 0.1 then
-        Logger.warn(COMPONENT_NAME,
+        Logger.warning(COMPONENT_NAME,
             "Задача '%s' выполнялась слишком долго: %.3f сек", 
             task.id, duration)
     end

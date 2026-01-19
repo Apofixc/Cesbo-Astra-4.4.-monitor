@@ -83,7 +83,7 @@ function HttpHelpers.check_rate_limit(request)
 
     data.count = data.count + 1
     if data.count > max_req then
-        Logger.warn(COMPONENT_NAME, "Превышен лимит запросов для %s (%d/%d)", ip, data.count, max_req)
+        Logger.warning(COMPONENT_NAME, "Превышен лимит запросов для %s (%d/%d)", ip, data.count, max_req)
         return false
     end
 

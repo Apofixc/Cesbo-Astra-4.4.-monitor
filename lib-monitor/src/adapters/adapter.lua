@@ -193,7 +193,7 @@ function Adapter.restart_dvb_monitor(name_adapter, new_params, force)
     local now = os_time()
     local last_restart = state.last_restarts[name_adapter] or 0
     if not force and now - last_restart < RESTART_DEBOUNCE_TIME then
-        Logger.warn(COMPONENT_NAME,
+        Logger.warning(COMPONENT_NAME,
             "restart_dvb_monitor: пропуск рестарта '%s' (слишком часто, осталось %d сек)",
             name_adapter, RESTART_DEBOUNCE_TIME - (now - last_restart))
         return true
@@ -321,7 +321,7 @@ function Adapter.switch_transponder(name_adapter, new_tuner_params, reserve_inpu
             for _, item in ipairs(reserve_input) do
                 -- Гарантируем удаление старого монитора, если он еще жив
                 if ChannelRepository and ChannelRepository:find(item.name) then
-                    Logger.warn(COMPONENT_NAME, "switch_transponder: принудительное удаление старого монитора '%s'", item.name)
+                    Logger.warning(COMPONENT_NAME, "switch_transponder: принудительное удаление старого монитора '%s'", item.name)
                     Channel.kill_stream(item.name)
                 end
 

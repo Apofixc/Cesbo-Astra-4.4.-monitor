@@ -404,7 +404,7 @@ function Channel.kill_stream(channel_data)
     
     local name = ch_data.config.name
     if not Channel.kill_monitor(name) then
-        Logger.warn(COMPONENT_NAME, "kill_stream: монитор '%s' не был активен", name)
+        Logger.warning(COMPONENT_NAME, "kill_stream: монитор '%s' не был активен", name)
     end
 
     kill_channel(ch_data)

@@ -203,7 +203,7 @@ function ChannelMonitor:_process_psi_data(data)
                     -- Лимит на количество отслеживаемых PID
                     if self._stats_count >= PID_LIMIT then
                         self:_clear_stats()
-                        Logger.warn(COMPONENT_NAME,
+                        Logger.warning(COMPONENT_NAME,
                             "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
                             tostring(self._name))
                     end
@@ -246,7 +246,7 @@ function ChannelMonitor:_process_analyze_data(data)
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
                     if self._stats_count >= PID_LIMIT then
                         self:_clear_stats()
-                        Logger.warn(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
+                        Logger.warning(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
                             tostring(self._name))
                     end
 
@@ -425,7 +425,7 @@ end
 --- @return any|nil Экземпляр анализатора Astra или nil
 function ChannelMonitor:start()
     if self._state == BaseMonitor.STATE.RUNNING then
-        Logger.warn(COMPONENT_NAME, "[%s] Монитор уже запущен", tostring(self._name))
+        Logger.warning(COMPONENT_NAME, "[%s] Монитор уже запущен", tostring(self._name))
         return self._instance
     end
 

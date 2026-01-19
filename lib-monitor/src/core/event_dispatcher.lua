@@ -569,7 +569,7 @@ function EventDispatcher:_safe_return_to_pool(event)
     local ok, err = pcall(TablePool.release, event, "event", event.is_table == true)
 
     if not ok then
-        Logger.warn(COMPONENT_NAME, "Не удалось вернуть событие в пул: %s", tostring(err))
+        Logger.warning(COMPONENT_NAME, "Не удалось вернуть событие в пул: %s", tostring(err))
     end
 end
 

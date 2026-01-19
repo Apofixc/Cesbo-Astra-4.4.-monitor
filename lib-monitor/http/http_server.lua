@@ -59,7 +59,7 @@ local function payload_limit_middleware(handler)
         local max_size = (MonitorConfig and MonitorConfig.MaxPayloadSize) or MAX_PAYLOAD_SIZE
         local content_length = tonumber(request.headers and request.headers["content-length"]) or 0
         if content_length > max_size then
-            Logger.warn(COMPONENT_NAME, "Слишком большой объем данных от %s (%d байт)", tostring(request.addr), content_length)
+            Logger.warning(COMPONENT_NAME, "Слишком большой объем данных от %s (%d байт)", tostring(request.addr), content_length)
             return HttpHelpers.error(server, client, 413, "Payload Too Large")
         end
         return handler(server, client, request)
@@ -237,7 +237,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
 
     -- Проверка занятости порта
     if Utils and Utils.is_port_busy(port) then
-        Logger.warn(COMPONENT_NAME, "Порт %d уже занят", port)
+        Logger.warning(COMPONENT_NAME, "Порт %d уже занят", port)
         if force_free then
             if not Utils.free_port(port) then
                 Logger.error(COMPONENT_NAME,
@@ -368,7 +368,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
         return true
     else
         if retry_count < RESTART_RETRY_COUNT then
-            Logger.warn(COMPONENT_NAME, "Не удалось занять порт %s (попытка %d/%d). Повтор...",
+            Logger.warning(COMPONENT_NAME, "Не удалось занять порт %s (попытка %d/%d). Повтор...",
                 tostring(port), retry_count + 1, RESTART_RETRY_COUNT)
             if timer then
                 timer({

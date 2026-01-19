@@ -278,7 +278,7 @@ local Transport = {
 --- @return boolean Статус добавления
 function SubscriptionManager:enqueue_retry(config, event, event_type, retry_count, content)
     if #self._retry_queue >= MAX_RETRY_QUEUE_SIZE then
-        Logger.warn(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
+        Logger.warning(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
         return false
     end
 
@@ -671,7 +671,7 @@ function SubscriptionManager:publish_event(event, now)
 
                         -- Автоматическое удаление "мертвых" подписчиков
                         if sub.stats.consecutive_failures > 50 then
-                            Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                            Logger.warning(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
                             self:unsubscribe(sub.id)
                         end
                     end
@@ -997,7 +997,7 @@ function SubscriptionManager:multicast_direct(plan, event_type, event_data, now,
 
                     -- Автоматическое удаление "мертвых" подписчиков
                     if sub.stats.consecutive_failures > 50 then
-                        Logger.warn(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
+                        Logger.warning(COMPONENT_NAME, "Удаление мертвого подписчика %s (50+ ошибок)", sub.id)
                         self:unsubscribe(sub.id)
                     end
                 end

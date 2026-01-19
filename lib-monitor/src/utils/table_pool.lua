@@ -261,7 +261,7 @@ function TablePool.release(t, pool_type, deep, depth)
 
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
-        Logger.warn(COMPONENT_NAME,
+        Logger.warning(COMPONENT_NAME,
             "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
         if depth == 0 then
             state.visited_count = state.visited_count - 1

@@ -361,14 +361,14 @@ local function _check_thresholds(report)
 
     -- Data Sanity Checks: игнорируем неправдоподобные скачки
     if state.last_cpu_usage > 0 and math_min(cpu_val, 100) - state.last_cpu_usage > MAX_CPU_JUMP then
-        if Logger and Logger.warn then Logger.warn(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f", state.last_cpu_usage, cpu_val) end
+        if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f", state.last_cpu_usage, cpu_val) end
         cpu_val = state.last_cpu_usage + (MAX_CPU_JUMP * 0.5) -- Сглаживаем вместо полного игнорирования
         report.cpu.usage = cpu_val
     end
 
     local last_ram_pct = (state.last_lua_mem / ram_limit_kb) * 100
     if state.last_lua_mem > 0 and ram_usage_pct - last_ram_pct > MAX_RAM_JUMP_PCT then
-        if Logger and Logger.warn then Logger.warn(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%", last_ram_pct, ram_usage_pct) end
+        if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%", last_ram_pct, ram_usage_pct) end
         ram_usage_pct = last_ram_pct + (MAX_RAM_JUMP_PCT * 0.5)
         report.memory.lua = (ram_usage_pct / 100) * ram_limit_kb
     end

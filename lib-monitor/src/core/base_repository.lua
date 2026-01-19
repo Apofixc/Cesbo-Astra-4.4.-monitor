@@ -295,7 +295,7 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
         return false
     end
 
-    Logger.warn(self._component_name,
+    Logger.warning(self._component_name,
         "[%s] Попытка восстановления (%d/%d, причина: %s)",
         name, attempts, max_attempts, reason)
     
@@ -397,7 +397,7 @@ end
 function BaseRepository:register(name, instance, class)
     local s = self._state
     if s.monitors[name] then
-        Logger.warn(self._component_name, "Объект '%s' уже зарегистрирован. Перезапись.", name)
+        Logger.warning(self._component_name, "Объект '%s' уже зарегистрирован. Перезапись.", name)
     else
         s.stats.active = s.stats.active + 1
     end

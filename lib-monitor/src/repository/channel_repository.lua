@@ -21,7 +21,7 @@ local BaseRepository = ModuleManager.get_module("core.base_repository")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
-local channel_list = ModuleManager.get_global_dependency("channel_list")
+-- (Загружаются динамически в методах для поддержки горячей перезагрузки)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
@@ -124,7 +124,7 @@ function ChannelRepository:start_dependent_channels(configs)
     if success_count == total then
         Logger.info(COMPONENT_NAME, "Все зависимые каналы (%d/%d) успешно запущены", success_count, total)
     else
-        Logger.warn(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", 
+        Logger.warning(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", 
             success_count, total)
     end
 end
@@ -138,6 +138,7 @@ end
 --- @return table<string, table> Список найденных каналов (имя -> ch_data)
 function ChannelRepository:find_by_adapter(adapter_name)
     local result = {}
+    local channel_list = ModuleManager.get_global_dependency("channel_list")
 
     if not channel_list then
         Logger.error(COMPONENT_NAME, "find_by_adapter: зависимость channel_list не найдена")
