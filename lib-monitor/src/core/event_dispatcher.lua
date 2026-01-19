@@ -96,8 +96,11 @@ end
 local function _deep_copy_to_pool(data)
     if type(data) ~= "table" then return data end
 
+    local visited = {}
     local root_copy = TablePool.get("lvc_sub")
-    local stack = { {src = data, dst = root_copy} }
+    visited[data] = root_copy
+
+    local stack = { { src = data, dst = root_copy } }
     local stack_ptr = 1
 
     while stack_ptr > 0 do
@@ -110,10 +113,15 @@ local function _deep_copy_to_pool(data)
             -- Защита от копирования служебных полей пула
             if k ~= "__pool_type" and k ~= "__in_pool" then
                 if type(v) == "table" then
-                    local v_copy = TablePool.get("lvc_sub")
-                    dst[k] = v_copy
-                    stack_ptr = stack_ptr + 1
-                    stack[stack_ptr] = {src = v, dst = v_copy}
+                    if visited[v] then
+                        dst[k] = visited[v]
+                    else
+                        local v_copy = TablePool.get("lvc_sub")
+                        visited[v] = v_copy
+                        dst[k] = v_copy
+                        stack_ptr = stack_ptr + 1
+                        stack[stack_ptr] = { src = v, dst = v_copy }
+                    end
                 else
                     dst[k] = v
                 end

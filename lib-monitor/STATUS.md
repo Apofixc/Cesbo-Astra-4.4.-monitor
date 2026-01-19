@@ -15,7 +15,7 @@
 | **Scheduler** | 100% | **Production Ready (Min-Heap) + Stress Tested (V13, 200 monitors) + Unit Tested** | 19.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme) + Unit Tested** | 19.01.2026 |
 | **TablePool** | 100% | **Production Ready + Drain System + Unit Tested** | 19.01.2026 |
-| **EventDispatcher** | 100% | **Production Ready + Time-Slicing + Burst Eviction + Stress Tested (V13, 200 monitors)** | 19.01.2026 |
+| **EventDispatcher** | 100% | **Production Ready + Chaos Tested (Cyclic, Bomb, Blocking, Storm) + Time-Slicing + Burst Eviction** | 20.01.2026 |
 
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
