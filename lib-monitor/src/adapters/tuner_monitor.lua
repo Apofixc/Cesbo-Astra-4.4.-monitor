@@ -408,12 +408,16 @@ function TunerMonitor:get_status_flags()
     return result
 end
 
---- Запускает сбор PSI таблиц на 10 секунд
+--- Запускает сбор PSI таблиц на указанное время
+--- @param timeout? number Время сбора в секундах (по умолчанию 10)
+--- @param callback? function Функция, вызываемая по завершении
 --- @return boolean Статус запуска процесса
-function TunerMonitor:psi_update()
+function TunerMonitor:psi_update(timeout, callback)
     if not self._instance or self._temp_analyzer then
         return false
     end
+
+    timeout = timeout or 10
 
     self._temp_analyzer = analyze({
         upstream = self._instance:stream(),
@@ -440,9 +444,42 @@ function TunerMonitor:psi_update()
         self:_clear_psi_resources()
         scheduler:remove_task("psi_update_" .. self._name)
         Logger.info(COMPONENT_NAME, "[%s] Обновление PSI завершено", tostring(self._name))
-    end, 10)
+        if callback then callback(self:get_psi()) end
+    end, timeout)
 
     return true
+end
+
+--- Выполняет сканирование транспондера (сбор PAT/PMT/SDT) и возвращает список сервисов
+--- @param timeout? number Время сканирования (сек)
+--- @param callback function Функция обратного вызова для результата
+--- @return boolean Статус запуска
+function TunerMonitor:scan(timeout, callback)
+    return self:psi_update(timeout, function(psi)
+        local services = {}
+        local sdt = psi and psi.SDT
+        local pat = psi and psi.PAT
+
+        if sdt and sdt.services then
+            for _, s in pairs(sdt.services) do
+                services[#services + 1] = {
+                    sid = s.sid,
+                    name = s.name,
+                    provider = s.provider,
+                    type = s.type
+                }
+            end
+        elseif pat and pat.programs then
+            for _, p in pairs(pat.programs) do
+                services[#services + 1] = {
+                    sid = p.program,
+                    name = "Service " .. tostring(p.program)
+                }
+            end
+        end
+
+        if callback then callback(services) end
+    end)
 end
 
 --- Проверяет возможность удаления тюнера (счетчик каналов).

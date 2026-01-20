@@ -350,18 +350,33 @@ function BaseRepository:update_settings(params)
     local settings = s.settings
     local changed_interval = false
 
+    -- Поддержка как snake_case, так и PascalCase (из MonitorConfig)
+    local p = params
+
     -- 1. Auto-recover settings
-    if params.auto_recover_enabled ~= nil then settings.auto_recover.enabled = params.auto_recover_enabled end
-    if params.auto_recover_interval ~= nil then settings.auto_recover.interval = params.auto_recover_interval end
-    if params.auto_recover_max_attempts ~= nil then settings.auto_recover.max_attempts = params.auto_recover_max_attempts end
-    if params.auto_recover_cooldown ~= nil then settings.auto_recover.cooldown = params.auto_recover_cooldown end
+    local ar_en = p.auto_recover_enabled ~= nil and p.auto_recover_enabled or p.AutoRecoverEnabled
+    if ar_en ~= nil then settings.auto_recover.enabled = ar_en end
+
+    local ar_int = p.auto_recover_interval or p.AutoRecoverInterval
+    if ar_int ~= nil then settings.auto_recover.interval = ar_int end
+
+    local ar_max = p.auto_recover_max_attempts or p.MaxRecoveryAttempts
+    if ar_max ~= nil then settings.auto_recover.max_attempts = ar_max end
+
+    local ar_cool = p.auto_recover_cooldown or p.RecoveryCooldown
+    if ar_cool ~= nil then settings.auto_recover.cooldown = ar_cool end
 
     -- 2. Watchdog settings
-    if params.watchdog_enabled ~= nil then settings.watchdog.enabled = params.watchdog_enabled end
-    if params.watchdog_max_attempts ~= nil then settings.watchdog.max_attempts = params.watchdog_max_attempts end
-    if params.watchdog_interval ~= nil then
-        if params.watchdog_interval ~= settings.watchdog.interval then
-            settings.watchdog.interval = params.watchdog_interval
+    local wd_en = p.watchdog_enabled ~= nil and p.watchdog_enabled or p.WatchdogEnabled
+    if wd_en ~= nil then settings.watchdog.enabled = wd_en end
+
+    local wd_max = p.watchdog_max_attempts or p.WatchdogMaxRetries
+    if wd_max ~= nil then settings.watchdog.max_attempts = wd_max end
+
+    local wd_int = p.watchdog_interval or p.WatchdogInterval
+    if wd_int ~= nil then
+        if wd_int ~= settings.watchdog.interval then
+            settings.watchdog.interval = wd_int
             changed_interval = true
         end
     end
@@ -455,6 +470,23 @@ end
 --- @return number Количество неудачных
 function BaseRepository:auto_recover()
     return self:_maintenance_tick()
+end
+
+--- Принудительно запускает процедуру восстановления для конкретного монитора
+--- @param name string Имя монитора
+--- @param reason? string Причина (по умолчанию "manual")
+--- @return boolean success
+function BaseRepository:recover_monitor(name, reason)
+    local s = self._state
+    local monitor = s.monitors[name]
+    local class = s.classes[name]
+
+    if not monitor or not class then
+        Logger.error(self._component_name, "recover_monitor: объект '%s' не найден", tostring(name))
+        return false
+    end
+
+    return self:_perform_recovery(name, monitor, class, reason or "manual", os_time())
 end
 
 --- Включает автономное восстановление через планировщик

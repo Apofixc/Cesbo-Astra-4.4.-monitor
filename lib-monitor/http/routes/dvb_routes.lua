@@ -34,9 +34,30 @@ function DvbRoutes.get_monitored_adapters(server, client, request)
     return HttpHelpers.success(server, client, list)
 end
 
---- Запуск сканирования адаптеров (заглушка)
+--- Запуск сканирования адаптеров
 function DvbRoutes.scan_adapters(server, client, request)
-    return HttpHelpers.error(server, client, 501, "Сканирование не реализовано")
+    local params = HttpHelpers.get_params(request)
+    local ok, err = RoutesUtils.validate_input(params, {
+        name = { type = "string", required = true },
+        timeout = { type = "number", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    local success = Adapter.scan_dvb(params.name, params.timeout, function(services)
+        -- Мы не можем отправить ответ из callback-а асинхронно в Astra http_server напрямую,
+        -- если соединение уже закрыто. Но в Astra http_server обработчик должен вернуть true/false.
+        -- Однако, для сканирования, которое занимает время, обычно используют либо WebSocket,
+        -- либо сохраняют результат в кэш объекта.
+        -- В данном случае, так как scan_dvb использует планировщик, мы просто запускаем процесс.
+        -- Для получения результата пользователю нужно будет вызвать GET /api/dvb/adapters/psi
+        -- или мы можем добавить специальный статус.
+    end)
+
+    if not success then
+        return HttpHelpers.error(server, client, 500, "Не удалось запустить сканирование")
+    end
+
+    return HttpHelpers.success(server, client, { message = "Сканирование запущено. Результаты будут доступны в PSI таблицах." })
 end
 
 --- Возвращает текущие метрики конкретного DVB адаптера

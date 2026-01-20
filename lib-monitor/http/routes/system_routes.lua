@@ -11,8 +11,8 @@ local collectgarbage = collectgarbage
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ResourceMonitor = ModuleManager.get_module("resource_monitor")
-local ChannelRepository = ModuleManager.get_module("repository.channel_repository")
-local DvbRepository = ModuleManager.get_module("repository.dvb_repository")
+local ChannelRepository = ModuleManager.get_module("channel_repository")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 -- local TablePool = ModuleManager.get_module("table_pool") -- Загружается динамически
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
@@ -144,6 +144,92 @@ function SystemRoutes.get_logs(server, client, request)
         count = #logs,
         entries = logs
     })
+end
+
+--- Управление Watchdog (включение/выключение)
+function SystemRoutes.toggle_watchdog(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        enabled = { type = "boolean", required = true },
+        repo = { type = "string", required = false } -- "channels" или "dvb"
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    if not data.repo or data.repo == "channels" then
+        if ChannelRepository then
+            if data.enabled then ChannelRepository:enable_watchdog() else ChannelRepository:disable_watchdog() end
+        end
+    end
+
+    if not data.repo or data.repo == "dvb" then
+        if DvbRepository then
+            if data.enabled then DvbRepository:enable_watchdog() else DvbRepository:disable_watchdog() end
+        end
+    end
+
+    return HttpHelpers.success(server, client, { message = "Watchdog статус обновлен", enabled = data.enabled })
+end
+
+--- Управление Auto-recovery (включение/выключение)
+function SystemRoutes.toggle_auto_recover(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        enabled = { type = "boolean", required = true },
+        repo = { type = "string", required = false }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    if not data.repo or data.repo == "channels" then
+        if ChannelRepository then
+            if data.enabled then ChannelRepository:enable_auto_recovery() else ChannelRepository:disable_auto_recovery() end
+        end
+    end
+
+    if not data.repo or data.repo == "dvb" then
+        if DvbRepository then
+            if data.enabled then DvbRepository:enable_auto_recovery() else DvbRepository:disable_auto_recovery() end
+        end
+    end
+
+    return HttpHelpers.success(server, client, { message = "Auto-recover статус обновлен", enabled = data.enabled })
+end
+
+--- Ручной запуск цикла обслуживания (Maintenance Run)
+function SystemRoutes.run_maintenance(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    local repo_name = data.repo or "all"
+    local results = {}
+
+    if repo_name == "all" or repo_name == "channels" then
+        if ChannelRepository then
+            local rec, fail = ChannelRepository:auto_recover()
+            results.channels = { recovered = rec, failed = fail }
+        end
+    end
+
+    if repo_name == "all" or repo_name == "dvb" then
+        if DvbRepository then
+            local rec, fail = DvbRepository:auto_recover()
+            results.dvb = { recovered = rec, failed = fail }
+        end
+    end
+
+    return HttpHelpers.success(server, client, { message = "Цикл обслуживания выполнен", results = results })
+end
+
+--- Обновление конфигурации в рантайме
+function SystemRoutes.update_config(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    if not MonitorConfig or not MonitorConfig.update then
+        return HttpHelpers.error(server, client, 501, "Обновление конфигурации не поддерживается")
+    end
+
+    local success, err = MonitorConfig.update(data)
+    if not success then
+        return HttpHelpers.error(server, client, 400, err or "Ошибка обновления конфигурации")
+    end
+
+    return HttpHelpers.success(server, client, { message = "Конфигурация обновлена" })
 end
 
 return SystemRoutes

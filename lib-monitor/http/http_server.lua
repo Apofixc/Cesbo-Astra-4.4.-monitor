@@ -281,6 +281,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/monitors/pause"] = { POST = MonitorRoutes.pause_monitor },
         ["/api/monitors/resume"] = { POST = MonitorRoutes.resume_monitor },
         ["/api/monitors/pids"] = { GET = MonitorRoutes.get_monitor_pids, DELETE = MonitorRoutes.clear_monitor_pids },
+        ["/api/monitors/recover"] = { POST = MonitorRoutes.recover_monitor },
 
         -- DVB Adapters
         ["/api/dvb/adapters"] = { GET = DvbRoutes.get_adapters },
@@ -305,6 +306,10 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/system/network/hostname"] = { GET = SystemRoutes.get_hostname },
         ["/api/system/pool-stats"] = { GET = SystemRoutes.get_pool_stats },
         ["/api/system/logs"] = { GET = SystemRoutes.get_logs },
+        ["/api/system/watchdog"] = { POST = SystemRoutes.toggle_watchdog },
+        ["/api/system/auto-recover"] = { POST = SystemRoutes.toggle_auto_recover },
+        ["/api/system/maintenance/run"] = { POST = SystemRoutes.run_maintenance },
+        ["/api/system/config"] = { PATCH = SystemRoutes.update_config },
 
         -- Subscribers
         ["/api/subscribers"] = {
@@ -312,6 +317,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
             POST = SubscriberRoutes.subscribe,
             DELETE = SubscriberRoutes.unsubscribe
         },
+        ["/api/subscribers/test"] = { POST = SubscriberRoutes.test_subscription },
 
         -- WebSocket
         ["/api/ws"] = http_websocket and http_websocket({ callback = WsSubscriber.on_message }) or nil,
@@ -325,6 +331,8 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/utils/objects"] = { GET = RoutesUtils.get_all_objects },
         ["/api/utils/cleanup"] = { POST = RoutesUtils.cleanup },
         ["/api/utils/info"] = { GET = RoutesUtils.get_api_info },
+        ["/api/docs"] = { GET = RoutesUtils.get_api_docs },
+        ["/"] = { GET = RoutesUtils.get_api_docs },
     }
 
     local routes = {}

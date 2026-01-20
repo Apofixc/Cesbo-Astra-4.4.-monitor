@@ -93,17 +93,35 @@ end
 --- Возвращает историю ошибок для монитора
 function RoutesUtils.get_monitor_errors(server, client, request)
     local params = HttpHelpers.get_params(request)
-    local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
+    local ok, err = HttpHelpers.validate(params, {
+        name = { type = "string", required = true },
+        limit = { type = "number", required = false }
+    })
     if not ok then return HttpHelpers.error(server, client, 400, err) end
 
     local ch_obj = ChannelRepository and ChannelRepository:find(params.name)
-    if not ch_obj then return HttpHelpers.error(server, client, 404, "Монитор не найден") end
+    local dvb_obj = DvbRepository and DvbRepository:find(params.name)
+    local obj = ch_obj or dvb_obj
+
+    if not obj then return HttpHelpers.error(server, client, 404, "Объект не найден") end
+
+    local limit = params.limit or 50
+    local logs = {}
+    if Logger and Logger.get_buffer then
+        -- Запрашиваем логи для компонента (имя монитора)
+        local all_logs = Logger.get_buffer(params.name, limit)
+        for _, entry in ipairs(all_logs) do
+            if entry.level == "ERROR" or entry.level == "WARN" then
+                table_insert(logs, entry)
+            end
+        end
+    end
 
     return HttpHelpers.success(server, client, {
         name = params.name,
-        display_name = ch_obj._display_name,
-        current_status = ch_obj._status,
-        error_history = {}
+        display_name = obj._display_name or params.name,
+        current_status = obj:get_status_table(),
+        error_history = logs
     })
 end
 
@@ -163,22 +181,107 @@ function RoutesUtils.get_all_objects(server, client, request)
     return HttpHelpers.success(server, client, { total = #objects, objects = objects })
 end
 
---- Очистка неактивных ресурсов (заглушка)
+--- Очистка неактивных ресурсов
 function RoutesUtils.cleanup(server, client, request)
-    return HttpHelpers.success(server, client, { message = "Отключено в целях безопасности", cleaned_count = 0 })
+    local cleaned_count = 0
+    local TablePool = ModuleManager.get_module("table_pool")
+
+    -- 1. Очистка пулов таблиц
+    if TablePool and TablePool.drain_all then
+        TablePool.drain_all()
+        cleaned_count = cleaned_count + 1
+    end
+
+    -- 2. Очистка кэша логов для неактивных компонентов
+    if Logger and Logger.clear_component_buffer then
+        -- Здесь можно реализовать логику обхода всех компонентов и удаления тех,
+        -- которых нет в репозиториях.
+    end
+
+    -- 3. Принудительный вызов GC
+    collectgarbage("collect")
+    collectgarbage("collect")
+
+    return HttpHelpers.success(server, client, {
+        message = "Системная очистка выполнена",
+        cleaned_count = cleaned_count,
+        lua_mem_kb = collectgarbage("count")
+    })
 end
 
 --- Возвращает информацию об API
 function RoutesUtils.get_api_info(server, client, request)
     return HttpHelpers.success(server, client, {
-        api_version = "1.1.0",
-        library_version = "2.3.2",
+        api_version = "1.2.0",
+        library_version = "2.4.0",
         supported_methods = {"GET", "POST", "PATCH", "DELETE"},
         endpoints = {
-            channels = "/api/channels", streams = "/api/streams", monitors = "/api/monitors",
-            dvb = "/api/dvb", system = "/api/system", subscribers = "/api/subscribers", utils = "/api/utils"
+            channels = "/api/channels",
+            streams = "/api/streams",
+            monitors = "/api/monitors",
+            dvb = "/api/dvb",
+            system = "/api/system",
+            subscribers = "/api/subscribers",
+            utils = "/api/utils"
         }
     })
+end
+
+--- Возвращает HTML-страницу с документацией API
+function RoutesUtils.get_api_docs(server, client, request)
+    local html = [[
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Astra Monitor API Documentation</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; background: #f4f4f9; }
+        h1 { color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; }
+        h2 { color: #2980b9; margin-top: 30px; border-left: 5px solid #2980b9; padding-left: 10px; }
+        .endpoint { background: #fff; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .method { font-weight: bold; color: #fff; padding: 3px 8px; border-radius: 3px; margin-right: 10px; display: inline-block; min-width: 60px; text-align: center; }
+        .GET { background: #2ecc71; }
+        .POST { background: #f1c40f; }
+        .PATCH { background: #3498db; }
+        .DELETE { background: #e74c3c; }
+        .path { font-family: monospace; font-size: 1.1em; font-weight: bold; }
+        .desc { margin-top: 5px; color: #666; }
+        code { background: #eee; padding: 2px 5px; border-radius: 3px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Astra Monitor API v1.2.0</h1>
+    <p>Интерфейс управления системой мониторинга Cesbo Astra.</p>
+
+    <h2>Система и Управление</h2>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/system/health</span><div class="desc">Состояние сервера и ресурсы</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/watchdog</span><div class="desc">Вкл/Выкл Watchdog (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/auto-recover</span><div class="desc">Вкл/Выкл Auto-recover (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/maintenance/run</span><div class="desc">Ручной запуск цикла восстановления</div></div>
+    <div class="endpoint"><span class="method PATCH">PATCH</span> <span class="path">/api/system/config</span><div class="desc">Обновление настроек в рантайме</div></div>
+
+    <h2>DVB Адаптеры</h2>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters</span><div class="desc">Список всех адаптеров</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/dvb/adapters/scan</span><div class="desc">Сканирование транспондера (параметры: <code>name</code>, <code>timeout</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters/data</span><div class="desc">Метрики сигнала (параметр: <code>name</code>)</div></div>
+
+    <h2>Мониторы и Каналы</h2>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors</span><div class="desc">Список активных мониторов</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors/data</span><div class="desc">Текущие данные монитора (параметр: <code>name</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/utils/monitors/errors</span><div class="desc">История ошибок и логи (параметр: <code>name</code>)</div></div>
+
+    <h2>Утилиты</h2>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/utils/cleanup</span><div class="desc">Очистка памяти и пулов</div></div>
+</body>
+</html>
+    ]]
+    server:send(client, {
+        code = 200,
+        content = html,
+        headers = { "Content-Type: text/html; charset=UTF-8" }
+    })
+    return true
 end
 
 return RoutesUtils

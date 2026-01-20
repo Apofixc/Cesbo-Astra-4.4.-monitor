@@ -9,6 +9,7 @@ local table_insert = table.insert
 local Logger = ModuleManager.get_module("logger")
 local HttpHelpers = ModuleManager.get_module("http_helpers")
 local ChannelRepository = ModuleManager.get_module("channel_repository")
+local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Channel = ModuleManager.get_module("channel")
 local RoutesUtils = ModuleManager.get_module("routes_utils")
 
@@ -171,6 +172,26 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
 
     ch_obj:clear_stats()
     return HttpHelpers.success(server, client, { message = "Статистика очищена" })
+end
+
+--- Ручное восстановление монитора
+function MonitorRoutes.recover_monitor(server, client, request)
+    local params = HttpHelpers.get_params(request)
+    local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    local success = false
+    if ChannelRepository and ChannelRepository:find(params.name) then
+        success = ChannelRepository:recover_monitor(params.name, "manual_api")
+    elseif DvbRepository and DvbRepository:find(params.name) then
+        success = DvbRepository:recover_monitor(params.name, "manual_api")
+    end
+
+    if not success then
+        return HttpHelpers.error(server, client, 404, "Объект не найден или ошибка восстановления")
+    end
+
+    return HttpHelpers.success(server, client, { message = "Процедура восстановления запущена" })
 end
 
 return MonitorRoutes

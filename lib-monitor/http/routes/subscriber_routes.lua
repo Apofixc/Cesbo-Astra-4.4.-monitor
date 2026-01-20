@@ -75,4 +75,26 @@ function SubscriberRoutes.unsubscribe(server, client, request)
     return HttpHelpers.success(server, client, { message = "Подписка удалена" })
 end
 
+--- Тестирование подписки (отправка тестового уведомления)
+function SubscriberRoutes.test_subscription(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        id = { type = "string", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    local dispatcher = EventDispatcher.get_instance()
+    local sub_mgr = dispatcher.subscription_manager
+    
+    local test_event = {
+        data = { message = "Test notification from Astra Monitor API", timestamp = os.time() },
+        json = nil -- Будет закодировано транспортом
+    }
+
+    local success = sub_mgr:publish_to_single(data.id, "sys:test_ping", test_event)
+    if not success then return HttpHelpers.error(server, client, 404, "Подписка не найдена") end
+
+    return HttpHelpers.success(server, client, { message = "Тестовое уведомление отправлено" })
+end
+
 return SubscriberRoutes

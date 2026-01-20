@@ -312,6 +312,67 @@ function MonitorConfig.is_development()
     return MonitorConfig.get_environment() == "development"
 end
 
+--- Обновляет параметры конфигурации в рантайме.
+--- @param params table Таблица новых параметров
+--- @return boolean success Статус выполнения
+--- @return string|nil error_message Сообщение об ошибке
+function MonitorConfig.update(params)
+    if type(params) ~= "table" then return false, "Параметры должны быть таблицей" end
+
+    local schema = MonitorConfig.ValidationSchema
+    if not schema then return false, "Схема валидации отсутствует" end
+
+    -- 1. Предварительная валидация всех параметров
+    for key, value in pairs(params) do
+        local rule = schema[key]
+        if rule then
+            if type(value) ~= rule.type then
+                return false, string.format("Параметр '%s' должен быть %s, получено %s", key, rule.type, type(value))
+            end
+            if rule.type == "number" then
+                if rule.min and value < rule.min then
+                    return false, string.format("Параметр '%s' слишком мал (min: %s)", key, tostring(rule.min))
+                end
+                if rule.max and value > rule.max then
+                    return false, string.format("Параметр '%s' слишком велик (max: %s)", key, tostring(rule.max))
+                end
+            elseif rule.type == "string" and rule.enum then
+                if not rule.enum[value] then
+                    return false, string.format("Недопустимое значение для '%s': %s", key, tostring(value))
+                end
+            end
+        end
+    end
+
+    -- 2. Применение параметров
+    for key, value in pairs(params) do
+        if schema[key] then
+            MonitorConfig[key] = value
+        end
+    end
+
+    -- 3. Уведомление зависимых модулей об изменениях
+    local Logger = ModuleManager.get_module("logger")
+    if Logger and Logger.refresh_log_level then
+        Logger.refresh_log_level()
+    end
+
+    -- Обновление настроек в репозиториях
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
+    if ChannelRepository and ChannelRepository.update_settings then
+        ChannelRepository:update_settings(params)
+    end
+
+    local DvbRepository = ModuleManager.get_module("dvb_repository")
+    if DvbRepository and DvbRepository.update_settings then
+        DvbRepository:update_settings(params)
+    end
+
+    _state.cache = {} -- Сброс кэша
+    Logger.info(COMPONENT_NAME, "Конфигурация обновлена через API")
+    return true
+end
+
 --- Сохраняет текущую конфигурацию в JSON файл.
 --- Исключает служебные поля, такие как ValidationSchema и функции.
 --- @return boolean success Статус выполнения

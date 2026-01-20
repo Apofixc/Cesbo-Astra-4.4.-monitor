@@ -262,6 +262,20 @@ function Adapter.get_dvb_psi(name_adapter)
     return nil
 end
 
+--- Запускает сканирование транспондера
+--- @param name_adapter string Имя адаптера
+--- @param timeout? number Время сканирования
+--- @param callback function Функция обратного вызова
+--- @return boolean Статус запуска
+function Adapter.scan_dvb(name_adapter, timeout, callback)
+    local tuner = DvbRepository:find(name_adapter)
+    if tuner then
+        return tuner:scan(timeout, callback)
+    end
+    Logger.error(COMPONENT_NAME, "scan_dvb: тюнер '%s' не найден", tostring(name_adapter))
+    return false
+end
+
 --- Сценарий "Переключение транспондера":
 --- 1. Останавливает каналы
 --- 2. Перенастраивает тюнер
