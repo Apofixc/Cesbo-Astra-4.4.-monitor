@@ -36,7 +36,7 @@
 | :--- | :---: | :--- | :--- |
 | **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + DVB Scenarios Tested** | 20.01.2026 |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + DVB Scenarios Tested** | 20.01.2026 |
-| **SubscriptionManager** | 100% | **Production Ready + Dynamic Transports + Smart Batching** | 20.01.2026 |
+| **SubscriptionManager** | 100% | **Production Ready + Dynamic Transports + Smart Batching + Multi-Transport (TG, Influx, Discord, etc.)** | 20.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Stress Tested** | 20.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)

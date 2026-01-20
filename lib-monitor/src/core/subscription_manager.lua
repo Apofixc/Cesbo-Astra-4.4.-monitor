@@ -14,6 +14,7 @@ local pairs = _G.pairs
 local table_insert = _G.table.insert
 local table_remove = _G.table.remove
 local os_clock = _G.os.clock
+local os_time = _G.os.time
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local io = _G.io
@@ -21,10 +22,12 @@ local math_random = _G.math.random
 local math_floor = _G.math.floor
 local string_gsub = _G.string.gsub
 local table_concat = _G.table.concat
+local os_execute = _G.os.execute
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Utils = ModuleManager.get_module("utils")
 local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
 local TablePool = ModuleManager.get_module("table_pool")
@@ -93,7 +96,8 @@ local state = {
     plan_cache = {},
     batchable_transports = {
         HTTP = true,
-        WS = true
+        WS = true,
+        INFLUXDB = true
     }
 }
 
@@ -275,6 +279,140 @@ local Transport = {
                         ((type(event) == "table" and event.id) and _get_event_json(event) or
                         ((type(event) == "table") and (encode and encode(event) or nil) or event))
         Logger.info("Консоль", "[СОБЫТИЕ:%s] %s", tostring(event_type), tostring(message))
+        return true
+    end,
+    --- Доставка в Telegram через curl (поддержка HTTPS)
+    TELEGRAM = function(self, config, event, event_type, _, event_json)
+        if not config.token or not config.chat_id then return false, "token или chat_id отсутствуют" end
+        
+        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        message = Utils.truncate_string(message, 4000)
+        
+        local text = string_format("<b>Astra Event: %s</b>\n<pre>%s</pre>", 
+            event_type, message:gsub("<", "<"):gsub(">", ">"))
+            
+        local cmd = string_format("curl -s -X POST \"https://api.telegram.org/bot%s/sendMessage\" -d chat_id=%s -d parse_mode=HTML -d text=%s &",
+            config.token, config.chat_id, Utils.shell_escape(text))
+            
+        os_execute(cmd)
+        return true
+    end,
+    --- Доставка в InfluxDB v3 (Line Protocol)
+    INFLUXDB = function(self, config, event, event_type)
+        if not config.host or not config.bucket or not config.token then return false, "параметры InfluxDB отсутствуют" end
+        
+        local measurement = config.measurement or event_type
+        local tags = config.tags or {}
+        local fields = type(event) == "table" and event.data or { value = tostring(event) }
+        
+        local line = Utils.to_line_protocol(measurement, tags, fields, os_time())
+        if not line then return false, "ошибка формирования Line Protocol" end
+        
+        local url = string_format("http%s://%s:%d/api/v2/write?org=%s&bucket=%s",
+            config.ssl and "s" or "", config.host, config.port or 8086, 
+            config.org or "astra", config.bucket)
+            
+        if config.ssl then
+            -- Используем curl для HTTPS
+            local cmd = string_format("curl -s -X POST \"%s\" -H \"Authorization: Token %s\" --data-binary %s &",
+                url, config.token, Utils.shell_escape(line))
+            os_execute(cmd)
+            return true
+        else
+            -- Используем http_request для обычного HTTP
+            local request = get_http_request()
+            if not request then return false end
+            return request({
+                host = config.host, port = config.port or 8086, path = url:match("://[^/]+(.+)$"),
+                method = "POST", content = line,
+                headers = { "Authorization: Token " .. config.token, CONNECTION_CLOSE }
+            })
+        end
+    end,
+    --- Доставка в Discord через Webhook
+    DISCORD = function(self, config, event, event_type, _, event_json)
+        if not config.url then return false, "url Webhook отсутствует" end
+        
+        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local content = Utils.truncate_string(string_format("**Astra Event: %s**\n```json\n%s\n```", event_type, message), 2000)
+        
+        local payload = get_json_encode()({ content = content })
+        local cmd = string_format("curl -s -X POST \"%s\" -H \"Content-Type: application/json\" -d %s &",
+            config.url, Utils.shell_escape(payload))
+            
+        os_execute(cmd)
+        return true
+    end,
+    --- Доставка в Slack через Webhook
+    SLACK = function(self, config, event, event_type, _, event_json)
+        if not config.url then return false, "url Webhook отсутствует" end
+        
+        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local payload = get_json_encode()({
+            text = string_format("*Astra Event: %s*\n```%s```", event_type, message)
+        })
+        
+        local cmd = string_format("curl -s -X POST \"%s\" -H \"Content-Type: application/json\" -d %s &",
+            config.url, Utils.shell_escape(payload))
+            
+        os_execute(cmd)
+        return true
+    end,
+    --- Доставка в Gotify
+    GOTIFY = function(self, config, event, event_type, _, event_json)
+        if not config.url or not config.token then return false, "url или token отсутствуют" end
+        
+        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local payload = get_json_encode()({
+            title = "Astra: " .. event_type,
+            message = message,
+            priority = config.priority or 5
+        })
+        
+        local url = config.url .. "/message?token=" .. config.token
+        local cmd = string_format("curl -s -X POST \"%s\" -H \"Content-Type: application/json\" -d %s &",
+            url, Utils.shell_escape(payload))
+            
+        os_execute(cmd)
+        return true
+    end,
+    --- Доставка в Pushover
+    PUSHOVER = function(self, config, event, event_type, _, event_json)
+        if not config.token or not config.user then return false, "token или user отсутствуют" end
+        
+        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local payload = string_format("token=%s&user=%s&title=%s&message=%s&priority=%s",
+            config.token, config.user, 
+            Utils.shell_escape("Astra: " .. event_type),
+            Utils.shell_escape(message),
+            config.priority or 0)
+            
+        local cmd = string_format("curl -s -X POST \"https://api.pushover.net/1/messages.json\" -d %s &", payload)
+        os_execute(cmd)
+        return true
+    end,
+    --- Универсальный Webhook
+    GENERIC_WEBHOOK = function(self, config, event, event_type, _, event_json)
+        if not config.url then return false, "url отсутствует" end
+        
+        local method = (config.method or "POST"):upper()
+        local content = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        
+        local headers_str = ""
+        if config.headers then
+            for _, h in pairs(config.headers) do
+                headers_str = headers_str .. string_format(" -H %s", Utils.shell_escape(h))
+            end
+        end
+        
+        if not config.headers or not table.concat(config.headers):find("Content-Type") then
+            headers_str = headers_str .. " -H \"Content-Type: application/json\""
+        end
+        
+        local cmd = string_format("curl -s -X %s \"%s\" %s -d %s &",
+            method, config.url, headers_str, Utils.shell_escape(content))
+            
+        os_execute(cmd)
         return true
     end
 }

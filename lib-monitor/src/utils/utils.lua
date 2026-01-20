@@ -374,6 +374,79 @@ function Utils.table_clear(t)
     end
 end
 
+--- Экранирует строку для безопасного использования в shell-командах
+--- @param s string Исходная строка
+--- @return string Экранированная строка
+function Utils.shell_escape(s)
+    if type(s) ~= "string" then return "''" end
+    -- Заменяем одиночную кавычку на '"'"' и оборачиваем в одиночные кавычки
+    return "'" .. s:gsub("'", "'\"'\"'") .. "'"
+end
+
+--- Обрезает строку до указанного лимита
+--- @param s string Исходная строка
+--- @param limit number Максимальная длина
+--- @return string Обрезанная строка
+function Utils.truncate_string(s, limit)
+    if type(s) ~= "string" then return "" end
+    if #s <= limit then return s end
+    return s:sub(1, limit - 3) .. "..."
+end
+
+--- Преобразует данные в формат InfluxDB Line Protocol
+--- @param measurement string Имя измерения
+--- @param tags table|nil Таблица тегов (строковые значения)
+--- @param fields table Таблица полей (числа, строки, булевы)
+--- @param timestamp? number Метка времени (в секундах)
+--- @return string|nil Строка в формате Line Protocol
+function Utils.to_line_protocol(measurement, tags, fields, timestamp)
+    if type(measurement) ~= "string" or type(fields) ~= "table" then return nil end
+    
+    local res = { measurement }
+    
+    -- Теги (должны быть отсортированы для лучшей производительности InfluxDB, но здесь упростим)
+    if tags then
+        for k, v in pairs(tags) do
+            if v ~= nil then
+                table.insert(res, ",")
+                table.insert(res, tostring(k))
+                table.insert(res, "=")
+                table.insert(res, tostring(v):gsub(" ", "\\ "):gsub(",", "\\,"):gsub("=", "\\="))
+            end
+        end
+    end
+    
+    table.insert(res, " ")
+    
+    -- Поля
+    local first_field = true
+    for k, v in pairs(fields) do
+        if v ~= nil then
+            if not first_field then table.insert(res, ",") end
+            table.insert(res, tostring(k))
+            table.insert(res, "=")
+            
+            if type(v) == "string" then
+                table.insert(res, "\"" .. v:gsub("\"", "\\\"") .. "\"")
+            elseif type(v) == "boolean" then
+                table.insert(res, v and "t" or "f")
+            else
+                table.insert(res, tostring(v))
+            end
+            first_field = false
+        end
+    end
+    
+    -- Метка времени (InfluxDB ожидает наносекунды по умолчанию, если не указано иное)
+    -- Используем строковую конкатенацию для предотвращения потери точности Lua float
+    if timestamp then
+        table.insert(res, " ")
+        table.insert(res, tostring(math.floor(timestamp)) .. "000000000")
+    end
+    
+    return table.concat(res)
+end
+
 --- Измеряет время выполнения функции и сохраняет статистику
 --- @param name string Уникальное имя операции
 --- @param func function Функция для выполнения

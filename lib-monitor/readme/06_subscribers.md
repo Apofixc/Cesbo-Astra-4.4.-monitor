@@ -8,12 +8,50 @@
 *   **Преимущества**: Простота реализации на стороне клиента, отсутствие необходимости держать постоянное соединение.
 *   **Эндпоинты**: `/api/monitors/data`, `/api/dvb/adapters/data`, `/api/system/health`.
 
-## 2. Push-метод (Webhooks)
+## 2. Push-методы (Транспорты)
 
-Система автоматически отправляет данные на указанный URL при возникновении события или обновлении метрик.
-*   **Регистрация**: Через POST `/api/subscribers`.
-*   **Формат данных**: JSON-объект или массив объектов (при включенном батчинге).
-*   **Надежность**: Поддержка автоматических повторов (Retries) с экспоненциальной задержкой при недоступности сервера клиента.
+Система поддерживает различные способы доставки уведомлений и метрик. Все внешние вызовы (кроме стандартного HTTP) выполняются асинхронно через системный `curl`, что гарантирует поддержку HTTPS и отсутствие блокировок основного потока Astra.
+
+### Поддерживаемые транспорты:
+
+| Тип | Описание | Параметры конфигурации |
+| :--- | :--- | :--- |
+| `HTTP` | Стандартный Webhook | `host`, `port`, `path` |
+| `TELEGRAM` | Уведомления в Telegram | `token`, `chat_id` |
+| `INFLUXDB` | Метрики в InfluxDB v3 | `host`, `port`, `token`, `org`, `bucket`, `ssl` |
+| `DISCORD` | Webhook в Discord | `url` |
+| `SLACK` | Webhook в Slack | `url` |
+| `GOTIFY` | Push через Gotify | `url`, `token`, `priority` |
+| `PUSHOVER` | Push через Pushover | `token`, `user`, `priority` |
+| `GENERIC_WEBHOOK` | Универсальный HTTP запрос | `url`, `method`, `headers` |
+
+### Примеры конфигурации подписок:
+
+**Telegram:**
+```json
+{
+  "event_type": "channel:*",
+  "callback": {
+    "type": "TELEGRAM",
+    "token": "123456:ABCDEF...",
+    "chat_id": "-100..."
+  }
+}
+```
+
+**InfluxDB v3:**
+```json
+{
+  "event_type": "sys:resource",
+  "callback": {
+    "type": "INFLUXDB",
+    "host": "influx.example.com",
+    "bucket": "astra_metrics",
+    "token": "my-secret-token",
+    "ssl": true
+  }
+}
+```
 
 ## 3. Real-time метод (WebSocket)
 
