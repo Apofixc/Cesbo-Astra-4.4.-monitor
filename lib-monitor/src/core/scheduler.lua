@@ -10,6 +10,7 @@
 local pairs = _G.pairs
 local type = _G.type
 local os_clock = _G.os.clock
+local os_time = _G.os.time
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local collectgarbage = _G.collectgarbage

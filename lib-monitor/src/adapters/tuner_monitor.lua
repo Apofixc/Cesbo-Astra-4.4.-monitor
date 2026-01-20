@@ -7,6 +7,7 @@
 
 -- 1. Стандартные Lua функции
 local math_max = _G.math.max
+local math_min = _G.math.min
 local os_time = _G.os.time
 local pairs = _G.pairs
 local setmetatable = _G.setmetatable
@@ -167,7 +168,8 @@ function TunerMonitor:_on_astra_data(data)
     if conf.analyze and self._stats.count > 0 then
         local avg_ber = self._stats.ber_sum / self._stats.count
         if avg_ber > 0 or self._stats.unc_sum > 0 then
-            current_quality = math_max(0, 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10))
+            local val = 100 - (avg_ber / 1000) - (self._stats.unc_sum * 10)
+            current_quality = math_min(100, math_max(0, val))
         else
             current_quality = 100
         end

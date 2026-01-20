@@ -394,20 +394,22 @@ end
 --- @param name string Имя объекта
 --- @param instance any Экземпляр объекта
 --- @param class? table Класс (мета-таблица) объекта для автовосстановления
+--- @return boolean success true если объект зарегистрирован, false если уже существует
 function BaseRepository:register(name, instance, class)
     local s = self._state
     if s.monitors[name] then
-        Logger.warning(self._component_name, "Объект '%s' уже зарегистрирован. Перезапись.", name)
-    else
-        s.stats.active = s.stats.active + 1
+        Logger.warning(self._component_name, "Объект '%s' уже зарегистрирован.", name)
+        return false
     end
 
+    s.stats.active = s.stats.active + 1
     s.monitors[name] = instance
     if class then
         s.classes[name] = class
     end
 
     Logger.debug(self._component_name, "Объект '%s' зарегистрирован.", name)
+    return true
 end
 
 --- Удаляет объект из репозитория и останавливает его

@@ -102,8 +102,10 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
         CONFIG_KEY_CACHE[cache_id] = key
     end
 
-    -- ВАЖНО: Мы НЕ меняем self._config, так как это эталон.
-    -- Изменения применяются только через хук в рабочую копию (astra_conf).
+    -- Сохраняем валидированное значение в эталонную конфигурацию
+    self._config[key] = result
+
+    -- Применяем изменения через хук (например, в рабочую копию astra_conf)
     self:_on_config_updated(key, result)
     return true
 end
