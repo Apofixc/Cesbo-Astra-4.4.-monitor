@@ -323,6 +323,7 @@ function ChannelMonitor:_process_total_data(data)
         r.monitor = self._config.monitor
 
         -- Оптимизация: прямое копирование полей (горячий путь)
+        r.input_id = active_id
         r.status = master.status
         r.bitrate = master.bitrate
         r.cc_errors = master.cc_errors
