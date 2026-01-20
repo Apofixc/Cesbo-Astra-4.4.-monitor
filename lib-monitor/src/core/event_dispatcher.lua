@@ -251,6 +251,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     -- Оптимизация: Smart Emit (Fast Path)
     -- Проверяем план доставки перед созданием объекта события
     local plan = sub_mgr:get_delivery_plan(event_type)
+    local fast_path_delivered = false
+
     if not plan then
         -- Если нет подписчиков и не нужно кэшировать в LVC, выходим немедленно
         if options and options.no_cache then return nil end
@@ -259,6 +261,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         -- Лимит в 10 простых групп для предотвращения блокировки основного потока
         if not plan.has_complex and plan.total_simple > 0 and plan.total_simple <= 10 then
             sub_mgr:multicast_direct(plan, event_type, event_data, now)
+            fast_path_delivered = true
             
             -- Если не нужно кэшировать в LVC, задача выполнена без создания объектов
             if options and options.no_cache then
@@ -369,6 +372,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     event.timestamp = (type(event_data) == "table" and event_data.timestamp) or now
     event.options = options
     event.is_table = options and options.is_table == true
+    event.fast_path_delivered = fast_path_delivered
 
     local queue = self.event_queues[p]
     if queue then

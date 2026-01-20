@@ -215,20 +215,9 @@ function Scheduler:_tick()
         end
     end
 
-    -- Adaptive Ticking
-    local min_next_run = (#self._heap > 0) and self._heap[1].next_run or (now + 3600)
-    local wait_time = min_next_run - now
-    local new_interval = 1
-    
-    if wait_time > 5 then
-        new_interval = 5
-    elseif wait_time > 1 then
-        new_interval = wait_time
-    end
-
-    if new_interval ~= self._current_interval and self._timer then
-        self._current_interval = new_interval
-    end
+    -- Adaptive Ticking (Disabled: Astra timer interval is fixed at creation)
+    -- To implement adaptive ticking, the timer would need to be recreated.
+    -- For monitoring, a fixed 1s interval is optimal.
 end
 
 -- ===========================================================================
@@ -319,7 +308,7 @@ function Scheduler:set_task_interval(id, interval)
         local old_interval = task.interval
         task.interval = (interval and interval >= 1) and interval or 1
         
-        local now = os_time()
+        local now = os_clock()
         local remaining = task.next_run - now
         if remaining > task.interval then
             task.next_run = now + task.interval
@@ -346,7 +335,7 @@ function Scheduler:resume_task(id)
     local task = self._tasks[id]
     if task then
         task.active = true
-        task.next_run = os_time()
+        task.next_run = os_clock()
         self:_heap_up(task.heap_idx)
         Logger.debug(COMPONENT_NAME, "Задача возобновлена: %s", id)
     end

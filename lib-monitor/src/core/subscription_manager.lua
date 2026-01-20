@@ -790,7 +790,8 @@ function SubscriptionManager:publish_event(event, now)
     local event_json = _get_event_json(event)
 
     -- 1. Fast Path: Мультикастинг для простых групп
-    if plan.total_simple > 0 then
+    -- Пропускаем, если событие уже было доставлено через Fast Path в EventDispatcher:emit
+    if plan.total_simple > 0 and not event.fast_path_delivered then
         self:multicast_direct(plan, event_type, event_data, now, event_json)
     end
 
