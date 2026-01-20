@@ -193,8 +193,6 @@ EventDispatcher.PRIORITIES = {
 --- Стандартные имена событий системы
 --- @type table<string, string>
 EventDispatcher.EVENTS = {
-    ADAPTER_BEFORE_RESTART = "adapter:before_restart",
-    ADAPTER_AFTER_RESTART = "adapter:after_restart",
     ADAPTER_STOPPED = "adapter:stopped",
     CHANNEL_CREATED = "channel:created",
     CHANNEL_KILLED = "channel:killed",

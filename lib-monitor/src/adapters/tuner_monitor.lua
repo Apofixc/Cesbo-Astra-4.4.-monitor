@@ -27,7 +27,6 @@ local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
-local dvb_input_instance_list = ModuleManager.get_global_dependency("dvb_input_instance_list")
 local analyze = ModuleManager.get_global_dependency("analyze")
 
 -- 4. Константы и конфигурации

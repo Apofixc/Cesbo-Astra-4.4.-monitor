@@ -215,25 +215,6 @@ local function _prepare_stream_json(ch_data, monitor_url)
     return stream_json
 end
 
---- Обработчик события: Перед рестартом адаптера
---- @param adapter_name string Имя адаптера
-local function _on_adapter_before_restart(adapter_name)
-    Logger.info(COMPONENT_NAME, "Рестарт адаптера '%s': остановка зависимых каналов", adapter_name)
-    local saved = ChannelRepository:stop_dependent_channels(adapter_name)
-    state.restart_configs[adapter_name] = saved
-end
-
---- Обработчик события: После рестарта адаптера
---- @param adapter_name string Имя адаптера
-local function _on_adapter_after_restart(adapter_name)
-    local configs = state.restart_configs[adapter_name]
-    if configs and #configs > 0 then
-        Logger.info(COMPONENT_NAME, "Рестарт адаптера '%s' завершен: запуск %d каналов", adapter_name, #configs)
-        ChannelRepository:start_dependent_channels(configs)
-    end
-    state.restart_configs[adapter_name] = nil
-end
-
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
@@ -461,22 +442,6 @@ function Channel.resume_monitor(name)
     end
     return false
 end
-
--- ===========================================================================
--- Инициализация модуля
--- ===========================================================================
-
---- Инициализирует подписки на события
-function Channel.initialize_events()
-    local dispatcher = _get_event_dispatcher()
-    if dispatcher then
-        dispatcher:subscribe("adapter:before_restart", _on_adapter_before_restart)
-        dispatcher:subscribe("adapter:after_restart", _on_adapter_after_restart)
-    end
-end
-
--- Автоматическая инициализация при загрузке (если диспетчер доступен)
-Channel.initialize_events()
 
 -- ===========================================================================
 -- Инициализация модуля

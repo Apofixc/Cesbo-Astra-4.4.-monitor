@@ -148,29 +148,6 @@ function Adapter.stop_dvb_monitor(name_adapter, force)
     return nil
 end
 
---- Останавливает все каналы, использующие указанный адаптер.
---- @param name_adapter string Имя адаптера
---- @return table Список сохраненных конфигураций каналов
-function Adapter.stop_dependent_channels(name_adapter)
-    local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository then
-        Logger.error(COMPONENT_NAME, "Модуль ChannelRepository не найден")
-        return {}
-    end
-    return ChannelRepository:stop_dependent_channels(name_adapter)
-end
-
---- Запускает каналы на основе предоставленных конфигураций.
---- @param configs table Список конфигураций каналов
-function Adapter.start_dependent_channels(configs)
-    local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository then
-        Logger.error(COMPONENT_NAME, "Модуль ChannelRepository не найден")
-        return
-    end
-    ChannelRepository:start_dependent_channels(configs)
-end
-
 --- Унифицированный метод переконфигурации группы адаптеров и зависимых каналов.
 --- Обеспечивает атомарность: каналы перезапускаются один раз, даже если затронуто несколько их тюнеров.
 --- @param adapter_list table Список имен адаптеров
@@ -181,63 +158,34 @@ function Adapter.reconfigure(adapter_list, options)
     options = options or {}
 
     local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository or not Channel then
-        Logger.error(COMPONENT_NAME, "reconfigure: модули Channel или ChannelRepository не найдены")
+    if not ChannelRepository then
+        Logger.error(COMPONENT_NAME, "reconfigure: модуль ChannelRepository не найден")
         return false
     end
 
-    -- 1. Собираем все уникальные зависимые каналы
-    local affected_channels = {}
-    for _, adapter_name in ipairs(adapter_list) do
-        local deps = ChannelRepository:find_by_adapter(adapter_name)
-        for name, ch_data in pairs(deps) do
-            if not affected_channels[name] then
-                affected_channels[name] = Utils.table_copy(ch_data.config)
+    -- Используем транзакционную логику репозитория каналов
+    return ChannelRepository:reconfigure_channels(adapter_list, function()
+        local success = true
+        for _, adapter_name in ipairs(adapter_list) do
+            local tuner = DvbRepository:find(adapter_name)
+            if tuner then
+                local old_conf = Utils.table_copy(tuner:get_config())
+                local target_conf = Utils.table_copy(old_conf)
+                local new_params = options.adapter_params and options.adapter_params[adapter_name]
+                if new_params then
+                    for k, v in pairs(new_params) do target_conf[k] = v end
+                end
+
+                -- При реконфигурации мы всегда используем force для монитора,
+                -- так как каналы уже остановлены репозиторием.
+                if not _perform_restart(adapter_name, target_conf, true, old_conf) then
+                    Logger.error(COMPONENT_NAME, "reconfigure: ошибка рестарта адаптера %s", adapter_name)
+                    success = false
+                end
             end
         end
-    end
-
-    -- 2. Останавливаем все затронутые каналы
-    for name, _ in pairs(affected_channels) do
-        Channel.kill_stream(name)
-    end
-
-    -- 3. Перезапускаем адаптеры
-    local success = true
-    for _, adapter_name in ipairs(adapter_list) do
-        local tuner = DvbRepository:find(adapter_name)
-        if tuner then
-            local old_conf = Utils.table_copy(tuner:get_config())
-            local target_conf = Utils.table_copy(old_conf)
-            local new_params = options.adapter_params and options.adapter_params[adapter_name]
-            if new_params then
-                for k, v in pairs(new_params) do target_conf[k] = v end
-            end
-
-            -- При реконфигурации мы всегда используем force для монитора,
-            -- так как каналы мы уже остановили сами.
-            if not _perform_restart(adapter_name, target_conf, true, old_conf) then
-                Logger.error(COMPONENT_NAME, "reconfigure: ошибка рестарта адаптера %s", adapter_name)
-                success = false
-            end
-        end
-    end
-
-    -- 4. Применяем обновления входов для каналов
-    if options.channel_updates then
-        for name, new_input in pairs(options.channel_updates) do
-            if affected_channels[name] then
-                affected_channels[name].input = new_input
-            end
-        end
-    end
-
-    -- 5. Запускаем каналы обратно
-    for _, conf in pairs(affected_channels) do
-        Channel.make_stream(conf)
-    end
-
-    return success
+        return success
+    end, options.channel_updates)
 end
 
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.

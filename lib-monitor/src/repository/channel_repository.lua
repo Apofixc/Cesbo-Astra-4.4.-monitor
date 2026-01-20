@@ -85,16 +85,27 @@ end
 -- Публичное API: Управление зависимыми каналами
 -- ===========================================================================
 
---- Останавливает все каналы, использующие указанный адаптер.
---- @param adapter_name string Имя адаптера
+--- Останавливает все каналы, использующие указанные адаптеры.
+--- @param adapter_list table Список имен адаптеров
 --- @return table Список сохраненных конфигураций каналов
-function ChannelRepository:stop_dependent_channels(adapter_name)
+function ChannelRepository:stop_dependent_channels(adapter_list)
     local Channel = ModuleManager.get_module("channel")
     local saved_configs = {}
-    if not Channel then return saved_configs end
+    if not Channel or type(adapter_list) ~= "table" then return saved_configs end
 
-    local dependent_channels = self:find_by_adapter(adapter_name)
-    for name, _ in pairs(dependent_channels) do
+    -- 1. Собираем все уникальные зависимые каналы для всех адаптеров
+    local affected_channels = {}
+    for _, adapter_name in ipairs(adapter_list) do
+        local deps = self:find_by_adapter(adapter_name)
+        for name, ch_data in pairs(deps) do
+            if not affected_channels[name] then
+                affected_channels[name] = true
+            end
+        end
+    end
+
+    -- 2. Останавливаем каждый канал один раз
+    for name, _ in pairs(affected_channels) do
         local ch_config = Channel.kill_stream(name)
         if ch_config then
             table_insert(saved_configs, ch_config)
@@ -108,7 +119,7 @@ end
 --- @param configs table Список конфигураций каналов
 function ChannelRepository:start_dependent_channels(configs)
     if not configs or type(configs) ~= "table" then return end
-    
+
     local total = #configs
     if total == 0 then return end
 
@@ -124,9 +135,42 @@ function ChannelRepository:start_dependent_channels(configs)
     if success_count == total then
         Logger.info(COMPONENT_NAME, "Все зависимые каналы (%d/%d) успешно запущены", success_count, total)
     else
-        Logger.warning(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно", 
+        Logger.warning(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно",
             success_count, total)
     end
+end
+
+--- Выполняет транзакционную переконфигурацию каналов.
+--- @param adapter_list table Список имен адаптеров
+--- @param callback function Функция, выполняемая между остановкой и запуском каналов
+--- @param channel_updates? table Таблица обновлений конфигураций каналов (name -> input)
+--- @return boolean success
+function ChannelRepository:reconfigure_channels(adapter_list, callback, channel_updates)
+    if type(adapter_list) ~= "table" or type(callback) ~= "function" then return false end
+
+    -- 1. Останавливаем все зависимые каналы
+    local saved_configs = self:stop_dependent_channels(adapter_list)
+
+    -- 2. Выполняем инфраструктурные действия (рестарт адаптеров)
+    local ok, err = pcall(callback)
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Ошибка в callback переконфигурации: %s", tostring(err))
+    end
+
+    -- 3. Применяем обновления конфигураций (если есть)
+    if channel_updates and type(channel_updates) == "table" then
+        for _, conf in ipairs(saved_configs) do
+            local new_input = channel_updates[conf.name]
+            if new_input then
+                conf.input = new_input
+            end
+        end
+    end
+
+    -- 4. Запускаем каналы обратно
+    self:start_dependent_channels(saved_configs)
+
+    return ok
 end
 
 -- ===========================================================================
