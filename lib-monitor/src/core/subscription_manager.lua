@@ -252,11 +252,11 @@ local Transport = {
     --- @param self SubscriptionManager
     --- @param config table Параметры (callback)
     --- @param event table|string Объект события или данные
-    LUA_CALLBACK = function(self, config, event)
+    LUA_CALLBACK = function(self, config, event, event_type)
         local callback = type(config) == "table" and config.callback or config
         if type(callback) ~= "function" then return false, "некорректный callback" end
         local data = (type(event) == "table" and event.id) and event.data or event
-        return pcall(callback, data)
+        return pcall(callback, data, event_type)
     end,
     --- Вывод события в консоль (лог Astra)
     --- @param self SubscriptionManager

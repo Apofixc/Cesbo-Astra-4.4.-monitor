@@ -34,17 +34,17 @@
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + Unit Tested** | 20.01.2026 |
-| **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + Unit Tested** | 20.01.2026 |
-| **SubscriptionManager** | 100% | **Production Ready + Circuit Breaker (Sync/Async) + Async Multicast + Unit Tested** | 20.01.2026 |
-| **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Unit Tested** | 20.01.2026 |
+| **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + DVB Scenarios Tested** | 20.01.2026 |
+| **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + DVB Scenarios Tested** | 20.01.2026 |
+| **SubscriptionManager** | 100% | **Production Ready + Circuit Breaker + LUA_CALLBACK Fixed** | 20.01.2026 |
+| **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Stress Tested** | 20.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **BaseMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Logic + Unit Tested** | 20.01.2026 |
-| **ChannelMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + Unit Tested** | 20.01.2026 |
-| **Channel (API)** | 100% | **Готов (Ultra-Extreme) + Рефакторинг + Unit Tested** | 20.01.2026 |
+| **BaseMonitor** | 100% | **Готов (Ultra-Extreme) + Soak Tested (50k cycles)** | 20.01.2026 |
+| **ChannelMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos & Soak Tested** | 20.01.2026 |
+| **Channel (API)** | 100% | **Готов (Ultra-Extreme) + Рефакторинг + DVB Scenarios Tested** | 20.01.2026 |
 | **ResourceMonitor** | 100% | **Готов (Ultra-Extreme) + Adaptive Ticking + Unit Tested** | 20.01.2026 |
 
 ---
