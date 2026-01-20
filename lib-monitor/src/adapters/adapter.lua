@@ -177,6 +177,75 @@ function Adapter.start_dependent_channels(configs)
     ChannelRepository:start_dependent_channels(configs)
 end
 
+--- Унифицированный метод переконфигурации группы адаптеров и зависимых каналов.
+--- Обеспечивает атомарность: каналы перезапускаются один раз, даже если затронуто несколько их тюнеров.
+--- @param adapter_list table Список имен адаптеров
+--- @param options table Опции (adapter_params, channel_updates, force)
+--- @return boolean success
+function Adapter.reconfigure(adapter_list, options)
+    if type(adapter_list) ~= "table" then return false end
+    options = options or {}
+
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
+    if not ChannelRepository or not Channel then
+        Logger.error(COMPONENT_NAME, "reconfigure: модули Channel или ChannelRepository не найдены")
+        return false
+    end
+
+    -- 1. Собираем все уникальные зависимые каналы
+    local affected_channels = {}
+    for _, adapter_name in ipairs(adapter_list) do
+        local deps = ChannelRepository:find_by_adapter(adapter_name)
+        for name, ch_data in pairs(deps) do
+            if not affected_channels[name] then
+                affected_channels[name] = Utils.table_copy(ch_data.config)
+            end
+        end
+    end
+
+    -- 2. Останавливаем все затронутые каналы
+    for name, _ in pairs(affected_channels) do
+        Channel.kill_stream(name)
+    end
+
+    -- 3. Перезапускаем адаптеры
+    local success = true
+    for _, adapter_name in ipairs(adapter_list) do
+        local tuner = DvbRepository:find(adapter_name)
+        if tuner then
+            local old_conf = Utils.table_copy(tuner:get_config())
+            local target_conf = Utils.table_copy(old_conf)
+            local new_params = options.adapter_params and options.adapter_params[adapter_name]
+            if new_params then
+                for k, v in pairs(new_params) do target_conf[k] = v end
+            end
+
+            -- При реконфигурации мы всегда используем force для монитора,
+            -- так как каналы мы уже остановили сами.
+            if not _perform_restart(adapter_name, target_conf, true, 0, old_conf) then
+                Logger.error(COMPONENT_NAME, "reconfigure: ошибка рестарта адаптера %s", adapter_name)
+                success = false
+            end
+        end
+    end
+
+    -- 4. Применяем обновления входов для каналов
+    if options.channel_updates then
+        for name, new_input in pairs(options.channel_updates) do
+            if affected_channels[name] then
+                affected_channels[name].input = new_input
+            end
+        end
+    end
+
+    -- 5. Запускаем каналы обратно
+    for _, conf in pairs(affected_channels) do
+        Channel.make_stream(conf)
+    end
+
+    return success
+end
+
 --- Перезапускает мониторинг DVB-тюнера и обновляет глобальную ссылку.
 --- @param name_adapter string Уникальное имя адаптера
 --- @param new_params table|nil Новые параметры тюнинга
@@ -199,45 +268,11 @@ function Adapter.restart_dvb_monitor(name_adapter, new_params, force)
         return true
     end
 
-    -- 1. Подготовка конфигурации
-    local old_conf = Utils.table_copy(tuner:get_config())
-    local new_conf = Utils.table_copy(old_conf)
-    if new_params and type(new_params) == "table" then
-        for k, v in pairs(new_params) do new_conf[k] = v end
-    end
-
-    -- 2. Уведомление о начале рестарта (для остановки каналов)
-    if not force and EventDispatcher then
-        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
-    end
-
-    local old_channels_count = 0
-    if force then
-        local instance = tuner:get_instance()
-        if instance and instance.__options then
-            old_channels_count = instance.__options.channels or 0
-        end
-    end
-
-    -- 3. Перезапуск монитора
-    if not _perform_restart(name_adapter, new_conf, force, old_channels_count, old_conf) then
-        Logger.error(COMPONENT_NAME, "restart_dvb_monitor: не удалось перезапустить '%s'. Откат...", name_adapter)
-        _perform_restart(name_adapter, old_conf, force, old_channels_count, old_conf)
-        if not force and EventDispatcher then
-            EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
-        end
-        return false
-    end
-
-    -- 4. Уведомление о завершении рестарта (для запуска каналов)
-    if not force and EventDispatcher then
-        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
-    end
-
-    return true
+    return Adapter.reconfigure({ name_adapter }, {
+        adapter_params = { [name_adapter] = new_params },
+        force = force
+    })
 end
-
---- Приостанавливает мониторинг тюнера
 --- @param name_adapter string Имя адаптера
 --- @return boolean Статус выполнения
 function Adapter.pause_dvb_monitor(name_adapter)
@@ -286,9 +321,9 @@ function Adapter.get_dvb_psi(name_adapter)
 end
 
 --- Сценарий "Переключение транспондера":
---- 1. Останавливает каналы (через события)
+--- 1. Останавливает каналы
 --- 2. Перенастраивает тюнер
---- 3. Запускает новые каналы, наследуя выходы старых
+--- 3. Запускает новые каналы с обновленными входами
 --- @param name_adapter string Имя адаптера
 --- @param new_tuner_params table Новые параметры тюнера
 --- @param reserve_input table|nil Список новых входов {name, input}
@@ -298,67 +333,27 @@ function Adapter.switch_transponder(name_adapter, new_tuner_params, reserve_inpu
     if not tuner then return nil end
 
     local old_tuner_params = Utils.table_copy(tuner:get_config())
-
-    -- 1. Уведомление о начале переключения (каналы остановятся сами)
-    if EventDispatcher then
-        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_BEFORE_RESTART, name_adapter)
-    end
-
-    -- 2. Перенастройка тюнера (используем force=true для обхода debounce и счетчиков)
-    if not Adapter.restart_dvb_monitor(name_adapter, new_tuner_params, true) then
-        -- В случае ошибки возвращаем старый конфиг
-        Adapter.restart_dvb_monitor(name_adapter, old_tuner_params, true)
-        if EventDispatcher then
-            EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
-        end
-        return nil
-    end
-
-    -- 3. Запуск новых каналов с сохранением выходов (если переданы)
+    local channel_updates = {}
     if reserve_input and type(reserve_input) == "table" then
-        if Channel then
-            local ChannelRepository = ModuleManager.get_module("channel_repository")
-            for _, item in ipairs(reserve_input) do
-                -- Гарантируем удаление старого монитора, если он еще жив
-                if ChannelRepository and ChannelRepository:find(item.name) then
-                    Logger.warning(COMPONENT_NAME, "switch_transponder: принудительное удаление старого монитора '%s'", item.name)
-                    Channel.kill_stream(item.name)
-                end
-
-                -- Находим старый конфиг (он мог быть сохранен в событии before_restart)
-                -- Но здесь мы полагаемся на переданный reserve_input
-                if item.input then
-                    -- Пытаемся найти базовый конфиг в репозитории (если он там остался)
-                    -- или используем минимальный конфиг
-                    local final_conf = {
-                        name = item.name,
-                        input = item.input
-                    }
-                    
-                    -- Если есть старый конфиг в репозитории, копируем его параметры (output и т.д.)
-                    local old_ch = ChannelRepository and ChannelRepository:find(item.name)
-                    if old_ch then
-                        local old_conf = old_ch:get_config()
-                        if old_conf then
-                            final_conf = Utils.table_copy(old_conf)
-                            final_conf.input = item.input
-                        end
-                    end
-
-                    Channel.make_stream(final_conf)
-                end
+        for _, item in ipairs(reserve_input) do
+            if item.name and item.input then
+                channel_updates[item.name] = item.input
             end
         end
     end
 
-    -- 4. Уведомление о завершении (остальные каналы запустятся сами)
-    if EventDispatcher then
-        EventDispatcher.get_instance():emit(EventDispatcher.EVENTS.ADAPTER_AFTER_RESTART, name_adapter)
+    local success = Adapter.reconfigure({ name_adapter }, {
+        adapter_params = { [name_adapter] = new_tuner_params },
+        channel_updates = channel_updates,
+        force = true
+    })
+
+    if success then
+        Logger.info(COMPONENT_NAME, "Транспондер успешно переключен на адаптере '%s'", name_adapter)
+        return { tuner_params = old_tuner_params }
     end
 
-    Logger.info(COMPONENT_NAME, "Транспондер переключен на адаптере '%s'", name_adapter)
-    
-    return { tuner_params = old_tuner_params }
+    return nil
 end
 
 -- ===========================================================================

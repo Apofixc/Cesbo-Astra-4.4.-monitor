@@ -28,14 +28,14 @@
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
 | **BaseRepository** | 100% | **Унифицирован (Recovery System) + Ultra-Extreme Tested + Unit Tested** | 20.01.2026 |
-| **ChannelRepository** | 100% | **Унифицирован (Hook-based) + Ultra-Extreme Tested + Unit Tested** | 20.01.2026 |
+| **ChannelRepository** | 100% | **Унифицирован (Hook-based) + Multi-Tuner Support + Unit Tested** | 20.01.2026 |
 | **DvbRepository** | 100% | **Унифицирован (Hook-based) + Ultra-Extreme Tested + Unit Tested** | 20.01.2026 |
 
 ## 4. Уровень взаимодействия (Adapters & Subscribers)
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + DVB Scenarios Tested** | 20.01.2026 |
-| **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + DVB Scenarios Tested** | 20.01.2026 |
+| **Adapter** | 100% | **Рефакторинг (Transactional Reconfigure) + API Ready + Multi-Tuner Support** | 20.01.2026 |
+| **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Refactored Lifecycle + Unified Base + DVB Scenarios Tested** | 20.01.2026 |
 | **SubscriptionManager** | 100% | **Production Ready + Dynamic Transports + Smart Batching + Multi-Transport (TG, Influx, Discord, etc.)** | 20.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Stress Tested** | 20.01.2026 |
 

@@ -351,13 +351,6 @@ function TunerMonitor:start()
     self._state = BaseMonitor.STATE.RUNNING
     self._active = true
 
-    -- Безопасное управление счетчиком каналов Astra
-    if self._instance and type(self._instance.__options) == "table" then
-        local opts = self._instance.__options
-        opts.channels = (opts.channels or 0) + 1
-        Logger.debug(COMPONENT_NAME, "[%s] Счетчик каналов тюнера увеличен: %d", tostring(self._name), opts.channels)
-    end
-
     return self._instance
 end
 
@@ -458,24 +451,15 @@ end
 --- @param force boolean Принудительное удаление
 --- @return boolean Разрешено ли удаление
 function TunerMonitor:_can_destroy(force)
+    if force then
+        return true
+    end
+
     local opts = self._instance and self._instance.__options
     local channels = (type(opts) == "table") and (opts.channels or 0) or 0
 
-    -- Согласно astra-api-usage.md: если адаптер занят другими стримами (channels > 1)
-    -- и не передан флаг force, мы не можем изменять состояние и должны прервать выполнение.
-    if channels > 1 and not force then
-        Logger.warning(COMPONENT_NAME,
-            "[%s] destroy: адаптер занят (%d канала), удаление отменено",
-            tostring(self._name), channels)
-        return false
-    end
-
-    -- Декрементируем счетчик, так как монитор отключается
-    if type(opts) == "table" then
-        opts.channels = (channels > 0) and (channels - 1) or 0
-    end
-
-    return true
+    -- Удаляем только если тюнер не занят реальными стримами
+    return channels == 0
 end
 
 --- Специфическая очистка ресурсов тюнера.

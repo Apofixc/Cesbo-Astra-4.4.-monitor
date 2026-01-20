@@ -796,8 +796,8 @@ MonitorConfig.ValidationSchema = {
     channel_method_comparison = {
         type = "number",
         min = 1,
-        max = 10,
-        default = 3
+        max = 8,
+        default = 2
     },
     channel_cc_threshold = {
         type = "number",
@@ -836,8 +836,8 @@ MonitorConfig.ValidationSchema = {
     dvb_method_comparison = {
         type = "number",
         min = 1,
-        max = 10,
-        default = 3
+        max = 7,
+        default = 2
     },
     dvb_analyze = {
         type = "boolean",

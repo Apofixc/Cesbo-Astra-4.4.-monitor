@@ -133,7 +133,8 @@ end
 -- Публичное API: Поиск
 -- ===========================================================================
 
---- Находит все каналы в системе Astra, использующие указанный DVB-адаптер
+--- Находит все каналы в системе Astra, использующие указанный DVB-адаптер.
+--- Проверяет все входы канала.
 --- @param adapter_name string Имя адаптера (например, "0" или "0.1")
 --- @return table<string, table> Список найденных каналов (имя -> ch_data)
 function ChannelRepository:find_by_adapter(adapter_name)
@@ -151,32 +152,32 @@ function ChannelRepository:find_by_adapter(adapter_name)
         if type(inputs) == "table" then
             for i = 1, #inputs do
                 local input = inputs[i]
-                
-                -- В Astra ch_data.input[i] может быть строкой URL или таблицей с полем config
-                local cfg
+                local is_match = false
+
                 if type(input) == "table" then
-                    cfg = input.config
+                    local cfg = input.config
+                    if type(cfg) == "table" and cfg.format == "dvb" and tostring(cfg.addr or "") == target_adapter then
+                        is_match = true
+                    end
                 elseif type(input) == "string" then
-                    -- Используем системный парсинг URL
                     local parsed = Utils.parse_url(input)
                     if parsed and parsed.format == "dvb" and tostring(parsed.addr) == target_adapter then
-                        local name = (type(ch_data.config) == "table") and ch_data.config.name
-                        if name then result[name] = ch_data end
-                        break
+                        is_match = true
                     end
                 end
 
-                if type(cfg) == "table" and cfg.format == "dvb" and tostring(cfg.addr or "") == target_adapter then
+                if is_match then
                     local name = (type(ch_data.config) == "table") and ch_data.config.name
                     if name then
                         result[name] = ch_data
                     end
+                    -- Если нашли совпадение в одном из входов, переходим к следующему каналу
                     break
                 end
             end
         end
     end
-    
+
     return result
 end
 
