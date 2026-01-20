@@ -565,18 +565,18 @@ function EventDispatcher:_process_queue()
                         self.stats.processed = self.stats.processed + 1
                     end
 
-                -- Возврат в пул
-                self:_safe_return_to_pool(event)
-            end
+                    -- Возврат в пул
+                    self:_safe_return_to_pool(event)
+                end
 
-            self._total_queued_count = self._total_queued_count - 1
-            processed_in_batch = processed_in_batch + 1
-            
-            -- Time-Slicing: прерываем если превышен лимит времени или батча
-            if processed_in_batch >= limit or (os_clock() - start_time) >= MAX_TICK_TIME then
-                return -- Прерываем обработку до следующего тика
+                self._total_queued_count = self._total_queued_count - 1
+                processed_in_batch = processed_in_batch + 1
+
+                -- Time-Slicing: прерываем если превышен лимит времени или батча
+                if processed_in_batch >= limit or (os_clock() - start_time) >= MAX_TICK_TIME then
+                    return -- Прерываем обработку до следующего тика
+                end
             end
-        end
             
             -- Если очередь пуста, сбрасываем бит в маске
             self._active_queues_mask = bit32.band(self._active_queues_mask, bit32.bnot(queue.priority_bit))

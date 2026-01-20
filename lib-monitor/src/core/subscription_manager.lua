@@ -199,7 +199,7 @@ local Transport = {
         -- Оптимизация: используем кэшированный заголовок Host если доступен
         local host_header = config._host_header or ("Host: " .. config.host .. ":" .. config.port)
 
-        request({
+        local ok = request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
             timeout = HTTP_TIMEOUT,
@@ -219,6 +219,8 @@ local Transport = {
                 end
             end
         })
+        -- Если запрос вернул false (синхронная ошибка), прокидываем её для Circuit Breaker
+        if ok == false then return false, "request failed" end
         return true
     end,
     --- Доставка через WebSocket

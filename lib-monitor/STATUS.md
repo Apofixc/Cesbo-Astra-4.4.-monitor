@@ -15,7 +15,7 @@
 | **Scheduler** | 100% | **Production Ready (Min-Heap) + Stress Tested (V13, 200 monitors) + Unit Tested** | 19.01.2026 |
 | **Logger** | 100% | **Готов (Ultra-Extreme) + Unit Tested** | 19.01.2026 |
 | **TablePool** | 100% | **Production Ready + Drain System + Unit Tested** | 19.01.2026 |
-| **EventDispatcher** | 100% | **Production Ready + Chaos Tested (Cyclic, Bomb, Blocking, Storm) + Time-Slicing + Burst Eviction** | 20.01.2026 |
+| **EventDispatcher** | 100% | **Production Ready + Ultra-Extreme Tested (4 Levels) + Cyclic Protection + Time-Slicing** | 20.01.2026 |
 
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
@@ -36,7 +36,7 @@
 | :--- | :---: | :--- | :--- |
 | **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + Unit Tested** | 19.01.2026 |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Unified Base + Unit Tested** | 19.01.2026 |
-| **SubscriptionManager** | 100% | **Production Ready + Circuit Breaker + Async Multicast + Unit Tested** | 19.01.2026 |
+| **SubscriptionManager** | 100% | **Production Ready + Circuit Breaker (Sync/Async) + Async Multicast + Unit Tested** | 20.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Unit Tested** | 19.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)
