@@ -331,7 +331,6 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/utils/objects"] = { GET = RoutesUtils.get_all_objects },
         ["/api/utils/cleanup"] = { POST = RoutesUtils.cleanup },
         ["/api/utils/info"] = { GET = RoutesUtils.get_api_info },
-        ["/api/docs"] = { GET = RoutesUtils.get_api_docs },
         ["/"] = { GET = RoutesUtils.get_api_docs },
     }
 
