@@ -6,15 +6,15 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local math_max = math.max
-local os_time = os.time
-local pairs = pairs
-local setmetatable = setmetatable
-local string_format = string.format
-local tostring = tostring
-local type = type
-local bit32 = bit32
-local pcall = pcall
+local math_max = _G.math.max
+local os_time = _G.os.time
+local pairs = _G.pairs
+local setmetatable = _G.setmetatable
+local string_format = _G.string.format
+local tostring = _G.tostring
+local type = _G.type
+local bit32 = _G.bit32
+local pcall = _G.pcall
 local bit32_band = bit32.band
 
 -- 2. Функции из ModuleManager.get_module()
