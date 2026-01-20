@@ -20,7 +20,7 @@
 ## 2. Конфигурация и Утилиты
 | Модуль | Готовность | Статус | Последняя проверка |
 | :--- | :---: | :--- | :--- |
-| **MonitorConfig** | 100% | **Готов (Ultra-Extreme) + Centralized Validation Schema + Unit Tested** | 20.01.2026 |
+| **MonitorConfig** | 100% | **Готов (Ultra-Extreme) + Schema-based Loading + Unit Tested** | 20.01.2026 |
 | **Utils / Wildcard** | 100% | **Оптимизирован (Decision Tree) + Refactored + Unit Tested** | 20.01.2026 |
 | **FilterEngine** | 100% | **Оптимизирован (JIT Inlining) + Unit Tested** | 20.01.2026 |
 
@@ -36,7 +36,7 @@
 | :--- | :---: | :--- | :--- |
 | **Adapter** | 100% | **Рефакторинг (Эталонная структура) + API Ready + DVB Scenarios Tested** | 20.01.2026 |
 | **TunerMonitor** | 100% | **Готов (Ultra-Extreme) + Chaos Tested + Unified Base + DVB Scenarios Tested** | 20.01.2026 |
-| **SubscriptionManager** | 100% | **Production Ready + Circuit Breaker + LUA_CALLBACK Fixed** | 20.01.2026 |
+| **SubscriptionManager** | 100% | **Production Ready + Dynamic Transports + Smart Batching** | 20.01.2026 |
 | **WsSubscriber** | 100% | **Готов (Ultra-Extreme) + WS Batching + Stress Tested** | 20.01.2026 |
 
 ## 5. Бизнес-логика (Monitors)

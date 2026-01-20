@@ -130,7 +130,7 @@ MonitorConfig.EventBatchLimit = 100
 MonitorConfig.MaxBatchLimit = 1000
 
 -- Пакетная отправка
-MonitorConfig.BatchEnabled = true
+MonitorConfig.BatchEnabled = false
 MonitorConfig.BatchFlushInterval = 0.5
 MonitorConfig.BatchMaxSize = 50
 MonitorConfig.DefaultBatchMode = "single"
@@ -174,6 +174,15 @@ local function _load_from_file()
     local json_decode = ModuleManager.get_global_dependency("json.decode")
     if not json_decode then return end
 
+    -- 0. Инициализация значений по умолчанию из схемы (если они еще не установлены)
+    if MonitorConfig.ValidationSchema then
+        for key, rule in pairs(MonitorConfig.ValidationSchema) do
+            if MonitorConfig[key] == nil and rule.default ~= nil then
+                MonitorConfig[key] = rule.default
+            end
+        end
+    end
+
     -- 1. Загрузка основного конфига библиотеки
     local f = io_open(CONFIG_PATH, "rb")
     if f then
@@ -183,8 +192,8 @@ local function _load_from_file()
             local success, data = pcall(json_decode, content)
             if success and type(data) == "table" then
                 for k, v in pairs(data) do
-                    -- Обновляем только существующие ключи для защиты от мусора в JSON
-                    if MonitorConfig[k] ~= nil then
+                    -- Обновляем ключи, которые есть в схеме или уже в конфиге
+                    if MonitorConfig[k] ~= nil or (MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema[k]) then
                         MonitorConfig[k] = v
                     end
                 end
@@ -327,19 +336,6 @@ function MonitorConfig.save()
     f:write(content)
     f:close()
     return true
-end
-
--- ===========================================================================
--- Инициализация модуля
--- ===========================================================================
-
--- Первичная загрузка из файлов
-_load_from_file()
-
--- Автоматическая настройка уровней логирования для режима разработки
-if MonitorConfig.is_development() then
-    MonitorConfig.ExtraDebug = true
-    MonitorConfig.LogLevel = "DEBUG"
 end
 
 -- [ Схема валидации для параметров мониторов ]
@@ -864,5 +860,18 @@ MonitorConfig.ValidationSchema = {
         default = 60
     }
 }
+
+-- ===========================================================================
+-- Инициализация модуля
+-- ===========================================================================
+
+-- Первичная загрузка из файлов
+_load_from_file()
+
+-- Автоматическая настройка уровней логирования для режима разработки
+if MonitorConfig.is_development() then
+    MonitorConfig.ExtraDebug = true
+    MonitorConfig.LogLevel = "DEBUG"
+end
 
 return MonitorConfig

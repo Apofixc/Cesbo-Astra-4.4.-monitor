@@ -87,9 +87,14 @@ local MAX_RETRY_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxRetryQueueSize)
 --- @class SubscriptionManagerState
 --- @field transport_cache table<any, string> Кэш типов транспорта
 --- @field plan_cache table<string, table> Кэш планов доставки
+--- @field batchable_transports table<string, boolean> Транспорты с поддержкой батчинга
 local state = {
     transport_cache = {},
     plan_cache = {},
+    batchable_transports = {
+        HTTP = true,
+        WS = true
+    }
 }
 
 --- @class SubscriptionStats
@@ -444,6 +449,19 @@ function SubscriptionManager:load()
     end
 end
 
+--- Регистрирует новый тип транспорта для доставки событий.
+--- @param name string Имя транспорта (например, "MQTT")
+--- @param func function Функция доставки (self, config, event, event_type, retry_count, event_json)
+--- @param is_batchable? boolean Поддерживает ли транспорт пакетную отправку
+function SubscriptionManager:register_transport(name, func, is_batchable)
+    if type(name) ~= "string" or type(func) ~= "function" then return false end
+    local key = name:upper()
+    Transport[key] = func
+    state.batchable_transports[key] = is_batchable == true
+    Logger.info(COMPONENT_NAME, "Зарегистрирован новый транспорт: %s (батчинг: %s)", key, tostring(is_batchable == true))
+    return true
+end
+
 --- Регистрирует новую подписку на события
 --- @param event_type string Тип события или маска
 --- @param sub_data table|function Данные подписки (callback, filters, throttle_ms) или функция коллбэка
@@ -658,9 +676,9 @@ function SubscriptionManager:publish_event(event, now)
             end
 
             if should_send then
-                -- Пакетная отправка (Batching)
+                -- Пакетная отправка (Batching) - только для разрешенных транспортов
                 if batch_enabled and
-                   (sub.transport == "HTTP" or sub.transport == "WS") and
+                   state.batchable_transports[sub.transport] and
                    sub.batch_mode ~= "single"
                 then
                     self:add_to_batch(sub, event)
@@ -742,7 +760,7 @@ function SubscriptionManager:detect_transport(cfg)
         t = "LUA_CALLBACK"
     elseif type(cfg) == "table" then
         t = cfg.type and cfg.type:upper()
-        if not (t == "HTTP" or t == "WS" or t == "CONSOLE" or t == "LUA_CALLBACK") then
+        if not Transport[t] then
             if cfg.host and cfg.port then
                 t = "HTTP"
             else

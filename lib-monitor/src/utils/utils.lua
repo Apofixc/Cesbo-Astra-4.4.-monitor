@@ -237,6 +237,11 @@ function Utils.validate_monitor_param(name, value)
         return schema.default
     end
 
+    -- Приведение к числу для надежности (если пришла строка из JSON)
+    if schema.type == "number" and type(value) ~= "number" then
+        value = _G.tonumber(value)
+    end
+
     if type(value) ~= schema.type then
         local log = _get_logger()
         if log then
