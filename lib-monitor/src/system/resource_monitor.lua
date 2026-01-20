@@ -653,8 +653,10 @@ if f_pid then
 end
 
 
--- Автоматический запуск при загрузке
-ResourceMonitor.start()
+-- Автоматический запуск при загрузке (если включено в конфиге)
+if not MonitorConfig or MonitorConfig.ResourceMonitorEnabled ~= false then
+    ResourceMonitor.start()
+end
 
 -- ===========================================================================
 -- Инициализация модуля

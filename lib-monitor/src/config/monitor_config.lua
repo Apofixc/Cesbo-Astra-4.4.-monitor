@@ -837,7 +837,13 @@ MonitorConfig.ValidationSchema = {
         default = 60
     },
 
-    -- 11. Параметры экземпляров (Instance Parameters)
+    -- 11. Системные мониторы
+    ResourceMonitorEnabled = {
+        type = "boolean",
+        default = true
+    },
+
+    -- 12. Параметры экземпляров (Instance Parameters)
     channel_rate = {
         type = "number",
         min = 0.0001,

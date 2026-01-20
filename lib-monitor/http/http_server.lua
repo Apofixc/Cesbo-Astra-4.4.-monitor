@@ -308,6 +308,7 @@ function HttpServer.start(addr, port, retry_count, force_free)
         ["/api/system/logs"] = { GET = SystemRoutes.get_logs },
         ["/api/system/watchdog"] = { POST = SystemRoutes.toggle_watchdog },
         ["/api/system/auto-recover"] = { POST = SystemRoutes.toggle_auto_recover },
+        ["/api/system/resource-monitor/toggle"] = { POST = SystemRoutes.toggle_resource_monitor },
         ["/api/system/maintenance/run"] = { POST = SystemRoutes.run_maintenance },
         ["/api/system/config"] = { PATCH = SystemRoutes.update_config },
 

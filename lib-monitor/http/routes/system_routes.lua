@@ -194,6 +194,32 @@ function SystemRoutes.toggle_auto_recover(server, client, request)
     return HttpHelpers.success(server, client, { message = "Auto-recover статус обновлен", enabled = data.enabled })
 end
 
+--- Управление ResourceMonitor (включение/выключение)
+function SystemRoutes.toggle_resource_monitor(server, client, request)
+    local data = HttpHelpers.get_params(request)
+    local ok, err = HttpHelpers.validate(data, {
+        enabled = { type = "boolean", required = true }
+    })
+    if not ok then return HttpHelpers.error(server, client, 400, err) end
+
+    if not ResourceMonitor then
+        return HttpHelpers.error(server, client, 501, "ResourceMonitor недоступен")
+    end
+
+    if data.enabled then
+        ResourceMonitor.start()
+    else
+        ResourceMonitor.stop()
+    end
+
+    -- Обновляем флаг в конфиге для синхронизации
+    if MonitorConfig then
+        MonitorConfig.ResourceMonitorEnabled = data.enabled
+    end
+
+    return HttpHelpers.success(server, client, { message = "ResourceMonitor статус обновлен", enabled = data.enabled })
+end
+
 --- Ручной запуск цикла обслуживания (Maintenance Run)
 function SystemRoutes.run_maintenance(server, client, request)
     local data = HttpHelpers.get_params(request)
