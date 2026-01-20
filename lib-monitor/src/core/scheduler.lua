@@ -71,7 +71,7 @@ function Scheduler:_initialize()
     self._active = true
     self._task_count = 0
     self._memory_limit_kb = DEFAULT_MEMORY_LIMIT_KB
-    self._current_interval = 0.1 -- Повышаем частоту тиков для точности
+    self._current_interval = 1 -- Интервал в секундах (целое число > 0 для Astra)
 
     -- Запуск основного цикла
     local astra_timer = get_timer()
