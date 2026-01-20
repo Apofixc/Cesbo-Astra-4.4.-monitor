@@ -48,10 +48,9 @@ local Adapter = {}
 --- @param name_adapter string Уникальное имя адаптера
 --- @param conf table Конфигурация для запуска
 --- @param force boolean|nil Принудительная остановка
---- @param old_channels_count number Предыдущее количество каналов (для force)
 --- @param old_conf table Старая конфигурация для отката
 --- @return boolean Статус выполнения
-local function _perform_restart(name_adapter, conf, force, old_channels_count, old_conf)
+local function _perform_restart(name_adapter, conf, force, old_conf)
     if not Adapter.stop_dvb_monitor(name_adapter, force) then
         return false
     end
@@ -64,11 +63,6 @@ local function _perform_restart(name_adapter, conf, force, old_channels_count, o
     if new_tuner then
         -- Сохраняем бэкап в новый объект
         new_tuner:set_backup(old_conf, {})
-
-        local instance = new_tuner:get_instance()
-        if force and instance and instance.__options then
-            instance.__options.channels = old_channels_count
-        end
     end
 
     -- Обновляем время последнего успешного рестарта
@@ -222,7 +216,7 @@ function Adapter.reconfigure(adapter_list, options)
 
             -- При реконфигурации мы всегда используем force для монитора,
             -- так как каналы мы уже остановили сами.
-            if not _perform_restart(adapter_name, target_conf, true, 0, old_conf) then
+            if not _perform_restart(adapter_name, target_conf, true, old_conf) then
                 Logger.error(COMPONENT_NAME, "reconfigure: ошибка рестарта адаптера %s", adapter_name)
                 success = false
             end

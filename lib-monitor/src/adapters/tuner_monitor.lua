@@ -473,18 +473,6 @@ function TunerMonitor:_on_destroy()
         scheduler:remove_task("psi_update_" .. self._name)
     end
 
-    -- Безопасная очистка внутреннего списка Astra
-    local opts = self._instance and self._instance.__options
-    if type(dvb_input_instance_list) == "table" and type(opts) == "table" then
-        local adapter = opts.adapter
-        local device = opts.device or "0"
-        if adapter ~= nil then
-            local instance_id = string_format("%s.%s", tostring(adapter),
-                tostring(device))
-            dvb_input_instance_list[instance_id] = nil
-        end
-    end
-
     self._current_flags = nil
     self._last_status_num = nil
     self._stats = nil
