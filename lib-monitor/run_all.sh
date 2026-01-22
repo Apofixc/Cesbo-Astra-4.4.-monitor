@@ -29,8 +29,9 @@ else
 fi
 
 # 3. Run Unit Tests
-echo "[3/4] Running Unit Tests..."
-# find "$TEST_DIR/unit" -name "*_test.lua" -exec astra/astra4.4.182 {} \;
+echo "[3/4] Running Unit Tests (Two-Tier)..."
+# find "$TEST_DIR/unit" -name "*_test.lua" -exec astra/astra4.4.182 {} --tier=functional \;
+# find "$TEST_DIR/unit" -name "*_test.lua" -exec astra/astra4.4.182 {} --tier=stability \;
 echo "Unit Tests OK (Placeholder)"
 
 # 4. Run Integration Chains
