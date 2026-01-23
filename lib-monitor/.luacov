@@ -1,0 +1,8 @@
+modules = {
+    ["src.*"] = "src/",
+    ["http.*"] = "http/"
+}
+exclude = {
+    "test",
+    "luacov"
+}
