@@ -11,7 +11,7 @@ local pairs = _G.pairs
 local ipairs = _G.ipairs
 local pcall = _G.pcall
 local load = _G.load
-local tostring = tostring
+local tostring = _G.tostring
 local string_format = _G.string.format
 local string_match = _G.string.match
 local string_find = _G.string.find
@@ -67,7 +67,8 @@ function FilterEngine.init_config_subscription()
         instance:subscribe("config:updated:pool", function(new_config)
             if new_config.MaxCacheSize and new_config.MaxCacheSize.filter_engine then
                 _m_config.MaxCacheSize.filter_engine = new_config.MaxCacheSize.filter_engine
-                Logger.debug(COMPONENT_NAME, "Лимит кэша FilterEngine обновлен: %d", _m_config.MaxCacheSize.filter_engine)
+                Logger.debug(COMPONENT_NAME, "Лимит кэша FilterEngine обновлен: %d",
+                    _m_config.MaxCacheSize.filter_engine)
             end
         end)
     end
@@ -81,8 +82,12 @@ local OPERATORS = {
     ge = function(a, b) return (type(a) == "number" and type(b) == "number") and a >= b end,
     lt = function(a, b) return (type(a) == "number" and type(b) == "number") and a < b end,
     le = function(a, b) return (type(a) == "number" and type(b) == "number") and a <= b end,
-    contains = function(a, b) return (type(a) == "string" and type(b) == "string") and string_find(a, b, 1, true) ~= nil end,
-    matches = function(a, b) return (type(a) == "string" and type(b) == "string") and string_match(a, b) ~= nil end,
+    contains = function(a, b)
+        return (type(a) == "string" and type(b) == "string") and string_find(a, b, 1, true) ~= nil
+    end,
+    matches = function(a, b)
+        return (type(a) == "string" and type(b) == "string") and string_match(a, b) ~= nil
+    end,
     ["in"] = function(a, b)
         if type(b) == "table" then
             for _, v in pairs(b) do if v == a then return true end end
@@ -177,7 +182,7 @@ end
 --- @return boolean Результат проверки
 local function _check_condition(data, condition, sub_id, cond_idx)
     if type(data) ~= "table" then return false end
-    
+
     -- Если это вложенная группа условий
     if condition.conditions then
         return FilterEngine.match(data, condition, sub_id)
@@ -247,7 +252,7 @@ local function _generate_cond_expr(cond, upvalues)
         for part in field:gmatch("[^%.]+") do
             table_insert(parts, part)
         end
-        
+
         local current = "data"
         local checks = {}
         for i = 1, #parts - 1 do
@@ -280,20 +285,35 @@ local function _generate_cond_expr(cond, upvalues)
         table_insert(upvalues, { name = uv_name, value = target })
         target_val = uv_name
     end
-    
+
     -- Генерация финального выражения с учетом типов
-    if op == "eq" then return string_format("(%s == %s)", field_expr, target_val)
-    elseif op == "ne" then return string_format("(%s ~= %s)", field_expr, target_val)
-    elseif op == "gt" then return string_format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
-    elseif op == "ge" then return string_format("(type(%s) == 'number' and %s >= %s)", field_expr, field_expr, target_val)
-    elseif op == "lt" then return string_format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
-    elseif op == "le" then return string_format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
+    if op == "eq" then
+        return string_format("(%s == %s)", field_expr, target_val)
+    elseif op == "ne" then
+        return string_format("(%s ~= %s)", field_expr, target_val)
+    elseif op == "gt" then
+        return string_format("(type(%s) == 'number' and %s > %s)", field_expr, field_expr, target_val)
+    elseif op == "ge" then
+        return string_format("(type(%s) == 'number' and %s >= %s)", field_expr, field_expr, target_val)
+    elseif op == "lt" then
+        return string_format("(type(%s) == 'number' and %s < %s)", field_expr, field_expr, target_val)
+    elseif op == "le" then
+        return string_format("(type(%s) == 'number' and %s <= %s)", field_expr, field_expr, target_val)
     elseif op == "contains" then
-        return string_format("(type(%s) == 'string' and string_find(%s, %s, 1, true) ~= nil)", field_expr, field_expr, target_val)
+        return string_format(
+            "(type(%s) == 'string' and string_find(%s, %s, 1, true) ~= nil)",
+            field_expr, field_expr, target_val
+        )
     elseif op == "matches" then
-        return string_format("(type(%s) == 'string' and string_match(%s, %s) ~= nil)", field_expr, field_expr, target_val)
+        return string_format(
+            "(type(%s) == 'string' and string_match(%s, %s) ~= nil)",
+            field_expr, field_expr, target_val
+        )
     elseif op == "in" and type(target) == "string" then
-        return string_format("(type(%s) ~= 'nil' and string_find(%s, tostring(%s), 1, true) ~= nil)", field_expr, target_val, field_expr)
+        return string_format(
+            "(type(%s) ~= 'nil' and string_find(%s, tostring(%s), 1, true) ~= nil)",
+            field_expr, target_val, field_expr
+        )
     end
 
     return "false"
@@ -306,7 +326,7 @@ end
 --- @return string Lua-код
 local function _generate_recursive(filters, upvalues)
     if not filters.conditions or #filters.conditions == 0 then return "true" end
-    
+
     local parts = {}
     for _, cond in ipairs(filters.conditions) do
         if cond.conditions then
@@ -315,7 +335,7 @@ local function _generate_recursive(filters, upvalues)
             table_insert(parts, _generate_cond_expr(cond, upvalues))
         end
     end
-    
+
     local joiner = (filters.logic == "or") and " or " or " and "
     return table_concat(parts, joiner)
 end
@@ -334,15 +354,15 @@ function FilterEngine.match(data, filters, sub_id)
         local function check_dur(f)
             if not f.conditions then return end
             for _, c in ipairs(f.conditions) do
-                if c.duration and c.duration > 0 then 
+                if c.duration and c.duration > 0 then
                     has_duration = true
                     -- Компилируем само условие для ускорения интерпретатора
                     if not c._compiled_cond then
                         local upvalues = {}
                         local expr = _generate_cond_expr(c, upvalues)
-                        local uv_env = { 
-                            type = type, tostring = tostring, 
-                            string_find = string_find, string_match = string_match 
+                        local uv_env = {
+                            type = type, tostring = tostring,
+                            string_find = string_find, string_match = string_match
                         }
                         for _, uv in ipairs(upvalues) do uv_env[uv.name] = uv.value end
                         local code = string_format("return function(data) return %s end", expr)
@@ -360,7 +380,7 @@ function FilterEngine.match(data, filters, sub_id)
         if not has_duration then
             local upvalues = {}
             local expr
-            
+
             if filters.conditions then
                 expr = _generate_recursive(filters, upvalues)
             else
@@ -374,15 +394,15 @@ function FilterEngine.match(data, filters, sub_id)
                 end
                 expr = #parts > 0 and table_concat(parts, " and ") or "true"
             end
-            
-            local uv_env = { 
-                type = type, tostring = tostring, 
-                string_find = string_find, string_match = string_match 
+
+            local uv_env = {
+                type = type, tostring = tostring,
+                string_find = string_find, string_match = string_match
             }
             for _, uv in ipairs(upvalues) do uv_env[uv.name] = uv.value end
-            
+
             local code = string_format("return function(data) return %s end", expr)
-            
+
             local factory, err = load(code, "=(filter_jit)", "t", uv_env)
             if factory then
                 local ok, func = pcall(factory)
@@ -409,7 +429,9 @@ function FilterEngine.match(data, filters, sub_id)
                 state.script_cache = {}
                 state.script_cache_count = 0
             end
-            local env = { data = data, type = type, tostring = tostring, os_time = os_time, pairs = pairs, ipairs = ipairs }
+            local env = {
+                data = data, type = type, tostring = tostring, os_time = os_time, pairs = pairs, ipairs = ipairs
+            }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
             if func then

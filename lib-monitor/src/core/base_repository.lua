@@ -69,7 +69,7 @@ function BaseRepository:_destroy_instance(name, instance, force)
         s.recovery.attempts[name] = nil
         s.recovery.last_success[name] = nil
         s.stats.active = s.stats.active - 1
-        
+
         -- Вызов хука для очистки специфичных данных в наследниках
         self:_on_instance_destroyed(name)
 
@@ -87,9 +87,8 @@ end
 --- @param data? table Дополнительные данные
 function BaseRepository:_emit_event(event_type, name, data)
     local dispatcher = EventDispatcher and EventDispatcher.get_instance()
-    if not dispatcher then 
-        print("[DEBUG] No dispatcher found in _emit_event")
-        return 
+    if not dispatcher then
+        return
     end
 
     local event_data = {
@@ -204,7 +203,7 @@ function BaseRepository:_maintenance_tick()
     local settings = s.settings
     local recovered = 0
     local failed = 0
-    
+
     s.recovery.last_check = now
 
     -- Создаем список имен для безопасной итерации (т.к. внутри можем удалять/добавлять)
@@ -278,18 +277,19 @@ end
 function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     local s = self._state
     local settings = s.settings
-    
+
     local attempts = (s.recovery.attempts[name] or 0) + 1
-    local max_attempts = (reason == "watchdog") and settings.watchdog.max_attempts or settings.auto_recover.max_attempts
+    local max_attempts = (reason == "watchdog") and settings.watchdog.max_attempts
+        or settings.auto_recover.max_attempts
 
     if attempts > max_attempts then
         Logger.error(self._component_name,
             "[%s] Превышен лимит восстановления (%d/%d, причина: %s). Остановка.",
             name, attempts - 1, max_attempts, reason)
-        
+
         s.stats.limit_reached = s.stats.limit_reached + 1
         self:_emit_event(EVENTS.RECOVERY_LIMIT, name, { attempts = attempts - 1, reason = reason })
-        
+
         if monitor.pause then monitor:pause() end
         return false
     end
@@ -297,7 +297,7 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     Logger.warning(self._component_name,
         "[%s] Попытка восстановления (%d/%d, причина: %s)",
         name, attempts, max_attempts, reason)
-    
+
     self:_emit_event(EVENTS.RECOVERY_ATTEMPT, name, { attempt = attempts, max = max_attempts, reason = reason })
 
     -- АТОМАРНОЕ ВОССТАНОВЛЕНИЕ (Shadow Copy)
@@ -312,15 +312,15 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
     local config = monitor.get_config and monitor:get_config()
     if config and class.new then
         local new_monitor = class.new(config)
-        
+
         if new_monitor and new_monitor.start and new_monitor:start() then
             -- Успех: заменяем старый на новый (unregister сам вызовет destroy)
             self:unregister(name, true)
             self:register(name, new_monitor, class)
-            
+
             s.recovery.attempts[name] = attempts
             s.recovery.last_success[name] = now
-            
+
             s.stats.total_recovered = s.stats.total_recovered + 1
             Logger.info(self._component_name, "[%s] Монитор успешно восстановлен", name)
             self:_emit_event(EVENTS.RECOVERY_SUCCESS, name, { attempt = attempts, reason = reason })
@@ -329,7 +329,11 @@ function BaseRepository:_perform_recovery(name, monitor, class, reason, now)
             s.stats.total_failed = s.stats.total_failed + 1
             s.recovery.attempts[name] = attempts
             Logger.error(self._component_name, "[%s] Не удалось запустить новый экземпляр", name)
-            self:_emit_event(EVENTS.RECOVERY_FAILED, name, { attempt = attempts, reason = reason, error = "start_failed" })
+            self:_emit_event(
+                EVENTS.RECOVERY_FAILED,
+                name,
+                { attempt = attempts, reason = reason, error = "start_failed" }
+            )
             return false
         end
     else
@@ -456,7 +460,7 @@ function BaseRepository:unregister(name, force)
     if not config then
         Logger.error(self._component_name, "unregister: не удалось уничтожить объект '%s'", name)
     end
-    
+
     return config
 end
 
@@ -556,8 +560,12 @@ end
 --- Останавливает и удаляет все объекты в репозитории.
 --- Используется при завершении работы системы.
 function BaseRepository:shutdown()
-    Logger.info(self._component_name, "Остановка репозитория: завершение работы %d мониторов", self._state.stats.active)
-    
+    Logger.info(
+        self._component_name,
+        "Остановка репозитория: завершение работы %d мониторов",
+        self._state.stats.active
+    )
+
     self:disable_auto_recovery()
     self:disable_watchdog()
 

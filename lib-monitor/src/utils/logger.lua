@@ -226,7 +226,7 @@ local function _write_to_buffer(level, component, message, context_id, now)
     local buffer = state.context_buffer[component]
     local pool = _get_table_pool()
     local entry = pool and pool.get("log_entry") or {}
-    
+
     entry.timestamp = now or os_time()
     entry.level = level
     entry.message = message

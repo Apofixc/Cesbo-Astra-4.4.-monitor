@@ -85,7 +85,7 @@ function SubscriberRoutes.test_subscription(server, client, request)
 
     local dispatcher = EventDispatcher.get_instance()
     local sub_mgr = dispatcher.subscription_manager
-    
+
     local test_event = {
         data = { message = "Test notification from Astra Monitor API", timestamp = os.time() },
         json = nil -- Будет закодировано транспортом

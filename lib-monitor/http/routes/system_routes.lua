@@ -76,7 +76,9 @@ function SystemRoutes.reload(server, client, request)
             interval = delay,
             callback = function(self) self:close(); if astra_reload then astra_reload() end end
         })
-        return HttpHelpers.success(server, client, { message = "Перезагрузка Astra запланирована через " .. delay .. " сек" })
+        return HttpHelpers.success(server, client, {
+            message = "Перезагрузка Astra запланирована через " .. delay .. " сек"
+        })
     end
 
     if astra_reload then astra_reload() end
@@ -89,8 +91,13 @@ function SystemRoutes.exit(server, client, request)
     local delay = tonumber(params.delay) or 1
 
     if timer_obj then
-        timer_obj({ interval = delay, callback = function(self) self:close(); if astra_exit then astra_exit() end end })
-        return HttpHelpers.success(server, client, { message = "Выход из Astra запланирован через " .. delay .. " сек" })
+        timer_obj({
+            interval = delay,
+            callback = function(self) self:close(); if astra_exit then astra_exit() end end
+        })
+        return HttpHelpers.success(server, client, {
+            message = "Выход из Astra запланирован через " .. delay .. " сек"
+        })
     end
 
     if astra_exit then astra_exit() end
@@ -181,7 +188,11 @@ function SystemRoutes.toggle_auto_recover(server, client, request)
 
     if not data.repo or data.repo == "channels" then
         if ChannelRepository then
-            if data.enabled then ChannelRepository:enable_auto_recovery() else ChannelRepository:disable_auto_recovery() end
+            if data.enabled then
+                ChannelRepository:enable_auto_recovery()
+            else
+                ChannelRepository:disable_auto_recovery()
+            end
         end
     end
 

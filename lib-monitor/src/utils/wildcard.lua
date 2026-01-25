@@ -204,7 +204,7 @@ function Wildcard.match_multiple(name, patterns)
     -- Если паттернов мало, используем обычный перебор (Fast Path)
     local count = 0
     for _ in pairs(patterns) do count = count + 1 end
-    
+
     if count < 5 then
         local result = {}
         for p in pairs(patterns) do
@@ -236,7 +236,7 @@ function Wildcard.match_multiple(name, patterns)
     local function search(node, segments, idx)
         -- Добавляем паттерны текущего узла
         for _, p in ipairs(node.patterns) do table_insert(result, p) end
-        
+
         local seg = segments[idx]
         if not seg then return end
 

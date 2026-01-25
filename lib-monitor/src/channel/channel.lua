@@ -48,25 +48,9 @@ local _m_config = {
 --- @class ChannelState
 --- @field restart_configs table<string, table[]> Хранилище конфигураций для перезапуска
 
-local state = {
-    --- Хранилище конфигураций для перезапуска каналов при рестарте DVB-адаптера
-    --- @type table<string, table[]>
-    restart_configs = {}
-}
-
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
-
---- Возвращает экземпляр диспетчера событий (ленивая загрузка)
---- @return any|nil
-local function _get_event_dispatcher()
-    local success, dispatcher = pcall(ModuleManager.get_module, "core.event_dispatcher")
-    if success and dispatcher and type(dispatcher) == "table" then
-        return dispatcher.get_instance()
-    end
-    return nil
-end
 
 --- Обработчики форматов сетевых адресов
 --- @param config table Конфигурация входа
@@ -75,13 +59,13 @@ local function _network_format_handler(config)
     local cfg = { format = config.format }
     local localaddr = config.localaddr or ""
     local host = config.addr or config.host or "0.0.0.0"
-    
+
     if localaddr ~= "" then
         cfg.addr = localaddr .. "@" .. host .. ":" .. (config.port or "0")
     else
         cfg.addr = host .. ":" .. (config.port or "0")
     end
-    
+
     cfg.stream = Utils.get_stream_name(host) or "unknown_stream"
     return cfg
 end
@@ -119,7 +103,7 @@ local _monitor_type_handlers = {
 
         local upstream = input_data.input and input_data.input.tail
         local monitor_target = "Input: Unknown"
-        
+
         if type(input_data.config) == "table" then
             local fmt = input_data.config.format or "Unknown"
             local addr = "Unknown"
@@ -175,7 +159,10 @@ local _monitor_type_handlers = {
         local addr = type(split_result) == "table" and split_result[1] or output_url
         local monitor_target = string_format("Output: IP (%s)", addr)
 
-        return { upstream = channel_data.output[key] and channel_data.output[key].tail, monitor_target = monitor_target }
+        return {
+            upstream = channel_data.output[key] and channel_data.output[key].tail,
+            monitor_target = monitor_target
+        }
     end,
 }
 
@@ -245,7 +232,7 @@ end
 --- @return any|nil Экземпляр монитора Astra или nil при ошибке
 function Channel.make_monitor(config)
     local limit = _m_config.ChannelMonitorLimit
-    
+
     if ChannelRepository:count() >= limit then
         Logger.error(COMPONENT_NAME, "make_monitor: лимит мониторов исчерпан (%d)", limit)
         return nil
@@ -402,7 +389,7 @@ function Channel.kill_stream(channel_data)
         Logger.error(COMPONENT_NAME, "kill_stream: некорректные данные канала или канал не найден")
         return nil
     end
-    
+
     local name = ch_data.config.name
     if not Channel.kill_monitor(name) then
         Logger.warning(COMPONENT_NAME, "kill_stream: монитор '%s' не был активен", name)
@@ -410,7 +397,7 @@ function Channel.kill_stream(channel_data)
 
     kill_channel(ch_data)
     Logger.info(COMPONENT_NAME, "Поток и монитор '%s' успешно остановлены", name)
-    
+
     return ch_data.config
 end
 

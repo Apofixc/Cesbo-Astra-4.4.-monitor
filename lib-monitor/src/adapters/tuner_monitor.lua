@@ -181,7 +181,7 @@ function TunerMonitor:_on_astra_data(data)
     end
 
     -- Расчет качества (quality) для метода сравнения
-    local current_quality = -1
+    local current_quality
     if conf.analyze and self._stats.count > 0 then
         local avg_ber = self._stats.ber_sum / self._stats.count
         if avg_ber > 0 or self._stats.unc_sum > 0 then

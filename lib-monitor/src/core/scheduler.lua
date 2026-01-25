@@ -7,10 +7,8 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local pairs = _G.pairs
 local type = _G.type
 local os_clock = _G.os.clock
-local os_time = _G.os.time
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local collectgarbage = _G.collectgarbage
@@ -108,7 +106,8 @@ function Scheduler:_initialize()
             end
         end, 60)
 
-        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Min-Heap: OK, GC Limit: %d KB)", self._memory_limit_kb)
+        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Min-Heap: OK, GC Limit: %d KB)",
+            self._memory_limit_kb)
     else
         Logger.error(COMPONENT_NAME, "Критическая ошибка: зависимость Astra 'timer' не найдена!")
     end
@@ -177,14 +176,16 @@ function Scheduler:_run_task(task, now)
     end
 
     if duration > 0.1 then
-        Logger.warning(COMPONENT_NAME,
-            "Задача '%s' выполнялась слишком долго: %.3f сек", 
-            task.id, duration)
+        Logger.warning(
+            COMPONENT_NAME,
+            "Задача '%s' выполнялась слишком долго: %.3f сек",
+            task.id, duration
+        )
     end
 
     task.last_run = now
     task.next_run = now + task.interval
-    
+
     -- После обновления времени следующего запуска, перестраиваем кучу
     self:_heap_down(task.heap_idx)
 end
@@ -195,7 +196,7 @@ function Scheduler:_tick()
     -- Оптимизация: быстрый выход если задач нет
     if #self._heap == 0 then return end
     local now = _G.os.clock()
-    
+
     -- Выполняем все задачи, время которых пришло
     while #self._heap > 0 do
         local task = self._heap[1]
@@ -237,9 +238,9 @@ end
 --- @param interval number Интервал выполнения в секундах
 --- @param options? table Дополнительные опции: { immediate: boolean, priority: number }
 function Scheduler:add_task(id, callback, interval, options)
-    if not id or type(callback) ~= "function" then 
+    if not id or type(callback) ~= "function" then
         Logger.error(COMPONENT_NAME, "Попытка добавить некорректную задачу: %s", tostring(id))
-        return 
+        return
     end
 
     -- Если задача с таким ID уже существует, удаляем её перед добавлением новой.
@@ -278,12 +279,12 @@ function Scheduler:remove_task(id)
     if task then
         local idx = task.heap_idx
         local size = #self._heap
-        
+
         if idx < size then
             self._heap[idx] = self._heap[size]
             self._heap[idx].heap_idx = idx
             self._heap[size] = nil
-            
+
             self:_heap_down(idx)
             if self._heap[idx] then self:_heap_up(idx) end
         else
@@ -304,15 +305,15 @@ function Scheduler:set_task_interval(id, interval)
     if task then
         local old_interval = task.interval
         task.interval = (interval and interval >= 1) and interval or 1
-        
+
         local now = os_clock()
         local remaining = task.next_run - now
         if remaining > task.interval then
             task.next_run = now + task.interval
             self:_heap_up(task.heap_idx)
         end
-        
-        Logger.debug(COMPONENT_NAME, "Интервал задачи '%s' изменен: %d -> %d сек", 
+
+        Logger.debug(COMPONENT_NAME, "Интервал задачи '%s' изменен: %d -> %d сек",
             id, old_interval, task.interval)
     end
 end
@@ -320,8 +321,8 @@ end
 --- Приостанавливает выполнение задачи
 --- @param id string Идентификатор задачи
 function Scheduler:pause_task(id)
-    if self._tasks[id] then 
-        self._tasks[id].active = false 
+    if self._tasks[id] then
+        self._tasks[id].active = false
         Logger.debug(COMPONENT_NAME, "Задача приостановлена: %s", id)
     end
 end

@@ -54,7 +54,11 @@ local MonitorConfig = {}
 
 MonitorConfig.ValidationSchema = {
     Logger = {
-        LogLevel = { type = "string", enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true}, default = "INFO" },
+        LogLevel = {
+            type = "string",
+            enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true},
+            default = "INFO"
+        },
         LogFormat = { type = "string", enum = {TEXT=true, JSON=true}, default = "TEXT" },
         LogBatchEnabled = { type = "boolean", default = false },
         LogBufferSize = { type = "number", min = 0, max = 1024 * 1024, default = 0 },
@@ -274,19 +278,31 @@ function MonitorConfig.validate()
                 local value = section[key]
                 if value ~= nil then
                     if type(value) ~= rule.type then
-                        return false, string_format("Parameter '%s.%s' must be a %s, got %s", section_name, key, rule.type, type(value))
+                        return false, string_format(
+                            "Parameter '%s.%s' must be a %s, got %s",
+                            section_name, key, rule.type, type(value)
+                        )
                     end
 
                     if rule.type == "number" then
                         if rule.min and value < rule.min then
-                            return false, string_format("Parameter '%s.%s' is too small (min: %s)", section_name, key, tostring(rule.min))
+                            return false, string_format(
+                                "Parameter '%s.%s' is too small (min: %s)",
+                                section_name, key, tostring(rule.min)
+                            )
                         end
                         if rule.max and value > rule.max then
-                            return false, string_format("Parameter '%s.%s' is too large (max: %s)", section_name, key, tostring(rule.max))
+                            return false, string_format(
+                                "Parameter '%s.%s' is too large (max: %s)",
+                                section_name, key, tostring(rule.max)
+                            )
                         end
                     elseif rule.type == "string" and rule.enum then
                         if not rule.enum[value] then
-                            return false, string_format("Invalid value for '%s.%s': %s", section_name, key, tostring(value))
+                            return false, string_format(
+                                "Invalid value for '%s.%s': %s",
+                                section_name, key, tostring(value)
+                            )
                         end
                     end
                 end
@@ -365,7 +381,10 @@ function MonitorConfig.update(params)
                 local rule = schema[k][sub_k]
                 if rule then
                     if type(sub_v) ~= rule.type then
-                        return false, string_format("Параметр '%s.%s' должен быть %s, получено %s", k, sub_k, rule.type, type(sub_v))
+                        return false, string_format(
+                            "Параметр '%s.%s' должен быть %s, получено %s",
+                            k, sub_k, rule.type, type(sub_v)
+                        )
                     end
                     MonitorConfig[k][sub_k] = sub_v
                     updated_sections[k] = true
@@ -395,12 +414,12 @@ function MonitorConfig.update(params)
     end
 
     _state.cache = {} -- Сброс кэша
-    
+
     local Logger = ModuleManager.get_module("logger")
     if Logger and Logger.info then
         Logger.info(COMPONENT_NAME, "Конфигурация обновлена через API")
     end
-    
+
     return true
 end
 
@@ -422,7 +441,7 @@ function MonitorConfig.save()
             end
         end
     end
-    
+
     local ok, content = pcall(json_encode, data_to_save)
     if not ok then return false end
 

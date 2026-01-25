@@ -416,7 +416,10 @@ function TablePool.maintain()
                     name, current_limit, new_limit, miss_rate)
             elseif miss_rate < 0.05 then
                 -- Сжимаем пул, если промахов почти нет
-                local new_limit = math_max(_m_config.PoolMinLimit, math_floor(current_limit * (1 - _m_config.PoolAdaptiveStep)))
+                local new_limit = math_max(
+                    _m_config.PoolMinLimit,
+                    math_floor(current_limit * (1 - _m_config.PoolAdaptiveStep))
+                )
                 if new_limit < current_limit then
                     state.limits[name] = new_limit
                     Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)

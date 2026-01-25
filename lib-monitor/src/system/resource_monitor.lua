@@ -197,7 +197,7 @@ end
 
 --- Обновляет кэш конфигурации (внутренняя версия с проверкой интервала)
 local function _auto_refresh_config()
-    -- Теперь конфигурация обновляется реактивно через события, 
+    -- Теперь конфигурация обновляется реактивно через события,
     -- но сохраняем метод для совместимости или первичной инициализации
     if state.config_cache.last_refresh == 0 then
         _refresh_config_internal()
@@ -214,13 +214,13 @@ end
 --- @return boolean Успех
 local function _parse_status(report)
     local f = state.status_file
-    if not f then 
+    if not f then
         state.status_file = io_open(PROC_STATUS, "r")
         f = state.status_file
         if not f then return false end
     end
 
-    local ok, err = f:seek("set", 0)
+    local ok, _ = f:seek("set", 0)
     if not ok then
         -- Self-Healing: пробуем переоткрыть файл
         f:close()
@@ -231,7 +231,7 @@ local function _parse_status(report)
     end
 
     local content = f:read(STATUS_READ_BUFFER)
-    if not content then 
+    if not content then
         -- Self-Healing: повторная попытка при ошибке чтения
         f:close()
         state.status_file = io_open(PROC_STATUS, "r")
@@ -245,12 +245,12 @@ local function _parse_status(report)
     -- Rare-Metric Throttling: FDSize и Threads парсим не каждый раз.
     -- Используем == 1, чтобы первая итерация всегда собирала полные данные.
     local update_rare = (state.iteration_count % _m_config.RareMetricInterval == 1)
-    
+
     if update_rare then
         report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
         report.cpu.threads = tonumber(string_match(content, "Threads:%s+(%d+)")) or report.cpu.threads
     end
-    
+
     report.memory.virtual = tonumber(string_match(content, "VmSize:%s+(%d+)")) or report.memory.virtual
     report.memory.resident = tonumber(string_match(content, "VmRSS:%s+(%d+)")) or report.memory.resident
 
@@ -261,13 +261,13 @@ end
 --- @return number, number
 local function _parse_stat()
     local f = state.stat_file
-    if not f then 
+    if not f then
         state.stat_file = io_open(PROC_STAT, "r")
         f = state.stat_file
         if not f then return 0, 0 end
     end
 
-    local ok, err = f:seek("set", 0)
+    local ok, _ = f:seek("set", 0)
     if not ok then
         -- Self-Healing
         f:close()
@@ -278,7 +278,7 @@ local function _parse_stat()
     end
 
     local content = f:read(STAT_READ_BUFFER)
-    if not content then 
+    if not content then
         -- Self-Healing
         f:close()
         state.stat_file = io_open(PROC_STAT, "r")
@@ -291,7 +291,7 @@ local function _parse_stat()
     -- Находим конец имени процесса (может содержать пробелы и скобки)
     local _, last_paren = string_find(content, ".*%)")
     if not last_paren then return 0, 0 end
-    
+
     -- Извлекаем utime и stime (14-й и 15-й параметры)
     -- Пропускаем 11 параметров после закрывающей скобки имени процесса
     local pos = last_paren + 2
@@ -326,7 +326,7 @@ local function _moving_average(val)
     local old_val = state.cpu_buffer[state.cpu_index] or 0
     state.cpu_buffer[state.cpu_index] = val
     state.cpu_sum = state.cpu_sum - old_val + val
-    
+
     state.cpu_count = math_min(state.cpu_count + 1, window)
     return state.cpu_sum / state.cpu_count
 end
@@ -349,14 +349,20 @@ local function _check_thresholds(report)
 
     -- Data Sanity Checks: игнорируем неправдоподобные скачки
     if state.last_cpu_usage > 0 and math_min(cpu_val, 100) - state.last_cpu_usage > _m_config.MaxCpuJump then
-        if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f", state.last_cpu_usage, cpu_val) end
+        if Logger and Logger.warning then
+            Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f",
+                state.last_cpu_usage, cpu_val)
+        end
         cpu_val = state.last_cpu_usage + (_m_config.MaxCpuJump * 0.5) -- Сглаживаем вместо полного игнорирования
         report.cpu.usage = cpu_val
     end
 
     local last_ram_pct = (state.last_lua_mem / ram_limit_kb) * 100
     if state.last_lua_mem > 0 and ram_usage_pct - last_ram_pct > _m_config.MaxRamJumpPct then
-        if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%", last_ram_pct, ram_usage_pct) end
+        if Logger and Logger.warning then
+            Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%",
+                last_ram_pct, ram_usage_pct)
+        end
         ram_usage_pct = last_ram_pct + (_m_config.MaxRamJumpPct * 0.5)
         report.memory.lua = (ram_usage_pct / 100) * ram_limit_kb
     end
@@ -373,7 +379,7 @@ local function _check_thresholds(report)
             scheduler:set_task_interval("resource_monitor", target_interval)
         end
     end
-    
+
     -- 1. Проверка CPU
     if not state.active_warnings.cpu then
         if cpu_val > cpu_threshold then
@@ -409,7 +415,8 @@ local function _check_thresholds(report)
                 threshold = ram_threshold_pct,
                 current_kb = report.memory.lua,
                 limit_kb = ram_limit_kb,
-                message = string_format("Высокое потребление памяти Lua: %.1f%% (%d KB)", ram_usage_pct, report.memory.lua)
+                message = string_format("Высокое потребление памяти Lua: %.1f%% (%d KB)",
+                    ram_usage_pct, report.memory.lua)
             })
         end
     else
@@ -452,7 +459,7 @@ local function _check_thresholds(report)
     -- Сохраняем историю lua_post_gc
     state.mem_history_idx = (state.mem_history_idx % 10) + 1
     state.mem_history[state.mem_history_idx] = report.memory.lua_post_gc
-    
+
     if #state.mem_history >= 10 then
         local is_growing = true
         for i = 1, 9 do
@@ -507,7 +514,7 @@ end
 function ResourceMonitor.check()
     local ok, err = _G.pcall(function()
         state.iteration_count = state.iteration_count + 1
-        
+
         local now_clock = os_clock()
         local now_time = os_time()
         local utime, stime = _parse_stat()
@@ -527,7 +534,7 @@ function ResourceMonitor.check()
             if delta_clock > 0 then
                 local u_usage = ((utime - state.last_utime) / TICK_RATE / delta_clock) * 100
                 local s_usage = ((stime - state.last_stime) / TICK_RATE / delta_clock) * 100
-                
+
                 report.cpu.user = u_usage
                 report.cpu.system = s_usage
                 report.cpu.usage = _moving_average(u_usage + s_usage)
@@ -542,7 +549,7 @@ function ResourceMonitor.check()
         -- Метрики памяти Lua
         report.memory.lua = current_lua_mem
         report.memory.lua_delta = (state.last_lua_mem > 0) and (current_lua_mem - state.last_lua_mem) or 0
-        
+
         if current_lua_mem < state.last_lua_mem then
             state.last_post_gc_mem = current_lua_mem
         end
@@ -553,7 +560,7 @@ function ResourceMonitor.check()
         if now_time - state.last_network_check > _m_config.NetworkCheckInterval then
             local net_list = report.network
             local idx = 1
-            
+
             if utils_ifaddrs and type(utils_ifaddrs) == "function" then
                 local interfaces = utils_ifaddrs()
                 if type(interfaces) == "table" then
@@ -571,7 +578,7 @@ function ResourceMonitor.check()
                     end
                 end
             end
-            
+
             -- Удаляем лишние элементы
             for i = #net_list, idx, -1 do
                 net_list[i] = nil
@@ -584,7 +591,9 @@ function ResourceMonitor.check()
     end)
 
     if not ok then
-        if Logger and Logger.error then Logger.error(COMPONENT_NAME, "Ошибка при сборе метрик: %s", _G.tostring(err)) end
+        if Logger and Logger.error then
+            Logger.error(COMPONENT_NAME, "Ошибка при сборе метрик: %s", _G.tostring(err))
+        end
         return nil
     end
 
@@ -623,7 +632,7 @@ function ResourceMonitor.stop()
     if scheduler then
         scheduler:remove_task("resource_monitor")
     end
-    
+
     -- Закрытие постоянных дескрипторов
     if state.stat_file then
         state.stat_file:close()

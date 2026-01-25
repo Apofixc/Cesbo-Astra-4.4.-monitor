@@ -8,7 +8,6 @@
 -- 1. Стандартные Lua функции
 local pairs = pairs
 local pcall = pcall
-local type = type
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -61,8 +60,8 @@ local function _flush_buffers()
             local message = "[" .. table_concat(info.buffer, ",") .. "]"
             -- Очистка буфера
             for i = 1, #info.buffer do info.buffer[i] = nil end
-            
-            local ok, err = pcall(send, server, client, message)
+
+            local ok = pcall(send, server, client, message)
             if not ok then
                 info.error_count = info.error_count + 1
                 if info.error_count >= 5 then
@@ -185,13 +184,13 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
     local send = server.send
     local close = server.close
     local table_insert = _G.table.insert
-    
+
     for client, info in pairs(clients) do
         if info.batch then
             -- Режим батчинга: добавляем в буфер
             message = message or ('{"event":"' .. event_type .. '","data":' .. json_data .. '}')
             table_insert(info.buffer, message)
-            
+
             -- Если буфер слишком большой, сбрасываем немедленно
             if #info.buffer >= 100 then
                 local batch_msg = "[" .. _G.table.concat(info.buffer, ",") .. "]"
@@ -202,7 +201,7 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
         else
             -- Обычный режим: немедленная отправка
             message = message or ('{"event":"' .. event_type .. '","data":' .. json_data .. '}')
-            local ok, err = pcall(send, server, client, message)
+            local ok = pcall(send, server, client, message)
             if not ok then
                 info.error_count = info.error_count + 1
                 if info.error_count >= 5 then

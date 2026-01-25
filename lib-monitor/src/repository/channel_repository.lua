@@ -43,7 +43,7 @@ local _m_config = {
 local function _safe_make_stream(conf)
     local Channel = ModuleManager.get_module("channel")
     if not Channel then return false end
-    
+
     local name = conf.name or "Unknown"
     Logger.debug(COMPONENT_NAME, "Попытка запуска канала: %s", name)
 
@@ -53,8 +53,11 @@ local function _safe_make_stream(conf)
         return true
     end
 
-    Logger.error(COMPONENT_NAME, "Ошибка при запуске канала %s: %s", 
-        name, tostring(res or "unknown error"))
+    Logger.error(
+        COMPONENT_NAME,
+        "Ошибка при запуске канала %s: %s",
+        name, tostring(res or "unknown error")
+    )
     return false
 end
 

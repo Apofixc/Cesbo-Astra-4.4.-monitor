@@ -18,7 +18,6 @@ local Logger = ModuleManager.get_module("logger")
 local TunerMonitor = ModuleManager.get_module("tuner_monitor")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
-local Channel = ModuleManager.get_module("channel")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra напрямую)

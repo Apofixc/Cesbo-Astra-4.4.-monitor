@@ -10,8 +10,6 @@
 local type = _G.type
 local tostring = _G.tostring
 local pairs = _G.pairs
-local table_insert = _G.table.insert
-local table_remove = _G.table.remove
 local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
@@ -24,15 +22,7 @@ local TablePool = ModuleManager.get_module("table_pool")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
-local _json_encode = nil
-
---- Возвращает функцию json.encode
---- @return function|nil
-local function get_json_encode()
-    if _json_encode then return _json_encode end
-    _json_encode = ModuleManager.get_global_dependency("json.encode")
-    return _json_encode
-end
+-- Нет
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "EventDispatcher"
@@ -243,7 +233,8 @@ end
 --- @param event_type string Тип события (например, "channel:error")
 --- @param event_data table|string Данные события
 --- @param priority? number Приоритет события (1 - Critical, 4 - Low). По умолчанию 3 (Medium).
---- @param options? table Дополнительные параметры: source (источник), no_cache (не сохранять в LVC), is_table (данные из пула).
+--- @param options? table Дополнительные параметры: source (источник), no_cache (не сохранять в LVC),
+--- is_table (данные из пула).
 --- @return string|nil ID созданного события или nil при ошибке
 function EventDispatcher:emit(event_type, event_data, priority, options)
     -- io.write(string.format("DEBUG: EventDispatcher:emit(%s)\n", tostring(event_type)))
@@ -276,7 +267,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         if not plan.has_complex and plan.total_simple > 0 and plan.total_simple <= 10 then
             sub_mgr:multicast_direct(plan, event_type, event_data, now)
             fast_path_delivered = true
-            
+
             -- Если не нужно кэшировать в LVC, задача выполнена без создания объектов
             if options and options.no_cache then
                 self.stats.emitted = self.stats.emitted + 1
@@ -468,7 +459,8 @@ end
 --- @param event_type string Тип события или маска (например, "adapter:*")
 --- @param callback function|table Функция-обработчик или конфигурация транспорта
 --- @param filters? table Схема фильтрации (условия, операторы или Lua-скрипт)
---- @param options? table Дополнительные опции: throttle_ms (ограничение частоты), send_lvc (отправить последнее состояние сразу)
+--- @param options? table Дополнительные опции: throttle_ms (ограничение частоты),
+--- send_lvc (отправить последнее состояние сразу)
 --- @return string|nil ID подписки (UUID)
 function EventDispatcher:subscribe(event_type, callback, filters, options)
     local sub_id = self.subscription_manager:subscribe(event_type, {
@@ -526,14 +518,14 @@ function EventDispatcher:_process_queue()
     local check_limit = (self._lvc_size > _m_config.MaxLvcSize * 0.8) and 20 or 10
     local checked = 0
     local current_key = self._last_lvc_check_key
-    
+
     while checked < check_limit do
         local k, entry = next(self._lvc, current_key)
-        if not k then 
+        if not k then
             current_key = nil
-            break 
+            break
         end
-        
+
         if entry and now - entry.timestamp > lvc_ttl then
             self:_release_lvc_entry(entry)
             self._lvc[k] = nil
@@ -546,7 +538,7 @@ function EventDispatcher:_process_queue()
     self._last_lvc_check_key = current_key
 
     local limit = _m_config.EventBatchLimit
-    
+
     -- Адаптивная частота: если суммарный размер очередей > 50%, увеличиваем лимит
     -- Оптимизировано: используем _total_queued_count вместо цикла
     if self._total_queued_count > (_m_config.MaxQueueSize * 0.5) then
@@ -560,7 +552,7 @@ function EventDispatcher:_process_queue()
 
     for p = priorities.CRITICAL, priorities.LOW do
         local queue = self.event_queues[p]
-        
+
         -- Оптимизация: проверяем маску перед входом в цикл очереди
         if bit32.band(mask, queue.priority_bit) ~= 0 then
             local q_data = queue.data
@@ -594,7 +586,7 @@ function EventDispatcher:_process_queue()
                     return -- Прерываем обработку до следующего тика
                 end
             end
-            
+
             -- Если очередь пуста, сбрасываем бит в маске
             self._active_queues_mask = bit32.band(self._active_queues_mask, bit32.bnot(queue.priority_bit))
         end

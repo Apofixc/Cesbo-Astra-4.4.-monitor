@@ -59,7 +59,6 @@ local function _get_logger()
     return Logger
 end
 
-
 --- Обновляет статистику производительности для указанной операции
 --- @param name string Уникальное имя операции
 --- @param duration number Длительность выполнения в секундах
@@ -218,7 +217,9 @@ end
 --- @return any Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
     local MonitorConfig = ModuleManager.get_module("monitor_config")
-    local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema.Instance and MonitorConfig.ValidationSchema.Instance[name]
+    local schema = MonitorConfig and MonitorConfig.ValidationSchema
+        and MonitorConfig.ValidationSchema.Instance
+        and MonitorConfig.ValidationSchema.Instance[name]
     if not schema then
         local log = _get_logger()
         if log then log.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name) end
@@ -394,9 +395,9 @@ end
 --- @return string|nil Строка в формате Line Protocol
 function Utils.to_line_protocol(measurement, tags, fields, timestamp)
     if type(measurement) ~= "string" or type(fields) ~= "table" then return nil end
-    
+
     local res = { measurement }
-    
+
     -- Теги (должны быть отсортированы для лучшей производительности InfluxDB, но здесь упростим)
     if tags then
         for k, v in pairs(tags) do
@@ -408,9 +409,9 @@ function Utils.to_line_protocol(measurement, tags, fields, timestamp)
             end
         end
     end
-    
+
     table.insert(res, " ")
-    
+
     -- Поля
     local first_field = true
     for k, v in pairs(fields) do
@@ -418,7 +419,7 @@ function Utils.to_line_protocol(measurement, tags, fields, timestamp)
             if not first_field then table.insert(res, ",") end
             table.insert(res, tostring(k))
             table.insert(res, "=")
-            
+
             if type(v) == "string" then
                 table.insert(res, "\"" .. v:gsub("\"", "\\\"") .. "\"")
             elseif type(v) == "boolean" then
@@ -429,14 +430,14 @@ function Utils.to_line_protocol(measurement, tags, fields, timestamp)
             first_field = false
         end
     end
-    
+
     -- Метка времени (InfluxDB ожидает наносекунды по умолчанию, если не указано иное)
     -- Используем строковую конкатенацию для предотвращения потери точности Lua float
     if timestamp then
         table.insert(res, " ")
         table.insert(res, tostring(math.floor(timestamp)) .. "000000000")
     end
-    
+
     return table.concat(res)
 end
 

@@ -8,11 +8,9 @@
 -- 1. Стандартные Lua функции
 local type = _G.type
 local pairs = _G.pairs
-local ipairs = _G.ipairs
 local tostring = _G.tostring
 local pcall = _G.pcall
 local table_concat = _G.table.concat
-local table_insert = _G.table.insert
 local table_remove = _G.table.remove
 local string_gmatch = _G.string.gmatch
 local string_format = _G.string.format
@@ -108,7 +106,7 @@ local function _topological_sort()
     local visited = {}
     local in_stack = {}
     local keys = {}
-    
+
     -- Получаем список всех ключей для стабильной итерации (микро-оптимизация)
     for name in pairs(_registered_modules) do
         keys[#keys + 1] = name
@@ -120,12 +118,12 @@ local function _topological_sort()
             -- Стек для итеративного DFS: { {name, next_dep_index}, ... }
             local stack = { { root_name, 1 } }
             in_stack[root_name] = true
-            
+
             while #stack > 0 do
                 local current = stack[#stack]
                 local name = current[1]
                 local module_info = _registered_modules[name]
-                
+
                 if not module_info then
                     _log_error(COMPONENT_NAME, "Модуль '%s' не зарегистрирован, но указан как зависимость.", name)
                     return nil
@@ -133,7 +131,7 @@ local function _topological_sort()
 
                 local deps = module_info.dependencies
                 local found_new_dep = false
-                
+
                 -- Проверяем зависимости, начиная с сохраненного индекса
                 for j = current[2], #deps do
                     local dep_name = deps[j]
@@ -147,11 +145,14 @@ local function _topological_sort()
                                 if start_collect then cycle_path[#cycle_path + 1] = stack[k][1] end
                             end
                             cycle_path[#cycle_path + 1] = dep_name
-                            _log_error(COMPONENT_NAME, "Обнаружена циклическая зависимость: %s", 
-                                table_concat(cycle_path, " -> "))
+                            _log_error(
+                                COMPONENT_NAME,
+                                "Обнаружена циклическая зависимость: %s",
+                                table_concat(cycle_path, " -> ")
+                            )
                             return nil
                         end
-                        
+
                         -- Сохраняем прогресс текущего модуля и переходим к зависимости
                         current[2] = j + 1
                         stack[#stack + 1] = { dep_name, 1 }
@@ -199,7 +200,7 @@ function ModuleManager.register_module(name, path, dependencies)
         _log_error(COMPONENT_NAME, "Модуль '%s': путь должен быть непустой строкой.", name)
         return false
     end
-    
+
     -- Валидация формата пути (базовая проверка на отсутствие подозрительных символов)
     if string_match(path, "[^%w%._%-/]") then
         _log_error(COMPONENT_NAME, "Модуль '%s': путь содержит недопустимые символы.", name)
@@ -295,7 +296,11 @@ function ModuleManager.validate_dependencies()
         for i = 1, #deps do
             local dep_name = deps[i]
             if not _registered_modules[dep_name] then
-                _log_error(COMPONENT_NAME, "Модуль '%s' требует незарегистрированную зависимость: '%s'.", name, dep_name)
+                _log_error(
+                    COMPONENT_NAME,
+                    "Модуль '%s' требует незарегистрированную зависимость: '%s'.",
+                    name, dep_name
+                )
                 all_met = false
             end
         end

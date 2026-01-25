@@ -146,7 +146,10 @@ function RoutesUtils.check_object(server, client, request)
     if ch_obj then
         return HttpHelpers.success(server, client, {
             name = params.name, exists = true, type = "channel", is_active = true, state = ch_obj._state,
-            details = { display_name = ch_obj._display_name, monitor_type = ch_obj._config.monitor_type }
+            details = {
+                display_name = ch_obj._display_name,
+                monitor_type = ch_obj._config.monitor_type
+            }
         })
     elseif dvb_obj then
         return HttpHelpers.success(server, client, {
@@ -194,8 +197,10 @@ function RoutesUtils.cleanup(server, client, request)
 
     -- 2. Очистка кэша логов для неактивных компонентов
     if Logger and Logger.clear_component_buffer then
-        -- Здесь можно реализовать логику обхода всех компонентов и удаления тех,
+        -- TODO: Реализовать логику обхода всех компонентов и удаления тех,
         -- которых нет в репозиториях.
+        local _ = Logger -- dummy use to avoid empty branch warning if needed
+        Logger.debug(COMPONENT_NAME, "Очистка кэша логов (не реализовано)")
     end
 
     -- 3. Принудительный вызов GC
@@ -236,11 +241,14 @@ function RoutesUtils.get_api_docs(server, client, request)
     <meta charset="UTF-8">
     <title>Astra Monitor API Documentation</title>
     <style>
-        body { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; background: #f4f4f9; }
+        body { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px;
+               background: #f4f4f9; }
         h1 { color: #2c3e50; border-bottom: 2px solid #2c3e50; padding-bottom: 10px; }
         h2 { color: #2980b9; margin-top: 30px; border-left: 5px solid #2980b9; padding-left: 10px; }
-        .endpoint { background: #fff; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .method { font-weight: bold; color: #fff; padding: 3px 8px; border-radius: 3px; margin-right: 10px; display: inline-block; min-width: 60px; text-align: center; }
+        .endpoint { background: #fff; padding: 15px; margin-bottom: 10px; border-radius: 5px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .method { font-weight: bold; color: #fff; padding: 3px 8px; border-radius: 3px; margin-right: 10px;
+                  display: inline-block; min-width: 60px; text-align: center; }
         .GET { background: #2ecc71; }
         .POST { background: #f1c40f; }
         .PATCH { background: #3498db; }
@@ -255,24 +263,36 @@ function RoutesUtils.get_api_docs(server, client, request)
     <p>Интерфейс управления системой мониторинга Cesbo Astra.</p>
 
     <h2>Система и Управление</h2>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/system/health</span><div class="desc">Состояние сервера и ресурсы</div></div>
-    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/watchdog</span><div class="desc">Вкл/Выкл Watchdog (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
-    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/auto-recover</span><div class="desc">Вкл/Выкл Auto-recover (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
-    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/maintenance/run</span><div class="desc">Ручной запуск цикла восстановления</div></div>
-    <div class="endpoint"><span class="method PATCH">PATCH</span> <span class="path">/api/system/config</span><div class="desc">Обновление настроек в рантайме</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/system/health</span>
+        <div class="desc">Состояние сервера и ресурсы</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/watchdog</span>
+        <div class="desc">Вкл/Выкл Watchdog (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/auto-recover</span>
+        <div class="desc">Вкл/Выкл Auto-recover (параметры: <code>enabled</code>, <code>repo</code>)</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/system/maintenance/run</span>
+        <div class="desc">Ручной запуск цикла восстановления</div></div>
+    <div class="endpoint"><span class="method PATCH">PATCH</span> <span class="path">/api/system/config</span>
+        <div class="desc">Обновление настроек в рантайме</div></div>
 
     <h2>DVB Адаптеры</h2>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters</span><div class="desc">Список всех адаптеров</div></div>
-    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/dvb/adapters/scan</span><div class="desc">Сканирование транспондера (параметры: <code>name</code>, <code>timeout</code>)</div></div>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters/data</span><div class="desc">Метрики сигнала (параметр: <code>name</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters</span>
+        <div class="desc">Список всех адаптеров</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/dvb/adapters/scan</span>
+        <div class="desc">Сканирование транспондера (параметры: <code>name</code>, <code>timeout</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/dvb/adapters/data</span>
+        <div class="desc">Метрики сигнала (параметр: <code>name</code>)</div></div>
 
     <h2>Мониторы и Каналы</h2>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors</span><div class="desc">Список активных мониторов</div></div>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors/data</span><div class="desc">Текущие данные монитора (параметр: <code>name</code>)</div></div>
-    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/utils/monitors/errors</span><div class="desc">История ошибок и логи (параметр: <code>name</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors</span>
+        <div class="desc">Список активных мониторов</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/monitors/data</span>
+        <div class="desc">Текущие данные монитора (параметр: <code>name</code>)</div></div>
+    <div class="endpoint"><span class="method GET">GET</span> <span class="path">/api/utils/monitors/errors</span>
+        <div class="desc">История ошибок и логи (параметр: <code>name</code>)</div></div>
 
     <h2>Утилиты</h2>
-    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/utils/cleanup</span><div class="desc">Очистка памяти и пулов</div></div>
+    <div class="endpoint"><span class="method POST">POST</span> <span class="path">/api/utils/cleanup</span>
+        <div class="desc">Очистка памяти и пулов</div></div>
 </body>
 </html>
     ]]

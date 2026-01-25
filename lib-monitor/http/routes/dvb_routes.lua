@@ -57,7 +57,9 @@ function DvbRoutes.scan_adapters(server, client, request)
         return HttpHelpers.error(server, client, 500, "Не удалось запустить сканирование")
     end
 
-    return HttpHelpers.success(server, client, { message = "Сканирование запущено. Результаты будут доступны в PSI таблицах." })
+    return HttpHelpers.success(server, client, {
+        message = "Сканирование запущено. Результаты будут доступны в PSI таблицах."
+    })
 end
 
 --- Возвращает текущие метрики конкретного DVB адаптера
