@@ -226,11 +226,19 @@ initialize_phase(INIT_PHASES.FINAL, function()
         DvbRepository:init_config_subscription()
     end
 
-    -- Дополнительные утилиты
+    -- Мониторы и утилиты
+    local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+    local ChannelMonitor = ModuleManager.get_module("channel_monitor")
+    local TunerMonitor = ModuleManager.get_module("tuner_monitor")
+    local Channel = ModuleManager.get_module("channel")
     local Wildcard = ModuleManager.get_module("utils.wildcard")
     local FilterEngine = ModuleManager.get_module("utils.filter_engine")
     local ResourceMonitor = ModuleManager.get_module("resource_monitor")
 
+    if BaseMonitor and BaseMonitor.init_config_subscription then BaseMonitor.init_config_subscription() end
+    if ChannelMonitor and ChannelMonitor.init_config_subscription then ChannelMonitor.init_config_subscription() end
+    if TunerMonitor and TunerMonitor.init_config_subscription then TunerMonitor.init_config_subscription() end
+    if Channel and Channel.init_config_subscription then Channel.init_config_subscription() end
     if Wildcard and Wildcard.init_config_subscription then Wildcard.init_config_subscription() end
     if FilterEngine and FilterEngine.init_config_subscription then FilterEngine.init_config_subscription() end
     if ResourceMonitor and ResourceMonitor.init_config_subscription then ResourceMonitor.init_config_subscription() end

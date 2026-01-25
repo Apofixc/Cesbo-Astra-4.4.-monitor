@@ -112,6 +112,11 @@ local COMPARISON_METHODS = {
 }
 
 -- 5. Внутреннее состояние (Private State)
+--- Локальная конфигурация модуля (глобальные параметры для всех экземпляров)
+local _m_config = {
+    MaxCounterValue = 1000000000,
+}
+
 --- @class TunerMonitor : BaseMonitor
 --- @field private _current_flags table|nil Текущие битовые флаги состояния
 --- @field private _last_status_num number|nil Последнее числовое значение статуса
@@ -125,6 +130,19 @@ TunerMonitor.__index = TunerMonitor
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Инициализирует подписку на обновление глобальной конфигурации модуля
+function TunerMonitor.init_config_subscription()
+    if EventDispatcher then
+        local dispatcher = EventDispatcher.get_instance()
+        dispatcher:subscribe("config:updated:monitor", function(new_config)
+            if new_config.MaxCounterValue then
+                _m_config.MaxCounterValue = new_config.MaxCounterValue
+                Logger.debug(COMPONENT_NAME, "Глобальный лимит счетчиков обновлен: %d", _m_config.MaxCounterValue)
+            end
+        end)
+    end
+end
 
 --- Вспомогательная функция для очистки ресурсов PSI
 --- @private
@@ -152,8 +170,8 @@ function TunerMonitor:_on_astra_data(data)
 
     -- Накопление статистики для расчета качества (упрощенно)
     if conf.analyze and data.status and bit32_band(data.status, 0x10) ~= 0 then
-        local MonitorConfig = ModuleManager.get_module("monitor_config")
-        local max_stats = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000000
+        -- Используем значение из локального конфига модуля
+        local max_stats = _m_config.MaxCounterValue
         -- Защита от переполнения при длительном отсутствии изменений
         if self._stats.count < max_stats then
             self._stats.ber_sum = self._stats.ber_sum + (data.ber or 0)

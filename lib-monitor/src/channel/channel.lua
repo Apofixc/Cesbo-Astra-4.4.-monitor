@@ -38,6 +38,11 @@ local MONITOR_TYPES = {
     IP = "ip"
 }
 
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    ChannelMonitorLimit = 200,
+}
+
 -- 5. Внутреннее состояние (Private State)
 
 --- @class ChannelState
@@ -221,12 +226,25 @@ end
 --- @class Channel
 local Channel = {}
 
+--- Инициализирует подписку на обновление конфигурации
+function Channel.init_config_subscription()
+    local success, EventDispatcher = pcall(ModuleManager.get_module, "core.event_dispatcher")
+    if success and EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:monitor", function(new_config)
+            if new_config.ChannelMonitorLimit then
+                _m_config.ChannelMonitorLimit = new_config.ChannelMonitorLimit
+                Logger.debug(COMPONENT_NAME, "Лимит мониторов каналов обновлен: %d", _m_config.ChannelMonitorLimit)
+            end
+        end)
+    end
+end
+
 --- Создает новый монитор канала
 --- @param config table Конфигурация монитора
 --- @return any|nil Экземпляр монитора Astra или nil при ошибке
 function Channel.make_monitor(config)
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
-    local limit = (MonitorConfig and MonitorConfig.Monitor and MonitorConfig.Monitor.ChannelMonitorLimit) or 200
+    local limit = _m_config.ChannelMonitorLimit
     
     if ChannelRepository:count() >= limit then
         Logger.error(COMPONENT_NAME, "make_monitor: лимит мониторов исчерпан (%d)", limit)

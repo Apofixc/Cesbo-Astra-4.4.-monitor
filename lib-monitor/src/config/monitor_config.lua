@@ -49,8 +49,121 @@ local _state = {
 local MonitorConfig = {}
 
 -- ===========================================================================
--- Конфигурация по умолчанию (Сгруппированная)
+-- Схема валидации и значения по умолчанию (Единый источник правды)
 -- ===========================================================================
+
+MonitorConfig.ValidationSchema = {
+    Logger = {
+        LogLevel = { type = "string", enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true}, default = "INFO" },
+        LogFormat = { type = "string", enum = {TEXT=true, JSON=true}, default = "TEXT" },
+        LogBatchEnabled = { type = "boolean", default = false },
+        LogBufferSize = { type = "number", min = 0, max = 1024 * 1024, default = 0 },
+        MaxLogQueueSize = { type = "number", min = 1, max = 10000, default = 200 },
+        MaxLogComponents = { type = "number", min = 1, max = 1000, default = 100 },
+    },
+    Network = {
+        MaxPayloadSize = { type = "number", min = 1024, max = 10 * 1024 * 1024, default = 1024 * 1024 },
+        CorsAllowOrigin = { type = "string", default = "*" },
+        HttpTimeout = { type = "number", min = 1, max = 300, default = 10 },
+        RateLimitWindow = { type = "number", min = 1, max = 3600, default = 60 },
+        RateLimitMaxRequests = { type = "number", min = 1, max = 10000, default = 100 },
+        MaxRetryQueueSize = { type = "number", min = 1, max = 10000, default = 500 },
+        MaxRetries = { type = "number", min = 0, max = 100, default = 5 },
+        RetryDelay = { type = "number", min = 1, max = 3600, default = 5 },
+        MaxRouteCacheSize = { type = "number", min = 1, max = 10000, default = 1000 },
+    },
+    Monitor = {
+        ChannelMonitorLimit = { type = "number", min = 1, max = 1000, default = 200 },
+        DvbMonitorLimit = { type = "number", min = 1, max = 100, default = 20 },
+        MaxMonitorNameLength = { type = "number", min = 1, max = 256, default = 64 },
+        MinRate = { type = "number", min = 0.0001, max = 1, default = 0.001 },
+        MaxRate = { type = "number", min = 0.001, max = 1, default = 0.3 },
+        MinTimeCheck = { type = "number", min = 0, max = 3600, default = 0 },
+        MaxTimeCheck = { type = "number", min = 1, max = 3600, default = 300 },
+        MinMethodComparison = { type = "number", min = 1, max = 10, default = 1 },
+        MaxMethodComparison = { type = "number", min = 1, max = 10, default = 8 },
+        ChannelCcThreshold = { type = "number", min = 0, max = 65535, default = 1 },
+        ForceSendInterval = { type = "number", min = 1, max = 3600, default = 300 },
+        PidStatsLimit = { type = "number", min = 1, max = 8192, default = 100 },
+        MaxCounterValue = { type = "number", min = 1, max = 1000000000000, default = 1000000000 },
+        MaxErrorCount = { type = "number", min = 1, max = 1000000000, default = 1000000 },
+    },
+    System = {
+        GcPause = { type = "number", min = 10, max = 1000, default = 100 },
+        GcStepMul = { type = "number", min = 10, max = 1000, default = 500 },
+        MemoryLimitMb = { type = "number", min = 1, max = 1024, default = 50 },
+        SchedulerInterval = { type = "number", min = 0.1, max = 60, default = 1 },
+        CpuThreshold = { type = "number", min = 1, max = 100, default = 90 },
+        RamThresholdPct = { type = "number", min = 1, max = 100, default = 80 },
+        FdThreshold = { type = "number", min = 1, max = 10000, default = 800 },
+        HysteresisFactor = { type = "number", min = 0.5, max = 0.99, default = 0.95 },
+        NetworkCheckInterval = { type = "number", min = 1, max = 3600, default = 30 },
+        ConfigRefreshInterval = { type = "number", min = 1, max = 3600, default = 10 },
+        AdaptiveTickThresholdCpu = { type = "number", min = 1, max = 100, default = 50 },
+        AdaptiveTickThresholdRam = { type = "number", min = 1, max = 100, default = 70 },
+        TickIntervalNormal = { type = "number", min = 0.1, max = 60, default = 5 },
+        TickIntervalFast = { type = "number", min = 0.1, max = 60, default = 1 },
+        RareMetricInterval = { type = "number", min = 1, max = 3600, default = 5 },
+        MaxCpuJump = { type = "number", min = 1, max = 100, default = 50 },
+        MaxRamJumpPct = { type = "number", min = 1, max = 100, default = 20 },
+        CpuMovingAverageWindow = { type = "number", min = 1, max = 100, default = 5 },
+        ResourceMonitorEnabled = { type = "boolean", default = true },
+    },
+    Recovery = {
+        AutoRecoverEnabled = { type = "boolean", default = false },
+        AutoRecoverInterval = { type = "number", min = 1, max = 3600, default = 300 },
+        MaxRecoveryAttempts = { type = "number", min = 1, max = 100, default = 3 },
+        RecoveryCooldown = { type = "number", min = 1, max = 86400, default = 3600 },
+    },
+    Event = {
+        LvcTtl = { type = "number", min = 1, max = 86400, default = 3600 },
+        MaxLvcSize = { type = "number", min = 1, max = 10000, default = 1000 },
+        MaxQueueSize = { type = "number", min = 1, max = 10000, default = 1000 },
+        EventBatchLimit = { type = "number", min = 1, max = 1000, default = 100 },
+        MaxBatchLimit = { type = "number", min = 1, max = 10000, default = 1000 },
+    },
+    Batch = {
+        BatchEnabled = { type = "boolean", default = true },
+        BatchFlushInterval = { type = "number", min = 0.01, max = 60, default = 0.5 },
+        BatchMaxSize = { type = "number", min = 1, max = 1000, default = 50 },
+        DefaultBatchMode = { type = "string", enum = {single=true, array=true}, default = "single" },
+    },
+    Pool = {
+        MaxPoolSize = { type = "number", min = 1, max = 10000, default = 100 },
+        PoolDebug = { type = "boolean", default = false },
+        PoolAdaptiveThreshold = { type = "number", min = 0.01, max = 1, default = 0.2 },
+        PoolAdaptiveStep = { type = "number", min = 0.01, max = 1, default = 0.25 },
+        PoolMinLimit = { type = "number", min = 1, max = 1000, default = 10 },
+        PoolMaintenanceInterval = { type = "number", min = 1, max = 3600, default = 300 },
+    },
+    Watchdog = {
+        WatchdogEnabled = { type = "boolean", default = false },
+        WatchdogMaxRetries = { type = "number", min = 1, max = 100, default = 3 },
+        WatchdogInterval = { type = "number", min = 1, max = 3600, default = 5 },
+        WatchdogThreshold = { type = "number", min = 1, max = 3600, default = 15 },
+        WatchdogCasThreshold = { type = "number", min = 1, max = 3600, default = 60 },
+    },
+    Instance = {
+        channel_rate = { type = "number", min = 0.0001, max = 1, default = 0.035 },
+        channel_time_check = { type = "number", min = 0, max = 3600, default = 0 },
+        channel_analyze = { type = "boolean", default = false },
+        channel_method_comparison = { type = "number", min = 1, max = 8, default = 2 },
+        channel_cc_threshold = { type = "number", min = 0, max = 65535, default = 1 },
+        channel_cc_limit = { type = "number", min = 0, max = 65535, default = 0 },
+        channel_bitrate_limit = { type = "number", min = 0, max = 100000000, default = 0 },
+        channel_join_pid = { type = "boolean", default = false },
+        dvb_time_check = { type = "number", min = 0, max = 3600, default = 10 },
+        dvb_rate = { type = "number", min = 0.0001, max = 1, default = 0.015 },
+        dvb_method_comparison = { type = "number", min = 1, max = 7, default = 2 },
+        dvb_analyze = { type = "boolean", default = true },
+        channel_watchdog_enabled = { type = "boolean", default = false },
+        channel_watchdog_timeout = { type = "number", min = 1, max = 3600, default = 15 },
+        channel_watchdog_cas_timeout = { type = "number", min = 1, max = 3600, default = 60 },
+        MaxCounterValue = { type = "number", default = 1000000000 },
+        MaxErrorCount = { type = "number", default = 1000000 },
+        PidStatsLimit = { type = "number", default = 100 },
+    }
+}
 
 -- Имена потоков
 MonitorConfig.STREAM = {
@@ -65,136 +178,22 @@ MonitorConfig.STREAM = {
     ["127.0.0.9"] = "WikiLink",
 }
 
--- Секции конфигурации
-MonitorConfig.Logger = {
-    LogLevel = "INFO",
-    LogFormat = "TEXT",
-    LogBatchEnabled = false,
-    LogBufferSize = 0,
-    MaxLogQueueSize = 200,
-    MaxLogComponents = 100,
-}
-
-MonitorConfig.Network = {
-    MaxPayloadSize = 1024 * 1024, -- 1MB
-    CorsAllowOrigin = "*",
-    HttpTimeout = 10,
-    RateLimitWindow = 60,
-    RateLimitMaxRequests = 100,
-    MaxRetryQueueSize = 500,
-    MaxRetries = 5,
-    RetryDelay = 5,
-    MaxRouteCacheSize = 1000,
-}
-
-MonitorConfig.Monitor = {
-    ChannelMonitorLimit = 200,
-    DvbMonitorLimit = 20,
-    MaxMonitorNameLength = 64,
-    MinRate = 0.001,
-    MaxRate = 0.3,
-    MinTimeCheck = 0,
-    MaxTimeCheck = 300,
-    MinMethodComparison = 1,
-    MaxMethodComparison = 8,
-    ChannelCcThreshold = 1,
-    ForceSendInterval = 300,
-}
-
-MonitorConfig.System = {
-    GcPause = 100,
-    GcStepMul = 500,
-    MemoryLimitMb = 50,
-    SchedulerInterval = 1,
-    CpuThreshold = 90,
-    RamThresholdPct = 80,
-    FdThreshold = 800,
-    HysteresisFactor = 0.95,
-    NetworkCheckInterval = 30,
-    ConfigRefreshInterval = 10,
-    AdaptiveTickThresholdCpu = 50,
-    AdaptiveTickThresholdRam = 70,
-    TickIntervalNormal = 5,
-    TickIntervalFast = 1,
-    RareMetricInterval = 5,
-    MaxCpuJump = 50,
-    MaxRamJumpPct = 20,
-    CpuMovingAverageWindow = 5,
-    ResourceMonitorEnabled = true,
-}
-
-MonitorConfig.Recovery = {
-    AutoRecoverEnabled = false,
-    AutoRecoverInterval = 300,
-    MaxRecoveryAttempts = 3,
-    RecoveryCooldown = 3600,
-}
-
-MonitorConfig.Event = {
-    LvcTtl = 3600,
-    MaxLvcSize = 1000,
-    MaxQueueSize = 1000,
-    EventBatchLimit = 100,
-    MaxBatchLimit = 1000,
-}
-
-MonitorConfig.Batch = {
-    BatchEnabled = false,
-    BatchFlushInterval = 0.5,
-    BatchMaxSize = 50,
-    DefaultBatchMode = "single",
-}
-
-MonitorConfig.Pool = {
-    MaxPoolSize = 100,
-    PoolLimits = {},
-    PoolDebug = false,
-    PoolAdaptiveThreshold = 0.2,
-    PoolAdaptiveStep = 0.25,
-    PoolMinLimit = 10,
-    PoolMaintenanceInterval = 300,
-    MaxCacheSize = {
-        wildcard = 1000,
-        filter_engine = 500,
-        subscription_routes = 1000
-    },
-}
-
-MonitorConfig.Watchdog = {
-    WatchdogEnabled = false,
-    WatchdogMaxRetries = 3,
-    WatchdogInterval = 5,
-    WatchdogThreshold = 15,
-    WatchdogCasThreshold = 60,
-}
-
-MonitorConfig.Instance = {
-    channel_rate = 0.035,
-    channel_time_check = 0,
-    channel_analyze = false,
-    channel_method_comparison = 2,
-    channel_cc_threshold = 1,
-    channel_cc_limit = 0,
-    channel_bitrate_limit = 0,
-    channel_join_pid = false,
-    dvb_time_check = 10,
-    dvb_rate = 0.015,
-    dvb_method_comparison = 2,
-    dvb_analyze = true,
-    channel_watchdog_enabled = false,
-    channel_watchdog_timeout = 15,
-    channel_watchdog_cas_timeout = 60,
-}
-
 -- Служебные данные
-MonitorConfig.PidStatsLimit = 100
-MonitorConfig.MaxCounterValue = 1000000000
-MonitorConfig.MaxErrorCount = 1000000
 MonitorConfig.subscribers = {}
 
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Инициализирует структуру конфигурации значениями по умолчанию из схемы
+local function _init_defaults()
+    for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+        MonitorConfig[section_name] = {}
+        for key, rule in pairs(section_rules) do
+            MonitorConfig[section_name][key] = rule.default
+        end
+    end
+end
 
 --- Загружает конфигурацию из внешних JSON файлов.
 --- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
@@ -215,13 +214,11 @@ local function _load_from_file()
                 -- Маппинг плоского JSON на сгруппированную структуру
                 for k, v in pairs(data) do
                     local found = false
-                    for section_name, section in pairs(MonitorConfig) do
-                        if type(section) == "table" and section_name ~= "ValidationSchema" and section_name ~= "STREAM" then
-                            if section[k] ~= nil or (MonitorConfig.ValidationSchema[section_name] and MonitorConfig.ValidationSchema[section_name][k]) then
-                                section[k] = v
-                                found = true
-                                break
-                            end
+                    for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+                        if section_rules[k] then
+                            MonitorConfig[section_name][k] = v
+                            found = true
+                            break
                         end
                     end
                     -- Если не нашли в секциях, проверяем корень (для обратной совместимости или служебных полей)
@@ -257,6 +254,7 @@ end
 --- @return boolean success Статус успеха
 --- @return string|nil error_message Сообщение об ошибке при неудаче
 function MonitorConfig.reload()
+    _init_defaults()
     _load_from_file()
     _state.cache = {} -- Сброс кэша при перезагрузке
     return MonitorConfig.validate()
@@ -416,19 +414,15 @@ function MonitorConfig.save()
 
     local data_to_save = {}
     -- Сохраняем в плоском виде для совместимости с существующими конфигами
-    for section_name, section in pairs(MonitorConfig) do
-        if type(section) == "table" and section_name ~= "ValidationSchema" and section_name ~= "STREAM" then
+    for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+        local section = MonitorConfig[section_name]
+        if type(section) == "table" then
             for k, v in pairs(section) do
                 data_to_save[k] = v
             end
         end
     end
     
-    -- Добавляем служебные поля из корня
-    data_to_save.PidStatsLimit = MonitorConfig.PidStatsLimit
-    data_to_save.MaxCounterValue = MonitorConfig.MaxCounterValue
-    data_to_save.MaxErrorCount = MonitorConfig.MaxErrorCount
-
     local ok, content = pcall(json_encode, data_to_save)
     if not ok then return false end
 
@@ -441,121 +435,11 @@ function MonitorConfig.save()
 end
 
 -- ===========================================================================
--- Схема валидации (Сгруппированная)
--- ===========================================================================
-
-MonitorConfig.ValidationSchema = {
-    Logger = {
-        LogLevel = { type = "string", enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true}, default = "INFO" },
-        LogFormat = { type = "string", enum = {TEXT=true, JSON=true}, default = "TEXT" },
-        LogBatchEnabled = { type = "boolean", default = false },
-        LogBufferSize = { type = "number", min = 0, max = 1024 * 1024, default = 0 },
-        MaxLogQueueSize = { type = "number", min = 1, max = 10000, default = 200 },
-        MaxLogComponents = { type = "number", min = 1, max = 1000, default = 100 },
-    },
-    Network = {
-        MaxPayloadSize = { type = "number", min = 1024, max = 10 * 1024 * 1024, default = 1024 * 1024 },
-        CorsAllowOrigin = { type = "string", default = "*" },
-        HttpTimeout = { type = "number", min = 1, max = 300, default = 10 },
-        RateLimitWindow = { type = "number", min = 1, max = 3600, default = 60 },
-        RateLimitMaxRequests = { type = "number", min = 1, max = 10000, default = 100 },
-        MaxRetryQueueSize = { type = "number", min = 1, max = 10000, default = 500 },
-        MaxRetries = { type = "number", min = 0, max = 100, default = 5 },
-        RetryDelay = { type = "number", min = 1, max = 3600, default = 5 },
-        MaxRouteCacheSize = { type = "number", min = 1, max = 10000, default = 1000 },
-    },
-    Monitor = {
-        ChannelMonitorLimit = { type = "number", min = 1, max = 1000, default = 200 },
-        DvbMonitorLimit = { type = "number", min = 1, max = 100, default = 20 },
-        MaxMonitorNameLength = { type = "number", min = 1, max = 256, default = 64 },
-        MinRate = { type = "number", min = 0.0001, max = 1, default = 0.001 },
-        MaxRate = { type = "number", min = 0.001, max = 1, default = 0.3 },
-        MinTimeCheck = { type = "number", min = 0, max = 3600, default = 0 },
-        MaxTimeCheck = { type = "number", min = 1, max = 3600, default = 300 },
-        MinMethodComparison = { type = "number", min = 1, max = 10, default = 1 },
-        MaxMethodComparison = { type = "number", min = 1, max = 10, default = 8 },
-        ChannelCcThreshold = { type = "number", min = 0, max = 65535, default = 1 },
-        ForceSendInterval = { type = "number", min = 1, max = 3600, default = 300 },
-    },
-    System = {
-        GcPause = { type = "number", min = 10, max = 1000, default = 100 },
-        GcStepMul = { type = "number", min = 10, max = 1000, default = 500 },
-        MemoryLimitMb = { type = "number", min = 1, max = 1024, default = 50 },
-        SchedulerInterval = { type = "number", min = 0.1, max = 60, default = 1 },
-        CpuThreshold = { type = "number", min = 1, max = 100, default = 90 },
-        RamThresholdPct = { type = "number", min = 1, max = 100, default = 80 },
-        FdThreshold = { type = "number", min = 1, max = 10000, default = 800 },
-        HysteresisFactor = { type = "number", min = 0.5, max = 0.99, default = 0.95 },
-        NetworkCheckInterval = { type = "number", min = 1, max = 3600, default = 30 },
-        ConfigRefreshInterval = { type = "number", min = 1, max = 3600, default = 10 },
-        AdaptiveTickThresholdCpu = { type = "number", min = 1, max = 100, default = 50 },
-        AdaptiveTickThresholdRam = { type = "number", min = 1, max = 100, default = 70 },
-        TickIntervalNormal = { type = "number", min = 0.1, max = 60, default = 5 },
-        TickIntervalFast = { type = "number", min = 0.1, max = 60, default = 1 },
-        RareMetricInterval = { type = "number", min = 1, max = 3600, default = 5 },
-        MaxCpuJump = { type = "number", min = 1, max = 100, default = 50 },
-        MaxRamJumpPct = { type = "number", min = 1, max = 100, default = 20 },
-        CpuMovingAverageWindow = { type = "number", min = 1, max = 100, default = 5 },
-        ResourceMonitorEnabled = { type = "boolean", default = true },
-    },
-    Recovery = {
-        AutoRecoverEnabled = { type = "boolean", default = false },
-        AutoRecoverInterval = { type = "number", min = 1, max = 3600, default = 300 },
-        MaxRecoveryAttempts = { type = "number", min = 1, max = 100, default = 3 },
-        RecoveryCooldown = { type = "number", min = 1, max = 86400, default = 3600 },
-    },
-    Event = {
-        LvcTtl = { type = "number", min = 1, max = 86400, default = 3600 },
-        MaxLvcSize = { type = "number", min = 1, max = 10000, default = 1000 },
-        MaxQueueSize = { type = "number", min = 1, max = 10000, default = 1000 },
-        EventBatchLimit = { type = "number", min = 1, max = 1000, default = 100 },
-        MaxBatchLimit = { type = "number", min = 1, max = 10000, default = 1000 },
-    },
-    Batch = {
-        BatchEnabled = { type = "boolean", default = true },
-        BatchFlushInterval = { type = "number", min = 0.01, max = 60, default = 0.5 },
-        BatchMaxSize = { type = "number", min = 1, max = 1000, default = 50 },
-        DefaultBatchMode = { type = "string", enum = {single=true, array=true}, default = "single" },
-    },
-    Pool = {
-        MaxPoolSize = { type = "number", min = 1, max = 10000, default = 100 },
-        PoolDebug = { type = "boolean", default = false },
-        PoolAdaptiveThreshold = { type = "number", min = 0.01, max = 1, default = 0.2 },
-        PoolAdaptiveStep = { type = "number", min = 0.01, max = 1, default = 0.25 },
-        PoolMinLimit = { type = "number", min = 1, max = 1000, default = 10 },
-        PoolMaintenanceInterval = { type = "number", min = 1, max = 3600, default = 300 },
-    },
-    Watchdog = {
-        WatchdogEnabled = { type = "boolean", default = false },
-        WatchdogMaxRetries = { type = "number", min = 1, max = 100, default = 3 },
-        WatchdogInterval = { type = "number", min = 1, max = 3600, default = 5 },
-        WatchdogThreshold = { type = "number", min = 1, max = 3600, default = 15 },
-        WatchdogCasThreshold = { type = "number", min = 1, max = 3600, default = 60 },
-    },
-    Instance = {
-        channel_rate = { type = "number", min = 0.0001, max = 1, default = 0.035 },
-        channel_time_check = { type = "number", min = 0, max = 3600, default = 0 },
-        channel_analyze = { type = "boolean", default = false },
-        channel_method_comparison = { type = "number", min = 1, max = 8, default = 2 },
-        channel_cc_threshold = { type = "number", min = 0, max = 65535, default = 1 },
-        channel_cc_limit = { type = "number", min = 0, max = 65535, default = 0 },
-        channel_bitrate_limit = { type = "number", min = 0, max = 100000000, default = 0 },
-        channel_join_pid = { type = "boolean", default = false },
-        dvb_time_check = { type = "number", min = 0, max = 3600, default = 10 },
-        dvb_rate = { type = "number", min = 0.0001, max = 1, default = 0.015 },
-        dvb_method_comparison = { type = "number", min = 1, max = 7, default = 2 },
-        dvb_analyze = { type = "boolean", default = true },
-        channel_watchdog_enabled = { type = "boolean", default = false },
-        channel_watchdog_timeout = { type = "number", min = 1, max = 3600, default = 15 },
-        channel_watchdog_cas_timeout = { type = "number", min = 1, max = 3600, default = 60 },
-    }
-}
-
--- ===========================================================================
 -- Инициализация модуля
 -- ===========================================================================
 
 -- Первичная загрузка из файлов
+_init_defaults()
 _load_from_file()
 
 -- Автоматическая настройка уровней логирования для режима разработки

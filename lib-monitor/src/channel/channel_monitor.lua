@@ -112,6 +112,13 @@ local COMPARISON_METHODS = {
 }
 
 -- 5. Внутреннее состояние (Private State)
+--- Локальная конфигурация модуля (глобальные параметры для всех экземпляров)
+local _m_config = {
+    MaxCounterValue = 1000000000,
+    MaxErrorCount = 1000000,
+    PidStatsLimit = 100,
+}
+
 --- @class ChannelMonitor : BaseMonitor
 --- @field private _display_name string Отображаемое имя монитора
 --- @field private _input_instance any|nil Экземпляр входного потока (для IP мониторов)
@@ -129,6 +136,20 @@ ChannelMonitor.__index = ChannelMonitor
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Инициализирует подписку на обновление глобальной конфигурации модуля
+function ChannelMonitor.init_config_subscription()
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local dispatcher = EventDispatcher.get_instance()
+        dispatcher:subscribe("config:updated:monitor", function(new_config)
+            if new_config.MaxCounterValue then _m_config.MaxCounterValue = new_config.MaxCounterValue end
+            if new_config.MaxErrorCount then _m_config.MaxErrorCount = new_config.MaxErrorCount end
+            if new_config.PidStatsLimit then _m_config.PidStatsLimit = new_config.PidStatsLimit end
+            Logger.debug(COMPONENT_NAME, "Глобальные лимиты монитора каналов обновлены")
+        end)
+    end
+end
 
 --- Возвращает закэшированные данные об источнике
 --- @private
@@ -188,8 +209,8 @@ function ChannelMonitor:_process_psi_data(data)
     -- Вызываем базовую логику сохранения в кэш
     BaseMonitor._process_psi_data(self, data)
 
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
-    local pid_limit = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
+    -- Используем значение из локального конфига модуля
+    local pid_limit = _m_config.PidStatsLimit
 
     local table_id = data.psi and data.psi:upper()
     if table_id == "PMT" and type(data.streams) == "table" then
@@ -232,9 +253,9 @@ function ChannelMonitor:_process_analyze_data(data)
     local conf = self._astra_conf or self._config
     if not conf.analyze or type(data.analyze) ~= "table" then return end
 
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
-    local pid_limit = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
-    local max_counter = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000000
+    -- Используем значения из локального конфига модуля
+    local pid_limit = _m_config.PidStatsLimit
+    local max_counter = _m_config.MaxCounterValue
 
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
@@ -289,9 +310,8 @@ function ChannelMonitor:_process_total_data(data)
     master.cc_errors = (master.cc_errors or 0) + cc_inc
     master.pes_errors = (master.pes_errors or 0) + pes_inc
 
-    -- Защита от переполнения счетчиков
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
-    local max_errors = (MonitorConfig and MonitorConfig.MaxErrorCount) or 1000000
+    -- Защита от переполнения счетчиков (используем локальный конфиг модуля)
+    local max_errors = _m_config.MaxErrorCount
     if master.cc_errors > max_errors then master.cc_errors = max_errors end
     if master.pes_errors > max_errors then master.pes_errors = max_errors end
 
