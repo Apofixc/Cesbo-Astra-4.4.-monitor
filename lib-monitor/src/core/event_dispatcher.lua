@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-field
 -- ===========================================================================
 -- Модуль `core.event_dispatcher`
 --
@@ -14,6 +15,9 @@ local os_clock = _G.os.clock
 local pcall = _G.pcall
 local setmetatable = _G.setmetatable
 local collectgarbage = _G.collectgarbage
+local bit32_bor = _G.bit32.bor
+local bit32_band = _G.bit32.band
+local bit32_bnot = _G.bit32.bnot
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
@@ -406,7 +410,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         queue.tail = (queue.tail % queue.max_size) + 1
         queue.size = queue.size + 1
         self._total_queued_count = self._total_queued_count + 1
-        self._active_queues_mask = bit32.bor(self._active_queues_mask, queue.priority_bit)
+        self._active_queues_mask = bit32_bor(self._active_queues_mask, queue.priority_bit)
     end
 
     self.stats.emitted = self.stats.emitted + 1
@@ -554,7 +558,7 @@ function EventDispatcher:_process_queue()
         local queue = self.event_queues[p]
 
         -- Оптимизация: проверяем маску перед входом в цикл очереди
-        if bit32.band(mask, queue.priority_bit) ~= 0 then
+        if bit32_band(mask, queue.priority_bit) ~= 0 then
             local q_data = queue.data
             local q_max = queue.max_size
 
@@ -588,7 +592,7 @@ function EventDispatcher:_process_queue()
             end
 
             -- Если очередь пуста, сбрасываем бит в маске
-            self._active_queues_mask = bit32.band(self._active_queues_mask, bit32.bnot(queue.priority_bit))
+            self._active_queues_mask = bit32_band(self._active_queues_mask, bit32_bnot(queue.priority_bit))
         end
     end
 end

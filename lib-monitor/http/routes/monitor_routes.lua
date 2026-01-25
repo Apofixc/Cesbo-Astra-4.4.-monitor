@@ -20,6 +20,10 @@ local timer = ModuleManager.get_global_dependency("timer")
 local COMPONENT_NAME = "MonitorRoutes"
 
 --- Возвращает список активных мониторов
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.get_monitors(server, client, request)
     local monitors = {}
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
@@ -36,6 +40,10 @@ function MonitorRoutes.get_monitors(server, client, request)
 end
 
 --- Возвращает сводный статус по всем мониторам
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.get_monitors_status(server, client, request)
     local total, ok_count, error_count, total_cc_errors = 0, 0, 0, 0
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
@@ -53,6 +61,10 @@ function MonitorRoutes.get_monitors_status(server, client, request)
 end
 
 --- Возвращает текущие метрики конкретного монитора
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.get_monitor_data(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -71,6 +83,10 @@ function MonitorRoutes.get_monitor_data(server, client, request)
 end
 
 --- Создает новый монитор (без создания канала)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.create_monitor(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(data, {
@@ -86,6 +102,10 @@ function MonitorRoutes.create_monitor(server, client, request)
 end
 
 --- Удаляет монитор (без удаления канала)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.kill_monitor(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -112,6 +132,10 @@ function MonitorRoutes.kill_monitor(server, client, request)
 end
 
 --- Обновляет параметры монитора
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.update_monitor(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -126,6 +150,10 @@ function MonitorRoutes.update_monitor(server, client, request)
 end
 
 --- Приостановка мониторинга канала
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.pause_monitor(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -138,6 +166,10 @@ function MonitorRoutes.pause_monitor(server, client, request)
 end
 
 --- Возобновление мониторинга канала
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.resume_monitor(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -150,6 +182,10 @@ function MonitorRoutes.resume_monitor(server, client, request)
 end
 
 --- Получение статистики по PID
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.get_monitor_pids(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -162,6 +198,10 @@ function MonitorRoutes.get_monitor_pids(server, client, request)
 end
 
 --- Очистка статистики по PID и битрейту
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.clear_monitor_pids(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -175,6 +215,10 @@ function MonitorRoutes.clear_monitor_pids(server, client, request)
 end
 
 --- Ручное восстановление монитора
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function MonitorRoutes.recover_monitor(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })

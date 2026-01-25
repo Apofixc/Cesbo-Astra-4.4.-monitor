@@ -405,7 +405,7 @@ function Utils.to_line_protocol(measurement, tags, fields, timestamp)
                 table.insert(res, ",")
                 table.insert(res, tostring(k))
                 table.insert(res, "=")
-                table.insert(res, tostring(v):gsub(" ", "\\ "):gsub(",", "\\,"):gsub("=", "\\="))
+                table.insert(res, (tostring(v):gsub(" ", "\\ "):gsub(",", "\\,"):gsub("=", "\\=")))
             end
         end
     end

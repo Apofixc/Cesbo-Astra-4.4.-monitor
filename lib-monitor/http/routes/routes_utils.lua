@@ -23,7 +23,8 @@ local COMPONENT_NAME = "RoutesUtils"
 --- Валидация входных данных
 --- @param params table Таблица параметров
 --- @param schema table Схема валидации
---- @return boolean success, string|nil error_message
+--- @return boolean Статус валидации
+--- @return string|nil Сообщение об ошибке
 function RoutesUtils.validate_input(params, schema)
     for field, rules in pairs(schema) do
         if rules.required and params[field] == nil then
@@ -37,6 +38,10 @@ function RoutesUtils.validate_input(params, schema)
 end
 
 --- Возвращает статистику использования ресурсов мониторинга
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_resource_stats(server, client, request)
     local channel_count = ChannelRepository and ChannelRepository:count() or 0
     local adapter_count = DvbRepository and DvbRepository:count() or 0
@@ -66,6 +71,10 @@ function RoutesUtils.get_resource_stats(server, client, request)
 end
 
 --- Возвращает расширенную информацию обо всех каналах
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_channels_extended(server, client, request)
     local result = {}
     local list = channel_list or {}
@@ -91,6 +100,10 @@ function RoutesUtils.get_channels_extended(server, client, request)
 end
 
 --- Возвращает историю ошибок для монитора
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_monitor_errors(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(params, {
@@ -126,6 +139,10 @@ function RoutesUtils.get_monitor_errors(server, client, request)
 end
 
 --- Возвращает текущую конфигурацию системы
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_system_config(server, client, request)
     local config = {}
     for k, v in pairs(MonitorConfig) do
@@ -135,6 +152,10 @@ function RoutesUtils.get_system_config(server, client, request)
 end
 
 --- Проверяет существование и статус объекта
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.check_object(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(params, { name = { type = "string", required = true } })
@@ -162,6 +183,10 @@ function RoutesUtils.check_object(server, client, request)
 end
 
 --- Возвращает список всех объектов системы
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_all_objects(server, client, request)
     local objects = {}
     local active_channels = ChannelRepository and ChannelRepository:get_all() or {}
@@ -185,6 +210,10 @@ function RoutesUtils.get_all_objects(server, client, request)
 end
 
 --- Очистка неактивных ресурсов
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.cleanup(server, client, request)
     local cleaned_count = 0
     local TablePool = ModuleManager.get_module("table_pool")
@@ -215,6 +244,10 @@ function RoutesUtils.cleanup(server, client, request)
 end
 
 --- Возвращает информацию об API
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_api_info(server, client, request)
     return HttpHelpers.success(server, client, {
         api_version = "1.2.0",
@@ -233,6 +266,10 @@ function RoutesUtils.get_api_info(server, client, request)
 end
 
 --- Возвращает HTML-страницу с документацией API
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function RoutesUtils.get_api_docs(server, client, request)
     local html = [[
 <!DOCTYPE html>

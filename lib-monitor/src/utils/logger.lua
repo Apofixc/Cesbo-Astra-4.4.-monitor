@@ -155,8 +155,8 @@ local function _propagate_error(msg)
 end
 
 --- Выполняет непосредственную запись сообщения в лог Astra или консоль
---- @param level_name string
---- @param message string
+--- @param level_name string Имя уровня логирования
+--- @param message string Текст сообщения
 local function _write_to_output(level_name, message)
     local method_name = LEVEL_MAP[level_name] or level_name:lower()
     if log and type(log) == "table" and type(log[method_name]) == "function" then
@@ -170,8 +170,8 @@ local function _write_to_output(level_name, message)
 end
 
 --- Добавляет сообщение в очередь пакетной записи
---- @param level_name string
---- @param message string
+--- @param level_name string Имя уровня логирования
+--- @param message string Текст сообщения
 local function _enqueue_log(level_name, message)
     if not state.cached_log_batch_enabled then
         _write_to_output(level_name, message)
@@ -432,8 +432,8 @@ end
 --- Выполняет функцию в контексте отслеживания ошибок
 --- @param func function Функция для выполнения
 --- @param ... any Аргументы функции
---- @return boolean success Статус выполнения
---- @return any|string|nil result_or_error Данные, nil или сообщение об ошибке
+--- @return boolean Статус выполнения
+--- @return any|string|nil Данные, nil или сообщение об ошибке
 --- @return any ... Дополнительные результаты
 function Logger.with_error(func, ...)
     state.active_contexts = state.active_contexts + 1

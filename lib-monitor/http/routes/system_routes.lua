@@ -37,6 +37,10 @@ local function format_uptime(seconds)
 end
 
 --- Проверяет состояние сервера и возвращает метрики ресурсов процесса
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.get_health(server, client, request)
     local report = ResourceMonitor and ResourceMonitor.get_report and ResourceMonitor.get_report() or {}
     local HttpServer = ModuleManager.get_module("http_server")
@@ -67,6 +71,10 @@ function SystemRoutes.get_health(server, client, request)
 end
 
 --- Перезагружает Astra
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.reload(server, client, request)
     local params = HttpHelpers.get_params(request)
     local delay = tonumber(params.delay) or 1
@@ -86,6 +94,10 @@ function SystemRoutes.reload(server, client, request)
 end
 
 --- Останавливает Astra
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.exit(server, client, request)
     local params = HttpHelpers.get_params(request)
     local delay = tonumber(params.delay) or 1
@@ -105,6 +117,10 @@ function SystemRoutes.exit(server, client, request)
 end
 
 --- Очищает кэш системных метрик
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.clear_cache(server, client, request)
     if ResourceMonitor and ResourceMonitor.check then
         ResourceMonitor.check()
@@ -114,12 +130,20 @@ function SystemRoutes.clear_cache(server, client, request)
 end
 
 --- Возвращает список всех сетевых интерфейсов сервера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.get_network_interfaces(server, client, request)
     local interfaces = utils_ifaddrs and utils_ifaddrs() or {}
     return HttpHelpers.success(server, client, interfaces)
 end
 
 --- Возвращает имя хоста сервера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.get_hostname(server, client, request)
     return HttpHelpers.success(server, client, {
         hostname = utils_hostname and utils_hostname() or "unknown"
@@ -127,6 +151,10 @@ function SystemRoutes.get_hostname(server, client, request)
 end
 
 --- Возвращает статистику использования пулов таблиц
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.get_pool_stats(server, client, request)
     local TablePool = ModuleManager.get_module("table_pool")
     if not TablePool or not TablePool.get_stats then
@@ -136,6 +164,10 @@ function SystemRoutes.get_pool_stats(server, client, request)
 end
 
 --- Возвращает дамп диагностических логов из буфера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.get_logs(server, client, request)
     local params = HttpHelpers.get_params(request)
     local component = params.component or "ModuleManager"
@@ -154,6 +186,10 @@ function SystemRoutes.get_logs(server, client, request)
 end
 
 --- Управление Watchdog (включение/выключение)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.toggle_watchdog(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {
@@ -178,6 +214,10 @@ function SystemRoutes.toggle_watchdog(server, client, request)
 end
 
 --- Управление Auto-recovery (включение/выключение)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.toggle_auto_recover(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {
@@ -206,6 +246,10 @@ function SystemRoutes.toggle_auto_recover(server, client, request)
 end
 
 --- Управление ResourceMonitor (включение/выключение)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.toggle_resource_monitor(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {
@@ -232,6 +276,10 @@ function SystemRoutes.toggle_resource_monitor(server, client, request)
 end
 
 --- Ручной запуск цикла обслуживания (Maintenance Run)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.run_maintenance(server, client, request)
     local data = HttpHelpers.get_params(request)
     local repo_name = data.repo or "all"
@@ -255,6 +303,10 @@ function SystemRoutes.run_maintenance(server, client, request)
 end
 
 --- Обновление конфигурации в рантайме
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SystemRoutes.update_config(server, client, request)
     local data = HttpHelpers.get_params(request)
     if not MonitorConfig or not MonitorConfig.update then

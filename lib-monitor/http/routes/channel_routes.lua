@@ -23,6 +23,10 @@ local timer = ModuleManager.get_global_dependency("timer")
 local COMPONENT_NAME = "ChannelRoutes"
 
 --- Возвращает список всех каналов с их адресами вещания
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.get_channels(server, client, request)
     local channels = {}
     local list = channel_list or {}
@@ -44,6 +48,10 @@ function ChannelRoutes.get_channels(server, client, request)
 end
 
 --- Возвращает агрегированную статистику по каналам
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.get_channels_stats(server, client, request)
     local total_astra_channels = 0
     if channel_list then
@@ -73,6 +81,10 @@ function ChannelRoutes.get_channels_stats(server, client, request)
 end
 
 --- Возвращает детальную информацию о канале
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.get_channel_info(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -87,6 +99,10 @@ function ChannelRoutes.get_channel_info(server, client, request)
 end
 
 --- Возвращает список входов канала и активный вход
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.get_channel_inputs(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -108,6 +124,10 @@ function ChannelRoutes.get_channel_inputs(server, client, request)
 end
 
 --- Возвращает данные PSI/SI канала
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.get_channel_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -132,6 +152,10 @@ function ChannelRoutes.get_channel_psi(server, client, request)
 end
 
 --- Создает новый канал (Raw Astra Channel)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.create_channel_raw(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(data, {
@@ -148,6 +172,10 @@ function ChannelRoutes.create_channel_raw(server, client, request)
 end
 
 --- Удаляет или перезапускает канал (Raw Astra Channel)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.kill_channel_raw(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -177,6 +205,10 @@ function ChannelRoutes.kill_channel_raw(server, client, request)
 end
 
 --- Создает поток с мониторингом
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.create_stream(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(data, {
@@ -194,6 +226,10 @@ function ChannelRoutes.create_stream(server, client, request)
 end
 
 --- Удаляет поток и монитор
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function ChannelRoutes.kill_stream(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {

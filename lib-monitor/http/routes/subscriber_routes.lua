@@ -76,6 +76,10 @@ function SubscriberRoutes.unsubscribe(server, client, request)
 end
 
 --- Тестирование подписки (отправка тестового уведомления)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function SubscriberRoutes.test_subscription(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = HttpHelpers.validate(data, {

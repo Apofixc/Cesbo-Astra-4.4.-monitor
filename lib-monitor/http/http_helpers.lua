@@ -201,7 +201,8 @@ end
 --- Валидация входных параметров
 --- @param params table Таблица параметров для проверки
 --- @param schema table Схема валидации
---- @return boolean success, string|nil error_message
+--- @return boolean Статус валидации
+--- @return string|nil Сообщение об ошибке
 function HttpHelpers.validate(params, schema)
     if not params then return false, "Параметры не предоставлены" end
     if not schema then return true end

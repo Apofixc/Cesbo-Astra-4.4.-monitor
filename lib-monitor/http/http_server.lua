@@ -218,6 +218,7 @@ function HttpServer.stop()
 end
 
 --- Возвращает статистику производительности API
+--- @return table Статистика сервера
 function HttpServer.get_stats()
     HttpServer._stats.lua_mem_kb = collectgarbage("count")
     return HttpServer._stats
@@ -228,6 +229,7 @@ end
 --- @param port number|nil Порт (по умолчанию 8080)
 --- @param retry_count number|nil Текущая попытка рестарта
 --- @param force_free boolean|nil Принудительно освобождать порт если занят
+--- @return boolean Статус запуска
 function HttpServer.start(addr, port, retry_count, force_free)
     if HttpServer._instance then
         HttpServer.stop()

@@ -19,6 +19,10 @@ local dvbls = ModuleManager.get_global_dependency("dvbls")
 local COMPONENT_NAME = "DvbRoutes"
 
 --- Возвращает список всех DVB адаптеров в системе
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_adapters(server, client, request)
     local list = dvbls and dvbls() or {}
     local adapters = {}
@@ -27,6 +31,10 @@ function DvbRoutes.get_adapters(server, client, request)
 end
 
 --- Возвращает список адаптеров, находящихся под мониторингом
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_monitored_adapters(server, client, request)
     local active_adapters = DvbRepository and DvbRepository:get_all() or {}
     local list = {}
@@ -35,6 +43,10 @@ function DvbRoutes.get_monitored_adapters(server, client, request)
 end
 
 --- Запуск сканирования адаптеров
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.scan_adapters(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -63,6 +75,10 @@ function DvbRoutes.scan_adapters(server, client, request)
 end
 
 --- Возвращает текущие метрики конкретного DVB адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_adapter_data(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -76,6 +92,10 @@ function DvbRoutes.get_adapter_data(server, client, request)
 end
 
 --- Обновляет параметры мониторинга DVB адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.update_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -90,6 +110,10 @@ function DvbRoutes.update_adapter(server, client, request)
 end
 
 --- Останавливает мониторинг DVB адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.stop_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -107,6 +131,10 @@ function DvbRoutes.stop_adapter(server, client, request)
 end
 
 --- Возвращает PSI данные DVB адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_adapter_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -130,6 +158,10 @@ function DvbRoutes.get_adapter_psi(server, client, request)
 end
 
 --- Запускает обновление PSI данных на адаптере
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.update_adapter_psi(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -143,6 +175,10 @@ function DvbRoutes.update_adapter_psi(server, client, request)
 end
 
 --- Настройка адаптера на частоту и запуск мониторинга
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.tune_adapter(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(data, {
@@ -160,6 +196,10 @@ function DvbRoutes.tune_adapter(server, client, request)
 end
 
 --- Переключение транспондера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.switch_transponder(server, client, request)
     local data = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(data, {
@@ -177,6 +217,10 @@ function DvbRoutes.switch_transponder(server, client, request)
 end
 
 --- Приостановка мониторинга адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.pause_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -189,6 +233,10 @@ function DvbRoutes.pause_adapter(server, client, request)
 end
 
 --- Возобновление мониторинга адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.resume_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
@@ -201,6 +249,10 @@ function DvbRoutes.resume_adapter(server, client, request)
 end
 
 --- Перезапуск мониторинга адаптера
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.restart_adapter(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, {
@@ -216,12 +268,20 @@ function DvbRoutes.restart_adapter(server, client, request)
 end
 
 --- Возвращает список всех физических адаптеров
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_hardware_all(server, client, request)
     local list = dvbls and dvbls() or {}
     return HttpHelpers.success(server, client, list)
 end
 
 --- Возвращает детальные флаги состояния DVB адаптера (has_signal, has_lock и т.д.)
+--- @param server table Объект сервера
+--- @param client table Объект клиента
+--- @param request table Объект запроса
+--- @return boolean Всегда true
 function DvbRoutes.get_adapter_status_info(server, client, request)
     local params = HttpHelpers.get_params(request)
     local ok, err = RoutesUtils.validate_input(params, { name = { type = "string", required = true } })
