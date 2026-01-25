@@ -18,14 +18,20 @@ local string_gsub = _G.string.gsub
 local string_gmatch = _G.string.gmatch
 
 -- 2. Функции из ModuleManager.get_module()
-local MonitorConfig = ModuleManager.get_module("monitor_config")
+local Logger = ModuleManager.get_module("logger")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
 
 -- 4. Константы и конфигурации
---- Максимальный размер кэша скомпилированных функций
-local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.wildcard) or 1000
+local COMPONENT_NAME = "Wildcard"
+
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    MaxCacheSize = {
+        wildcard = 1000
+    }
+}
 
 -- 5. Внутреннее состояние (Private State)
 --- @class WildcardState
@@ -44,6 +50,20 @@ local Wildcard = {}
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Инициализирует подписку на обновление конфигурации
+function Wildcard.init_config_subscription()
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:pool", function(new_config)
+            if new_config.MaxCacheSize and new_config.MaxCacheSize.wildcard then
+                _m_config.MaxCacheSize.wildcard = new_config.MaxCacheSize.wildcard
+                Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
+            end
+        end)
+    end
+end
 
 --- Создает матчер для любого значения (маска "*")
 --- @private
@@ -279,7 +299,7 @@ function Wildcard.compile(pattern)
     end
 
     -- Управление кэшем (очистка при переполнении)
-    if state.cache_size >= MAX_CACHE_SIZE then
+    if state.cache_size >= _m_config.MaxCacheSize.wildcard then
         state.compile_cache = {}
         state.cache_size = 0
     end

@@ -21,7 +21,6 @@ local collectgarbage = _G.collectgarbage
 local Logger = ModuleManager.get_module("logger")
 local SubscriptionManager = ModuleManager.get_module("core.subscription_manager")
 local TablePool = ModuleManager.get_module("table_pool")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
@@ -38,18 +37,15 @@ end
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "EventDispatcher"
 
---- Максимальный размер LVC (Last Value Cache)
-local MAX_LVC_SIZE = (MonitorConfig and MonitorConfig.MaxLvcSize) or 1000
---- Максимальный размер очереди событий на один приоритет
-local MAX_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxQueueSize) or 2000
---- Лимит обработки событий за один тик планировщика
-local DEFAULT_BATCH_LIMIT = (MonitorConfig and MonitorConfig.EventBatchLimit) or 100
---- Максимальный лимит при высокой нагрузке
-local MAX_BATCH_LIMIT = (MonitorConfig and MonitorConfig.MaxBatchLimit) or 1000
---- Максимальное время обработки очереди за один тик (5 мс)
-local MAX_TICK_TIME = (MonitorConfig and MonitorConfig.MaxTickTime) or 0.005
---- TTL для записей LVC по умолчанию (1 час)
-local DEFAULT_LVC_TTL = (MonitorConfig and MonitorConfig.LvcTtl) or 3600
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    LvcTtl = 3600,
+    MaxLvcSize = 1000,
+    MaxQueueSize = 1000,
+    EventBatchLimit = 100,
+    MaxBatchLimit = 1000,
+    MaxTickTime = 0.005,
+}
 
 -- 5. Внутреннее состояние (Private State)
 --- @class EventDispatcherState
@@ -136,10 +132,9 @@ end
 --- @private
 function EventDispatcher:_initialize()
     -- Тонкая настройка Garbage Collector для инкрементальной очистки
-    local gc_pause = (MonitorConfig and MonitorConfig.GcPause) or 100
-    local gc_stepmul = (MonitorConfig and MonitorConfig.GcStepMul) or 500
-    collectgarbage("setpause", gc_pause)
-    collectgarbage("setstepmul", gc_stepmul)
+    -- (Значения по умолчанию, будут обновлены через события System)
+    collectgarbage("setpause", 100)
+    collectgarbage("setstepmul", 500)
 
     self.subscription_manager = SubscriptionManager.new()
 
@@ -161,7 +156,7 @@ function EventDispatcher:_initialize()
             head = 1,
             tail = 1,
             size = 0,
-            max_size = MAX_QUEUE_SIZE,
+            max_size = _m_config.MaxQueueSize,
             priority_bit = 2 ^ (p - 1)
         }
     end
@@ -220,6 +215,25 @@ function EventDispatcher:_release_lvc_entry(entry)
         -- Используем автоматический рекурсивный возврат вложенных таблиц
         TablePool.release(entry, "lvc_wrapper", true)
     end
+end
+
+--- Инициализирует подписку на обновление конфигурации
+function EventDispatcher:init_config_subscription()
+    self:subscribe("config:updated:event", function(new_config)
+        for k, v in pairs(new_config) do
+            _m_config[k] = v
+        end
+        -- Обновляем лимиты очередей
+        for _, queue in pairs(self.event_queues) do
+            queue.max_size = _m_config.MaxQueueSize
+        end
+        Logger.info(COMPONENT_NAME, "Конфигурация событий обновлена")
+    end)
+
+    self:subscribe("config:updated:system", function(new_config)
+        if new_config.GcPause then collectgarbage("setpause", new_config.GcPause) end
+        if new_config.GcStepMul then collectgarbage("setstepmul", new_config.GcStepMul) end
+    end)
 end
 
 --- Публикует событие в систему.
@@ -317,24 +331,24 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     if not no_cache then
         -- Ограничить размер LVC для предотвращения утечек памяти (Burst Eviction)
         if not self._lvc[event_type] then
-            if self._lvc_size >= MAX_LVC_SIZE then
+            if self._lvc_size >= _m_config.MaxLvcSize then
                 -- Вытесняем пачкой по 5 записей для стабильности при шторме новых типов
                 for _ = 1, 5 do
                     local oldest_key = self._lvc_keys[self._lvc_head]
                     if oldest_key then
                         self._lvc_keys[self._lvc_head] = nil
-                        self._lvc_head = (self._lvc_head % MAX_LVC_SIZE) + 1
+                        self._lvc_head = (self._lvc_head % _m_config.MaxLvcSize) + 1
                         self._lvc_size = self._lvc_size - 1
 
                         local old_entry = self._lvc[oldest_key]
                         self:_release_lvc_entry(old_entry)
                         self._lvc[oldest_key] = nil
                     end
-                    if self._lvc_size < MAX_LVC_SIZE then break end
+                    if self._lvc_size < _m_config.MaxLvcSize then break end
                 end
             end
             self._lvc_keys[self._lvc_tail] = event_type
-            self._lvc_tail = (self._lvc_tail % MAX_LVC_SIZE) + 1
+            self._lvc_tail = (self._lvc_tail % _m_config.MaxLvcSize) + 1
             self._lvc_size = self._lvc_size + 1
         end
 
@@ -491,7 +505,8 @@ function EventDispatcher:_start_queue_processor()
     if not Scheduler then return end
 
     local scheduler = Scheduler.get_instance()
-    local interval = (MonitorConfig and MonitorConfig.SchedulerInterval) or 1
+    -- Интервал планировщика будет обновляться через события System
+    local interval = 1
 
     scheduler:add_task("event_dispatcher_queue", function()
         if self.active then self:_process_queue() end
@@ -507,8 +522,8 @@ function EventDispatcher:_process_queue()
 
     -- Инкрементальная очистка старых записей LVC (TTL)
     -- Оптимизация: проверяем по 10-20 записей за тик.
-    local lvc_ttl = (MonitorConfig and MonitorConfig.LvcTtl) or DEFAULT_LVC_TTL
-    local check_limit = (self._lvc_size > MAX_LVC_SIZE * 0.8) and 20 or 10
+    local lvc_ttl = _m_config.LvcTtl
+    local check_limit = (self._lvc_size > _m_config.MaxLvcSize * 0.8) and 20 or 10
     local checked = 0
     local current_key = self._last_lvc_check_key
     
@@ -530,12 +545,12 @@ function EventDispatcher:_process_queue()
     end
     self._last_lvc_check_key = current_key
 
-    local limit = (MonitorConfig and MonitorConfig.EventBatchLimit) or DEFAULT_BATCH_LIMIT
+    local limit = _m_config.EventBatchLimit
     
     -- Адаптивная частота: если суммарный размер очередей > 50%, увеличиваем лимит
     -- Оптимизировано: используем _total_queued_count вместо цикла
-    if self._total_queued_count > (MAX_QUEUE_SIZE * 0.5) then
-        limit = math.min(MAX_BATCH_LIMIT, limit * 2)
+    if self._total_queued_count > (_m_config.MaxQueueSize * 0.5) then
+        limit = math.min(_m_config.MaxBatchLimit, limit * 2)
     end
 
     local processed_in_batch = 0
@@ -575,7 +590,7 @@ function EventDispatcher:_process_queue()
                 processed_in_batch = processed_in_batch + 1
 
                 -- Time-Slicing: прерываем если превышен лимит времени или батча
-                if processed_in_batch >= limit or (os_clock() - start_time) >= MAX_TICK_TIME then
+                if processed_in_batch >= limit or (os_clock() - start_time) >= _m_config.MaxTickTime then
                     return -- Прерываем обработку до следующего тика
                 end
             end

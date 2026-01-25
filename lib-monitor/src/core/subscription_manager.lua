@@ -26,7 +26,6 @@ local os_execute = _G.os.execute
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Utils = ModuleManager.get_module("utils")
 local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
@@ -80,11 +79,19 @@ local COMPONENT_NAME = "SubscriptionManager"
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local CONNECTION_CLOSE = "Connection: close"
 local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
-local MAX_RETRIES = (MonitorConfig and MonitorConfig.MaxRetries) or 5
-local RETRY_DELAY = (MonitorConfig and MonitorConfig.RetryDelay) or 5
-local HTTP_TIMEOUT = (MonitorConfig and MonitorConfig.HttpTimeout) or 10
-local MAX_ROUTE_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxRouteCacheSize) or 1000
-local MAX_RETRY_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxRetryQueueSize) or 500
+
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    MaxRetries = 5,
+    RetryDelay = 5,
+    HttpTimeout = 10,
+    MaxRouteCacheSize = 1000,
+    MaxRetryQueueSize = 500,
+    BatchEnabled = true,
+    BatchFlushInterval = 0.5,
+    BatchMaxSize = 50,
+    DefaultBatchMode = "single",
+}
 
 -- 5. Внутреннее состояние (Private State)
 --- @class SubscriptionManagerState
@@ -429,12 +436,12 @@ local Transport = {
 --- @param content string Подготовленный JSON
 --- @return boolean Статус добавления
 function SubscriptionManager:enqueue_retry(config, event, event_type, retry_count, content)
-    if #self._retry_queue >= MAX_RETRY_QUEUE_SIZE then
+    if #self._retry_queue >= _m_config.MaxRetryQueueSize then
         Logger.warning(COMPONENT_NAME, "Очередь повторов переполнена, событие %s отброшено", event_type)
         return false
     end
 
-    local delay = RETRY_DELAY * (2 ^ retry_count)
+    local delay = _m_config.RetryDelay * (2 ^ retry_count)
     local jitter = math_random() * 2
 
     local item = TablePool and TablePool.get("retry_item") or {}
@@ -469,7 +476,24 @@ function SubscriptionManager.new()
     self._retry_queue = {}
     self:load()
     self:start_retry_processor()
+    self:init_config_subscription()
     return self
+end
+
+--- Инициализирует подписку на обновление конфигурации
+function SubscriptionManager:init_config_subscription()
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:network", function(new_config)
+            for k, v in pairs(new_config) do _m_config[k] = v end
+            Logger.info(COMPONENT_NAME, "Конфигурация сети обновлена")
+        end)
+        instance:subscribe("config:updated:batch", function(new_config)
+            for k, v in pairs(new_config) do _m_config[k] = v end
+            Logger.info(COMPONENT_NAME, "Конфигурация батчинга обновлена")
+        end)
+    end
 end
 
 --- Запускает фоновый процесс обработки очереди повторных попыток и отложенного сохранения.
@@ -485,8 +509,8 @@ function SubscriptionManager:start_retry_processor()
         local now = os_clock()
 
         -- 1. Пакетная отправка (Batch Flush)
-        if MonitorConfig and MonitorConfig.BatchEnabled then
-            local interval = MonitorConfig.BatchFlushInterval or 0.5
+        if _m_config.BatchEnabled then
+            local interval = _m_config.BatchFlushInterval
             for sub_id, queue in pairs(self._batch_queues) do
                 if #queue.events > 0 and (now - queue.last_flush) >= interval then
                     self:flush_batch(sub_id)
@@ -623,7 +647,7 @@ function SubscriptionManager:subscribe(event_type, sub_data, existing_id)
 
     local sub_id = existing_id or _generate_uuid()
     local filters = sub_data.filters or {}
-    local default_batch_mode = (MonitorConfig and MonitorConfig.DefaultBatchMode) or "single"
+    local default_batch_mode = _m_config.DefaultBatchMode
 
     -- Предкомпиляция аксессоров для фильтров
     if FilterEngine and filters.conditions then
@@ -730,7 +754,7 @@ function SubscriptionManager._get_targets(self, event_type)
     if targets then return targets end
 
     -- Ограничение размера кэша для предотвращения утечек памяти
-    if self._route_cache_size >= MAX_ROUTE_CACHE_SIZE then
+    if self._route_cache_size >= _m_config.MaxRouteCacheSize then
         self._route_cache = {}
         self._route_cache_size = 0
     end
@@ -797,7 +821,7 @@ function SubscriptionManager:publish_event(event, now)
 
     -- 2. Обработка сложных подписчиков (фильтры, троттлинг, батчинг)
     local complex_subs = plan.complex_subs
-    local batch_enabled = MonitorConfig and MonitorConfig.BatchEnabled
+    local batch_enabled = _m_config.BatchEnabled
 
     for i = 1, #complex_subs do
         local sub = complex_subs[i]
@@ -936,7 +960,7 @@ function SubscriptionManager:add_to_batch(sub, event)
 
     -- Smart Flush: немедленный сброс для критических событий (Priority 1-2)
     local is_high_priority = event.priority and event.priority <= 2
-    local max_size = MonitorConfig and MonitorConfig.BatchMaxSize or 50
+    local max_size = _m_config.BatchMaxSize
 
     if is_high_priority or #queue.events >= max_size then
         self:flush_batch(sub_id)
@@ -1002,7 +1026,7 @@ function SubscriptionManager:shutdown()
     end
 
     -- Сброс всех накопленных батчей перед выходом
-    if MonitorConfig and MonitorConfig.BatchEnabled then
+    if _m_config.BatchEnabled then
         for sub_id, _ in pairs(self._batch_queues) do
             self:flush_batch(sub_id)
         end

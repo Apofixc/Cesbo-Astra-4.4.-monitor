@@ -21,14 +21,19 @@ local os_time = _G.os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "FilterEngine"
-local MAX_CACHE_SIZE = (MonitorConfig and MonitorConfig.MaxCacheSize and MonitorConfig.MaxCacheSize.filter_engine) or 500
+
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    MaxCacheSize = {
+        filter_engine = 500
+    }
+}
 
 -- 5. Внутреннее состояние (Private State)
 --- @class FilterEngineState
@@ -53,6 +58,20 @@ end
 
 --- @class FilterEngine
 local FilterEngine = {}
+
+--- Инициализирует подписку на обновление конфигурации
+function FilterEngine.init_config_subscription()
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:pool", function(new_config)
+            if new_config.MaxCacheSize and new_config.MaxCacheSize.filter_engine then
+                _m_config.MaxCacheSize.filter_engine = new_config.MaxCacheSize.filter_engine
+                Logger.debug(COMPONENT_NAME, "Лимит кэша FilterEngine обновлен: %d", _m_config.MaxCacheSize.filter_engine)
+            end
+        end)
+    end
+end
 
 --- @type table<string, function> Операторы сравнения для интерпретируемого режима
 local OPERATORS = {
@@ -95,7 +114,7 @@ function FilterEngine.compile_accessor(path)
     local accessor = state.accessor_cache[path]
     if accessor then return accessor end
 
-    if state.accessor_cache_count >= MAX_CACHE_SIZE then
+    if state.accessor_cache_count >= _m_config.MaxCacheSize.filter_engine then
         state.accessor_cache = {}
         state.accessor_cache_count = 0
     end
@@ -386,7 +405,7 @@ function FilterEngine.match(data, filters, sub_id)
         ---@type function|nil
         local func = state.script_cache[filters.script]
         if not func then
-            if state.script_cache_count >= MAX_CACHE_SIZE then
+            if state.script_cache_count >= _m_config.MaxCacheSize.filter_engine then
                 state.script_cache = {}
                 state.script_cache_count = 0
             end

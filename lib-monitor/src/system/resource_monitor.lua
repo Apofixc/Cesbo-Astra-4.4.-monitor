@@ -59,7 +59,6 @@ local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
@@ -74,19 +73,25 @@ local TICK_RATE = 100 -- Стандарт для Linux (USER_HZ)
 local STAT_READ_BUFFER = 512
 local STATUS_READ_BUFFER = 4096
 
--- Настройки по умолчанию (используются если MonitorConfig недоступен)
-local DEFAULT_CPU_THRESHOLD = (MonitorConfig and MonitorConfig.CpuThreshold) or 90
-local DEFAULT_RAM_THRESHOLD_PCT = (MonitorConfig and MonitorConfig.RamThresholdPct) or 80
-local HYSTERESIS_FACTOR = (MonitorConfig and MonitorConfig.HysteresisFactor) or 0.95
-local NETWORK_CHECK_INTERVAL = (MonitorConfig and MonitorConfig.NetworkCheckInterval) or 30
-local CONFIG_REFRESH_INTERVAL = (MonitorConfig and MonitorConfig.ConfigRefreshInterval) or 10
-local ADAPTIVE_TICK_THRESHOLD_CPU = (MonitorConfig and MonitorConfig.AdaptiveTickThresholdCpu) or 50
-local ADAPTIVE_TICK_THRESHOLD_RAM = (MonitorConfig and MonitorConfig.AdaptiveTickThresholdRam) or 70
-local TICK_INTERVAL_NORMAL = (MonitorConfig and MonitorConfig.TickIntervalNormal) or 5
-local TICK_INTERVAL_FAST = (MonitorConfig and MonitorConfig.TickIntervalFast) or 1
-local RARE_METRIC_INTERVAL = (MonitorConfig and MonitorConfig.RareMetricInterval) or 5
-local MAX_CPU_JUMP = (MonitorConfig and MonitorConfig.MaxCpuJump) or 50
-local MAX_RAM_JUMP_PCT = (MonitorConfig and MonitorConfig.MaxRamJumpPct) or 20
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    CpuThreshold = 90,
+    RamThresholdPct = 80,
+    MemoryLimitMb = 50,
+    FdThreshold = 800,
+    HysteresisFactor = 0.95,
+    NetworkCheckInterval = 30,
+    ConfigRefreshInterval = 10,
+    AdaptiveTickThresholdCpu = 50,
+    AdaptiveTickThresholdRam = 70,
+    TickIntervalNormal = 5,
+    TickIntervalFast = 1,
+    RareMetricInterval = 5,
+    MaxCpuJump = 50,
+    MaxRamJumpPct = 20,
+    CpuMovingAverageWindow = 5,
+    ResourceMonitorEnabled = true,
+}
 
 -- 5. Внутреннее состояние (Private State)
 
@@ -157,15 +162,15 @@ local state = {
 
     -- Кэш конфигурации
     config_cache = {
-        cpu_threshold = DEFAULT_CPU_THRESHOLD,
-        ram_threshold_pct = DEFAULT_RAM_THRESHOLD_PCT,
-        ram_limit_kb = ((MonitorConfig and MonitorConfig.MemoryLimitMb) or 50) * 1024,
-        fd_threshold = (MonitorConfig and MonitorConfig.FdThreshold) or 800,
+        cpu_threshold = 90,
+        ram_threshold_pct = 80,
+        ram_limit_kb = 50 * 1024,
+        fd_threshold = 800,
         last_refresh = 0
     },
 
     -- Адаптивный интервал
-    current_tick_interval = TICK_INTERVAL_NORMAL,
+    current_tick_interval = 5,
 
     -- Тренд памяти
     mem_history = {},
@@ -183,37 +188,20 @@ end
 
 --- Обновляет кэш конфигурации (внутренняя версия)
 local function _refresh_config_internal()
-    if MonitorConfig then
-        -- Усиленная валидация (Data Sanity & Type Safety)
-        local cpu = tonumber(MonitorConfig.CpuThreshold)
-        if cpu and cpu > 0 and cpu <= 100 then
-            state.config_cache.cpu_threshold = cpu
-        end
-
-        local ram_pct = tonumber(MonitorConfig.RamThresholdPct)
-        if ram_pct and ram_pct > 0 and ram_pct <= 100 then
-            state.config_cache.ram_threshold_pct = ram_pct
-        end
-
-        local ram_limit = tonumber(MonitorConfig.MemoryLimitMb)
-        if ram_limit and ram_limit > 0 and ram_limit < 4096 then
-            state.config_cache.ram_limit_kb = ram_limit * 1024
-        end
-
-        local fd = tonumber(MonitorConfig.FdThreshold)
-        if fd and fd > 0 and fd < 65535 then
-            state.config_cache.fd_threshold = fd
-        end
-    end
+    state.config_cache.cpu_threshold = _m_config.CpuThreshold
+    state.config_cache.ram_threshold_pct = _m_config.RamThresholdPct
+    state.config_cache.ram_limit_kb = _m_config.MemoryLimitMb * 1024
+    state.config_cache.fd_threshold = _m_config.FdThreshold
     state.config_cache.last_refresh = os_time()
 end
 
 --- Обновляет кэш конфигурации (внутренняя версия с проверкой интервала)
 local function _auto_refresh_config()
-    local now = os_time()
-    if now - state.config_cache.last_refresh < CONFIG_REFRESH_INTERVAL then return end
-    
-    _refresh_config_internal()
+    -- Теперь конфигурация обновляется реактивно через события, 
+    -- но сохраняем метод для совместимости или первичной инициализации
+    if state.config_cache.last_refresh == 0 then
+        _refresh_config_internal()
+    end
 end
 
 --- Возвращает EventDispatcher (ленивая загрузка)
@@ -331,7 +319,7 @@ end
 --- @param val number Новое значение
 --- @return number
 local function _moving_average(val)
-    local window = (MonitorConfig and MonitorConfig.CpuMovingAverageWindow) or 0
+    local window = _m_config.CpuMovingAverageWindow or 0
     if window <= 1 then return val end
 
     state.cpu_index = (state.cpu_index % window) + 1
@@ -360,22 +348,22 @@ local function _check_thresholds(report)
     local cpu_val = report.cpu.usage
 
     -- Data Sanity Checks: игнорируем неправдоподобные скачки
-    if state.last_cpu_usage > 0 and math_min(cpu_val, 100) - state.last_cpu_usage > MAX_CPU_JUMP then
+    if state.last_cpu_usage > 0 and math_min(cpu_val, 100) - state.last_cpu_usage > _m_config.MaxCpuJump then
         if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок CPU: %.1f -> %.1f", state.last_cpu_usage, cpu_val) end
-        cpu_val = state.last_cpu_usage + (MAX_CPU_JUMP * 0.5) -- Сглаживаем вместо полного игнорирования
+        cpu_val = state.last_cpu_usage + (_m_config.MaxCpuJump * 0.5) -- Сглаживаем вместо полного игнорирования
         report.cpu.usage = cpu_val
     end
 
     local last_ram_pct = (state.last_lua_mem / ram_limit_kb) * 100
-    if state.last_lua_mem > 0 and ram_usage_pct - last_ram_pct > MAX_RAM_JUMP_PCT then
+    if state.last_lua_mem > 0 and ram_usage_pct - last_ram_pct > _m_config.MaxRamJumpPct then
         if Logger and Logger.warning then Logger.warning(COMPONENT_NAME, "Игнорирован аномальный скачок RAM: %.1f%% -> %.1f%%", last_ram_pct, ram_usage_pct) end
-        ram_usage_pct = last_ram_pct + (MAX_RAM_JUMP_PCT * 0.5)
+        ram_usage_pct = last_ram_pct + (_m_config.MaxRamJumpPct * 0.5)
         report.memory.lua = (ram_usage_pct / 100) * ram_limit_kb
     end
 
-    local target_interval = TICK_INTERVAL_NORMAL
-    if cpu_val > ADAPTIVE_TICK_THRESHOLD_CPU or ram_usage_pct > ADAPTIVE_TICK_THRESHOLD_RAM then
-        target_interval = TICK_INTERVAL_FAST
+    local target_interval = _m_config.TickIntervalNormal
+    if cpu_val > _m_config.AdaptiveTickThresholdCpu or ram_usage_pct > _m_config.AdaptiveTickThresholdRam then
+        target_interval = _m_config.TickIntervalFast
     end
 
     if target_interval ~= state.current_tick_interval then
@@ -399,7 +387,7 @@ local function _check_thresholds(report)
             })
         end
     else
-        if cpu_val < (cpu_threshold * HYSTERESIS_FACTOR) then
+        if cpu_val < (cpu_threshold * _m_config.HysteresisFactor) then
             state.active_warnings.cpu = false
             ed:emit("sys:resource_warning", {
                 type = "cpu",
@@ -425,7 +413,7 @@ local function _check_thresholds(report)
             })
         end
     else
-        if ram_usage_pct < (ram_threshold_pct * HYSTERESIS_FACTOR) then
+        if ram_usage_pct < (ram_threshold_pct * _m_config.HysteresisFactor) then
             state.active_warnings.ram = false
             ed:emit("sys:resource_warning", {
                 type = "ram",
@@ -449,7 +437,7 @@ local function _check_thresholds(report)
             })
         end
     else
-        if report.fd_size < (fd_threshold * HYSTERESIS_FACTOR) then
+        if report.fd_size < (fd_threshold * _m_config.HysteresisFactor) then
             state.active_warnings.fd = false
             ed:emit("sys:resource_warning", {
                 type = "fd",
@@ -494,7 +482,22 @@ end
 --- @class ResourceMonitor
 local ResourceMonitor = {}
 
+--- Инициализирует подписку на обновление конфигурации
+function ResourceMonitor.init_config_subscription()
+    local ed = _get_event_dispatcher()
+    if ed then
+        ed:subscribe("config:updated:system", function(new_config)
+            for k, v in pairs(new_config) do
+                _m_config[k] = v
+            end
+            _refresh_config_internal()
+            Logger.info(COMPONENT_NAME, "Конфигурация системного монитора обновлена")
+        end)
+    end
+end
+
 --- Явное обновление конфигурации из MonitorConfig
+--- @deprecated Используйте систему событий
 function ResourceMonitor.refresh_config()
     _refresh_config_internal()
 end
@@ -547,7 +550,7 @@ function ResourceMonitor.check()
         state.last_lua_mem = current_lua_mem
 
         -- Метрики сети (Static Table Reuse)
-        if now_time - state.last_network_check > NETWORK_CHECK_INTERVAL then
+        if now_time - state.last_network_check > _m_config.NetworkCheckInterval then
             local net_list = report.network
             local idx = 1
             
@@ -606,7 +609,7 @@ function ResourceMonitor.start(interval)
         return
     end
 
-    local run_interval = interval or (MonitorConfig and MonitorConfig.SchedulerInterval) or TICK_INTERVAL_NORMAL
+    local run_interval = interval or _m_config.SchedulerInterval
     state.current_tick_interval = run_interval
 
     scheduler:add_task("resource_monitor", function()
@@ -654,7 +657,7 @@ end
 
 
 -- Автоматический запуск при загрузке (если включено в конфиге)
-if not MonitorConfig or MonitorConfig.ResourceMonitorEnabled ~= false then
+if _m_config.ResourceMonitorEnabled ~= false then
     ResourceMonitor.start()
 end
 

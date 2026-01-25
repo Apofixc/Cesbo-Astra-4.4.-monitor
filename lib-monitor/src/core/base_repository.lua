@@ -17,7 +17,6 @@ local type = _G.type
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
@@ -31,9 +30,9 @@ local COMPONENT_NAME = "BaseRepository"
 -- (Для классов состояние инкапсулировано в экземпляре, создаваемом в .new)
 
 --- Настройки по умолчанию
-local DEFAULT_RECOVER_INTERVAL = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or 300
-local DEFAULT_MAX_ATTEMPTS = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or 3
-local DEFAULT_COOLDOWN_TIME = (MonitorConfig and MonitorConfig.RecoveryCooldown) or 3600 -- 1 час стабильной работы для сброса попыток
+local DEFAULT_RECOVER_INTERVAL = 300
+local DEFAULT_MAX_ATTEMPTS = 3
+local DEFAULT_COOLDOWN_TIME = 3600 -- 1 час стабильной работы для сброса попыток
 local DEFAULT_WATCHDOG_INTERVAL = 5
 
 --- Типы событий репозитория
@@ -121,18 +120,18 @@ function BaseRepository.new(component_name)
         monitors = {},           -- Активные экземпляры мониторов: name -> instance
         classes = {},            -- Классы (мета-таблицы) для пересоздания: name -> class
 
-        -- Настройки (копируются из MonitorConfig для поддержки API)
+        -- Настройки (значения по умолчанию)
         settings = {
             auto_recover = {
-                enabled = (MonitorConfig and MonitorConfig.AutoRecoverEnabled) or false,
-                interval = (MonitorConfig and MonitorConfig.AutoRecoverInterval) or DEFAULT_RECOVER_INTERVAL,
-                max_attempts = (MonitorConfig and MonitorConfig.MaxRecoveryAttempts) or DEFAULT_MAX_ATTEMPTS,
-                cooldown = (MonitorConfig and MonitorConfig.RecoveryCooldown) or DEFAULT_COOLDOWN_TIME
+                enabled = false,
+                interval = DEFAULT_RECOVER_INTERVAL,
+                max_attempts = DEFAULT_MAX_ATTEMPTS,
+                cooldown = DEFAULT_COOLDOWN_TIME
             },
             watchdog = {
-                enabled = (MonitorConfig and MonitorConfig.WatchdogEnabled) or false,
-                max_attempts = (MonitorConfig and MonitorConfig.WatchdogMaxRetries) or 3,
-                interval = (MonitorConfig and MonitorConfig.WatchdogInterval) or DEFAULT_WATCHDOG_INTERVAL
+                enabled = false,
+                max_attempts = 3,
+                interval = DEFAULT_WATCHDOG_INTERVAL
             }
         },
 
@@ -389,8 +388,23 @@ function BaseRepository:update_settings(params)
         end
     end
 
-    Logger.info(self._component_name, "Настройки репозитория обновлены")
     return true
+end
+
+--- Инициализирует подписки на конфигурацию (вызывается из наследников)
+function BaseRepository:init_base_config_subscription()
+    local dispatcher = EventDispatcher and EventDispatcher.get_instance()
+    if not dispatcher then return end
+
+    dispatcher:subscribe("config:updated:recovery", function(new_config)
+        self:update_settings(new_config)
+        Logger.info(self._component_name, "Настройки восстановления обновлены")
+    end)
+
+    dispatcher:subscribe("config:updated:watchdog", function(new_config)
+        self:update_settings(new_config)
+        Logger.info(self._component_name, "Настройки Watchdog обновлены")
+    end)
 end
 
 --- Включает механизм Watchdog

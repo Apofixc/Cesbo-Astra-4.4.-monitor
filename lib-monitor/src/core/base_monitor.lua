@@ -18,7 +18,6 @@ local pcall = _G.pcall
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra
@@ -77,11 +76,28 @@ function BaseMonitor:_set_config_param(param_name, value, prefix)
     if not self._config then return false end
 
     local result
-    if Utils and Utils.validate_monitor_param then
-        result = Utils.validate_monitor_param(param_name, value)
-    else
-        -- Fallback если Utils недоступен
-        result = value
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    
+    -- Используем MonitorConfig только для валидации параметров экземпляра
+    if MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema.Instance then
+        local rule = MonitorConfig.ValidationSchema.Instance[param_name]
+        if rule then
+            if type(value) ~= rule.type then
+                Logger.error(self._component_name, "[%s] Некорректный тип для %s: ожидался %s, получен %s",
+                    tostring(self._name), param_name, rule.type, type(value))
+                return false
+            end
+            -- (Дополнительные проверки min/max можно добавить здесь)
+            result = value
+        end
+    end
+
+    if result == nil then
+        if Utils and Utils.validate_monitor_param then
+            result = Utils.validate_monitor_param(param_name, value)
+        else
+            result = value
+        end
     end
 
     if result == nil then
@@ -253,7 +269,8 @@ function BaseMonitor.new(config, component_name, config_prefix, comparison_metho
     self._instance = nil
 
     -- 3. Таймеры и интервалы
-    self._force_interval = (MonitorConfig and MonitorConfig.ForceSendInterval) or 300
+    -- Значение по умолчанию, будет обновлено при публикации первого события или через MonitorConfig
+    self._force_interval = 300
     self._force_timer = self._force_interval -- Сразу готов к отправке
     self._check_timer = 0
     self._last_update = os_time()
@@ -271,11 +288,24 @@ function BaseMonitor.new(config, component_name, config_prefix, comparison_metho
     self._load_shedding_active = false
     self._original_time_check = 0
 
-    -- Подписка на события снижения нагрузки
+    -- Подписка на события снижения нагрузки и конфигурации
     if EventDispatcher then
         local dispatcher = EventDispatcher.get_instance()
         self._resource_sub_id = dispatcher:subscribe("sys:resource_warning", function(data)
             BaseMonitor._handle_resource_warning(self, data)
+        end)
+
+        -- Получаем актуальный ForceSendInterval из MonitorConfig (только для чтения при создании)
+        local MonitorConfig = ModuleManager.get_module("monitor_config")
+        if MonitorConfig and MonitorConfig.Monitor then
+            self._force_interval = MonitorConfig.Monitor.ForceSendInterval or 300
+        end
+
+        -- Подписка на обновление глобального интервала принудительной отправки
+        dispatcher:subscribe("config:updated:monitor", function(new_config)
+            if new_config.ForceSendInterval then
+                self._force_interval = new_config.ForceSendInterval
+            end
         end)
     end
 

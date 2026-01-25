@@ -18,7 +18,6 @@ local pcall = _G.pcall
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local analyze = ModuleManager.get_global_dependency("analyze")
@@ -27,9 +26,6 @@ local kill_input = ModuleManager.get_global_dependency("kill_input")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelMonitor"
 local DEFAULT_SOURCE_TEMPLATE = { format = "Unknown", addr = "Unknown", stream = "Unknown" }
-local MAX_COUNTER = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000000
-local MAX_ERROR_COUNT = (MonitorConfig and MonitorConfig.MaxErrorCount) or 1000000
-local PID_LIMIT = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
 
 -- Методы сравнения
 local METHOD_ALWAYS = 1
@@ -192,6 +188,9 @@ function ChannelMonitor:_process_psi_data(data)
     -- Вызываем базовую логику сохранения в кэш
     BaseMonitor._process_psi_data(self, data)
 
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local pid_limit = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
+
     local table_id = data.psi and data.psi:upper()
     if table_id == "PMT" and type(data.streams) == "table" then
         for _, stream in ipairs(data.streams) do
@@ -201,7 +200,7 @@ function ChannelMonitor:_process_psi_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID
-                    if self._stats_count >= PID_LIMIT then
+                    if self._stats_count >= pid_limit then
                         self:_clear_stats()
                         Logger.warning(COMPONENT_NAME,
                             "[%s] Достигнут лимит статистики PID при обработке PSI, очистка статистики",
@@ -233,6 +232,10 @@ function ChannelMonitor:_process_analyze_data(data)
     local conf = self._astra_conf or self._config
     if not conf.analyze or type(data.analyze) ~= "table" then return end
 
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local pid_limit = (MonitorConfig and MonitorConfig.PidStatsLimit) or 100
+    local max_counter = (MonitorConfig and MonitorConfig.MaxCounterValue) or 1000000000
+
     for _, pid_data in ipairs(data.analyze) do
         local pid = pid_data.pid
         if pid then
@@ -244,7 +247,7 @@ function ChannelMonitor:_process_analyze_data(data)
                 local stats = self._stats[pid]
                 if not stats then
                     -- Лимит на количество отслеживаемых PID для предотвращения утечек памяти
-                    if self._stats_count >= PID_LIMIT then
+                    if self._stats_count >= pid_limit then
                         self:_clear_stats()
                         Logger.warning(COMPONENT_NAME, "[%s] Достигнут лимит статистики PID, очистка статистики",
                             tostring(self._name))
@@ -262,9 +265,9 @@ function ChannelMonitor:_process_analyze_data(data)
                     self._stats_count = self._stats_count + 1
                 else
                     -- Защита от переполнения
-                    stats.cc = (stats.cc + cc) > MAX_COUNTER and MAX_COUNTER or (stats.cc + cc)
-                    stats.pes = (stats.pes + pes) > MAX_COUNTER and MAX_COUNTER or (stats.pes + pes)
-                    stats.sc = (stats.sc + sc) > MAX_COUNTER and MAX_COUNTER or (stats.sc + sc)
+                    stats.cc = (stats.cc + cc) > max_counter and max_counter or (stats.cc + cc)
+                    stats.pes = (stats.pes + pes) > max_counter and max_counter or (stats.pes + pes)
+                    stats.sc = (stats.sc + sc) > max_counter and max_counter or (stats.sc + sc)
                 end
             end
         end
@@ -287,8 +290,10 @@ function ChannelMonitor:_process_total_data(data)
     master.pes_errors = (master.pes_errors or 0) + pes_inc
 
     -- Защита от переполнения счетчиков
-    if master.cc_errors > MAX_ERROR_COUNT then master.cc_errors = MAX_ERROR_COUNT end
-    if master.pes_errors > MAX_ERROR_COUNT then master.pes_errors = MAX_ERROR_COUNT end
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local max_errors = (MonitorConfig and MonitorConfig.MaxErrorCount) or 1000000
+    if master.cc_errors > max_errors then master.cc_errors = max_errors end
+    if master.pes_errors > max_errors then master.pes_errors = max_errors end
 
     local active_id = self._channel_data and self._channel_data.active_input_id or 1
     local conf = self._astra_conf or self._config

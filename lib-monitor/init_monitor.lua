@@ -196,10 +196,53 @@ initialize_phase(INIT_PHASES.FINAL, function()
     local Adapter = ModuleManager.get_module("adapter")
     local HttpServer = ModuleManager.get_module("http_server")
     local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local TablePool = ModuleManager.get_module("utils.table_pool")
+    local Scheduler = ModuleManager.get_module("core.scheduler")
+    local ChannelRepository = ModuleManager.get_module("channel_repository")
+    local DvbRepository = ModuleManager.get_module("dvb_repository")
 
-    -- Инициализация глобального диспетчера событий
+    -- 1. Инициализация глобального диспетчера событий (Singleton)
+    local dispatcher_instance = nil
     if EventDispatcher then
-        _G.EventDispatcher = EventDispatcher.get_instance()
+        dispatcher_instance = EventDispatcher.get_instance()
+        _G.EventDispatcher = dispatcher_instance
+    end
+
+    -- 2. Инициализация подписок на конфигурацию у всех компонентов
+    if Logger and Logger.init_config_subscription then Logger.init_config_subscription() end
+    if TablePool and TablePool.init_config_subscription then TablePool.init_config_subscription() end
+    if dispatcher_instance and dispatcher_instance.init_config_subscription then
+        dispatcher_instance:init_config_subscription()
+    end
+    if Scheduler and Scheduler.get_instance then
+        local s = Scheduler.get_instance()
+        if s.init_config_subscription then s:init_config_subscription() end
+    end
+    if ChannelRepository and ChannelRepository.init_config_subscription then
+        ChannelRepository:init_config_subscription()
+    end
+    if DvbRepository and DvbRepository.init_config_subscription then
+        DvbRepository:init_config_subscription()
+    end
+
+    -- Дополнительные утилиты
+    local Wildcard = ModuleManager.get_module("utils.wildcard")
+    local FilterEngine = ModuleManager.get_module("utils.filter_engine")
+    local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+
+    if Wildcard and Wildcard.init_config_subscription then Wildcard.init_config_subscription() end
+    if FilterEngine and FilterEngine.init_config_subscription then FilterEngine.init_config_subscription() end
+    if ResourceMonitor and ResourceMonitor.init_config_subscription then ResourceMonitor.init_config_subscription() end
+
+    -- 3. Первичная синхронизация конфигурации (передача из JSON в модули через события)
+    if MonitorConfig and dispatcher_instance then
+        Logger.info("Init", "Выполнение первичной синхронизации конфигурации...")
+        for section_name, section_data in pairs(MonitorConfig) do
+            if type(section_data) == "table" and section_name ~= "ValidationSchema" and section_name ~= "STREAM" then
+                dispatcher_instance:emit_safe("config:updated:" .. section_name:lower(), section_data)
+            end
+        end
     end
 
     -- Экспорт основных функций в глобальную область видимости для обратной совместимости

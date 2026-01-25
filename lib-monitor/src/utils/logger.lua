@@ -17,7 +17,6 @@ local tostring = _G.tostring
 local unpack = _G.table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
-local MonitorConfig = nil -- Кэшируется при первом обращении
 local TablePool = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
@@ -25,6 +24,17 @@ local log = ModuleManager.get_global_dependency("log")
 local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
+
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    LogLevel = "INFO",
+    LogFormat = "TEXT",
+    LogBatchEnabled = false,
+    LogBufferSize = 0,
+    MaxLogQueueSize = 200,
+    MaxLogComponents = 100,
+}
+
 local LOG_LEVELS = {
     DEBUG = 1,
     INFO = 2,
@@ -32,10 +42,6 @@ local LOG_LEVELS = {
     ERROR = 4,
     NONE = 5
 }
-
-local MAX_COMPONENTS = (MonitorConfig and MonitorConfig.MaxLogComponents) or 100
-local MAX_LOG_QUEUE_SIZE = (MonitorConfig and MonitorConfig.MaxLogQueueSize) or 200
-local CONFIG_REFRESH_INTERVAL = (MonitorConfig and MonitorConfig.ConfigRefreshInterval) or 5 -- секунд
 
 local LEVEL_MAP = {
     DEBUG = "debug",
@@ -90,18 +96,6 @@ local state = {
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
---- Возвращает модуль конфигурации (ленивая загрузка)
---- @return MonitorConfig|nil
-local function _get_monitor_config()
-    if MonitorConfig then return MonitorConfig end
-    local success, config = pcall(ModuleManager.get_module, "monitor_config")
-    if success and config and type(config) == "table" then
-        MonitorConfig = config
-        return MonitorConfig
-    end
-    return nil
-end
-
 --- Возвращает модуль TablePool (ленивая загрузка)
 --- @return TablePool|nil
 local function _get_table_pool()
@@ -114,29 +108,19 @@ local function _get_table_pool()
     return nil
 end
 
---- Обновляет кэшированные параметры логирования из конфигурации
+--- Обновляет кэшированные параметры логирования из локальной конфигурации
 local function _refresh_config_cache()
-    local config = _get_monitor_config()
-    if config then
-        state.cached_log_level = LOG_LEVELS[config.LogLevel] or LOG_LEVELS.INFO
-        state.cached_log_format = config.LogFormat or "TEXT"
-        state.cached_log_buffer_size = config.LogBufferSize or 0
-        state.cached_log_batch_enabled = config.LogBatchEnabled or false
-    else
-        state.cached_log_level = LOG_LEVELS.INFO
-        state.cached_log_format = "TEXT"
-        state.cached_log_buffer_size = 0
-        state.cached_log_batch_enabled = false
-    end
+    state.cached_log_level = LOG_LEVELS[_m_config.LogLevel] or LOG_LEVELS.INFO
+    state.cached_log_format = _m_config.LogFormat or "TEXT"
+    state.cached_log_buffer_size = _m_config.LogBufferSize or 0
+    state.cached_log_batch_enabled = _m_config.LogBatchEnabled or false
 end
 
---- Возвращает текущий уровень логирования с учетом интервала обновления кэша
+--- Возвращает текущий уровень логирования
 --- @return number
 local function _get_current_level()
-    local now = os_time()
-    if not state.cached_log_level or now - state.last_config_refresh > CONFIG_REFRESH_INTERVAL then
+    if not state.cached_log_level then
         _refresh_config_cache()
-        state.last_config_refresh = now
     end
     return state.cached_log_level
 end
@@ -199,7 +183,7 @@ local function _enqueue_log(level_name, message)
     item.level = level_name
     item.message = message
 
-    if #state.log_queue < MAX_LOG_QUEUE_SIZE then
+    if #state.log_queue < _m_config.MaxLogQueueSize then
         table_insert(state.log_queue, item)
     else
         -- Если очередь переполнена, сбрасываем немедленно
@@ -223,7 +207,7 @@ end
 local function _write_to_buffer(level, component, message, context_id, now)
     if not state.context_buffer[component] then
         -- Ограничение количества отслеживаемых компонентов
-        if #state.component_list >= MAX_COMPONENTS then
+        if #state.component_list >= _m_config.MaxLogComponents then
             local old_comp = table_remove(state.component_list, 1)
             -- Вызываем очистку напрямую
             local old_buffer = state.context_buffer[old_comp]
@@ -324,7 +308,21 @@ local Logger = {}
 -- Экспорт буфера для внешнего доступа (только для чтения/диагностики)
 Logger._context_buffer = state.context_buffer
 
+--- Инициализирует подписку на обновление конфигурации
+function Logger.init_config_subscription()
+    if _G.EventDispatcher then
+        _G.EventDispatcher:subscribe("config:updated:logger", function(new_config)
+            for k, v in pairs(new_config) do
+                _m_config[k] = v
+            end
+            _refresh_config_cache()
+            Logger.info("Logger", "Конфигурация логирования обновлена")
+        end)
+    end
+end
+
 --- Обновляет кэшированный уровень логирования
+--- @deprecated Используйте систему событий
 function Logger.refresh_log_level()
     _refresh_config_cache()
 end

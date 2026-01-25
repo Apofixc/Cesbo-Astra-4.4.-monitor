@@ -17,7 +17,6 @@ local collectgarbage = _G.collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
@@ -26,15 +25,18 @@ local Scheduler = ModuleManager.get_module("core.scheduler")
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "TablePool"
 
--- Настройки пула по умолчанию
-local DEFAULT_MAX_POOL_SIZE = (MonitorConfig and MonitorConfig.MaxPoolSize) or 100
-local MAX_DEPTH = 10 -- Защита от слишком глубокой рекурсии
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    MaxPoolSize = 100,
+    PoolLimits = {},
+    PoolDebug = false,
+    PoolAdaptiveThreshold = 0.2,
+    PoolAdaptiveStep = 0.25,
+    PoolMinLimit = 10,
+    PoolMaintenanceInterval = 300,
+}
 
--- Настройки адаптивности
-local ADAPTIVE_THRESHOLD = (MonitorConfig and MonitorConfig.PoolAdaptiveThreshold) or 0.2
-local ADAPTIVE_STEP = (MonitorConfig and MonitorConfig.PoolAdaptiveStep) or 0.25
-local MIN_LIMIT = (MonitorConfig and MonitorConfig.PoolMinLimit) or 10
-local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInterval) or 300
+local MAX_DEPTH = 10 -- Защита от слишком глубокой рекурсии
 
 -- 5. Внутреннее состояние (Private State)
 --- @class TablePoolState
@@ -46,6 +48,7 @@ local MAINTENANCE_INTERVAL = (MonitorConfig and MonitorConfig.PoolMaintenanceInt
 --- @field visited_cache table<table, boolean> Кэш для защиты от циклических ссылок
 --- @field visited_count number Счетчик вложенности для очистки кэша
 --- @field debug_mode boolean Режим отладки
+--- @field maintenance_started boolean Флаг запуска обслуживания
 local state = {
     pools = {},
     cleaners = {},
@@ -54,7 +57,8 @@ local state = {
     is_flat = {},
     visited_cache = {},
     visited_count = 0,
-    debug_mode = (MonitorConfig and MonitorConfig.PoolDebug) or false,
+    debug_mode = false,
+    maintenance_started = false,
 }
 
 --- @class TablePool
@@ -63,6 +67,16 @@ local TablePool = {}
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Обновляет локальную конфигурацию из события
+--- @param new_config table Новая конфигурация секции Pool
+local function _update_config(new_config)
+    for k, v in pairs(new_config) do
+        _m_config[k] = v
+    end
+    state.debug_mode = _m_config.PoolDebug
+    Logger.debug(COMPONENT_NAME, "Конфигурация пулов обновлена")
+end
 
 --- Очищает кэш посещенных объектов
 local function _clear_visited_cache()
@@ -101,6 +115,13 @@ end
 -- Публичное API (Public API)
 -- ===========================================================================
 
+--- Инициализирует подписку на обновление конфигурации
+function TablePool.init_config_subscription()
+    if _G.EventDispatcher then
+        _G.EventDispatcher:subscribe("config:updated:pool", _update_config)
+    end
+end
+
 --- Включает или выключает режим отладки
 --- @param enabled boolean Статус режима отладки
 function TablePool.set_debug(enabled)
@@ -117,16 +138,16 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     if type(pool_type) ~= "string" or state.pools[pool_type] then return end
 
     -- Автоматический запуск обслуживания при первой регистрации пула
-    if MonitorConfig and not MonitorConfig.PoolMaintenanceStarted and Scheduler then
+    if not state.maintenance_started and Scheduler then
         local s = Scheduler.get_instance()
         if s then
             s:add_task("table_pool_maintenance", function()
                 TablePool.maintain()
-            end, MAINTENANCE_INTERVAL)
-            MonitorConfig.PoolMaintenanceStarted = true
+            end, _m_config.PoolMaintenanceInterval)
+            state.maintenance_started = true
             Logger.debug(COMPONENT_NAME,
                 "Автоматическое обслуживание пулов запущено (интервал: %d сек)",
-                MAINTENANCE_INTERVAL)
+                _m_config.PoolMaintenanceInterval)
         end
     end
 
@@ -169,12 +190,9 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     state.stats[pool_type] = { hits = 0, misses = 0, created = 0 }
     state.is_flat[pool_type] = is_flat or false
 
-    -- Приоритет лимита: конфиг -> аргумент -> значение по умолчанию
-    local limit = max_size
-    if MonitorConfig and MonitorConfig.PoolLimits then
-        limit = MonitorConfig.PoolLimits[pool_type] or limit
-    end
-    state.limits[pool_type] = limit or DEFAULT_MAX_POOL_SIZE
+    -- Приоритет лимита: аргумент -> локальный конфиг -> значение по умолчанию
+    local limit = max_size or _m_config.PoolLimits[pool_type] or _m_config.MaxPoolSize
+    state.limits[pool_type] = limit
 
     if type(preallocate_count) == "number" and preallocate_count > 0 then
         TablePool.preallocate(pool_type, preallocate_count)
@@ -188,7 +206,7 @@ function TablePool.preallocate(pool_type, count)
     local pool = state.pools[pool_type]
     if not pool then return end
 
-    local limit = state.limits[pool_type] or DEFAULT_MAX_POOL_SIZE
+    local limit = state.limits[pool_type] or _m_config.MaxPoolSize
     local current = #pool
     if count > limit then count = limit end
 
@@ -387,18 +405,18 @@ function TablePool.maintain()
         local total = s.hits + s.misses
         if total > 0 then
             local miss_rate = s.misses / total
-            local current_limit = state.limits[name] or DEFAULT_MAX_POOL_SIZE
+            local current_limit = state.limits[name] or _m_config.MaxPoolSize
 
-            if miss_rate > ADAPTIVE_THRESHOLD then
+            if miss_rate > _m_config.PoolAdaptiveThreshold then
                 -- Расширяем пул
-                local new_limit = math_floor(current_limit * (1 + ADAPTIVE_STEP))
+                local new_limit = math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep))
                 state.limits[name] = new_limit
                 Logger.debug(COMPONENT_NAME,
                     "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
                     name, current_limit, new_limit, miss_rate)
             elseif miss_rate < 0.05 then
                 -- Сжимаем пул, если промахов почти нет
-                local new_limit = math_max(MIN_LIMIT, math_floor(current_limit * (1 - ADAPTIVE_STEP)))
+                local new_limit = math_max(_m_config.PoolMinLimit, math_floor(current_limit * (1 - _m_config.PoolAdaptiveStep)))
                 if new_limit < current_limit then
                     state.limits[name] = new_limit
                     Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)
@@ -423,7 +441,7 @@ function TablePool.get_stats()
             hits = s.hits,
             misses = s.misses,
             created = s.created,
-            limit = state.limits[name] or DEFAULT_MAX_POOL_SIZE
+            limit = state.limits[name] or _m_config.MaxPoolSize
         }
     end
     return result

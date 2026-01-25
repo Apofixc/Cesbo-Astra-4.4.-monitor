@@ -18,13 +18,17 @@ local type = _G.type
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseRepository = ModuleManager.get_module("core.base_repository")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- (Загружаются динамически в методах для поддержки горячей перезагрузки)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
+
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    ChannelMonitorLimit = 200,
+}
 
 -- 5. Внутреннее состояние (Private State)
 -- (Состояние инкапсулировано в экземпляре ChannelRepository)
@@ -60,6 +64,26 @@ end
 
 --- @class ChannelRepository : BaseRepository
 local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
+
+--- Инициализирует подписку на обновление конфигурации
+function ChannelRepository:init_config_subscription()
+    self:init_base_config_subscription()
+
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:monitor", function(new_config)
+            for k, v in pairs(new_config) do
+                _m_config[k] = v
+            end
+            -- Обновляем лимит в базовом репозитории
+            if _m_config.ChannelMonitorLimit then
+                self:set_limit(_m_config.ChannelMonitorLimit)
+            end
+            Logger.info(COMPONENT_NAME, "Конфигурация репозитория каналов обновлена")
+        end)
+    end
+end
 
 --- Хук, вызываемый перед пересозданием монитора.
 --- Выполняет перезапуск стрима в Astra.

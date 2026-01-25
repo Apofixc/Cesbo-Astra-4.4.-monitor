@@ -18,7 +18,6 @@ local ChannelMonitor = ModuleManager.get_module("channel_monitor")
 local ChannelRepository = ModuleManager.get_module("channel_repository")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Logger = ModuleManager.get_module("logger")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 local Utils = ModuleManager.get_module("utils")
 
 -- 3. Глобальные зависимости Astra
@@ -226,8 +225,11 @@ local Channel = {}
 --- @param config table Конфигурация монитора
 --- @return any|nil Экземпляр монитора Astra или nil при ошибке
 function Channel.make_monitor(config)
-    if ChannelRepository:count() >= (MonitorConfig.ChannelMonitorLimit or 50) then
-        Logger.error(COMPONENT_NAME, "make_monitor: лимит мониторов исчерпан")
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local limit = (MonitorConfig and MonitorConfig.Monitor and MonitorConfig.Monitor.ChannelMonitorLimit) or 200
+    
+    if ChannelRepository:count() >= limit then
+        Logger.error(COMPONENT_NAME, "make_monitor: лимит мониторов исчерпан (%d)", limit)
         return nil
     end
 

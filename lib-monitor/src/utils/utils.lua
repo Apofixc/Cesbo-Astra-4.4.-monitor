@@ -23,7 +23,6 @@ local error = _G.error
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = nil -- Кэшируется при первом обращении
-local MonitorConfig = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
@@ -60,13 +59,6 @@ local function _get_logger()
     return Logger
 end
 
---- Возвращает модуль конфигурации (ленивая загрузка)
---- @return MonitorConfig|nil
-local function _get_monitor_config()
-    if MonitorConfig then return MonitorConfig end
-    MonitorConfig = ModuleManager.get_module("monitor_config")
-    return MonitorConfig
-end
 
 --- Обновляет статистику производительности для указанной операции
 --- @param name string Уникальное имя операции
@@ -107,8 +99,8 @@ function Utils.get_stream_name(ip_address)
         return nil
     end
 
-    local config = _get_monitor_config()
-    local stream_map = config and config.STREAM or {}
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local stream_map = MonitorConfig and MonitorConfig.STREAM or {}
     return stream_map[ip_address] or ip_address
 end
 
@@ -225,8 +217,8 @@ end
 --- @param value any Значение
 --- @return any Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
-    local config = _get_monitor_config()
-    local schema = config and config.ValidationSchema and config.ValidationSchema[name]
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local schema = MonitorConfig and MonitorConfig.ValidationSchema and MonitorConfig.ValidationSchema.Instance and MonitorConfig.ValidationSchema.Instance[name]
     if not schema then
         local log = _get_logger()
         if log then log.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name) end
@@ -288,8 +280,9 @@ function Utils.validate_monitor_name(name)
         return false
     end
 
-    local config = _get_monitor_config()
-    if config and config.MaxMonitorNameLength and #name > config.MaxMonitorNameLength then
+    local MonitorConfig = ModuleManager.get_module("monitor_config")
+    local max_len = (MonitorConfig and MonitorConfig.Monitor and MonitorConfig.Monitor.MaxMonitorNameLength) or 64
+    if #name > max_len then
         return false
     end
 

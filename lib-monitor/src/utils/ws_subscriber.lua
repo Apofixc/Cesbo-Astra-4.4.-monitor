@@ -35,6 +35,11 @@ local state = {
     is_task_running = false,
 }
 
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    WsBatchInterval = 0.05,
+}
+
 --- @class WsSubscriber
 local WsSubscriber = {}
 
@@ -75,6 +80,24 @@ end
 -- Публичное API (Public API)
 -- ===========================================================================
 
+--- Инициализирует подписку на обновление конфигурации
+function WsSubscriber.init_config_subscription()
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if EventDispatcher then
+        local instance = EventDispatcher.get_instance()
+        instance:subscribe("config:updated:batch", function(new_config)
+            if new_config.WsBatchInterval and new_config.WsBatchInterval ~= _m_config.WsBatchInterval then
+                _m_config.WsBatchInterval = new_config.WsBatchInterval
+                local Scheduler = ModuleManager.get_module("core.scheduler")
+                if Scheduler and state.is_task_running then
+                    Scheduler.get_instance():set_task_interval("ws_subscriber_flush", _m_config.WsBatchInterval)
+                end
+                Logger.debug(COMPONENT_NAME, "Интервал батчинга WebSocket обновлен: %.3f", _m_config.WsBatchInterval)
+            end
+        end)
+    end
+end
+
 --- Инициализирует модуль и привязывает его к экземпляру HTTP-сервера
 --- @param server any Экземпляр сервера Astra http_server
 --- @return boolean Статус инициализации
@@ -88,9 +111,8 @@ function WsSubscriber.init(server)
     -- Запуск задачи планировщика для сброса батчей (раз в 50мс)
     if not state.is_task_running then
         local Scheduler = ModuleManager.get_module("core.scheduler")
-        local MonitorConfig = ModuleManager.get_module("monitor_config")
         if Scheduler then
-            local interval = (MonitorConfig and MonitorConfig.WsBatchInterval) or 0.05
+            local interval = _m_config.WsBatchInterval
             Scheduler.get_instance():add_task("ws_subscriber_flush", _flush_buffers, interval)
             state.is_task_running = true
         end

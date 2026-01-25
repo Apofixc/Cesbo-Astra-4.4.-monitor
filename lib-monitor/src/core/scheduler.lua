@@ -20,7 +20,6 @@ local math_floor = _G.math.floor
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local TablePool = ModuleManager.get_module("table_pool")
-local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local function get_timer()
@@ -30,8 +29,11 @@ end
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "Scheduler"
 
--- Кэшированные параметры для обслуживания памяти (по умолчанию 50MB)
-local DEFAULT_MEMORY_LIMIT_KB = 50 * 1024
+--- Локальная конфигурация модуля (значения по умолчанию)
+local _m_config = {
+    MemoryLimitMb = 50,
+    SchedulerInterval = 1,
+}
 
 -- 5. Внутреннее состояние (Private State)
 --- @class SchedulerTask
@@ -70,8 +72,8 @@ function Scheduler:_initialize()
     self._heap = {}
     self._active = true
     self._task_count = 0
-    self._memory_limit_kb = DEFAULT_MEMORY_LIMIT_KB
-    self._current_interval = 1 -- Интервал в секундах (целое число > 0 для Astra)
+    self._memory_limit_kb = _m_config.MemoryLimitMb * 1024
+    self._current_interval = _m_config.SchedulerInterval
 
     -- Запуск основного цикла
     local astra_timer = get_timer()
@@ -82,11 +84,6 @@ function Scheduler:_initialize()
                 if self._active then self:_tick() end
             end
         })
-
-        -- Обновляем лимит памяти из конфигурации
-        if MonitorConfig and MonitorConfig.MemoryLimitMb then
-            self._memory_limit_kb = MonitorConfig.MemoryLimitMb * 1024
-        end
 
         -- Регистрация системной задачи обслуживания (раз в минуту)
         self:add_task("gc_maintenance", function()
@@ -338,6 +335,34 @@ function Scheduler:resume_task(id)
         task.next_run = os_clock()
         self:_heap_up(task.heap_idx)
         Logger.debug(COMPONENT_NAME, "Задача возобновлена: %s", id)
+    end
+end
+
+--- Инициализирует подписку на обновление конфигурации
+function Scheduler:init_config_subscription()
+    if _G.EventDispatcher then
+        _G.EventDispatcher:subscribe("config:updated:system", function(new_config)
+            if new_config.MemoryLimitMb then
+                self._memory_limit_kb = new_config.MemoryLimitMb * 1024
+            end
+            if new_config.SchedulerInterval and new_config.SchedulerInterval ~= self._current_interval then
+                self._current_interval = new_config.SchedulerInterval
+                -- Пересоздаем таймер с новым интервалом
+                if self._timer then
+                    if self._timer.close then self._timer:close() end
+                    local astra_timer = get_timer()
+                    if astra_timer then
+                        self._timer = astra_timer({
+                            interval = self._current_interval,
+                            callback = function()
+                                if self._active then self:_tick() end
+                            end
+                        })
+                    end
+                end
+            end
+            Logger.info(COMPONENT_NAME, "Конфигурация планировщика обновлена")
+        end)
     end
 end
 
