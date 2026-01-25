@@ -295,7 +295,7 @@ function TablePool.release(t, pool_type, deep, depth)
     end
 
     -- Оптимизация: если пул полон и не требуется глубокая очистка, выходим сразу
-    local limit = state.limits[pool_type] or DEFAULT_MAX_POOL_SIZE
+    local limit = state.limits[pool_type] or _m_config.MaxPoolSize
     if depth == 0 and #pool >= limit and not deep then
         state.visited_count = state.visited_count - 1
         if state.visited_count == 0 then _clear_visited_cache() end

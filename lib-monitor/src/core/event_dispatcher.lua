@@ -290,7 +290,7 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
     end
 
     -- Load Shedding: защита от перегрузок (сброс низкоприоритетных событий)
-    local total_capacity = MAX_QUEUE_SIZE * 4
+    local total_capacity = _m_config.MaxQueueSize * 4
     if self._total_queued_count > (total_capacity * 0.9) then
         if p == self.PRIORITIES.LOW then
             self.stats.dropped = self.stats.dropped + 1

@@ -218,7 +218,7 @@ local Transport = {
         local ok = request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
-            timeout = HTTP_TIMEOUT,
+            timeout = _m_config.HttpTimeout,
             headers = {
                 get_user_agent(), host_header,
                 CONTENT_TYPE, "Content-Length: " .. #content, CONNECTION_CLOSE
@@ -230,7 +230,7 @@ local Transport = {
                     is_error = true
                 end
 
-                if is_error and retry_count < MAX_RETRIES then
+                if is_error and retry_count < _m_config.MaxRetries then
                     self:enqueue_retry(config, event, event_type, retry_count, content)
                 end
             end

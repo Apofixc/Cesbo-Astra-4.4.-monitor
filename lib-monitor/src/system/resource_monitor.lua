@@ -244,7 +244,7 @@ local function _parse_status(report)
     -- Однопроходный поиск ключевых метрик
     -- Rare-Metric Throttling: FDSize и Threads парсим не каждый раз.
     -- Используем == 1, чтобы первая итерация всегда собирала полные данные.
-    local update_rare = (state.iteration_count % RARE_METRIC_INTERVAL == 1)
+    local update_rare = (state.iteration_count % _m_config.RareMetricInterval == 1)
     
     if update_rare then
         report.fd_size = tonumber(string_match(content, "FDSize:%s+(%d+)")) or report.fd_size
