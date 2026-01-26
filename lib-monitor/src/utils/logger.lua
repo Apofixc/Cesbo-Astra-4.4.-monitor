@@ -100,12 +100,8 @@ local state = {
 --- @return TablePool|nil
 local function _get_table_pool()
     if TablePool then return TablePool end
-    local success, pool = pcall(ModuleManager.get_module, "table_pool")
-    if success and pool and type(pool) == "table" then
-        TablePool = pool
-        return TablePool
-    end
-    return nil
+    TablePool = ModuleManager.get_module("table_pool")
+    return TablePool
 end
 
 --- Обновляет кэшированные параметры логирования из локальной конфигурации
