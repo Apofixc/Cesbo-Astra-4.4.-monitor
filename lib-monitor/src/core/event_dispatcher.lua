@@ -652,16 +652,15 @@ end
 -- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("table_pool")
-if tp then
-    tp.register_type("event", {
+if TablePool then
+    TablePool.register_type("event", {
         "id", "type", "data", "priority", "timestamp", "options", "is_table", "json_cache"
     }, 500, 50)
-    tp.register_type("event_options", nil, 500, 50, true)
-    tp.register_type("lvc_wrapper", { "data", "json", "timestamp" }, 200, 20)
+    TablePool.register_type("event_options", nil, 500, 50, true)
+    TablePool.register_type("lvc_wrapper", { "data", "json", "timestamp" }, 200, 20)
     -- lvc_entry и lvc_sub не должны быть flat, так как могут содержать вложенные таблицы из пула
-    tp.register_type("lvc_entry", nil, 500, 50)
-    tp.register_type("lvc_sub", nil, 200, 20)
+    TablePool.register_type("lvc_entry", nil, 500, 50)
+    TablePool.register_type("lvc_sub", nil, 200, 20)
 end
 
 return EventDispatcher

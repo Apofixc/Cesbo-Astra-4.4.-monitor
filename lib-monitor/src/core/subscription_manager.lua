@@ -1205,10 +1205,9 @@ end
 -- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("table_pool")
-if tp then
-    tp.register_type("retry_item")
-    tp.register_type("batch_queue")
+if TablePool then
+    TablePool.register_type("retry_item")
+    TablePool.register_type("batch_queue")
 end
 
 return SubscriptionManager
