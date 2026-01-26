@@ -398,6 +398,16 @@ function TablePool.clear_all()
     Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
 end
 
+--- Останавливает обслуживание пулов и очищает ресурсы.
+function TablePool.shutdown()
+    if state.maintenance_started and Scheduler then
+        Scheduler.get_instance():remove_task("table_pool_maintenance")
+        state.maintenance_started = false
+    end
+    TablePool.clear_all()
+    Logger.info(COMPONENT_NAME, "Модуль пулов таблиц остановлен")
+end
+
 --- Выполняет обслуживание пулов: адаптивное изменение лимитов.
 --- Рекомендуется вызывать периодически (например, раз в минуту).
 function TablePool.maintain()

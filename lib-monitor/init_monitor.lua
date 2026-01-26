@@ -327,6 +327,13 @@ add_shutdown_handler("10_http_server", function()
     end
 end)
 
+add_shutdown_handler("15_ws_subscriber", function()
+    local WsSubscriber = ModuleManager.get_module("ws_subscriber")
+    if WsSubscriber and WsSubscriber.shutdown then
+        WsSubscriber.shutdown()
+    end
+end)
+
 add_shutdown_handler("20_repositories", function()
     local ChannelRepository = ModuleManager.get_module("channel_repository")
     local DvbRepository = ModuleManager.get_module("dvb_repository")
@@ -344,6 +351,30 @@ add_shutdown_handler("30_event_dispatcher", function()
     local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
+        if instance and instance.shutdown then
+            instance:shutdown()
+        end
+    end
+end)
+
+add_shutdown_handler("40_resource_monitor", function()
+    local ResourceMonitor = ModuleManager.get_module("resource_monitor")
+    if ResourceMonitor and ResourceMonitor.stop then
+        ResourceMonitor.stop()
+    end
+end)
+
+add_shutdown_handler("50_table_pool", function()
+    local TablePool = ModuleManager.get_module("table_pool")
+    if TablePool and TablePool.shutdown then
+        TablePool.shutdown()
+    end
+end)
+
+add_shutdown_handler("99_scheduler", function()
+    local Scheduler = ModuleManager.get_module("core.scheduler")
+    if Scheduler then
+        local instance = Scheduler.get_instance()
         if instance and instance.shutdown then
             instance:shutdown()
         end

@@ -126,6 +126,19 @@ function WsSubscriber.clear()
     state.http_server_instance = nil
 end
 
+--- Останавливает модуль и удаляет задачи из планировщика.
+function WsSubscriber.shutdown()
+    if state.is_task_running then
+        local Scheduler = ModuleManager.get_module("core.scheduler")
+        if Scheduler then
+            Scheduler.get_instance():remove_task("ws_subscriber_flush")
+        end
+        state.is_task_running = false
+    end
+    WsSubscriber.clear()
+    Logger.info(COMPONENT_NAME, "Модуль WebSocket подписчиков остановлен")
+end
+
 --- Обработчик WebSocket соединений (callback для http_websocket)
 --- Регистрирует новых клиентов и обрабатывает входящие сообщения
 --- @param server any Экземпляр сервера
