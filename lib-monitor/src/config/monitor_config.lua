@@ -17,6 +17,7 @@ local string_format = _G.string.format
 
 -- 2. Функции из ModuleManager.get_module()
 local ModuleManager = _G.ModuleManager
+local Logger = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 -- (Глобальные зависимости загружаются динамически в _load_from_file)
@@ -188,6 +189,14 @@ MonitorConfig.subscribers = {}
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Возвращает модуль Logger (ленивая загрузка)
+--- @return Logger|nil
+local function _get_logger()
+    if Logger then return Logger end
+    Logger = ModuleManager.get_module("logger")
+    return Logger
+end
 
 --- Инициализирует структуру конфигурации значениями по умолчанию из схемы
 local function _init_defaults()
@@ -415,9 +424,9 @@ function MonitorConfig.update(params)
 
     _state.cache = {} -- Сброс кэша
 
-    local Logger = ModuleManager.get_module("logger")
-    if Logger and Logger.info then
-        Logger.info(COMPONENT_NAME, "Конфигурация обновлена через API")
+    local log = _get_logger()
+    if log and log.info then
+        log.info(COMPONENT_NAME, "Конфигурация обновлена через API")
     end
 
     return true
