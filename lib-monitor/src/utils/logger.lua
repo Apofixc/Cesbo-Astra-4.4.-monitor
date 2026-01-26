@@ -102,10 +102,13 @@ local function _get_table_pool()
     if TablePool then return TablePool end
     TablePool = ModuleManager.get_module("table_pool")
 
-    -- Пул для записей в буфере и очереди
-    TablePool.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
-    -- Пул для временных объектов при JSON-логировании
-    TablePool.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
+    -- Регистрация типов пулов при первом обращении
+    if TablePool and TablePool.register_type then
+        -- Пул для записей в буфере и очереди
+        TablePool.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
+        -- Пул для временных объектов при JSON-логировании
+        TablePool.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
+    end
 
     return TablePool
 end
