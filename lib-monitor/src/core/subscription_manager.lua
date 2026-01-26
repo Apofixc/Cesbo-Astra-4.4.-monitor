@@ -543,7 +543,7 @@ function SubscriptionManager:save_now()
         end
     end
 
-    local content = encode(data_to_save)
+    local content = json_encode(data_to_save)
     if not content then return false end
 
     -- Атомарная запись через временный файл
@@ -574,7 +574,7 @@ function SubscriptionManager:load()
     local content = f:read("*all")
     f:close()
     if not content or content == "" then return end
-    local data = decode(content)
+    local data = json_decode(content)
     if type(data) ~= "table" then return end
     for event_type, subs in pairs(data) do
         if type(subs) == "table" then
@@ -1131,10 +1131,9 @@ end
 --- @param event_json? string Предварительно подготовленный JSON
 function SubscriptionManager:multicast_direct(plan, event_type, event_data, now, event_json)
     if not event_json then
-        local encode = get_json_encode()
         -- Кодируем JSON один раз для всех групп
         if type(event_data) == "table" then
-            local ok, res = pcall(encode, event_data)
+            local ok, res = pcall(json_encode, event_data)
             if ok then event_json = res end
         else
             event_json = tostring(event_data)
