@@ -452,7 +452,6 @@ function SubscriptionManager.new()
     self._retry_queue = {}
     self:load()
     self:start_retry_processor()
-    self:init_config_subscription()
     return self
 end
 

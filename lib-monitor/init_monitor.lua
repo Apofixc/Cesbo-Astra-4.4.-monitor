@@ -212,8 +212,13 @@ initialize_phase(INIT_PHASES.FINAL, function()
     -- 2. Инициализация подписок на конфигурацию у всех компонентов
     if Logger and Logger.init_config_subscription then Logger.init_config_subscription() end
     if TablePool and TablePool.init_config_subscription then TablePool.init_config_subscription() end
-    if dispatcher_instance and dispatcher_instance.init_config_subscription then
-        dispatcher_instance:init_config_subscription()
+    if dispatcher_instance then
+        if dispatcher_instance.subscription_manager and dispatcher_instance.subscription_manager.init_config_subscription then
+            dispatcher_instance.subscription_manager:init_config_subscription()
+        end
+        if dispatcher_instance.init_config_subscription then
+            dispatcher_instance:init_config_subscription()
+        end
     end
     if Scheduler and Scheduler.get_instance then
         local s = Scheduler.get_instance()
