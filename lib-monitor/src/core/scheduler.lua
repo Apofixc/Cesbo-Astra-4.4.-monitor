@@ -17,7 +17,6 @@ local math_floor = _G.math.floor
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local TablePool = ModuleManager.get_module("table_pool")
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
@@ -27,7 +26,6 @@ local COMPONENT_NAME = "Scheduler"
 
 --- Локальная конфигурация модуля (значения по умолчанию)
 local _m_config = {
-    MemoryLimitMb = 50,
     SchedulerInterval = 1,
 }
 
@@ -48,7 +46,6 @@ local _m_config = {
 --- @field private _timer any|nil Системный таймер Astra
 --- @field private _active boolean Флаг работы планировщика
 --- @field private _task_count number Общее количество добавленных задач
---- @field private _memory_limit_kb number Лимит памяти для автоматической очистки
 --- @field private _current_interval number Текущий интервал таймера
 local Scheduler = {}
 Scheduler.__index = Scheduler
@@ -68,7 +65,6 @@ function Scheduler:_initialize()
     self._heap = {}
     self._active = true
     self._task_count = 0
-    self._memory_limit_kb = _m_config.MemoryLimitMb * 1024
     self._current_interval = _m_config.SchedulerInterval
 
     -- Запуск основного цикла
@@ -80,31 +76,7 @@ function Scheduler:_initialize()
             end
         })
 
-        -- Регистрация системной задачи обслуживания (раз в минуту)
-        self:add_task("gc_maintenance", function()
-            local mem_kb = collectgarbage("count")
-
-            if mem_kb > self._memory_limit_kb then
-                Logger.warning(COMPONENT_NAME,
-                    "Превышен лимит памяти (%d KB > %d KB). Запуск полного GC.",
-                    mem_kb, self._memory_limit_kb)
-
-                if TablePool and TablePool.clear_all then
-                    TablePool.clear_all()
-                end
-
-                collectgarbage("collect")
-            else
-                collectgarbage("step", 50)
-            end
-
-            if Logger and Logger.flush then
-                Logger.flush()
-            end
-        end, 60)
-
-        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Min-Heap: OK, GC Limit: %d KB)",
-            self._memory_limit_kb)
+        Logger.info(COMPONENT_NAME, "Планировщик инициализирован (Min-Heap: OK)")
     else
         Logger.error(COMPONENT_NAME, "Критическая ошибка: зависимость Astra 'timer' не найдена!")
     end
@@ -340,9 +312,6 @@ end
 function Scheduler:init_config_subscription()
     if _G.EventDispatcher then
         _G.EventDispatcher:subscribe("config:updated:system", function(new_config)
-            if new_config.MemoryLimitMb then
-                self._memory_limit_kb = new_config.MemoryLimitMb * 1024
-            end
             if new_config.SchedulerInterval and new_config.SchedulerInterval ~= self._current_interval then
                 self._current_interval = new_config.SchedulerInterval
                 -- Пересоздаем таймер с новым интервалом

@@ -17,7 +17,7 @@ local collectgarbage = _G.collectgarbage
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
-local Scheduler = ModuleManager.get_module("core.scheduler")
+local Scheduler = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
@@ -34,6 +34,7 @@ local _m_config = {
     PoolAdaptiveStep = 0.25,
     PoolMinLimit = 10,
     PoolMaintenanceInterval = 300,
+    MemoryLimitMb = 50,
 }
 
 local MAX_DEPTH = 10 -- Защита от слишком глубокой рекурсии
@@ -68,6 +69,14 @@ local TablePool = {}
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
+--- Возвращает модуль Scheduler (ленивая загрузка)
+--- @return Scheduler|nil
+local function _get_scheduler()
+    if Scheduler then return Scheduler end
+    Scheduler = ModuleManager.get_module("core.scheduler")
+    return Scheduler
+end
+
 --- Обновляет локальную конфигурацию из события
 --- @param new_config table Новая конфигурация секции Pool
 local function _update_config(new_config)
@@ -75,7 +84,9 @@ local function _update_config(new_config)
         _m_config[k] = v
     end
     state.debug_mode = _m_config.PoolDebug
-    Logger.debug(COMPONENT_NAME, "Конфигурация пулов обновлена")
+    if Logger then
+        Logger.debug(COMPONENT_NAME, "Конфигурация пулов обновлена")
+    end
 end
 
 --- Очищает кэш посещенных объектов
@@ -138,16 +149,21 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     if type(pool_type) ~= "string" or state.pools[pool_type] then return end
 
     -- Автоматический запуск обслуживания при первой регистрации пула
-    if not state.maintenance_started and Scheduler then
-        local s = Scheduler.get_instance()
-        if s then
-            s:add_task("table_pool_maintenance", function()
-                TablePool.maintain()
-            end, _m_config.PoolMaintenanceInterval)
-            state.maintenance_started = true
-            Logger.debug(COMPONENT_NAME,
-                "Автоматическое обслуживание пулов запущено (интервал: %d сек)",
-                _m_config.PoolMaintenanceInterval)
+    if not state.maintenance_started then
+        local s_mod = _get_scheduler()
+        if s_mod then
+            local s = s_mod.get_instance()
+            if s then
+                s:add_task("table_pool_maintenance", function()
+                    TablePool.maintain()
+                end, _m_config.PoolMaintenanceInterval)
+                state.maintenance_started = true
+                if Logger then
+                    Logger.debug(COMPONENT_NAME,
+                        "Автоматическое обслуживание пулов запущено (интервал: %d сек)",
+                        _m_config.PoolMaintenanceInterval)
+                end
+            end
         end
     end
 
@@ -400,17 +416,45 @@ end
 
 --- Останавливает обслуживание пулов и очищает ресурсы.
 function TablePool.shutdown()
-    if state.maintenance_started and Scheduler then
-        Scheduler.get_instance():remove_task("table_pool_maintenance")
+    if state.maintenance_started then
+        local s_mod = _get_scheduler()
+        if s_mod then
+            s_mod.get_instance():remove_task("table_pool_maintenance")
+        end
         state.maintenance_started = false
     end
     TablePool.clear_all()
-    Logger.info(COMPONENT_NAME, "Модуль пулов таблиц остановлен")
+    if Logger then
+        Logger.info(COMPONENT_NAME, "Модуль пулов таблиц остановлен")
+    end
 end
 
---- Выполняет обслуживание пулов: адаптивное изменение лимитов.
+--- Выполняет обслуживание пулов: адаптивное изменение лимитов и очистка памяти.
 --- Рекомендуется вызывать периодически (например, раз в минуту).
 function TablePool.maintain()
+    -- 1. Системное обслуживание памяти (GC)
+    local mem_kb = collectgarbage("count")
+    local memory_limit_kb = (_m_config.MemoryLimitMb or 50) * 1024
+
+    if mem_kb > memory_limit_kb then
+        if Logger then
+            Logger.warning(COMPONENT_NAME,
+                "Превышен лимит памяти (%d KB > %d KB). Запуск полной очистки.",
+                mem_kb, memory_limit_kb)
+        end
+
+        TablePool.clear_all()
+        collectgarbage("collect")
+    else
+        collectgarbage("step", 50)
+    end
+
+    -- 2. Сброс логов
+    if Logger and Logger.flush then
+        Logger.flush()
+    end
+
+    -- 3. Адаптивное изменение лимитов пулов
     for name, s in pairs(state.stats) do
         local total = s.hits + s.misses
         if total > 0 then

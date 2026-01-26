@@ -101,6 +101,12 @@ local state = {
 local function _get_table_pool()
     if TablePool then return TablePool end
     TablePool = ModuleManager.get_module("table_pool")
+
+    -- Пул для записей в буфере и очереди
+    TablePool.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
+    -- Пул для временных объектов при JSON-логировании
+    TablePool.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
+
     return TablePool
 end
 
@@ -494,14 +500,6 @@ end
 -- Инициализация модуля
 -- ===========================================================================
 
--- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("table_pool")
-if tp then
-    -- Пул для записей в буфере и очереди
-    tp.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
-    -- Пул для временных объектов при JSON-логировании
-    tp.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
-end
 
 -- Первичная инициализация кэша
 _refresh_config_cache()

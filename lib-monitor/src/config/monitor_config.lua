@@ -95,7 +95,6 @@ MonitorConfig.ValidationSchema = {
     System = {
         GcPause = { type = "number", min = 10, max = 1000, default = 100 },
         GcStepMul = { type = "number", min = 10, max = 1000, default = 500 },
-        MemoryLimitMb = { type = "number", min = 1, max = 1024, default = 50 },
         SchedulerInterval = { type = "number", min = 0.1, max = 60, default = 1 },
         CpuThreshold = { type = "number", min = 1, max = 100, default = 90 },
         RamThresholdPct = { type = "number", min = 1, max = 100, default = 80 },
@@ -139,6 +138,7 @@ MonitorConfig.ValidationSchema = {
         PoolAdaptiveStep = { type = "number", min = 0.01, max = 1, default = 0.25 },
         PoolMinLimit = { type = "number", min = 1, max = 1000, default = 10 },
         PoolMaintenanceInterval = { type = "number", min = 1, max = 3600, default = 300 },
+        MemoryLimitMb = { type = "number", min = 1, max = 1024, default = 50 },
     },
     Watchdog = {
         WatchdogEnabled = { type = "boolean", default = false },
