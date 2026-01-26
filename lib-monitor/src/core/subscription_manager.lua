@@ -28,6 +28,8 @@ local Utils = ModuleManager.get_module("utils")
 local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
 local TablePool = ModuleManager.get_module("table_pool")
+local WsSubscriber = ModuleManager.get_module("ws_subscriber")
+local Scheduler = ModuleManager.get_module("core.scheduler")
 
 -- 3. Глобальные зависимости Astra
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -212,7 +214,6 @@ local Transport = {
     --- @param event_type string Тип события
     --- @param event_json? string Предварительно подготовленный JSON
     WS = function(self, config, event, event_type, event_json)
-        local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
             local json_data = event_json or
                              ((type(event) == "table" and event.id) and _get_event_json(event) or
@@ -457,7 +458,7 @@ end
 
 --- Инициализирует подписку на обновление конфигурации
 function SubscriptionManager:init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher") -- Оставили так, чтобы избежать колизий
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:network", function(new_config)
@@ -474,7 +475,6 @@ end
 --- Запускает фоновый процесс обработки очереди повторных попыток и отложенного сохранения.
 --- @private
 function SubscriptionManager:start_retry_processor()
-    local Scheduler = ModuleManager.get_module("core.scheduler")
     if not Scheduler then return end
 
     local scheduler = Scheduler.get_instance()
@@ -993,7 +993,6 @@ end
 
 --- Останавливает менеджер подписок, сбрасывает батчи и удаляет задачи из планировщика.
 function SubscriptionManager:shutdown()
-    local Scheduler = ModuleManager.get_module("core.scheduler")
     if Scheduler then
         Scheduler.get_instance():remove_task("subscription_manager_maintenance")
     end
