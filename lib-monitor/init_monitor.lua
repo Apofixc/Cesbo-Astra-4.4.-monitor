@@ -108,15 +108,15 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
     ModuleManager.register_module("utils.wildcard", path_prefix .. "src.utils.wildcard", {"logger"})
     ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
     ModuleManager.register_module("utils", path_prefix .. "src.utils.utils", {"logger", "monitor_config"})
-    ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine", {"logger"})
-    ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber", {"logger"})
+    ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine", {"logger", "table_pool"})
+    ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber", {"logger", "core.scheduler"})
 
     -- Ядро системы
     ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
     ModuleManager.register_module("core.base_monitor", path_prefix .. "src.core.base_monitor",
-        {"logger", "utils", "monitor_config", "core.scheduler"})
+        {"logger", "utils", "monitor_config", "core.scheduler", "table_pool"})
     ModuleManager.register_module("core.subscription_manager", path_prefix .. "src.core.subscription_manager",
-        {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard", "core.scheduler"})
+        {"logger", "monitor_config", "utils.filter_engine", "utils.wildcard", "core.scheduler", "table_pool"})
     ModuleManager.register_module("core.event_dispatcher", path_prefix .. "src.core.event_dispatcher",
         {"logger", "core.subscription_manager", "table_pool", "utils", "utils.wildcard", "core.scheduler"})
 

@@ -29,48 +29,12 @@ local FilterEngine = ModuleManager.get_module("utils.filter_engine")
 local Wildcard = ModuleManager.get_module("utils.wildcard")
 local TablePool = ModuleManager.get_module("table_pool")
 
--- 3. Глобальные зависимости Astra (Lazy Caching)
-local _http_request = nil
-local _json_encode = nil
-local _json_decode = nil
-local _astra_version = nil
-local _user_agent = nil
-
---- Возвращает функцию http_request
---- @return function|nil
-local function get_http_request()
-    if _http_request then return _http_request end
-    _http_request = ModuleManager.get_global_dependency("http_request")
-    return _http_request
-end
-
---- Возвращает функцию json.encode
---- @return function|nil
-local function get_json_encode()
-    if _json_encode then return _json_encode end
-    _json_encode = ModuleManager.get_global_dependency("json.encode")
-    return _json_encode
-end
-
---- Возвращает функцию json.decode
---- @return function|nil
-local function get_json_decode()
-    if _json_decode then return _json_decode end
-    _json_decode = ModuleManager.get_global_dependency("json.decode")
-    return _json_decode
-end
-
---- Возвращает строку User-Agent
---- Оптимизировано: кэширование полной строки заголовка.
---- @return string
-local function get_user_agent()
-    if _user_agent then return _user_agent end
-    if not _astra_version then
-        _astra_version = ModuleManager.get_global_dependency("astra.version") or "unknown"
-    end
-    _user_agent = "User-Agent: Astra v." .. _astra_version
-    return _user_agent
-end
+-- 3. Глобальные зависимости Astra
+local http_request = ModuleManager.get_global_dependency("http_request")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local astra_version = ModuleManager.get_global_dependency("astra.version") or "unknown"
+local USER_AGENT = "User-Agent: Astra v." .. astra_version
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "SubscriptionManager"
@@ -166,14 +130,13 @@ local function _get_event_json(event)
     -- 2. Проверяем кэш в опциях (совместимость)
     if options and options.json_cache then return options.json_cache end
 
-    local encode = get_json_encode()
-    if not encode then return nil end
+    if not json_encode then return nil end
 
     local json
     if type(event.data) == "string" then
         json = event.data
     else
-        local ok, res = pcall(encode, event.data)
+        local ok, res = pcall(json_encode, event.data)
         if not ok then
             Logger.error(COMPONENT_NAME, "Ошибка кодирования JSON: %s", tostring(res))
             return nil
@@ -198,13 +161,11 @@ local Transport = {
 --- @param retry_count? number Текущая попытка повтора
 --- @param event_json? string Предварительно подготовленный JSON
     HTTP = function(self, config, event, event_type, retry_count, event_json)
-        local request = get_http_request()
-        if not request then return false, "http_request недоступен" end
+        if not http_request then return false, "http_request недоступен" end
 
-        local encode = get_json_encode()
         local content = event_json or
                         ((type(event) == "table" and event.id) and _get_event_json(event) or
-                        ((type(event) == "table") and (encode and encode(event) or nil) or tostring(event)))
+                        ((type(event) == "table") and (json_encode and json_encode(event) or nil) or tostring(event)))
 
         if not content then return false, "ошибка кодирования JSON" end
 
@@ -213,12 +174,12 @@ local Transport = {
         -- Оптимизация: используем кэшированный заголовок Host если доступен
         local host_header = config._host_header or ("Host: " .. config.host .. ":" .. config.port)
 
-        local ok = request({
+        local ok = http_request({
             host = config.host, port = config.port, path = config.path or "/",
             method = "POST", content = content,
             timeout = _m_config.HttpTimeout,
             headers = {
-                get_user_agent(), host_header,
+                USER_AGENT, host_header,
                 CONTENT_TYPE, "Content-Length: " .. #content, CONNECTION_CLOSE
             },
             callback = function(s, response)
@@ -253,10 +214,9 @@ local Transport = {
     WS = function(self, config, event, event_type, event_json)
         local WsSubscriber = ModuleManager.get_module("ws_subscriber")
         if WsSubscriber and WsSubscriber.broadcast_raw then
-            local encode = get_json_encode()
             local json_data = event_json or
                              ((type(event) == "table" and event.id) and _get_event_json(event) or
-                             ((type(event) == "table") and (encode and encode(event) or nil) or event))
+                             ((type(event) == "table") and (json_encode and json_encode(event) or nil) or event))
             WsSubscriber.broadcast_raw(event_type, json_data)
             return true
         end
@@ -279,10 +239,9 @@ local Transport = {
     --- @param event_type string Тип события
     --- @param event_json? string Предварительно подготовленный JSON
     CONSOLE = function(self, config, event, event_type, event_json)
-        local encode = get_json_encode()
         local message = event_json or
                         ((type(event) == "table" and event.id) and _get_event_json(event) or
-                        ((type(event) == "table") and (encode and encode(event) or nil) or event))
+                        ((type(event) == "table") and (json_encode and json_encode(event) or nil) or event))
         Logger.info("Консоль", "[СОБЫТИЕ:%s] %s", tostring(event_type), tostring(message))
         return true
     end,
@@ -290,7 +249,7 @@ local Transport = {
     TELEGRAM = function(_, config, event, event_type, _, event_json)
         if not config.token or not config.chat_id then return false, "token или chat_id отсутствуют" end
 
-        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local message = event_json or (json_encode and json_encode(event) or tostring(event))
         message = Utils.truncate_string(message, 4000)
 
         local text = string_format(
@@ -332,9 +291,8 @@ local Transport = {
             return true
         else
             -- Используем http_request для обычного HTTP
-            local request = get_http_request()
-            if not request then return false end
-            return request({
+            if not http_request then return false end
+            return http_request({
                 host = config.host, port = config.port or 8086, path = url:match("://[^/]+(.+)$"),
                 method = "POST", content = line,
                 headers = { "Authorization: Token " .. config.token, CONNECTION_CLOSE }
@@ -345,13 +303,13 @@ local Transport = {
     DISCORD = function(_, config, event, event_type, _, event_json)
         if not config.url then return false, "url Webhook отсутствует" end
 
-        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local message = event_json or (json_encode and json_encode(event) or tostring(event))
         local content = Utils.truncate_string(
             string_format("**Astra Event: %s**\n```json\n%s\n```", event_type, message),
             2000
         )
 
-        local payload = get_json_encode()({ content = content })
+        local payload = json_encode({ content = content })
         local cmd = string_format(
             "curl -s -X POST \"%s\" -H \"Content-Type: application/json\" -d %s &",
             config.url, Utils.shell_escape(payload)
@@ -364,8 +322,8 @@ local Transport = {
     SLACK = function(_, config, event, event_type, _, event_json)
         if not config.url then return false, "url Webhook отсутствует" end
 
-        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
-        local payload = get_json_encode()({
+        local message = event_json or (json_encode and json_encode(event) or tostring(event))
+        local payload = json_encode({
             text = string_format("*Astra Event: %s*\n```%s```", event_type, message)
         })
 
@@ -381,8 +339,8 @@ local Transport = {
     GOTIFY = function(_, config, event, event_type, _, event_json)
         if not config.url or not config.token then return false, "url или token отсутствуют" end
 
-        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
-        local payload = get_json_encode()({
+        local message = event_json or (json_encode and json_encode(event) or tostring(event))
+        local payload = json_encode({
             title = "Astra: " .. event_type,
             message = message,
             priority = config.priority or 5
@@ -401,7 +359,7 @@ local Transport = {
     PUSHOVER = function(_, config, event, event_type, _, event_json)
         if not config.token or not config.user then return false, "token или user отсутствуют" end
 
-        local message = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local message = event_json or (json_encode and json_encode(event) or tostring(event))
         local payload = string_format(
             "token=%s&user=%s&title=%s&message=%s&priority=%s",
             config.token, config.user,
@@ -419,7 +377,7 @@ local Transport = {
         if not config.url then return false, "url отсутствует" end
 
         local method = (config.method or "POST"):upper()
-        local content = event_json or (get_json_encode() and get_json_encode()(event) or tostring(event))
+        local content = event_json or (json_encode and json_encode(event) or tostring(event))
 
         local headers_str = ""
         if config.headers then
@@ -566,8 +524,7 @@ end
 --- Lua-коллбэки игнорируются при сохранении.
 --- @return boolean Статус выполнения
 function SubscriptionManager:save_now()
-    local encode = get_json_encode()
-    if not encode then return false end
+    if not json_encode then return false end
 
     self._save_pending = false
     local data_to_save = {}
@@ -610,8 +567,7 @@ end
 --- Загружает подписки из JSON файла и регистрирует их в системе.
 --- @private
 function SubscriptionManager:load()
-    local decode = get_json_decode()
-    if not decode then return end
+    if not json_decode then return end
 
     local f = io.open(STORAGE_PATH, "r")
     if not f then return end
@@ -1024,8 +980,7 @@ function SubscriptionManager:flush_batch(sub_id)
     --- @type string|table|nil
     local payload
     if sub.transport == "LUA_CALLBACK" then
-        local decode = get_json_decode()
-        payload = decode and decode(final_json) or nil
+        payload = json_decode and json_decode(final_json) or nil
     else
         payload = final_json
     end

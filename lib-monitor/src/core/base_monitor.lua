@@ -239,11 +239,13 @@ function BaseMonitor.init_config_subscription()
         dispatcher:subscribe("config:updated:monitor", function(new_config)
             if new_config.ForceSendInterval then
                 _m_config.ForceSendInterval = new_config.ForceSendInterval
-                Logger.debug(
-                    "BaseMonitor",
-                    "Глобальный интервал принудительной отправки обновлен: %d",
-                    _m_config.ForceSendInterval
-                )
+                if Logger then
+                    Logger.debug(
+                        "BaseMonitor",
+                        "Глобальный интервал принудительной отправки обновлен: %d",
+                        _m_config.ForceSendInterval
+                    )
+                end
             end
         end)
     end

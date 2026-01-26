@@ -11,6 +11,8 @@ local pcall = pcall
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local Scheduler = ModuleManager.get_module("core.scheduler")
+local EventDispatcher = nil -- Кэшируется при инициализации подписок
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
@@ -81,17 +83,21 @@ end
 
 --- Инициализирует подписку на обновление конфигурации
 function WsSubscriber.init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:batch", function(new_config)
             if new_config.WsBatchInterval and new_config.WsBatchInterval ~= _m_config.WsBatchInterval then
                 _m_config.WsBatchInterval = new_config.WsBatchInterval
-                local Scheduler = ModuleManager.get_module("core.scheduler")
                 if Scheduler and state.is_task_running then
                     Scheduler.get_instance():set_task_interval("ws_subscriber_flush", _m_config.WsBatchInterval)
                 end
-                Logger.debug(COMPONENT_NAME, "Интервал батчинга WebSocket обновлен: %.3f", _m_config.WsBatchInterval)
+                if Logger then
+                    Logger.debug(COMPONENT_NAME, "Интервал батчинга WebSocket обновлен: %.3f", _m_config.WsBatchInterval)
+                end
             end
         end)
     end
@@ -102,14 +108,13 @@ end
 --- @return boolean Статус инициализации
 function WsSubscriber.init(server)
     if not server then
-        Logger.error(COMPONENT_NAME, "Попытка инициализации с пустым сервером")
+        if Logger then Logger.error(COMPONENT_NAME, "Попытка инициализации с пустым сервером") end
         return false
     end
     state.http_server_instance = server
 
     -- Запуск задачи планировщика для сброса батчей (раз в 50мс)
     if not state.is_task_running then
-        local Scheduler = ModuleManager.get_module("core.scheduler")
         if Scheduler then
             local interval = _m_config.WsBatchInterval
             Scheduler.get_instance():add_task("ws_subscriber_flush", _flush_buffers, interval)
@@ -129,14 +134,15 @@ end
 --- Останавливает модуль и удаляет задачи из планировщика.
 function WsSubscriber.shutdown()
     if state.is_task_running then
-        local Scheduler = ModuleManager.get_module("core.scheduler")
         if Scheduler then
             Scheduler.get_instance():remove_task("ws_subscriber_flush")
         end
         state.is_task_running = false
     end
     WsSubscriber.clear()
-    Logger.info(COMPONENT_NAME, "Модуль WebSocket подписчиков остановлен")
+    if Logger then
+        Logger.info(COMPONENT_NAME, "Модуль WebSocket подписчиков остановлен")
+    end
 end
 
 --- Обработчик WebSocket соединений (callback для http_websocket)

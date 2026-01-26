@@ -22,7 +22,7 @@ local unpack = _G.table.unpack
 local error = _G.error
 
 -- 2. Функции из ModuleManager.get_module()
-local Logger = nil -- Кэшируется при первом обращении
+local Logger = ModuleManager.get_module("logger")
 
 -- 3. Глобальные зависимости Astra
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
@@ -50,14 +50,6 @@ local state = {
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
-
---- Возвращает модуль логгера (ленивая загрузка)
---- @return Logger|nil
-local function _get_logger()
-    if Logger then return Logger end
-    Logger = ModuleManager.get_module("logger")
-    return Logger
-end
 
 --- Обновляет статистику производительности для указанной операции
 --- @param name string Уникальное имя операции
@@ -93,8 +85,7 @@ local Utils = {}
 --- @return string|nil Имя потока или исходный IP-адрес, nil в случае ошибки
 function Utils.get_stream_name(ip_address)
     if type(ip_address) ~= "string" or not ip_address then
-        local log = _get_logger()
-        if log then log.error(COMPONENT_NAME, "get_stream_name: некорректный ip_address") end
+        if Logger then Logger.error(COMPONENT_NAME, "get_stream_name: некорректный ip_address") end
         return nil
     end
 
@@ -221,8 +212,7 @@ function Utils.validate_monitor_param(name, value)
         and MonitorConfig.ValidationSchema.Instance
         and MonitorConfig.ValidationSchema.Instance[name]
     if not schema then
-        local log = _get_logger()
-        if log then log.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name) end
+        if Logger then Logger.error(COMPONENT_NAME, "validate_monitor_param: неизвестный параметр '%s'", name) end
         return nil
     end
 
@@ -236,9 +226,8 @@ function Utils.validate_monitor_param(name, value)
     end
 
     if type(value) ~= schema.type then
-        local log = _get_logger()
-        if log then
-            log.error(COMPONENT_NAME,
+        if Logger then
+            Logger.error(COMPONENT_NAME,
                 "validate_monitor_param: некорректный тип для '%s' (ожидался %s, получен %s).",
                 name, schema.type, type(value))
         end
@@ -247,18 +236,16 @@ function Utils.validate_monitor_param(name, value)
 
     if schema.type == "number" then
         if schema.min and value < schema.min then
-            local log = _get_logger()
-            if log then
-                log.error(COMPONENT_NAME,
+            if Logger then
+                Logger.error(COMPONENT_NAME,
                     "validate_monitor_param: значение для '%s' слишком мало (%s < %s).",
                     name, tostring(value), tostring(schema.min))
             end
             return schema.default
         end
         if schema.max and value > schema.max then
-            local log = _get_logger()
-            if log then
-                log.error(COMPONENT_NAME,
+            if Logger then
+                Logger.error(COMPONENT_NAME,
                     "validate_monitor_param: значение для '%s' слишком велико (%s > %s).",
                     name, tostring(value), tostring(schema.max))
             end
@@ -302,8 +289,7 @@ end
 function Utils.parse_url(url)
     if type(url) ~= "string" or url == "" then return nil end
     if not astra_parse_url then
-        local log = _get_logger()
-        if log then log.error(COMPONENT_NAME, "parse_url: зависимость не найдена") end
+        if Logger then Logger.error(COMPONENT_NAME, "parse_url: зависимость не найдена") end
         return nil
     end
     return astra_parse_url(url)
@@ -339,22 +325,21 @@ function Utils.free_port(port)
     if not port then return false end
     if not Utils.is_port_busy(port) then return true end
 
-    local log = _get_logger()
-    if log then log.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port) end
+    if Logger then Logger.info(COMPONENT_NAME, "Порт %d занят, пытаемся освободить...", port) end
     os_execute(string_format("fuser -k %d/tcp >/dev/null 2>&1", port))
 
     -- Ожидание освобождения (до 2 секунд)
     local start = os_clock()
     while os_clock() - start < 2 do
         if not Utils.is_port_busy(port) then
-            if log then log.info(COMPONENT_NAME, "Порт %d успешно освобожден", port) end
+            if Logger then Logger.info(COMPONENT_NAME, "Порт %d успешно освобожден", port) end
             return true
         end
     end
 
     local busy = Utils.is_port_busy(port)
     if busy then
-        if log then log.error(COMPONENT_NAME, "Не удалось освободить порт %d", port) end
+        if Logger then Logger.error(COMPONENT_NAME, "Не удалось освободить порт %d", port) end
     end
     return not busy
 end

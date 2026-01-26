@@ -21,6 +21,8 @@ local os_time = _G.os.time
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local TablePool = ModuleManager.get_module("table_pool")
+local EventDispatcher = nil -- Кэшируется при инициализации подписок
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
@@ -50,25 +52,25 @@ local state = {
     duration_state = {},
 }
 
--- 2.1. Загрузка TablePool для оптимизации Duration
-local TablePool = ModuleManager.get_module("table_pool")
-if TablePool then
-    TablePool.register_type("filter_duration_state", nil, 100, 10)
-end
 
 --- @class FilterEngine
 local FilterEngine = {}
 
 --- Инициализирует подписку на обновление конфигурации
 function FilterEngine.init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:pool", function(new_config)
             if new_config.MaxCacheSize and new_config.MaxCacheSize.filter_engine then
                 _m_config.MaxCacheSize.filter_engine = new_config.MaxCacheSize.filter_engine
-                Logger.debug(COMPONENT_NAME, "Лимит кэша FilterEngine обновлен: %d",
-                    _m_config.MaxCacheSize.filter_engine)
+                if Logger then
+                    Logger.debug(COMPONENT_NAME, "Лимит кэша FilterEngine обновлен: %d",
+                        _m_config.MaxCacheSize.filter_engine)
+                end
             end
         end)
     end
@@ -475,5 +477,10 @@ end
 -- ===========================================================================
 -- Инициализация модуля
 -- ===========================================================================
+
+-- Регистрация типов пулов при загрузке модуля
+if TablePool then
+    TablePool.register_type("filter_duration_state", nil, 100, 10)
+end
 
 return FilterEngine
