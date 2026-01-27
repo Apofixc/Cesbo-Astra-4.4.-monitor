@@ -19,6 +19,7 @@ local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 local TablePool = ModuleManager.get_module("utils.table_pool")
+local EventDispatcher = nil
 
 -- 3. Глобальные зависимости Astra
 local analyze = ModuleManager.get_global_dependency("analyze")
@@ -140,7 +141,10 @@ ChannelMonitor.__index = ChannelMonitor
 
 --- Инициализирует подписку на обновление глобальной конфигурации модуля
 function ChannelMonitor.init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+
     if EventDispatcher then
         local dispatcher = EventDispatcher.get_instance()
         dispatcher:subscribe("config:updated:monitor", function(new_config)

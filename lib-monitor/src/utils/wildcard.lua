@@ -19,6 +19,7 @@ local string_gmatch = _G.string.gmatch
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local EventDispatcher = nil
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
@@ -53,7 +54,10 @@ local Wildcard = {}
 
 --- Инициализирует подписку на обновление конфигурации
 function Wildcard.init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:pool", function(new_config)

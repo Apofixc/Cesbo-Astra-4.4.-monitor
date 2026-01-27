@@ -44,7 +44,6 @@ local DvbRepository = BaseRepository.new(COMPONENT_NAME)
 function DvbRepository:init_config_subscription()
     self:init_base_config_subscription()
 
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:monitor", function(new_config)

@@ -23,6 +23,7 @@ local error = _G.error
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local MonitorConfig = ModuleManager.get_module("monitor_config")
 
 -- 3. Глобальные зависимости Astra
 local utils_hostname = ModuleManager.get_global_dependency("utils.hostname")
@@ -89,7 +90,6 @@ function Utils.get_stream_name(ip_address)
         return nil
     end
 
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
     local stream_map = MonitorConfig and MonitorConfig.STREAM or {}
     return stream_map[ip_address] or ip_address
 end
@@ -207,7 +207,6 @@ end
 --- @param value any Значение
 --- @return any Валидированные данные или значение по умолчанию
 function Utils.validate_monitor_param(name, value)
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
     local schema = MonitorConfig and MonitorConfig.ValidationSchema
         and MonitorConfig.ValidationSchema.Instance
         and MonitorConfig.ValidationSchema.Instance[name]
@@ -268,7 +267,6 @@ function Utils.validate_monitor_name(name)
         return false
     end
 
-    local MonitorConfig = ModuleManager.get_module("monitor_config")
     local max_len = (MonitorConfig and MonitorConfig.Monitor and MonitorConfig.Monitor.MaxMonitorNameLength) or 64
     if #name > max_len then
         return false

@@ -19,6 +19,7 @@ local TunerMonitor = ModuleManager.get_module("tuner_monitor")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
 local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+local Channel = ModuleManager.get_module("channel")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra напрямую)
@@ -168,7 +169,6 @@ function Adapter.reconfigure(adapter_list, options)
     if type(adapter_list) ~= "table" then return false end
     options = options or {}
 
-    local Channel = ModuleManager.get_module("channel")
     if not Channel then
         Logger.error(COMPONENT_NAME, "reconfigure: модуль Channel не найден")
         return false
