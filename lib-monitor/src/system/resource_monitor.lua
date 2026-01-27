@@ -60,6 +60,7 @@ local string_format = _G.string.format
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local Scheduler = ModuleManager.get_module("core.scheduler")
+local EventDispatcher = nil -- Кэшируется при инициализации подписок
 
 -- 3. Глобальные зависимости Astra
 --- @type fun():table<string, AstraInterfaceInfo>
@@ -186,6 +187,14 @@ end
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
+--- Возвращает модуль EventDispatcher (ленивая загрузка)
+--- @return EventDispatcher|nil
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("table_pool")
+    return EventDispatcher
+end
+
 --- Обновляет кэш конфигурации (внутренняя версия)
 local function _refresh_config_internal()
     state.config_cache.cpu_threshold = _m_config.CpuThreshold
@@ -202,11 +211,6 @@ local function _auto_refresh_config()
     if state.config_cache.last_refresh == 0 then
         _refresh_config_internal()
     end
-end
-
---- Возвращает EventDispatcher (ленивая загрузка)
-local function _get_event_dispatcher()
-    return ModuleManager.get_module("core.event_dispatcher")
 end
 
 --- Парсит /proc/self/status (Single-pass Zero-allocation parsing)
