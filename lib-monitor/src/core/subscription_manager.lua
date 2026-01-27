@@ -30,6 +30,7 @@ local Wildcard = ModuleManager.get_module("utils.wildcard")
 local TablePool = ModuleManager.get_module("table_pool")
 local WsSubscriber = ModuleManager.get_module("ws_subscriber")
 local Scheduler = ModuleManager.get_module("core.scheduler")
+local EventDispatcher = nil
 
 -- 3. Глобальные зависимости Astra
 local http_request = ModuleManager.get_global_dependency("http_request")
@@ -458,7 +459,10 @@ end
 
 --- Инициализирует подписку на обновление конфигурации
 function SubscriptionManager:init_config_subscription()
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher") -- Оставили так, чтобы избежать колизий
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+    
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:network", function(new_config)
