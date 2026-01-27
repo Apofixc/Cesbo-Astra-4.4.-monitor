@@ -590,10 +590,9 @@ end
 -- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("utils.table_pool")
-if tp then
-    tp.register_type("generic")
-    tp.register_type("event_options")
+if TablePool then
+    TablePool.register_type("generic")
+    TablePool.register_type("event_options")
 end
 
 return BaseMonitor

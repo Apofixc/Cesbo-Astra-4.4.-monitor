@@ -23,6 +23,7 @@ local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
 local Scheduler = ModuleManager.get_module("core.scheduler")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra
 local dvb_tune = ModuleManager.get_global_dependency("dvb_tune")
@@ -539,9 +540,8 @@ end
 -- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("table_pool")
-if tp then
-    tp.register_type("report_dvb")
+if TablePool then
+    TablePool.register_type("report_dvb")
 end
 
 -- ===========================================================================

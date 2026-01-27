@@ -18,6 +18,7 @@ local pcall = _G.pcall
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseMonitor = ModuleManager.get_module("core.base_monitor")
+local TablePool = ModuleManager.get_module("utils.table_pool")
 
 -- 3. Глобальные зависимости Astra
 local analyze = ModuleManager.get_global_dependency("analyze")
@@ -611,13 +612,12 @@ end
 -- ===========================================================================
 
 -- Регистрация пулов при загрузке модуля
-local tp = ModuleManager.get_module("table_pool")
-if tp then
+if TablePool then
     -- Используем стандартную очистку TablePool для всех типов,
     -- так как она теперь поддерживает автоматический возврат вложенных таблиц.
-    tp.register_type("report_channel")
-    tp.register_type("report_error")
-    tp.register_type("pid_stats")
+    TablePool.register_type("report_channel")
+    TablePool.register_type("report_error")
+    TablePool.register_type("pid_stats")
 end
 
 -- ===========================================================================
