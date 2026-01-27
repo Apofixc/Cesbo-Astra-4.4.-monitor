@@ -18,9 +18,9 @@ local type = _G.type
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
 local BaseRepository = ModuleManager.get_module("core.base_repository")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
--- (Загружаются динамически в методах для поддержки горячей перезагрузки)
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "ChannelRepository"
@@ -37,30 +37,6 @@ local _m_config = {
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
---- Вспомогательная функция для безопасного запуска одного канала
---- @param conf table Конфигурация канала
---- @return boolean success
-local function _safe_make_stream(conf)
-    local Channel = ModuleManager.get_module("channel")
-    if not Channel then return false end
-
-    local name = conf.name or "Unknown"
-    Logger.debug(COMPONENT_NAME, "Попытка запуска канала: %s", name)
-
-    local ok, res = pcall(Channel.make_stream, conf)
-    if ok and res then
-        Logger.debug(COMPONENT_NAME, "Канал %s успешно запущен", name)
-        return true
-    end
-
-    Logger.error(
-        COMPONENT_NAME,
-        "Ошибка при запуске канала %s: %s",
-        name, tostring(res or "unknown error")
-    )
-    return false
-end
-
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
@@ -72,7 +48,6 @@ local ChannelRepository = BaseRepository.new(COMPONENT_NAME)
 function ChannelRepository:init_config_subscription()
     self:init_base_config_subscription()
 
-    local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:monitor", function(new_config)
@@ -89,115 +64,19 @@ function ChannelRepository:init_config_subscription()
 end
 
 --- Хук, вызываемый перед пересозданием монитора.
---- Выполняет перезапуск стрима в Astra.
+--- Генерирует событие для перезапуска стрима.
 --- @protected
 --- @param name string Имя монитора
 --- @param reason string Причина ("silence" или "watchdog")
 --- @return boolean success
 function ChannelRepository:_on_before_recreate(name, reason)
     if reason == "watchdog" or reason == "silence" then
-        local Channel = ModuleManager.get_module("channel")
-        if Channel then
-            Logger.info(COMPONENT_NAME, "[%s] Перезапуск стрима (причина: %s)", name, reason)
-            local conf = Channel.kill_stream(name)
-            if conf then
-                return Channel.make_stream(conf) ~= nil
-            end
+        if EventDispatcher then
+            Logger.info(COMPONENT_NAME, "[%s] Запрос на перезапуск стрима (причина: %s)", name, reason)
+            EventDispatcher.get_instance():emit("channel:action:recreate", name, reason)
         end
     end
     return true
-end
-
--- ===========================================================================
--- Публичное API: Управление зависимыми каналами
--- ===========================================================================
-
---- Останавливает все каналы, использующие указанные адаптеры.
---- @param adapter_list table Список имен адаптеров
---- @return table Список сохраненных конфигураций каналов
-function ChannelRepository:stop_dependent_channels(adapter_list)
-    local Channel = ModuleManager.get_module("channel")
-    local saved_configs = {}
-    if not Channel or type(adapter_list) ~= "table" then return saved_configs end
-
-    -- 1. Собираем все уникальные зависимые каналы для всех адаптеров
-    local affected_channels = {}
-    for _, adapter_name in ipairs(adapter_list) do
-        local deps = self:find_by_adapter(adapter_name)
-        for name, ch_data in pairs(deps) do
-            if not affected_channels[name] then
-                affected_channels[name] = true
-            end
-        end
-    end
-
-    -- 2. Останавливаем каждый канал один раз
-    for name, _ in pairs(affected_channels) do
-        local ch_config = Channel.kill_stream(name)
-        if ch_config then
-            table_insert(saved_configs, ch_config)
-        end
-    end
-
-    return saved_configs
-end
-
---- Запускает каналы на основе предоставленных конфигураций.
---- @param configs table Список конфигураций каналов
-function ChannelRepository:start_dependent_channels(configs)
-    if not configs or type(configs) ~= "table" then return end
-
-    local total = #configs
-    if total == 0 then return end
-
-    Logger.info(COMPONENT_NAME, "Запуск %d зависимых каналов...", total)
-    local success_count = 0
-
-    for _, conf in ipairs(configs) do
-        if _safe_make_stream(conf) then
-            success_count = success_count + 1
-        end
-    end
-
-    if success_count == total then
-        Logger.info(COMPONENT_NAME, "Все зависимые каналы (%d/%d) успешно запущены", success_count, total)
-    else
-        Logger.warning(COMPONENT_NAME, "Запуск зависимых каналов завершен частично: %d из %d успешно",
-            success_count, total)
-    end
-end
-
---- Выполняет транзакционную переконфигурацию каналов.
---- @param adapter_list table Список имен адаптеров
---- @param callback function Функция, выполняемая между остановкой и запуском каналов
---- @param channel_updates? table Таблица обновлений конфигураций каналов (name -> input)
---- @return boolean success
-function ChannelRepository:reconfigure_channels(adapter_list, callback, channel_updates)
-    if type(adapter_list) ~= "table" or type(callback) ~= "function" then return false end
-
-    -- 1. Останавливаем все зависимые каналы
-    local saved_configs = self:stop_dependent_channels(adapter_list)
-
-    -- 2. Выполняем инфраструктурные действия (рестарт адаптеров)
-    local ok, err = pcall(callback)
-    if not ok then
-        Logger.error(COMPONENT_NAME, "Ошибка в callback переконфигурации: %s", tostring(err))
-    end
-
-    -- 3. Применяем обновления конфигураций (если есть)
-    if channel_updates and type(channel_updates) == "table" then
-        for _, conf in ipairs(saved_configs) do
-            local new_input = channel_updates[conf.name]
-            if new_input then
-                conf.input = new_input
-            end
-        end
-    end
-
-    -- 4. Запускаем каналы обратно
-    self:start_dependent_channels(saved_configs)
-
-    return ok
 end
 
 -- ===========================================================================

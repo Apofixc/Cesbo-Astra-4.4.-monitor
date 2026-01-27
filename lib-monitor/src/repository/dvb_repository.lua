@@ -11,6 +11,7 @@
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local BaseRepository = ModuleManager.get_module("core.base_repository")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- 3. Глобальные зависимости Astra из ModuleManager.get_global_dependency()
 -- Нет прямых зависимостей
@@ -60,17 +61,16 @@ function DvbRepository:init_config_subscription()
 end
 
 --- Хук, вызываемый перед пересозданием монитора.
---- Выполняет перезапуск DVB-адаптера в Astra.
+--- Генерирует событие для перезапуска DVB-адаптера.
 --- @protected
 --- @param name string Имя монитора
 --- @param reason string Причина ("silence" или "watchdog")
 --- @return boolean success
 function DvbRepository:_on_before_recreate(name, reason)
     if reason == "watchdog" or reason == "silence" then
-        local Adapter = ModuleManager.get_module("adapter")
-        if Adapter and Adapter.restart_dvb_monitor then
-            Logger.info(COMPONENT_NAME, "[%s] Перезапуск адаптера (причина: %s)", name, reason)
-            Adapter.restart_dvb_monitor(name)
+        if EventDispatcher then
+            Logger.info(COMPONENT_NAME, "[%s] Запрос на перезапуск адаптера (причина: %s)", name, reason)
+            EventDispatcher.get_instance():emit("adapter:action:restart", name, reason)
         end
     end
     return true

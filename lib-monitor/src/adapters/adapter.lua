@@ -18,6 +18,7 @@ local Logger = ModuleManager.get_module("logger")
 local TunerMonitor = ModuleManager.get_module("tuner_monitor")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Utils = ModuleManager.get_module("utils")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra напрямую)
@@ -41,6 +42,18 @@ local Adapter = {}
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+--- Инициализирует подписки на события
+function Adapter.init_events()
+    if not EventDispatcher then return end
+    local instance = EventDispatcher.get_instance()
+
+    -- Подписка на действия с адаптерами (от репозитория)
+    instance:subscribe("adapter:action:restart", function(name, reason)
+        Logger.info(COMPONENT_NAME, "[%s] Выполнение перезапуска адаптера по событию (причина: %s)", name, reason)
+        Adapter.restart_dvb_monitor(name, nil, true)
+    end)
+end
 
 --- Выполняет физический перезапуск монитора тюнера
 --- @param name_adapter string Уникальное имя адаптера
@@ -155,14 +168,14 @@ function Adapter.reconfigure(adapter_list, options)
     if type(adapter_list) ~= "table" then return false end
     options = options or {}
 
-    local ChannelRepository = ModuleManager.get_module("channel_repository")
-    if not ChannelRepository then
-        Logger.error(COMPONENT_NAME, "reconfigure: модуль ChannelRepository не найден")
+    local Channel = ModuleManager.get_module("channel")
+    if not Channel then
+        Logger.error(COMPONENT_NAME, "reconfigure: модуль Channel не найден")
         return false
     end
 
-    -- Используем транзакционную логику репозитория каналов
-    return ChannelRepository:reconfigure_channels(adapter_list, function()
+    -- Используем транзакционную логику модуля Channel
+    return Channel.reconfigure_streams(adapter_list, function()
         local success = true
         for _, adapter_name in ipairs(adapter_list) do
             local tuner = DvbRepository:find(adapter_name)
@@ -175,7 +188,7 @@ function Adapter.reconfigure(adapter_list, options)
                 end
 
                 -- При реконфигурации мы всегда используем force для монитора,
-                -- так как каналы уже остановлены репозиторием.
+                -- так как каналы уже остановлены модулем Channel.
                 if not _perform_restart(adapter_name, target_conf, true, old_conf) then
                     Logger.error(COMPONENT_NAME, "reconfigure: ошибка рестарта адаптера %s", adapter_name)
                     success = false

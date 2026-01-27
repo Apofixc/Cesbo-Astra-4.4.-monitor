@@ -19,6 +19,7 @@ local ChannelRepository = ModuleManager.get_module("channel_repository")
 local DvbRepository = ModuleManager.get_module("dvb_repository")
 local Logger = ModuleManager.get_module("logger")
 local Utils = ModuleManager.get_module("utils")
+local EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
 
 -- 3. Глобальные зависимости Astra
 local find_channel = ModuleManager.get_global_dependency("find_channel")
@@ -213,18 +214,27 @@ end
 --- @class Channel
 local Channel = {}
 
---- Инициализирует подписку на обновление конфигурации
-function Channel.init_config_subscription()
-    local success, EventDispatcher = pcall(ModuleManager.get_module, "core.event_dispatcher")
-    if success and EventDispatcher then
-        local instance = EventDispatcher.get_instance()
-        instance:subscribe("config:updated:monitor", function(new_config)
-            if new_config.ChannelMonitorLimit then
-                _m_config.ChannelMonitorLimit = new_config.ChannelMonitorLimit
-                Logger.debug(COMPONENT_NAME, "Лимит мониторов каналов обновлен: %d", _m_config.ChannelMonitorLimit)
-            end
-        end)
-    end
+--- Инициализирует подписки на события и конфигурацию
+function Channel.init_events()
+    if not EventDispatcher then return end
+    local instance = EventDispatcher.get_instance()
+
+    -- Подписка на обновление конфигурации
+    instance:subscribe("config:updated:monitor", function(new_config)
+        if new_config.ChannelMonitorLimit then
+            _m_config.ChannelMonitorLimit = new_config.ChannelMonitorLimit
+            Logger.debug(COMPONENT_NAME, "Лимит мониторов каналов обновлен: %d", _m_config.ChannelMonitorLimit)
+        end
+    end)
+
+    -- Подписка на действия с каналами (от репозитория)
+    instance:subscribe("channel:action:recreate", function(name, reason)
+        Logger.info(COMPONENT_NAME, "[%s] Выполнение перезапуска по событию (причина: %s)", name, reason)
+        local conf = Channel.kill_stream(name)
+        if conf then
+            Channel.make_stream(conf)
+        end
+    end)
 end
 
 --- Создает новый монитор канала
@@ -448,6 +458,47 @@ function Channel.resume_monitor(name)
         return monitor:resume()
     end
     return false
+end
+
+-- ===========================================================================
+-- Публичное API: Координация потоков
+-- ===========================================================================
+
+--- Выполняет транзакционную переконфигурацию потоков.
+--- Останавливает все зависимые каналы, выполняет callback и запускает их обратно.
+--- @param adapter_list table Список имен адаптеров
+--- @param callback function Функция, выполняемая между остановкой и запуском
+--- @param updates? table Таблица обновлений конфигураций (name -> input)
+--- @return boolean success
+function Channel.reconfigure_streams(adapter_list, callback, updates)
+    if type(adapter_list) ~= "table" or type(callback) ~= "function" then return false end
+
+    local configs = {}
+    -- 1. Сбор и остановка зависимых каналов
+    for _, adapter_name in ipairs(adapter_list) do
+        local deps = ChannelRepository:find_by_adapter(adapter_name)
+        for name, _ in pairs(deps) do
+            if not configs[name] then
+                configs[name] = Channel.kill_stream(name)
+            end
+        end
+    end
+
+    -- 2. Выполнение коллбэка (например, рестарт адаптеров)
+    local ok, err = pcall(callback)
+    if not ok then
+        Logger.error(COMPONENT_NAME, "Ошибка в callback переконфигурации: %s", tostring(err))
+    end
+
+    -- 3. Применение обновлений и запуск
+    for name, conf in pairs(configs) do
+        if updates and updates[name] then
+            conf.input = updates[name]
+        end
+        Channel.make_stream(conf)
+    end
+
+    return ok
 end
 
 -- ===========================================================================

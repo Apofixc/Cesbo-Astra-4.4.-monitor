@@ -242,7 +242,8 @@ initialize_phase(INIT_PHASES.FINAL, function()
     if BaseMonitor and BaseMonitor.init_config_subscription then BaseMonitor.init_config_subscription() end
     if ChannelMonitor and ChannelMonitor.init_config_subscription then ChannelMonitor.init_config_subscription() end
     if TunerMonitor and TunerMonitor.init_config_subscription then TunerMonitor.init_config_subscription() end
-    if Channel and Channel.init_config_subscription then Channel.init_config_subscription() end
+    if Channel and Channel.init_events then Channel.init_events() end
+    if Adapter and Adapter.init_events then Adapter.init_events() end
     if Wildcard and Wildcard.init_config_subscription then Wildcard.init_config_subscription() end
     if FilterEngine and FilterEngine.init_config_subscription then FilterEngine.init_config_subscription() end
     if ResourceMonitor and ResourceMonitor.init_config_subscription then ResourceMonitor.init_config_subscription() end
@@ -274,8 +275,6 @@ initialize_phase(INIT_PHASES.FINAL, function()
         _G.resume_dvb_monitor = Adapter.resume_dvb_monitor
         _G.update_dvb_monitor_parameters = Adapter.update_dvb_monitor_parameters
         _G.switch_transponder = Adapter.switch_transponder
-        _G.stop_dependent_channels = Adapter.stop_dependent_channels
-        _G.start_dependent_channels = Adapter.start_dependent_channels
     end
 
     if type(HttpServer) == "table" then
