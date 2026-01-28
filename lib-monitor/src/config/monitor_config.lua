@@ -270,6 +270,12 @@ function MonitorConfig.reload()
     _init_defaults()
     _load_from_file()
     _state.cache = {} -- Сброс кэша при перезагрузке
+
+    -- Автоматическая настройка уровней логирования для режима разработки
+    if MonitorConfig.is_development() then
+        MonitorConfig.Logger.LogLevel = "DEBUG"
+    end
+
     return MonitorConfig.validate()
 end
 
@@ -389,14 +395,30 @@ function MonitorConfig.update(params)
             for sub_k, sub_v in pairs(v) do
                 local rule = schema[k][sub_k]
                 if rule then
+                    -- Полная валидация по правилу
                     if type(sub_v) ~= rule.type then
                         return false, string_format(
                             "Параметр '%s.%s' должен быть %s, получено %s",
                             k, sub_k, rule.type, type(sub_v)
                         )
                     end
-                    MonitorConfig[k][sub_k] = sub_v
+                    if rule.type == "number" then
+                        if rule.min and sub_v < rule.min then
+                            return false, string_format("Параметр '%s.%s' слишком мал (min: %s)",
+                                k, sub_k, tostring(rule.min))
+                        end
+                        if rule.max and sub_v > rule.max then
+                            return false, string_format("Параметр '%s.%s' слишком велик (max: %s)",
+                                k, sub_k, tostring(rule.max))
+                        end
+                    elseif rule.type == "string" and rule.enum then
+                        if not rule.enum[sub_v] then
+                            return false, string_format("Недопустимое значение для '%s.%s': %s",
+                                k, sub_k, tostring(sub_v))
+                        end
+                    end
                     updated_sections[k] = true
+                    MonitorConfig[k][sub_k] = sub_v
                 end
             end
         else
@@ -407,11 +429,23 @@ function MonitorConfig.update(params)
                     if type(v) ~= rule.type then
                         return false, string_format("Параметр '%s' должен быть %s, получено %s", k, rule.type, type(v))
                     end
-                    if rule.type == "string" and rule.enum and not rule.enum[v] then
-                        return false, string_format("Недопустимое значение для '%s': %s", k, tostring(v))
+                    if rule.type == "number" then
+                        if rule.min and v < rule.min then
+                            return false, string_format("Параметр '%s' слишком мал (min: %s)",
+                                k, tostring(rule.min))
+                        end
+                        if rule.max and v > rule.max then
+                            return false, string_format("Параметр '%s' слишком велик (max: %s)",
+                                k, tostring(rule.max))
+                        end
+                    elseif rule.type == "string" and rule.enum then
+                        if not rule.enum[v] then
+                            return false, string_format("Недопустимое значение для '%s': %s",
+                                k, tostring(v))
+                        end
                     end
-                    MonitorConfig[section_name][k] = v
                     updated_sections[section_name] = true
+                    MonitorConfig[section_name][k] = v
                     break
                 end
             end
@@ -469,13 +503,7 @@ end
 -- Инициализация модуля
 -- ===========================================================================
 
--- Первичная загрузка из файлов
-_init_defaults()
-_load_from_file()
-
--- Автоматическая настройка уровней логирования для режима разработки
-if MonitorConfig.is_development() then
-    MonitorConfig.Logger.LogLevel = "DEBUG"
-end
+-- Первичная загрузка из файлов и настройка окружения
+MonitorConfig.reload()
 
 return MonitorConfig

@@ -109,12 +109,10 @@ local function _do_clear_table(t, deep, depth)
             if type(v) == "table" and not state.visited_cache[v] then
                 local v_pool_type = v.__pool_type or default_child_pool
                 if v_pool_type then
-                    -- Автоматический возврат вложенного объекта в его пул
                     TablePool.release(v, v_pool_type, deep, depth + 1)
                 elseif deep and depth < MAX_DEPTH then
-                    -- Рекурсивная очистка обычной вложенной таблицы
                     state.visited_cache[v] = true
-                    _do_clear_table(v, true, depth + 1)
+                    _do_clear_table(v, deep, depth + 1)
                 end
             end
             t[k] = nil
@@ -351,17 +349,17 @@ function TablePool.release(t, pool_type, deep, depth)
 
     if #pool < limit then
         t.__in_pool = pool_type
+        pool[#pool + 1] = t
+    end
 
-        if state.debug_mode then
-            for k in next, t do
-                if k ~= "__in_pool" and k ~= "__pool_type" then
-                    Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
-                    t[k] = nil
-                end
+    -- В режиме отладки проверяем, что таблица чистая (после очистки)
+    if state.debug_mode and depth == 0 then
+        for k in next, t do
+            if k ~= "__pool_type" and k ~= "__in_pool" then
+                Logger.error(COMPONENT_NAME, "Таблица '%s' осталась грязной! Поле: %s", pool_type, tostring(k))
+                t[k] = nil
             end
         end
-
-        pool[#pool + 1] = t
     end
 
     if depth == 0 then
@@ -442,7 +440,6 @@ function TablePool.maintain()
                 "Превышен лимит памяти (%d KB > %d KB). Запуск полной очистки.",
                 mem_kb, memory_limit_kb)
         end
-
         TablePool.clear_all()
         collectgarbage("collect")
     else
@@ -460,16 +457,20 @@ function TablePool.maintain()
         if total > 0 then
             local miss_rate = s.misses / total
             local current_limit = state.limits[name] or _m_config.MaxPoolSize
+            local pool = state.pools[name]
+            local current_size = pool and #pool or 0
 
             if miss_rate > _m_config.PoolAdaptiveThreshold then
-                -- Расширяем пул (используем ceil, чтобы лимит рос даже при малых значениях)
-                local new_limit = math_max(current_limit + 1, math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep)))
+                -- Расширяем пул
+                local new_limit = math_max(current_limit + 1,
+                    math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep)))
                 state.limits[name] = new_limit
                 Logger.debug(COMPONENT_NAME,
                     "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
                     name, current_limit, new_limit, miss_rate)
-            elseif miss_rate < 0.05 then
-                -- Сжимаем пул, если промахов почти нет
+            elseif miss_rate < 0.05 and current_size < (current_limit * 0.5) then
+                -- Сжимаем пул, только если промахов почти нет И он заполнен менее чем наполовину
+                -- Это предотвращает осцилляцию при активном, но стабильном использовании.
                 local new_limit = math_max(
                     _m_config.PoolMinLimit,
                     math_floor(current_limit * (1 - _m_config.PoolAdaptiveStep))

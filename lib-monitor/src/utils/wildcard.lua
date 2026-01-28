@@ -9,7 +9,6 @@
 -- 1. Стандартные Lua функции
 local type = _G.type
 local pairs = _G.pairs
-local ipairs = _G.ipairs
 local table_insert = _G.table.insert
 local string_find = _G.string.find
 local string_match = _G.string.match
@@ -200,16 +199,15 @@ function Wildcard.clear_tree()
 end
 
 --- Сопоставляет имя события со всеми активными масками за один проход.
---- Реализует дерево решений (Decision Tree) для оптимизации маршрутизации.
+--- Реализует гибридное сегментированное дерево (Segmented Trie) для оптимизации.
 --- @param name string Имя события
 --- @param patterns table<string, any> Список активных паттернов (ключи - паттерны)
 --- @return table Список совпавших паттернов
 function Wildcard.match_multiple(name, patterns)
-    -- Если паттернов мало, используем обычный перебор (Fast Path)
+    -- Если паттернов мало, используем быстрый линейный перебор
     local count = 0
     for _ in pairs(patterns) do count = count + 1 end
-
-    if count < 5 then
+    if count < 10 then
         local result = {}
         for p in pairs(patterns) do
             if Wildcard.compile(p)(name) then
@@ -221,43 +219,92 @@ function Wildcard.match_multiple(name, patterns)
 
     -- Построение дерева решений (ленивая инициализация)
     if not state.decision_tree then
-        local tree = { nodes = {}, patterns = {} }
+        local tree = { exact = {}, wild = {}, patterns = {} }
         for p in pairs(patterns) do
             local current = tree
-            -- Разбиваем паттерн на сегменты по разделителю (например, ":" или ".")
+            -- Разбиваем паттерн на сегменты
             for segment in p:gmatch("[^:.]+") do
-                current.nodes = current.nodes or {}
-                current.nodes[segment] = current.nodes[segment] or { nodes = {}, patterns = {} }
-                current = current.nodes[segment]
+                if segment == "*" then
+                    -- Catch-all сегмент
+                    current.catch_all = current.catch_all or { exact = {}, wild = {}, patterns = {} }
+                    current = current.catch_all
+                elseif string_find(segment, "[*%?]") then
+                    -- Сегмент с маской (например, "chan*")
+                    current.wild = current.wild or {}
+                    if not current.wild[segment] then
+                        current.wild[segment] = {
+                            matcher = Wildcard.compile(segment), -- Компилируем как отдельный матчер
+                            node = { exact = {}, wild = {}, patterns = {} }
+                        }
+                    end
+                    current = current.wild[segment].node
+                else
+                    -- Точный сегмент
+                    current.exact = current.exact or {}
+                    current.exact[segment] = current.exact[segment] or { exact = {}, wild = {}, patterns = {} }
+                    current = current.exact[segment]
+                end
             end
             table_insert(current.patterns, p)
         end
         state.decision_tree = tree
     end
 
-    -- Поиск по дереву
+    -- Рекурсивный поиск по дереву
     local result = {}
+    local seen = {} -- Защита от дубликатов (один паттерн может подойти разными путями)
+
     local function search(node, segments, idx)
+        local is_end = (idx > #segments)
+
         -- Добавляем паттерны текущего узла
-        for _, p in ipairs(node.patterns) do table_insert(result, p) end
+        for i = 1, #node.patterns do
+            local p = node.patterns[i]
+            if not seen[p] then
+                -- Паттерн в узле считается совпавшим, если:
+                -- 1. Мы дошли до конца сообщения (точное совпадение по сегментам)
+                -- 2. ИЛИ паттерн заканчивается на * (он "жадный" и может поглощать остаток)
+                if is_end then
+                    table_insert(result, p)
+                    seen[p] = true
+                elseif string_sub(p, -1) == "*" then
+                    -- Для жадных паттернов проверяем совпадение со всей строкой
+                    if Wildcard.compile(p)(name) then
+                        table_insert(result, p)
+                        seen[p] = true
+                    end
+                end
+            end
+        end
+
+        -- Если сегменты в сообщении закончились, вглубь не идем
+        if is_end then return end
 
         local seg = segments[idx]
-        if not seg then return end
 
-        if node.nodes then
-            -- Точное совпадение сегмента
-            if node.nodes[seg] then
-                search(node.nodes[seg], segments, idx + 1)
+        -- 1. Точное совпадение сегмента
+        if node.exact and node.exact[seg] then
+            search(node.exact[seg], segments, idx + 1)
+        end
+
+        -- 2. Совпадение через частичные маски (wildcards в сегменте)
+        if node.wild then
+            for _, entry in pairs(node.wild) do
+                if entry.matcher(seg) then
+                    search(entry.node, segments, idx + 1)
+                end
             end
-            -- Совпадение через wildcard (если есть в дереве)
-            if node.nodes["*"] then
-                search(node.nodes["*"], segments, idx + 1)
-            end
+        end
+
+        -- 3. Совпадение через catch-all (*)
+        if node.catch_all then
+            search(node.catch_all, segments, idx + 1)
         end
     end
 
     local name_segments = {}
     for s in name:gmatch("[^:.]+") do table_insert(name_segments, s) end
+
     search(state.decision_tree, name_segments, 1)
 
     return result
