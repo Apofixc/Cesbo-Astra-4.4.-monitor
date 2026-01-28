@@ -407,6 +407,9 @@ function MonitorConfig.update(params)
                     if type(v) ~= rule.type then
                         return false, string_format("Параметр '%s' должен быть %s, получено %s", k, rule.type, type(v))
                     end
+                    if rule.type == "string" and rule.enum and not rule.enum[v] then
+                        return false, string_format("Недопустимое значение для '%s': %s", k, tostring(v))
+                    end
                     MonitorConfig[section_name][k] = v
                     updated_sections[section_name] = true
                     break

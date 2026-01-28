@@ -462,8 +462,8 @@ function TablePool.maintain()
             local current_limit = state.limits[name] or _m_config.MaxPoolSize
 
             if miss_rate > _m_config.PoolAdaptiveThreshold then
-                -- Расширяем пул
-                local new_limit = math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep))
+                -- Расширяем пул (используем ceil, чтобы лимит рос даже при малых значениях)
+                local new_limit = math_max(current_limit + 1, math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep)))
                 state.limits[name] = new_limit
                 Logger.debug(COMPONENT_NAME,
                     "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",

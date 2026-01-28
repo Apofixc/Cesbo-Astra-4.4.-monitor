@@ -1,0 +1,1336 @@
+==============================================================================
+/opt/astra/lib-monitor/src/config/monitor_config.lua
+==============================================================================
+     -- ===========================================================================
+     -- Модуль `config.monitor_config`
+     --
+     -- Централизованное хранилище конфигурации системы мониторинга.
+     -- Содержит параметры логирования, сетевые настройки, лимиты ресурсов
+     -- и правила валидации для мониторов.
+     -- ===========================================================================
+
+     -- 1. Стандартные Lua функции
+   1 local io_open = _G.io.open
+   1 local os_time = _G.os.time
+   1 local pairs = _G.pairs
+   1 local pcall = _G.pcall
+   1 local tostring = _G.tostring
+   1 local type = _G.type
+   1 local string_format = _G.string.format
+
+     -- 2. Функции из ModuleManager.get_module()
+   1 local ModuleManager = _G.ModuleManager
+   1 local Logger = nil -- Кэшируется при первом обращении
+
+     -- 3. Глобальные зависимости Astra
+     -- (Глобальные зависимости загружаются динамически в _load_from_file)
+
+     -- 4. Константы и конфигурации
+   1 local COMPONENT_NAME = "MonitorConfig"
+   1 local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
+   1 local GLOBAL_CONFIG_PATH = "/opt/config.json"
+
+     --- @class ValidationRule
+     --- @field type string Тип данных ("number"|"boolean"|"string"|"table")
+     --- @field min number|nil Минимальное значение (для чисел)
+     --- @field max number|nil Максимальное значение (для чисел)
+     --- @field enum table<string, boolean>|nil Список допустимых значений (для строк)
+     --- @field default any Значение по умолчанию
+
+     -- 5. Внутреннее состояние (Private State)
+
+     --- @class MonitorConfigState
+     --- @field cache table<string, any> Кэш вычисляемых значений
+     --- @field cache_ttl number Время жизни кэша (сек)
+     --- @field cache_timestamp number Время последнего обновления кэша
+   1 local _state = {
+   1     cache = {},
+   1     cache_ttl = 60,
+   1     cache_timestamp = 0
+     }
+
+     --- @class MonitorConfig
+   1 local MonitorConfig = {}
+
+     -- ===========================================================================
+     -- Схема валидации и значения по умолчанию (Единый источник правды)
+     -- ===========================================================================
+
+   1 MonitorConfig.ValidationSchema = {
+   1     Logger = {
+   1         LogLevel = {
+   1             type = "string",
+   1             enum = {DEBUG=true, INFO=true, WARN=true, ERROR=true, NONE=true},
+   1             default = "INFO"
+   1         },
+   1         LogFormat = { type = "string", enum = {TEXT=true, JSON=true}, default = "TEXT" },
+   1         LogBatchEnabled = { type = "boolean", default = false },
+   1         LogBufferSize = { type = "number", min = 0, max = 1024 * 1024, default = 0 },
+   1         MaxLogQueueSize = { type = "number", min = 1, max = 10000, default = 200 },
+   1         MaxLogComponents = { type = "number", min = 1, max = 1000, default = 100 },
+   1     },
+   1     Network = {
+   1         MaxPayloadSize = { type = "number", min = 1024, max = 10 * 1024 * 1024, default = 1024 * 1024 },
+   1         CorsAllowOrigin = { type = "string", default = "*" },
+   1         HttpTimeout = { type = "number", min = 1, max = 300, default = 10 },
+   1         RateLimitWindow = { type = "number", min = 1, max = 3600, default = 60 },
+   1         RateLimitMaxRequests = { type = "number", min = 1, max = 10000, default = 100 },
+   1         MaxRetryQueueSize = { type = "number", min = 1, max = 10000, default = 500 },
+   1         MaxRetries = { type = "number", min = 0, max = 100, default = 5 },
+   1         RetryDelay = { type = "number", min = 1, max = 3600, default = 5 },
+   1         MaxRouteCacheSize = { type = "number", min = 1, max = 10000, default = 1000 },
+   1     },
+   1     Monitor = {
+   1         ChannelMonitorLimit = { type = "number", min = 1, max = 1000, default = 200 },
+   1         DvbMonitorLimit = { type = "number", min = 1, max = 100, default = 20 },
+   1         MaxMonitorNameLength = { type = "number", min = 1, max = 256, default = 64 },
+   1         MinRate = { type = "number", min = 0.0001, max = 1, default = 0.001 },
+   1         MaxRate = { type = "number", min = 0.001, max = 1, default = 0.3 },
+   1         MinTimeCheck = { type = "number", min = 0, max = 3600, default = 0 },
+   1         MaxTimeCheck = { type = "number", min = 1, max = 3600, default = 300 },
+   1         MinMethodComparison = { type = "number", min = 1, max = 10, default = 1 },
+   1         MaxMethodComparison = { type = "number", min = 1, max = 10, default = 8 },
+   1         ChannelCcThreshold = { type = "number", min = 0, max = 65535, default = 1 },
+   1         ForceSendInterval = { type = "number", min = 1, max = 3600, default = 300 },
+   1         PidStatsLimit = { type = "number", min = 1, max = 8192, default = 100 },
+   1         MaxCounterValue = { type = "number", min = 1, max = 1000000000000, default = 1000000000 },
+   1         MaxErrorCount = { type = "number", min = 1, max = 1000000000, default = 1000000 },
+   1     },
+   1     System = {
+   1         GcPause = { type = "number", min = 10, max = 1000, default = 100 },
+   1         GcStepMul = { type = "number", min = 10, max = 1000, default = 500 },
+   1         SchedulerInterval = { type = "number", min = 0.1, max = 60, default = 1 },
+   1         CpuThreshold = { type = "number", min = 1, max = 100, default = 90 },
+   1         RamThresholdPct = { type = "number", min = 1, max = 100, default = 80 },
+   1         FdThreshold = { type = "number", min = 1, max = 10000, default = 800 },
+   1         HysteresisFactor = { type = "number", min = 0.5, max = 0.99, default = 0.95 },
+   1         NetworkCheckInterval = { type = "number", min = 1, max = 3600, default = 30 },
+   1         ConfigRefreshInterval = { type = "number", min = 1, max = 3600, default = 10 },
+   1         AdaptiveTickThresholdCpu = { type = "number", min = 1, max = 100, default = 50 },
+   1         AdaptiveTickThresholdRam = { type = "number", min = 1, max = 100, default = 70 },
+   1         TickIntervalNormal = { type = "number", min = 0.1, max = 60, default = 5 },
+   1         TickIntervalFast = { type = "number", min = 0.1, max = 60, default = 1 },
+   1         RareMetricInterval = { type = "number", min = 1, max = 3600, default = 5 },
+   1         MaxCpuJump = { type = "number", min = 1, max = 100, default = 50 },
+   1         MaxRamJumpPct = { type = "number", min = 1, max = 100, default = 20 },
+   1         CpuMovingAverageWindow = { type = "number", min = 1, max = 100, default = 5 },
+   1         ResourceMonitorEnabled = { type = "boolean", default = true },
+   1     },
+   1     Recovery = {
+   1         AutoRecoverEnabled = { type = "boolean", default = false },
+   1         AutoRecoverInterval = { type = "number", min = 1, max = 3600, default = 300 },
+   1         MaxRecoveryAttempts = { type = "number", min = 1, max = 100, default = 3 },
+   1         RecoveryCooldown = { type = "number", min = 1, max = 86400, default = 3600 },
+   1     },
+   1     Event = {
+   1         LvcTtl = { type = "number", min = 1, max = 86400, default = 3600 },
+   1         MaxLvcSize = { type = "number", min = 1, max = 10000, default = 1000 },
+   1         MaxQueueSize = { type = "number", min = 1, max = 10000, default = 1000 },
+   1         EventBatchLimit = { type = "number", min = 1, max = 1000, default = 100 },
+   1         MaxBatchLimit = { type = "number", min = 1, max = 10000, default = 1000 },
+   1     },
+   1     Batch = {
+   1         BatchEnabled = { type = "boolean", default = true },
+   1         BatchFlushInterval = { type = "number", min = 0.01, max = 60, default = 0.5 },
+   1         BatchMaxSize = { type = "number", min = 1, max = 1000, default = 50 },
+   1         DefaultBatchMode = { type = "string", enum = {single=true, array=true}, default = "single" },
+   1     },
+   1     Pool = {
+   1         MaxPoolSize = { type = "number", min = 1, max = 10000, default = 100 },
+   1         PoolDebug = { type = "boolean", default = false },
+   1         PoolAdaptiveThreshold = { type = "number", min = 0.01, max = 1, default = 0.2 },
+   1         PoolAdaptiveStep = { type = "number", min = 0.01, max = 1, default = 0.25 },
+   1         PoolMinLimit = { type = "number", min = 1, max = 1000, default = 10 },
+   1         PoolMaintenanceInterval = { type = "number", min = 1, max = 3600, default = 300 },
+   1         MemoryLimitMb = { type = "number", min = 1, max = 1024, default = 50 },
+   1     },
+   1     Watchdog = {
+   1         WatchdogEnabled = { type = "boolean", default = false },
+   1         WatchdogMaxRetries = { type = "number", min = 1, max = 100, default = 3 },
+   1         WatchdogInterval = { type = "number", min = 1, max = 3600, default = 5 },
+   1         WatchdogThreshold = { type = "number", min = 1, max = 3600, default = 15 },
+   1         WatchdogCasThreshold = { type = "number", min = 1, max = 3600, default = 60 },
+   1     },
+   1     Instance = {
+   1         channel_rate = { type = "number", min = 0.0001, max = 1, default = 0.035 },
+   1         channel_time_check = { type = "number", min = 0, max = 3600, default = 0 },
+   1         channel_analyze = { type = "boolean", default = false },
+   1         channel_method_comparison = { type = "number", min = 1, max = 8, default = 2 },
+   1         channel_cc_threshold = { type = "number", min = 0, max = 65535, default = 1 },
+   1         channel_cc_limit = { type = "number", min = 0, max = 65535, default = 0 },
+   1         channel_bitrate_limit = { type = "number", min = 0, max = 100000000, default = 0 },
+   1         channel_join_pid = { type = "boolean", default = false },
+   1         dvb_time_check = { type = "number", min = 0, max = 3600, default = 10 },
+   1         dvb_rate = { type = "number", min = 0.0001, max = 1, default = 0.015 },
+   1         dvb_method_comparison = { type = "number", min = 1, max = 7, default = 2 },
+   1         dvb_analyze = { type = "boolean", default = true },
+   1         channel_watchdog_enabled = { type = "boolean", default = false },
+   1         channel_watchdog_timeout = { type = "number", min = 1, max = 3600, default = 15 },
+   1         channel_watchdog_cas_timeout = { type = "number", min = 1, max = 3600, default = 60 },
+   1         MaxCounterValue = { type = "number", default = 1000000000 },
+   1         MaxErrorCount = { type = "number", default = 1000000 },
+   1         PidStatsLimit = { type = "number", default = 100 },
+   1     }
+   1 }
+
+     -- Имена потоков
+   1 MonitorConfig.STREAM = {
+   1     ["127.0.0.1"] = "Узда",
+   1     ["127.0.0.2"] = "Дружный",
+   1     ["127.0.0.3"] = "Старобин",
+   1     ["127.0.0.4"] = "Октябрьский",
+   1     ["127.0.0.5"] = "Червень",
+   1     ["127.0.0.6"] = "Mediatech",
+   1     ["127.0.0.7"] = "PlayOut",
+   1     ["127.0.0.8"] = "BeCloud",
+   1     ["127.0.0.9"] = "WikiLink",
+   1 }
+
+     -- Служебные данные
+   1 MonitorConfig.subscribers = {}
+
+     -- ===========================================================================
+     -- Внутренние функции (Private/Protected)
+     -- ===========================================================================
+
+     --- Возвращает модуль Logger (ленивая загрузка)
+     --- @return Logger|nil
+     local function _get_logger()
+   1     if Logger then return Logger end
+   1     Logger = ModuleManager.get_module("logger")
+   1     return Logger
+     end
+
+     --- Инициализирует структуру конфигурации значениями по умолчанию из схемы
+     local function _init_defaults()
+  33     for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+  30         MonitorConfig[section_name] = {}
+ 300         for key, rule in pairs(section_rules) do
+ 270             MonitorConfig[section_name][key] = rule.default
+             end
+         end
+     end
+
+     --- Загружает конфигурацию из внешних JSON файлов.
+     --- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
+     --- @private
+     local function _load_from_file()
+   3     if not ModuleManager then return end
+   3     local json_decode = ModuleManager.get_global_dependency("json.decode")
+   3     if not json_decode then return end
+
+         -- 1. Загрузка основного конфига библиотеки
+   3     local f = io_open(CONFIG_PATH, "rb")
+   3     if f then
+   3         local content = f:read("*all")
+   3         f:close()
+   3         if content and content ~= "" then
+   3             local success, data = pcall(json_decode, content)
+   3             if success and type(data) == "table" then
+                     -- Маппинг плоского JSON на сгруппированную структуру
+   9                 for k, v in pairs(data) do
+   6                     local found = false
+  44                     for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+  42                         if section_rules[k] then
+   4                             MonitorConfig[section_name][k] = v
+   4                             found = true
+                                 break
+                             end
+                         end
+                         -- Если не нашли в секциях, проверяем корень (для обратной совместимости или служебных полей)
+   6                     if not found and MonitorConfig[k] ~= nil then
+***0                         MonitorConfig[k] = v
+                         end
+                     end
+                 end
+             end
+         end
+
+         -- 2. Загрузка глобального конфига для Middleware (CORS и др.)
+   3     local global_f = io_open(GLOBAL_CONFIG_PATH, "rb")
+   3     if global_f then
+   3         local content = global_f:read("*all")
+   3         global_f:close()
+   3         if content and content ~= "" then
+   3             local success, data = pcall(json_decode, content)
+   3             if success and type(data) == "table" then
+   3                 if data.cors_allow_origin then
+   2                     MonitorConfig.Network.CorsAllowOrigin = data.cors_allow_origin
+                     end
+                 end
+             end
+         end
+     end
+
+     -- ===========================================================================
+     -- Публичное API (Public API)
+     -- ===========================================================================
+
+     --- Перезагружает конфигурацию из файлов и выполняет валидацию.
+     --- @return boolean success Статус успеха
+     --- @return string|nil error_message Сообщение об ошибке при неудаче
+   1 function MonitorConfig.reload()
+   2     _init_defaults()
+   2     _load_from_file()
+   2     _state.cache = {} -- Сброс кэша при перезагрузке
+   2     return MonitorConfig.validate()
+     end
+
+     --- Валидирует текущую конфигурацию на соответствие типам и диапазонам.
+     --- @return boolean success Статус валидности
+     --- @return string|nil error_message Описание первой найденной ошибки
+   1 function MonitorConfig.validate()
+   6     local schema = MonitorConfig.ValidationSchema
+   6     if not schema then return true end
+
+  44     for section_name, section_rules in pairs(schema) do
+  42         local section = MonitorConfig[section_name]
+  42         if type(section) == "table" then
+ 418             for key, rule in pairs(section_rules) do
+ 380                 local value = section[key]
+ 380                 if value ~= nil then
+ 380                     if type(value) ~= rule.type then
+   2                         return false, string_format(
+   1                             "Parameter '%s.%s' must be a %s, got %s",
+   1                             section_name, key, rule.type, type(value)
+   1                         )
+                         end
+
+ 379                     if rule.type == "number" then
+ 312                         if rule.min and value < rule.min then
+   2                             return false, string_format(
+   1                                 "Parameter '%s.%s' is too small (min: %s)",
+   1                                 section_name, key, tostring(rule.min)
+   1                             )
+                             end
+ 311                         if rule.max and value > rule.max then
+   2                             return false, string_format(
+   1                                 "Parameter '%s.%s' is too large (max: %s)",
+   1                                 section_name, key, tostring(rule.max)
+   1                             )
+                             end
+  67                     elseif rule.type == "string" and rule.enum then
+  13                         if not rule.enum[value] then
+   2                             return false, string_format(
+   1                                 "Invalid value for '%s.%s': %s",
+   1                                 section_name, key, tostring(value)
+   1                             )
+                             end
+                         end
+                     end
+                 end
+             end
+         end
+
+   2     return true
+     end
+
+     --- Возвращает значение из кэша или генерирует новое, если кэш просрочен.
+     --- @param key string Уникальный ключ кэша
+     --- @param generator function Функция для генерации значения при промахе
+     --- @return any Значение из кэша или сгенерированное
+   1 function MonitorConfig.get_cached(key, generator)
+   5     local now = os_time()
+   5     if _state.cache_timestamp + _state.cache_ttl < now then
+   2         _state.cache = {}
+   2         _state.cache_timestamp = now
+         end
+
+   5     if _state.cache[key] == nil then
+   4         _state.cache[key] = generator()
+         end
+
+   5     return _state.cache[key]
+     end
+
+     --- Возвращает человекочитаемое имя потока по его IP-адресу.
+     --- Использует кэширование для оптимизации частых вызовов.
+     --- @param ip string IP-адрес
+     --- @return string Имя потока или исходный IP
+   1 function MonitorConfig.get_stream_name_cached(ip)
+   4     return MonitorConfig.get_cached("stream_" .. ip, function()
+   2         return MonitorConfig.STREAM[ip] or ip
+         end)
+     end
+
+     --- Определяет текущее окружение системы на основе файла /opt/astra/environment.
+     --- @return string "development" или "production"
+   1 function MonitorConfig.get_environment()
+   3     local env_file = io_open("/opt/astra/environment", "r")
+   3     if env_file then
+   3         local content = env_file:read("*all")
+   3         env_file:close()
+   3         if content then
+   3             return content:gsub("%s+", ""):lower()
+             end
+         end
+***0     return "production"
+     end
+
+     --- Проверяет, запущена ли система в режиме разработки.
+     --- @return boolean true если разработка
+   1 function MonitorConfig.is_development()
+   2     return MonitorConfig.get_environment() == "development"
+     end
+
+     --- Обновляет параметры конфигурации в рантайме.
+     --- @param params table Таблица новых параметров (может быть плоской или сгруппированной)
+     --- @return boolean success Статус выполнения
+     --- @return string|nil error_message Сообщение об ошибке
+   1 function MonitorConfig.update(params)
+   5     if type(params) ~= "table" then return false, "Параметры должны быть таблицей" end
+
+   4     local schema = MonitorConfig.ValidationSchema
+   4     if not schema then return false, "Схема валидации отсутствует" end
+
+   4     local updated_sections = {}
+
+         -- 1. Валидация и применение
+   5     for k, v in pairs(params) do
+   4         if type(v) == "table" and schema[k] then
+                 -- Сгруппированные параметры
+   1             for sub_k, sub_v in pairs(v) do
+   1                 local rule = schema[k][sub_k]
+   1                 if rule then
+   1                     if type(sub_v) ~= rule.type then
+   2                         return false, string_format(
+   1                             "Параметр '%s.%s' должен быть %s, получено %s",
+   1                             k, sub_k, rule.type, type(sub_v)
+   1                         )
+                         end
+***0                     MonitorConfig[k][sub_k] = sub_v
+***0                     updated_sections[k] = true
+                     end
+                 end
+             else
+                 -- Плоские параметры (поиск по секциям)
+  15             for section_name, section_rules in pairs(schema) do
+  15                 local rule = section_rules[k]
+  15                 if rule then
+   3                     if type(v) ~= rule.type then
+   1                         return false, string_format("Параметр '%s' должен быть %s, получено %s", k, rule.type, type(v))
+                         end
+   2                     if rule.type == "string" and rule.enum and not rule.enum[v] then
+   1                         return false, string_format("Недопустимое значение для '%s': %s", k, tostring(v))
+                         end
+   1                     MonitorConfig[section_name][k] = v
+   1                     updated_sections[section_name] = true
+                         break
+                     end
+                 end
+             end
+         end
+
+         -- 2. Рассылка событий об обновлении секций
+   1     if _G.EventDispatcher then
+   2         for section_name in pairs(updated_sections) do
+   1             _G.EventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+             end
+         end
+
+   1     _state.cache = {} -- Сброс кэша
+
+   1     local log = _get_logger()
+   1     if log and log.info then
+   1         log.info(COMPONENT_NAME, "Конфигурация обновлена через API")
+         end
+
+   1     return true
+     end
+
+     --- Сохраняет текущую конфигурацию в JSON файл.
+     --- Исключает служебные поля, такие как ValidationSchema и функции.
+     --- @return boolean success Статус выполнения
+   1 function MonitorConfig.save()
+   1     if not ModuleManager then return false end
+   1     local json_encode = ModuleManager.get_global_dependency("json.encode")
+   1     if not json_encode then return false end
+
+   1     local data_to_save = {}
+         -- Сохраняем в плоском виде для совместимости с существующими конфигами
+  11     for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
+  10         local section = MonitorConfig[section_name]
+  10         if type(section) == "table" then
+ 100             for k, v in pairs(section) do
+  90                 data_to_save[k] = v
+                 end
+             end
+         end
+
+   1     local ok, content = pcall(json_encode, data_to_save)
+   1     if not ok then return false end
+
+   1     local f = io_open(CONFIG_PATH, "w")
+   1     if not f then return false end
+
+   1     f:write(content)
+   1     f:close()
+   1     return true
+     end
+
+     -- ===========================================================================
+     -- Инициализация модуля
+     -- ===========================================================================
+
+     -- Первичная загрузка из файлов
+   1 _init_defaults()
+   1 _load_from_file()
+
+     -- Автоматическая настройка уровней логирования для режима разработки
+   1 if MonitorConfig.is_development() then
+***0     MonitorConfig.Logger.LogLevel = "DEBUG"
+     end
+
+   1 return MonitorConfig
+
+==============================================================================
+/opt/astra/lib-monitor/src/utils/table_pool.lua
+==============================================================================
+     -- ===========================================================================
+     -- Модуль `utils.table_pool`
+     --
+     -- Пул таблиц для оптимизации работы с памятью и снижения нагрузки на GC.
+     -- Реализует автоматический рекурсивный возврат вложенных объектов в их пулы.
+     -- ===========================================================================
+
+     -- 1. Стандартные Lua функции
+   1 local next = _G.next
+   1 local type = _G.type
+   1 local pcall = _G.pcall
+   1 local math_floor = _G.math.floor
+   1 local math_max = _G.math.max
+   1 local getmetatable = _G.getmetatable
+   1 local setmetatable = _G.setmetatable
+   1 local collectgarbage = _G.collectgarbage
+
+     -- 2. Функции из ModuleManager.get_module()
+   1 local Logger = ModuleManager.get_module("logger")
+   1 local Scheduler = nil -- Кэшируется при первом обращении
+
+     -- 3. Глобальные зависимости Astra
+     -- (Модуль не использует внешние зависимости Astra)
+
+     -- 4. Константы и конфигурации
+   1 local COMPONENT_NAME = "TablePool"
+
+     --- Локальная конфигурация модуля (значения по умолчанию)
+   1 local _m_config = {
+   1     MaxPoolSize = 100,
+   1     PoolLimits = {},
+   1     PoolDebug = false,
+   1     PoolAdaptiveThreshold = 0.2,
+   1     PoolAdaptiveStep = 0.25,
+   1     PoolMinLimit = 10,
+   1     PoolMaintenanceInterval = 300,
+   1     MemoryLimitMb = 50,
+     }
+
+   1 local MAX_DEPTH = 10 -- Защита от слишком глубокой рекурсии
+
+     -- 5. Внутреннее состояние (Private State)
+     --- @class TablePoolState
+     --- @field pools table<string, table[]> Таблицы пулов: type -> { t1, t2, ... }
+     --- @field cleaners table<string, function> Кастомные функции очистки: type -> function
+     --- @field limits table<string, number> Лимиты размеров: type -> number
+     --- @field stats table<string, table> Статистика использования: type -> { hits, misses, created }
+     --- @field is_flat table<string, boolean> Флаги плоских пулов (без рекурсии)
+     --- @field visited_cache table<table, boolean> Кэш для защиты от циклических ссылок
+     --- @field visited_count number Счетчик вложенности для очистки кэша
+     --- @field debug_mode boolean Режим отладки
+     --- @field maintenance_started boolean Флаг запуска обслуживания
+   1 local state = {
+   1     pools = {},
+   1     cleaners = {},
+   1     limits = {},
+   1     stats = {},
+   1     is_flat = {},
+   1     visited_cache = {},
+   1     visited_count = 0,
+   1     debug_mode = false,
+   1     maintenance_started = false,
+     }
+
+     --- @class TablePool
+   1 local TablePool = {}
+
+     -- ===========================================================================
+     -- Внутренние функции (Private/Protected)
+     -- ===========================================================================
+
+     --- Возвращает модуль Scheduler (ленивая загрузка)
+     --- @return Scheduler|nil
+     local function _get_scheduler()
+   2     if Scheduler then return Scheduler end
+   1     Scheduler = ModuleManager.get_module("core.scheduler")
+   1     return Scheduler
+     end
+
+     --- Обновляет локальную конфигурацию из события
+     --- @param new_config table Новая конфигурация секции Pool
+     local function _update_config(new_config)
+   4     for k, v in pairs(new_config) do
+   3         _m_config[k] = v
+         end
+   1     state.debug_mode = _m_config.PoolDebug
+   1     if Logger then
+   1         Logger.debug(COMPONENT_NAME, "Конфигурация пулов обновлена")
+         end
+     end
+
+     --- Очищает кэш посещенных объектов
+     local function _clear_visited_cache()
+  67     for k in next, state.visited_cache do
+  34         state.visited_cache[k] = nil
+         end
+     end
+
+     --- Внутренняя рекурсивная функция очистки таблицы.
+     --- Реализует автоматический возврат вложенных таблиц в их родные пулы.
+     --- @param t table Таблица для очистки
+     --- @param deep boolean|string Флаг глубокой очистки (рекурсия по обычным таблицам)
+     --- @param depth number Текущая глубина рекурсии
+     local function _do_clear_table(t, deep, depth)
+  33     local default_child_pool = type(deep) == "string" and deep or nil
+
+  69     for k, v in next, t do
+  36         if k ~= "__pool_type" then
+   3             if type(v) == "table" and not state.visited_cache[v] then
+***0                 local v_pool_type = v.__pool_type or default_child_pool
+***0                 if v_pool_type then
+                         -- Автоматический возврат вложенного объекта в его пул
+***0                     TablePool.release(v, v_pool_type, deep, depth + 1)
+***0                 elseif deep and depth < MAX_DEPTH then
+                         -- Рекурсивная очистка обычной вложенной таблицы
+***0                     state.visited_cache[v] = true
+***0                     _do_clear_table(v, true, depth + 1)
+                     end
+                 end
+   3             t[k] = nil
+             end
+         end
+     end
+
+     -- ===========================================================================
+     -- Публичное API (Public API)
+     -- ===========================================================================
+
+     --- Инициализирует подписку на обновление конфигурации
+   1 function TablePool.init_config_subscription()
+   1     if _G.EventDispatcher then
+   1         _G.EventDispatcher:subscribe("config:updated:pool", _update_config)
+         end
+     end
+
+     --- Включает или выключает режим отладки
+     --- @param enabled boolean Статус режима отладки
+   1 function TablePool.set_debug(enabled)
+   2     state.debug_mode = enabled
+     end
+
+     --- Регистрирует новый тип пула.
+     --- @param pool_type string Уникальное имя типа (например, "report")
+     --- @param cleaner? function|table Опциональная функция очистки или список ключей (схема)
+     --- @param max_size? number Максимальный размер пула (по умолчанию 100)
+     --- @param preallocate_count? number Количество таблиц для преаллокации
+     --- @param is_flat? boolean Флаг плоского пула (без рекурсивной очистки)
+   1 function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count, is_flat)
+   7     if type(pool_type) ~= "string" or state.pools[pool_type] then return end
+
+         -- Автоматический запуск обслуживания при первой регистрации пула
+   7     if not state.maintenance_started then
+   1         local s_mod = _get_scheduler()
+   1         if s_mod then
+   1             local s = s_mod.get_instance()
+   1             if s then
+   2                 s:add_task("table_pool_maintenance", function()
+***0                     TablePool.maintain()
+   1                 end, _m_config.PoolMaintenanceInterval)
+   1                 state.maintenance_started = true
+   1                 if Logger then
+   2                     Logger.debug(COMPONENT_NAME,
+   1                         "Автоматическое обслуживание пулов запущено (интервал: %d сек)",
+   1                         _m_config.PoolMaintenanceInterval)
+                     end
+                 end
+             end
+         end
+
+   7     state.pools[pool_type] = {}
+
+         -- Если передана таблица ключей, создаем оптимизированный очиститель по схеме
+   7     if type(cleaner) == "table" then
+   1         local schema = cleaner
+   1         local schema_len = #schema
+             cleaner = function(t, deep, depth)
+   2             for i = 1, schema_len do
+   1                 local k = schema[i]
+   1                 local v = t[k]
+   1                 if type(v) == "table" and not state.visited_cache[v] then
+   1                     local v_pool_type = v.__pool_type
+   1                     if v_pool_type then
+   1                         TablePool.release(v, v_pool_type, deep, depth + 1)
+***0                     elseif deep and depth < MAX_DEPTH then
+***0                         state.visited_cache[v] = true
+***0                         _do_clear_table(v, true, depth + 1)
+                         end
+                     end
+   1                 t[k] = nil
+                 end
+                 -- В режиме отладки проверяем, не осталось ли лишних полей
+   1             if state.debug_mode then
+***0                 for k in next, t do
+***0                     if k ~= "__pool_type" and k ~= "__in_pool" then
+***0                         Logger.error(COMPONENT_NAME,
+                                 "Схематичный очиститель '%s' пропустил поле: %s",
+***0                             pool_type, tostring(k))
+***0                         t[k] = nil
+                         end
+                     end
+                 end
+             end
+         end
+
+   7     state.cleaners[pool_type] = cleaner
+   7     state.stats[pool_type] = { hits = 0, misses = 0, created = 0 }
+   7     state.is_flat[pool_type] = is_flat or false
+
+         -- Приоритет лимита: аргумент -> локальный конфиг -> значение по умолчанию
+   7     local limit = max_size or _m_config.PoolLimits[pool_type] or _m_config.MaxPoolSize
+   7     state.limits[pool_type] = limit
+
+   7     if type(preallocate_count) == "number" and preallocate_count > 0 then
+***0         TablePool.preallocate(pool_type, preallocate_count)
+         end
+     end
+
+     --- Публичный метод преаллокации таблиц.
+     --- @param pool_type string Тип пула
+     --- @param count number Количество таблиц
+   1 function TablePool.preallocate(pool_type, count)
+   1     local pool = state.pools[pool_type]
+   1     if not pool then return end
+
+***0     local limit = state.limits[pool_type] or _m_config.MaxPoolSize
+***0     local current = #pool
+***0     if count > limit then count = limit end
+
+***0     if current < count then
+***0         local s = state.stats[pool_type]
+***0         for _ = 1, (count - current) do
+***0             local t = {
+                     __in_pool = pool_type,
+***0                 __pool_type = pool_type
+                 }
+***0             pool[#pool + 1] = t
+***0             if s then s.created = s.created + 1 end
+             end
+         end
+     end
+
+     --- Возвращает чистую таблицу из пула.
+     --- @param pool_type? string Тип пула (по умолчанию "generic")
+     --- @return table Свободная таблица
+   1 function TablePool.get(pool_type)
+  46     pool_type = pool_type or "generic"
+  46     local pool = state.pools[pool_type]
+  46     if not pool then
+   3         TablePool.register_type(pool_type)
+   3         pool = state.pools[pool_type]
+         end
+
+  46     local size = #pool
+  46     if size > 0 then
+  12         local t = pool[size]
+  12         pool[size] = nil
+
+  12         t.__in_pool = nil -- Снимаем метку нахождения в пуле
+
+  12         local s = state.stats[pool_type]
+  12         if s then s.hits = s.hits + 1 end
+  12         return t
+         end
+
+         -- Пул пуст, создаем новый объект
+  34     local s = state.stats[pool_type]
+  34     if s then
+  34         s.misses = s.misses + 1
+  34         s.created = s.created + 1
+         end
+
+  34     return { __pool_type = pool_type }
+     end
+
+     --- Возвращает таблицу в пул для повторного использования.
+     --- @param t table Таблица для возврата
+     --- @param pool_type? string Тип пула (если nil, берется из объекта)
+     --- @param deep? boolean|string Флаг глубокой очистки (рекурсивный возврат вложенных таблиц)
+     --- @param depth? number Внутренний параметр глубины рекурсии
+   1 function TablePool.release(t, pool_type, deep, depth)
+  34     depth = depth or 0
+  34     if type(t) ~= "table" or state.visited_cache[t] then return end
+  34     if depth == 0 then state.visited_count = state.visited_count + 1 end
+
+         -- Определяем целевой пул
+  34     local original_type = t.__pool_type
+  34     pool_type = pool_type or original_type or "generic"
+
+         -- Защита от "Type Poisoning": если тип не совпадает, форсируем полную очистку
+  34     local force_deep = false
+  34     if original_type and original_type ~= pool_type then
+   1         force_deep = true
+   1         deep = true
+         end
+
+         -- Защита от двойного возврата (O(1))
+  34     if t.__in_pool then
+***0         Logger.warning(COMPONENT_NAME,
+***0             "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
+***0         if depth == 0 then
+***0             state.visited_count = state.visited_count - 1
+***0             if state.visited_count == 0 then _clear_visited_cache() end
+             end
+***0         return
+         end
+
+  34     local pool = state.pools[pool_type]
+  34     if not pool then
+   1         TablePool.register_type(pool_type)
+   1         pool = state.pools[pool_type]
+         end
+
+         -- Оптимизация: если пул полон и не требуется глубокая очистка, выходим сразу
+  34     local limit = state.limits[pool_type] or _m_config.MaxPoolSize
+  34     if depth == 0 and #pool >= limit and not deep then
+***0         state.visited_count = state.visited_count - 1
+***0         if state.visited_count == 0 then _clear_visited_cache() end
+***0         return
+         end
+
+  34     state.visited_cache[t] = true
+
+         -- Выполняем очистку
+  34     local cleaner = state.cleaners[pool_type]
+  34     local is_deep = (deep == true or type(deep) == "string")
+  34     local is_flat = state.is_flat[pool_type] and not force_deep
+
+  34     if force_deep then
+             -- Принудительная полная очистка при смене типа пула
+   1         _do_clear_table(t, true, depth)
+  33     elseif cleaner then
+             -- Кастомные очистители запускаем в pcall для безопасности
+   1         local ok, err = pcall(cleaner, t, is_deep, depth)
+   1         if not ok then
+***0             Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err))
+             end
+  32     elseif not is_flat and depth < MAX_DEPTH then
+             -- Стандартная очистка (быстрее без pcall)
+  32         _do_clear_table(t, is_deep, depth)
+***0     elseif is_flat then
+             -- Быстрая очистка для плоских пулов
+***0         for k in next, t do
+***0             if k ~= "__pool_type" then t[k] = nil end
+             end
+         end
+
+  34     if getmetatable(t) then setmetatable(t, nil) end
+
+         -- Обновляем метку типа (важно при миграции между пулами)
+  34     t.__pool_type = pool_type
+
+  34     if #pool < limit then
+  34         t.__in_pool = pool_type
+
+  34         if state.debug_mode then
+   3             for k in next, t do
+   2                 if k ~= "__in_pool" and k ~= "__pool_type" then
+***0                     Logger.error(COMPONENT_NAME, "Таблица '%s' возвращена грязной! Поле: %s", pool_type, tostring(k))
+***0                     t[k] = nil
+                     end
+                 end
+             end
+
+  34         pool[#pool + 1] = t
+         end
+
+  34     if depth == 0 then
+  33         state.visited_count = state.visited_count - 1
+  33         if state.visited_count == 0 then _clear_visited_cache() end
+         end
+     end
+
+     --- Частично или полностью очищает указанный пул.
+     --- Помогает GC точечно освобождать память без сброса всей системы.
+     --- @param pool_type string Тип пула
+     --- @param count? number Количество таблиц для удаления. Если nil, очищается весь пул.
+   1 function TablePool.drain(pool_type, count)
+   2     local pool = state.pools[pool_type]
+   2     if not pool then return end
+
+***0     local size = #pool
+***0     local to_remove = count or size
+***0     if to_remove > size then to_remove = size end
+
+***0     for i = 1, to_remove do
+***0         local t = pool[size - i + 1]
+***0         if t then t.__in_pool = nil end
+***0         pool[size - i + 1] = nil
+         end
+
+***0     if state.debug_mode then
+***0         Logger.debug(COMPONENT_NAME, "Пул '%s' частично очищен: удалено %d таблиц", pool_type, to_remove)
+         end
+     end
+
+     --- Полностью очищает все пулы и вызывает сборщик мусора.
+   1 function TablePool.clear_all()
+  16     for name, pool in pairs(state.pools) do
+  36         for i = 1, #pool do
+  22             local t = pool[i]
+  22             if t then t.__in_pool = nil end
+  22             pool[i] = nil
+             end
+
+  14         local s = state.stats[name]
+  14         if s then
+  14             s.hits = 0
+  14             s.misses = 0
+  14             s.created = 0
+             end
+         end
+
+   2     collectgarbage()
+   2     Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
+     end
+
+     --- Останавливает обслуживание пулов и очищает ресурсы.
+   1 function TablePool.shutdown()
+   1     if state.maintenance_started then
+   1         local s_mod = _get_scheduler()
+   1         if s_mod then
+   1             s_mod.get_instance():remove_task("table_pool_maintenance")
+             end
+   1         state.maintenance_started = false
+         end
+   1     TablePool.clear_all()
+   1     if Logger then
+   1         Logger.info(COMPONENT_NAME, "Модуль пулов таблиц остановлен")
+         end
+     end
+
+     --- Выполняет обслуживание пулов: адаптивное изменение лимитов и очистка памяти.
+     --- Рекомендуется вызывать периодически (например, раз в минуту).
+   1 function TablePool.maintain()
+         -- 1. Системное обслуживание памяти (GC)
+   5     local mem_kb = collectgarbage("count")
+   5     local memory_limit_kb = (_m_config.MemoryLimitMb or 50) * 1024
+
+   5     if mem_kb > memory_limit_kb then
+   1         if Logger then
+   2             Logger.warning(COMPONENT_NAME,
+   1                 "Превышен лимит памяти (%d KB > %d KB). Запуск полной очистки.",
+   1                 mem_kb, memory_limit_kb)
+             end
+
+   1         TablePool.clear_all()
+   1         collectgarbage("collect")
+         else
+   4         collectgarbage("step", 50)
+         end
+
+         -- 2. Сброс логов
+   5     if Logger and Logger.flush then
+   5         Logger.flush()
+         end
+
+         -- 3. Адаптивное изменение лимитов пулов
+  34     for name, s in pairs(state.stats) do
+  29         local total = s.hits + s.misses
+  29         if total > 0 then
+   7             local miss_rate = s.misses / total
+   7             local current_limit = state.limits[name] or _m_config.MaxPoolSize
+
+   7             if miss_rate > _m_config.PoolAdaptiveThreshold then
+                     -- Расширяем пул (используем ceil, чтобы лимит рос даже при малых значениях)
+   5                 local new_limit = math_max(current_limit + 1, math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep)))
+   5                 state.limits[name] = new_limit
+  10                 Logger.debug(COMPONENT_NAME,
+   5                     "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
+  10                     name, current_limit, new_limit, miss_rate)
+   2             elseif miss_rate < 0.05 then
+                     -- Сжимаем пул, если промахов почти нет
+   4                 local new_limit = math_max(
+   2                     _m_config.PoolMinLimit,
+   2                     math_floor(current_limit * (1 - _m_config.PoolAdaptiveStep))
+                     )
+   2                 if new_limit < current_limit then
+   2                     state.limits[name] = new_limit
+   2                     Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)
+                     end
+                 end
+
+                 -- Сброс статистики для следующего интервала
+   7             s.hits = 0
+   7             s.misses = 0
+             end
+         end
+     end
+
+     --- Возвращает статистику использования пулов.
+     --- @return table Статистика (тип -> данные)
+   1 function TablePool.get_stats()
+   2     local result = {}
+  13     for name, pool in pairs(state.pools) do
+  11         local s = state.stats[name] or { hits = 0, misses = 0, created = 0 }
+  11         result[name] = {
+  11             size = #pool,
+  11             hits = s.hits,
+  11             misses = s.misses,
+  11             created = s.created,
+  11             limit = state.limits[name] or _m_config.MaxPoolSize
+  11         }
+         end
+   2     return result
+     end
+
+     -- ===========================================================================
+     -- Инициализация модуля
+     -- ===========================================================================
+
+   1 return TablePool
+
+==============================================================================
+/opt/astra/lib-monitor/src/utils/wildcard.lua
+==============================================================================
+     -- ===========================================================================
+     -- Модуль `utils.wildcard`
+     --
+     -- Оптимизированный движок сопоставления масок (wildcards).
+     -- Предварительно компилирует маски в функции для ускорения маршрутизации.
+     -- Поддерживает символы `*` (любое количество символов) и `?` (один символ).
+     -- ===========================================================================
+
+     -- 1. Стандартные Lua функции
+   1 local type = _G.type
+   1 local pairs = _G.pairs
+   1 local ipairs = _G.ipairs
+   1 local table_insert = _G.table.insert
+   1 local string_find = _G.string.find
+   1 local string_match = _G.string.match
+   1 local string_sub = _G.string.sub
+   1 local string_gsub = _G.string.gsub
+   1 local string_gmatch = _G.string.gmatch
+
+     -- 2. Функции из ModuleManager.get_module()
+   1 local Logger = ModuleManager.get_module("logger")
+   1 local EventDispatcher = nil
+
+     -- 3. Глобальные зависимости Astra
+     -- (Модуль не использует внешние зависимости Astra)
+
+     -- 4. Константы и конфигурации
+   1 local COMPONENT_NAME = "Wildcard"
+
+     --- Локальная конфигурация модуля (значения по умолчанию)
+   1 local _m_config = {
+   1     MaxCacheSize = {
+   1         wildcard = 1000
+   1     }
+     }
+
+     -- 5. Внутреннее состояние (Private State)
+     --- @class WildcardState
+     --- @field compile_cache table<string, function> Кэш скомпилированных функций
+     --- @field cache_size number Текущее количество элементов в кэше
+     --- @field decision_tree table|nil Дерево решений для множественного сопоставления
+   1 local state = {
+   1     compile_cache = {},
+   1     cache_size = 0,
+   1     decision_tree = nil,
+     }
+
+     --- @class Wildcard
+   1 local Wildcard = {}
+
+     -- ===========================================================================
+     -- Внутренние функции (Private/Protected)
+     -- ===========================================================================
+
+     --- Инициализирует подписку на обновление конфигурации
+   1 function Wildcard.init_config_subscription()
+   1     if not EventDispatcher then
+   1         EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+         end
+
+   1     if EventDispatcher then
+   1         local instance = EventDispatcher.get_instance()
+   2         instance:subscribe("config:updated:pool", function(new_config)
+   1             if new_config.MaxCacheSize and new_config.MaxCacheSize.wildcard then
+   1                 _m_config.MaxCacheSize.wildcard = new_config.MaxCacheSize.wildcard
+   1                 Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
+                 end
+             end)
+         end
+     end
+
+     --- Создает матчер для любого значения (маска "*")
+     --- @private
+     --- @return function Функция-матчер
+     local function _create_any_matcher()
+         return function(name)
+   2         return name ~= nil
+         end
+     end
+
+     --- Создает матчер для точного совпадения строк
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_exact_matcher(pattern)
+         return function(name)
+   3         return pattern == name
+         end
+     end
+
+     --- Создает матчер для проверки префикса (маска "prefix:*")
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_prefix_matcher(pattern)
+   2     local prefix = string_sub(pattern, 1, -2)
+         return function(name)
+   4         if not name or type(name) ~= "string" then return false end
+   2         return string_find(name, prefix, 1, true) == 1
+         end
+     end
+
+     --- Создает матчер для проверки суффикса (маска "*:suffix")
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_suffix_matcher(pattern)
+   2     local suffix = string_sub(pattern, 2)
+   2     local suffix_len = #suffix
+         return function(name)
+   3         if not name or type(name) ~= "string" then return false end
+   3         return string_find(name, suffix, -suffix_len, true) ~= nil
+         end
+     end
+
+     --- Создает матчер для проверки вхождения (маска "*middle*")
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_middle_matcher(pattern)
+   1     local middle = string_sub(pattern, 2, -2)
+         return function(name)
+   1         if not name or type(name) ~= "string" then return false end
+   1         return string_find(name, middle, 1, true) ~= nil
+         end
+     end
+
+     --- Создает матчер для сложных масок с множественными сегментами (только "*")
+     --- Например: "prefix*middle*suffix"
+     --- Оптимизировано: читаемый цикл с использованием string.find.
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_segments_matcher(pattern)
+   4     local segments = {}
+  11     for seg in string_gmatch(pattern, "[^*]+") do
+   7         segments[#segments + 1] = seg
+         end
+
+   4     local num_segments = #segments
+   4     if num_segments == 0 then return _create_any_matcher() end
+
+   3     local first_is_star = string_sub(pattern, 1, 1) == "*"
+   3     local last_is_star = string_sub(pattern, -1, -1) == "*"
+
+         return function(name)
+   4         if not name or type(name) ~= "string" then return false end
+   4         local pos = 1
+
+  13         for i = 1, num_segments do
+  10             local seg = segments[i]
+  10             if i == 1 and not first_is_star then
+                     -- Проверка префикса
+   3                 if string_find(name, seg, 1, true) ~= 1 then return false end
+   3                 pos = #seg + 1
+   7             elseif i == num_segments and not last_is_star then
+                     -- Проверка суффикса
+   2                 local s = string_find(name, seg, -#seg, true)
+   2                 if not s or (s + #seg - 1) ~= #name then return false end
+                 else
+                     -- Поиск сегмента в середине
+   5                 local s, e = string_find(name, seg, pos, true)
+   5                 if not s then return false end
+   5                 pos = e + 1
+                 end
+             end
+   3         return true
+         end
+     end
+
+     --- Создает универсальный матчер на основе регулярных выражений Lua
+     --- Используется как fallback для масок с "?" или сложной комбинацией "*"
+     --- @private
+     --- @param pattern string Маска
+     --- @return function Функция-матчер
+     local function _create_regex_matcher(pattern)
+         -- Экранируем магические символы Lua, кроме * и ?
+   1     local regex = string_gsub(pattern, "%%", "%%%%")
+   2     regex = string_gsub(regex, "([%^%$%(%)%.%[%]%+%-%?])", function(c)
+   1         if c == "?" then return "." end
+***0         return "%%" .. c
+         end)
+         -- Заменяем * на .* для regex
+   1     regex = string_gsub(regex, "%*", ".*")
+   1     local final_regex = "^" .. regex .. "$"
+
+         return function(name)
+   1         if not name or type(name) ~= "string" then return false end
+   1         return string_match(name, final_regex) ~= nil
+         end
+     end
+
+     -- ===========================================================================
+     -- Публичное API (Public API)
+     -- ===========================================================================
+
+     --- Очищает дерево решений. Вызывается при изменении набора подписок.
+   1 function Wildcard.clear_tree()
+   1     state.decision_tree = nil
+     end
+
+     --- Сопоставляет имя события со всеми активными масками за один проход.
+     --- Реализует дерево решений (Decision Tree) для оптимизации маршрутизации.
+     --- @param name string Имя события
+     --- @param patterns table<string, any> Список активных паттернов (ключи - паттерны)
+     --- @return table Список совпавших паттернов
+   1 function Wildcard.match_multiple(name, patterns)
+         -- Если паттернов мало, используем обычный перебор (Fast Path)
+   2     local count = 0
+  11     for _ in pairs(patterns) do count = count + 1 end
+
+   2     if count < 5 then
+   1         local result = {}
+   3         for p in pairs(patterns) do
+   2             if Wildcard.compile(p)(name) then
+   2                 table_insert(result, p)
+                 end
+             end
+   1         return result
+         end
+
+         -- Построение дерева решений (ленивая инициализация)
+   1     if not state.decision_tree then
+   1         local tree = { nodes = {}, patterns = {} }
+   8         for p in pairs(patterns) do
+   7             local current = tree
+                 -- Разбиваем паттерн на сегменты по разделителю (например, ":" или ".")
+  20             for segment in p:gmatch("[^:.]+") do
+  13                 current.nodes = current.nodes or {}
+  13                 current.nodes[segment] = current.nodes[segment] or { nodes = {}, patterns = {} }
+  13                 current = current.nodes[segment]
+                 end
+   7             table_insert(current.patterns, p)
+             end
+   1         state.decision_tree = tree
+         end
+
+         -- Поиск по дереву
+   1     local result = {}
+         local function search(node, segments, idx)
+             -- Добавляем паттерны текущего узла
+   6         for _, p in ipairs(node.patterns) do table_insert(result, p) end
+
+   4         local seg = segments[idx]
+   4         if not seg then return end
+
+   3         if node.nodes then
+                 -- Точное совпадение сегмента
+   3             if node.nodes[seg] then
+   1                 search(node.nodes[seg], segments, idx + 1)
+                 end
+                 -- Совпадение через wildcard (если есть в дереве)
+   3             if node.nodes["*"] then
+   2                 search(node.nodes["*"], segments, idx + 1)
+                 end
+             end
+         end
+
+   1     local name_segments = {}
+   3     for s in name:gmatch("[^:.]+") do table_insert(name_segments, s) end
+   1     search(state.decision_tree, name_segments, 1)
+
+   1     return result
+     end
+
+     --- Компилирует маску в функцию сопоставления.
+     --- Поддерживает оптимизированные пути для частых случаев (префиксы, суффиксы, сегменты).
+     --- @param pattern string Маска (например, "channel:*", "adapter:1", "*", "a?c")
+     --- @return function Функция-матчер
+   1 function Wildcard.compile(pattern)
+  30     if not pattern or type(pattern) ~= "string" then
+   4         return function() return false end
+         end
+
+         -- Проверка кэша
+  28     local cached = state.compile_cache[pattern]
+  28     if cached then return cached end
+
+         local matcher
+
+         -- Определение стратегии компиляции
+  23     if pattern == "*" then
+             -- 1. Любая строка (Оптимизировано: константная функция)
+   1         matcher = _create_any_matcher()
+  22     elseif not string_find(pattern, "[%*%?]") then
+             -- 2. Прямое сравнение (нет спецсимволов)
+  12         matcher = _create_exact_matcher(pattern)
+  10     elseif string_match(pattern, "^[^%*%?]+%*$") then
+             -- 3. Оптимизация: Префикс "prefix:*"
+   2         matcher = _create_prefix_matcher(pattern)
+   8     elseif string_match(pattern, "^%*[^%*%?]+$") then
+             -- 4. Оптимизация: Суффикс "*:suffix"
+   2         matcher = _create_suffix_matcher(pattern)
+   6     elseif string_match(pattern, "^%*[^%*%?]+%*$") then
+             -- 5. Оптимизация: Вхождение "*middle*"
+   1         matcher = _create_middle_matcher(pattern)
+   5     elseif not string_find(pattern, "?", 1, true) then
+             -- 6. Оптимизация: Множественные сегменты (только *)
+   4         matcher = _create_segments_matcher(pattern)
+         else
+             -- 7. Общий случай: Регулярное выражение Lua (поддержка ?)
+   1         matcher = _create_regex_matcher(pattern)
+         end
+
+         -- Управление кэшем (очистка при переполнении)
+  23     if state.cache_size >= _m_config.MaxCacheSize.wildcard then
+   2         state.compile_cache = {}
+   2         state.cache_size = 0
+         end
+
+  23     state.compile_cache[pattern] = matcher
+  23     state.cache_size = state.cache_size + 1
+
+  23     return matcher
+     end
+
+     -- ===========================================================================
+     -- Инициализация модуля
+     -- ===========================================================================
+
+   1 return Wildcard
+
+==============================================================================
+Summary
+==============================================================================
+
+File                                                 Hits Missed Coverage
+-------------------------------------------------------------------------
+/opt/astra/lib-monitor/src/config/monitor_config.lua 288  5      98.29%
+/opt/astra/lib-monitor/src/utils/table_pool.lua      217  50     81.27%
+/opt/astra/lib-monitor/src/utils/wildcard.lua        129  1      99.23%
+-------------------------------------------------------------------------
+Total                                                634  56     91.88%
