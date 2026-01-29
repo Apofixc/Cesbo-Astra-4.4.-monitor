@@ -18,9 +18,11 @@ local string_format = _G.string.format
 -- 2. Функции из ModuleManager.get_module()
 local ModuleManager = _G.ModuleManager
 local Logger = nil -- Кэшируется при первом обращении
+local EventDispatcher = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
--- (Глобальные зависимости загружаются динамически в _load_from_file)
+local json_decode = ModuleManager.get_global_dependency("json.decode")
+local json_encode = ModuleManager.get_global_dependency("json.encode")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "MonitorConfig"
@@ -212,8 +214,6 @@ end
 --- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
 --- @private
 local function _load_from_file()
-    if not ModuleManager then return end
-    local json_decode = ModuleManager.get_global_dependency("json.decode")
     if not json_decode then return end
 
     -- 1. Загрузка основного конфига библиотеки
@@ -452,10 +452,14 @@ function MonitorConfig.update(params)
         end
     end
 
+    if not EventDispatcher then
+        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    end
+
     -- 2. Рассылка событий об обновлении секций
-    if _G.EventDispatcher then
+    if EventDispatcher then
         for section_name in pairs(updated_sections) do
-            _G.EventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+            EventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
         end
     end
 
@@ -473,8 +477,6 @@ end
 --- Исключает служебные поля, такие как ValidationSchema и функции.
 --- @return boolean success Статус выполнения
 function MonitorConfig.save()
-    if not ModuleManager then return false end
-    local json_encode = ModuleManager.get_global_dependency("json.encode")
     if not json_encode then return false end
 
     local data_to_save = {}
