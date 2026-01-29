@@ -462,7 +462,7 @@ function SubscriptionManager:init_config_subscription()
     if not EventDispatcher then
         EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
     end
-    
+
     if EventDispatcher then
         local instance = EventDispatcher.get_instance()
         instance:subscribe("config:updated:network", function(new_config)

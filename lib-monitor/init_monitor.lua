@@ -108,8 +108,10 @@ initialize_phase(INIT_PHASES.CORE_MODULES, function()
     ModuleManager.register_module("utils.wildcard", path_prefix .. "src.utils.wildcard", {"logger"})
     ModuleManager.register_module("logger", path_prefix .. "src.utils.logger", {"monitor_config"})
     ModuleManager.register_module("utils", path_prefix .. "src.utils.utils", {"logger", "monitor_config"})
-    ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine", {"logger", "table_pool"})
-    ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber", {"logger", "core.scheduler"})
+    ModuleManager.register_module("utils.filter_engine", path_prefix .. "src.utils.filter_engine",
+        {"logger", "table_pool"})
+    ModuleManager.register_module("ws_subscriber", path_prefix .. "src.utils.ws_subscriber",
+        {"logger", "core.scheduler"})
 
     -- Ядро системы
     ModuleManager.register_module("core.base_repository", path_prefix .. "src.core.base_repository", {"logger"})
@@ -213,7 +215,8 @@ initialize_phase(INIT_PHASES.FINAL, function()
     if Logger and Logger.init_config_subscription then Logger.init_config_subscription() end
     if TablePool and TablePool.init_config_subscription then TablePool.init_config_subscription() end
     if dispatcher_instance then
-        if dispatcher_instance.subscription_manager and dispatcher_instance.subscription_manager.init_config_subscription then
+        local subscription_manager = dispatcher_instance.subscription_manager
+        if subscription_manager and subscription_manager.init_config_subscription then
             dispatcher_instance.subscription_manager:init_config_subscription()
         end
         if dispatcher_instance.init_config_subscription then

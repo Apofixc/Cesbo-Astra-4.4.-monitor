@@ -7,10 +7,7 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local ipairs = _G.ipairs
 local pairs = _G.pairs
-local pcall = _G.pcall
-local table_insert = _G.table.insert
 local tostring = _G.tostring
 local type = _G.type
 

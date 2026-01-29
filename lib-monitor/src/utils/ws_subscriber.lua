@@ -96,7 +96,8 @@ function WsSubscriber.init_config_subscription()
                     Scheduler.get_instance():set_task_interval("ws_subscriber_flush", _m_config.WsBatchInterval)
                 end
                 if Logger then
-                    Logger.debug(COMPONENT_NAME, "Интервал батчинга WebSocket обновлен: %.3f", _m_config.WsBatchInterval)
+                    Logger.debug(COMPONENT_NAME, "Интервал батчинга WebSocket обновлен: %.3f",
+                        _m_config.WsBatchInterval)
                 end
             end
         end)
