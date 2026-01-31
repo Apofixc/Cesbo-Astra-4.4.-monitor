@@ -42,10 +42,12 @@ local GLOBAL_CONFIG_PATH = "/opt/config.json"
 --- @field cache table<string, any> Кэш вычисляемых значений
 --- @field cache_ttl number Время жизни кэша (сек)
 --- @field cache_timestamp number Время последнего обновления кэша
+--- @field environment_cache string|nil Кэш окружения
 local _state = {
     cache = {},
     cache_ttl = 60,
-    cache_timestamp = 0
+    cache_timestamp = 0,
+    environment_cache = nil
 }
 
 --- @class MonitorConfig
@@ -193,6 +195,7 @@ MonitorConfig.subscribers = {}
 -- ===========================================================================
 
 --- Возвращает модуль Logger (ленивая загрузка)
+--- @private
 --- @return Logger|nil
 local function _get_logger()
     if Logger then return Logger end
@@ -200,7 +203,8 @@ local function _get_logger()
     return Logger
 end
 
---- Инициализирует структуру конфигурации значениями по умолчанию из схемы
+--- Инициализирует структуру конфигурации значениями по умолчанию из схемы.
+--- @private
 local function _init_defaults()
     for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
         MonitorConfig[section_name] = {}
@@ -214,10 +218,14 @@ end
 --- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
 --- @private
 local function _load_from_file()
-    if not json_decode then return end
+    local log = _get_logger()
+    if not json_decode then
+        if log then log.error(COMPONENT_NAME, "json.decode недоступен для загрузки конфигурации") end
+        return
+    end
 
     -- 1. Загрузка основного конфига библиотеки
-    local f = io_open(CONFIG_PATH, "rb")
+    local f, err = io_open(CONFIG_PATH, "rb")
     if f then
         local content = f:read("*all")
         f:close()
@@ -234,17 +242,23 @@ local function _load_from_file()
                             break
                         end
                     end
-                    -- Если не нашли в секциях, проверяем корень (для обратной совместимости или служебных полей)
-                    if not found and MonitorConfig[k] ~= nil then
-                        MonitorConfig[k] = v
+                    -- Если не нашли в секциях, логируем предупреждение
+                    if not found then
+                        if log then log.warning(COMPONENT_NAME, "Неизвестный ключ конфигурации в ", CONFIG_PATH, ": ", k) end
                     end
                 end
+            else
+                if log then log.error(COMPONENT_NAME, "Ошибка парсинга JSON в ", CONFIG_PATH, ": ", data) end
             end
+        else
+            if log then log.info(COMPONENT_NAME, "Файл конфигурации пуст или не содержит данных: ", CONFIG_PATH) end
         end
+    else
+        if log then log.info(COMPONENT_NAME, "Файл конфигурации не найден или недоступен: ", CONFIG_PATH, " Ошибка: ", err) end
     end
 
     -- 2. Загрузка глобального конфига для Middleware (CORS и др.)
-    local global_f = io_open(GLOBAL_CONFIG_PATH, "rb")
+    local global_f, global_err = io_open(GLOBAL_CONFIG_PATH, "rb")
     if global_f then
         local content = global_f:read("*all")
         global_f:close()
@@ -254,8 +268,14 @@ local function _load_from_file()
                 if data.cors_allow_origin then
                     MonitorConfig.Network.CorsAllowOrigin = data.cors_allow_origin
                 end
+            else
+                if log then log.error(COMPONENT_NAME, "Ошибка парсинга JSON в глобальном конфиге ", GLOBAL_CONFIG_PATH, ": ", data) end
             end
+        else
+            if log then log.info(COMPONENT_NAME, "Глобальный файл конфигурации пуст или не содержит данных: ", GLOBAL_CONFIG_PATH) end
         end
+    else
+        if log then log.info(COMPONENT_NAME, "Глобальный файл конфигурации не найден или недоступен: ", GLOBAL_CONFIG_PATH, " Ошибка: ", global_err) end
     end
 end
 
@@ -357,17 +377,24 @@ function MonitorConfig.get_stream_name_cached(ip)
 end
 
 --- Определяет текущее окружение системы на основе файла /opt/astra/environment.
+--- Результат кэшируется.
 --- @return string "development" или "production"
 function MonitorConfig.get_environment()
+    if _state.environment_cache then
+        return _state.environment_cache
+    end
+
     local env_file = io_open("/opt/astra/environment", "r")
     if env_file then
         local content = env_file:read("*all")
         env_file:close()
         if content then
-            return content:gsub("%s+", ""):lower()
+            _state.environment_cache = content:gsub("%s+", ""):lower()
+            return _state.environment_cache
         end
     end
-    return "production"
+    _state.environment_cache = "production"
+    return _state.environment_cache
 end
 
 --- Проверяет, запущена ли система в режиме разработки.
@@ -477,7 +504,11 @@ end
 --- Исключает служебные поля, такие как ValidationSchema и функции.
 --- @return boolean success Статус выполнения
 function MonitorConfig.save()
-    if not json_encode then return false end
+    local log = _get_logger()
+    if not json_encode then
+        if log then log.error(COMPONENT_NAME, "json.encode недоступен для сохранения конфигурации") end
+        return false
+    end
 
     local data_to_save = {}
     -- Сохраняем в плоском виде для совместимости с существующими конфигами
@@ -491,13 +522,25 @@ function MonitorConfig.save()
     end
 
     local ok, content = pcall(json_encode, data_to_save)
-    if not ok then return false end
+    if not ok then
+        if log then log.error(COMPONENT_NAME, "Ошибка сериализации конфигурации в JSON: ", content) end
+        return false
+    end
 
-    local f = io_open(CONFIG_PATH, "w")
-    if not f then return false end
+    local f, err = io_open(CONFIG_PATH, "w")
+    if not f then
+        if log then log.error(COMPONENT_NAME, "Не удалось открыть файл конфигурации для записи: ", CONFIG_PATH, " Ошибка: ", err) end
+        return false
+    end
 
-    f:write(content)
+    local write_ok, write_err = pcall(f.write, f, content)
     f:close()
+    if not write_ok then
+        if log then log.error(COMPONENT_NAME, "Ошибка записи конфигурации в файл: ", CONFIG_PATH, " Ошибка: ", write_err) end
+        return false
+    end
+
+    if log then log.info(COMPONENT_NAME, "Конфигурация успешно сохранена в ", CONFIG_PATH) end
     return true
 end
 
