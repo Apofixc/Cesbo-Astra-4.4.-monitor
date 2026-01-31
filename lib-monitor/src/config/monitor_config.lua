@@ -290,6 +290,7 @@ function MonitorConfig.reload()
     _init_defaults()
     _load_from_file()
     _state.cache = {} -- Сброс кэша при перезагрузке
+    _state.environment_cache = nil -- Сброс кэша окружения при перезагрузке
 
     -- Автоматическая настройка уровней логирования для режима разработки
     if MonitorConfig.is_development() then
