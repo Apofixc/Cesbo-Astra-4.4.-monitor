@@ -64,6 +64,8 @@ local global_dependencies_to_check = {
     "init_input",
     "json.decode",
     "json.encode",
+    "json.load",
+    "json.save",
     "kill_channel",
     "kill_input",
     "make_channel",

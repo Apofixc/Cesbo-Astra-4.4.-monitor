@@ -7,7 +7,6 @@
 -- ===========================================================================
 
 -- 1. Стандартные Lua функции
-local io_open = _G.io.open
 local os_time = _G.os.time
 local pairs = _G.pairs
 local pcall = _G.pcall
@@ -21,13 +20,12 @@ local Logger = nil -- Кэшируется при первом обращени�
 local EventDispatcher = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
-local json_decode = ModuleManager.get_global_dependency("json.decode")
-local json_encode = ModuleManager.get_global_dependency("json.encode")
+local json_load = ModuleManager.get_global_dependency("json.load")
+local json_save = ModuleManager.get_global_dependency("json.save")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "MonitorConfig"
 local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
-local GLOBAL_CONFIG_PATH = "/opt/config.json"
 
 --- @class ValidationRule
 --- @field type string Тип данных ("number"|"boolean"|"string"|"table")
@@ -219,64 +217,34 @@ end
 --- @private
 local function _load_from_file()
     local log = _get_logger()
-    if not json_decode then
-        if log then log.error(COMPONENT_NAME, "json.decode недоступен для загрузки конфигурации") end
+    if not json_load then
+        if log then log.error(COMPONENT_NAME, "json.load недоступен для загрузки конфигурации") end
         return
     end
 
     -- 1. Загрузка основного конфига библиотеки
-    local f, err = io_open(CONFIG_PATH, "rb")
-    if f then
-        local content = f:read("*all")
-        f:close()
-        if content and content ~= "" then
-            local success, data = pcall(json_decode, content)
-            if success and type(data) == "table" then
-                -- Маппинг плоского JSON на сгруппированную структуру
-                for k, v in pairs(data) do
-                    local found = false
-                    for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
-                        if section_rules[k] then
-                            MonitorConfig[section_name][k] = v
-                            found = true
-                            break
-                        end
-                    end
-                    -- Если не нашли в секциях, логируем предупреждение
-                    if not found then
-                        if log then log.warning(COMPONENT_NAME, "Неизвестный ключ конфигурации в ", CONFIG_PATH, ": ", k) end
+    local success, data = pcall(json_load, CONFIG_PATH)
+    if success and type(data) == "table" then
+        -- Маппинг сгруппированного JSON на структуру MonitorConfig
+        for section_name, section_data in pairs(data) do
+            if MonitorConfig.ValidationSchema[section_name] and type(section_data) == "table" then
+                for key, value in pairs(section_data) do
+                    if MonitorConfig.ValidationSchema[section_name][key] then
+                        MonitorConfig[section_name][key] = value
+                    else
+                        if log then log.warning(COMPONENT_NAME, "Неизвестный ключ конфигурации в секции ", section_name, " в ", CONFIG_PATH, ": ", key) end
                     end
                 end
             else
-                if log then log.error(COMPONENT_NAME, "Ошибка парсинга JSON в ", CONFIG_PATH, ": ", data) end
+                if log then log.warning(COMPONENT_NAME, "Неизвестная секция конфигурации в ", CONFIG_PATH, ": ", section_name) end
             end
-        else
-            if log then log.info(COMPONENT_NAME, "Файл конфигурации пуст или не содержит данных: ", CONFIG_PATH) end
         end
+    elseif success and data == nil then
+        if log then log.info(COMPONENT_NAME, "Файл конфигурации не найден или пуст: ", CONFIG_PATH) end
     else
-        if log then log.info(COMPONENT_NAME, "Файл конфигурации не найден или недоступен: ", CONFIG_PATH, " Ошибка: ", err) end
+        if log then log.error(COMPONENT_NAME, "Ошибка загрузки или парсинга JSON в ", CONFIG_PATH, ": ", data) end
     end
 
-    -- 2. Загрузка глобального конфига для Middleware (CORS и др.)
-    local global_f, global_err = io_open(GLOBAL_CONFIG_PATH, "rb")
-    if global_f then
-        local content = global_f:read("*all")
-        global_f:close()
-        if content and content ~= "" then
-            local success, data = pcall(json_decode, content)
-            if success and type(data) == "table" then
-                if data.cors_allow_origin then
-                    MonitorConfig.Network.CorsAllowOrigin = data.cors_allow_origin
-                end
-            else
-                if log then log.error(COMPONENT_NAME, "Ошибка парсинга JSON в глобальном конфиге ", GLOBAL_CONFIG_PATH, ": ", data) end
-            end
-        else
-            if log then log.info(COMPONENT_NAME, "Глобальный файл конфигурации пуст или не содержит данных: ", GLOBAL_CONFIG_PATH) end
-        end
-    else
-        if log then log.info(COMPONENT_NAME, "Глобальный файл конфигурации не найден или недоступен: ", GLOBAL_CONFIG_PATH, " Ошибка: ", global_err) end
-    end
 end
 
 -- ===========================================================================
@@ -506,38 +474,29 @@ end
 --- @return boolean success Статус выполнения
 function MonitorConfig.save()
     local log = _get_logger()
-    if not json_encode then
-        if log then log.error(COMPONENT_NAME, "json.encode недоступен для сохранения конфигурации") end
+    if not json_save then
+        if log then log.error(COMPONENT_NAME, "json.save недоступен для сохранения конфигурации") end
         return false
     end
 
     local data_to_save = {}
-    -- Сохраняем в плоском виде для совместимости с существующими конфигами
+    -- Сохраняем в сгруппированном виде
     for section_name, section_rules in pairs(MonitorConfig.ValidationSchema) do
         local section = MonitorConfig[section_name]
         if type(section) == "table" then
+            data_to_save[section_name] = {} -- Создаем таблицу для секции
             for k, v in pairs(section) do
-                data_to_save[k] = v
+                -- Сохраняем только те ключи, которые есть в схеме валидации
+                if section_rules[k] then
+                    data_to_save[section_name][k] = v -- Присваиваем вложенной таблице секции
+                end
             end
         end
     end
 
-    local ok, content = pcall(json_encode, data_to_save)
+    local ok, err = pcall(json_save, CONFIG_PATH, data_to_save)
     if not ok then
-        if log then log.error(COMPONENT_NAME, "Ошибка сериализации конфигурации в JSON: ", content) end
-        return false
-    end
-
-    local f, err = io_open(CONFIG_PATH, "w")
-    if not f then
-        if log then log.error(COMPONENT_NAME, "Не удалось открыть файл конфигурации для записи: ", CONFIG_PATH, " Ошибка: ", err) end
-        return false
-    end
-
-    local write_ok, write_err = pcall(f.write, f, content)
-    f:close()
-    if not write_ok then
-        if log then log.error(COMPONENT_NAME, "Ошибка записи конфигурации в файл: ", CONFIG_PATH, " Ошибка: ", write_err) end
+        if log then log.error(COMPONENT_NAME, "Ошибка сохранения конфигурации в файл: ", CONFIG_PATH, " Ошибка: ", err) end
         return false
     end
 
