@@ -40,12 +40,10 @@ local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
 --- @field cache table<string, any> Кэш вычисляемых значений
 --- @field cache_ttl number Время жизни кэша (сек)
 --- @field cache_timestamp number Время последнего обновления кэша
---- @field environment_cache string|nil Кэш окружения
 local _state = {
     cache = {},
     cache_ttl = 60,
     cache_timestamp = 0,
-    environment_cache = nil
 }
 
 --- @class MonitorConfig
@@ -258,12 +256,6 @@ function MonitorConfig.reload()
     _init_defaults()
     _load_from_file()
     _state.cache = {} -- Сброс кэша при перезагрузке
-    _state.environment_cache = nil -- Сброс кэша окружения при перезагрузке
-
-    -- Автоматическая настройка уровней логирования для режима разработки
-    if MonitorConfig.is_development() then
-        MonitorConfig.Logger.LogLevel = "DEBUG"
-    end
 
     return MonitorConfig.validate()
 end
@@ -343,33 +335,6 @@ function MonitorConfig.get_stream_name_cached(ip)
     return MonitorConfig.get_cached("stream_" .. ip, function()
         return MonitorConfig.STREAM[ip] or ip
     end)
-end
-
---- Определяет текущее окружение системы на основе файла /opt/astra/environment.
---- Результат кэшируется.
---- @return string "development" или "production"
-function MonitorConfig.get_environment()
-    if _state.environment_cache then
-        return _state.environment_cache
-    end
-
-    local env_file = io_open("/opt/astra/environment", "r")
-    if env_file then
-        local content = env_file:read("*all")
-        env_file:close()
-        if content then
-            _state.environment_cache = content:gsub("%s+", ""):lower()
-            return _state.environment_cache
-        end
-    end
-    _state.environment_cache = "production"
-    return _state.environment_cache
-end
-
---- Проверяет, запущена ли система в режиме разработки.
---- @return boolean true если разработка
-function MonitorConfig.is_development()
-    return MonitorConfig.get_environment() == "development"
 end
 
 --- Обновляет параметры конфигурации в рантайме.
