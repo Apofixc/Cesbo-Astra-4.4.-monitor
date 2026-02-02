@@ -131,36 +131,49 @@ end
 --- @param pattern string Маска
 --- @return function Функция-матчер
 local function _create_segments_matcher(pattern)
-    local segments = {}
-    for seg in string_gmatch(pattern, "[^*]+") do
-        segments[#segments + 1] = seg
+    local parts = {}
+    local current_pos = 1
+    local star_found = false
+
+    -- Разбиваем паттерн на части по '*'
+    for part in string_gmatch(pattern, "[^%*]+") do
+        table_insert(parts, part)
+        current_pos = current_pos + #part
+        if string_sub(pattern, current_pos, current_pos) == "*" then
+            star_found = true
+            current_pos = current_pos + 1
+            table_insert(parts, "*") -- Добавляем '*' как отдельную часть
+        end
+    end
+    -- Если паттерн заканчивается на '*', добавляем его
+    if string_sub(pattern, -1) == "*" and not star_found then
+        table_insert(parts, "*")
     end
 
-    local num_segments = #segments
-    if num_segments == 0 then return _create_any_matcher() end
-
-    local first_is_star = string_sub(pattern, 1, 1) == "*"
-    local last_is_star = string_sub(pattern, -1, -1) == "*"
+    local num_parts = #parts
+    if num_parts == 0 then return _create_any_matcher() end
 
     return function(name)
         if not name or type(name) ~= "string" then return false end
-        local pos = 1
+        local name_pos = 1
 
-        for i = 1, num_segments do
-            local seg = segments[i]
-            if i == 1 and not first_is_star then
-                -- Проверка префикса
-                if string_find(name, seg, 1, true) ~= 1 then return false end
-                pos = #seg + 1
-            elseif i == num_segments and not last_is_star then
-                -- Проверка суффикса
-                local s = string_find(name, seg, -#seg, true)
-                if not s or (s + #seg - 1) ~= #name then return false end
+        for i = 1, num_parts do
+            local part = parts[i]
+            if part == "*" then
+                -- '*' может соответствовать пустой строке или любому количеству символов
+                -- Просто пропускаем, позволяя следующей части найти свое место
             else
-                -- Поиск сегмента в середине
-                local s, e = string_find(name, seg, pos, true)
-                if not s then return false end
-                pos = e + 1
+                local found_start, found_end = string_find(name, part, name_pos, true)
+                if not found_start then return false end -- Часть не найдена
+
+                if i == 1 and string_sub(pattern, 1, 1) ~= "*" and found_start ~= 1 then
+                    return false -- Если нет начального '*', часть должна быть в начале
+                end
+                if i == num_parts and string_sub(pattern, -1) ~= "*" and found_end ~= #name then
+                    return false -- Если нет конечного '*', часть должна быть в конце
+                end
+
+                name_pos = found_end + 1
             end
         end
         return true
@@ -193,8 +206,11 @@ end
 -- Публичное API (Public API)
 -- ===========================================================================
 
---- Очищает дерево решений. Вызывается при изменении набора подписок.
-function Wildcard.clear_tree()
+--- Очищает кэш компиляции и дерево решений.
+--- Вызывается при изменении набора подписок или при необходимости полного сброса состояния.
+function Wildcard.reset_state()
+    state.compile_cache = {}
+    state.cache_size = 0
     state.decision_tree = nil
 end
 
