@@ -422,8 +422,9 @@ function MonitorConfig.update(params)
     local eventDispatcher = _get_event_dispatcher()
     -- 2. Рассылка событий об обновлении секций
     if eventDispatcher then
+        local instance = eventDispatcher.get_instance()
         for section_name in pairs(updated_sections) do
-            eventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+            instance:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
         end
     end
 

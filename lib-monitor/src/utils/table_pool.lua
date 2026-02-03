@@ -135,7 +135,8 @@ end
 function TablePool.init_config_subscription()
     local eventDispatcher = _get_event_dispatcher()
     if eventDispatcher then
-        eventDispatcher:subscribe("config:updated:pool", _update_config)
+        local instance = eventDispatcher.get_instance()
+        instance:subscribe("config:updated:pool", _update_config)
     end
 end
 

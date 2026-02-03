@@ -51,21 +51,10 @@ local Wildcard = {}
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
 
---- Инициализирует подписку на обновление конфигурации
-function Wildcard.init_config_subscription()
-    if not EventDispatcher then
-        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
-    end
-
-    if EventDispatcher then
-        local instance = EventDispatcher.get_instance()
-        instance:subscribe("config:updated:pool", function(new_config)
-            if new_config.MaxCacheSize and new_config.MaxCacheSize.wildcard then
-                _m_config.MaxCacheSize.wildcard = new_config.MaxCacheSize.wildcard
-                Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
-            end
-        end)
-    end
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    return EventDispatcher
 end
 
 --- Создает матчер для любого значения (маска "*")
@@ -205,6 +194,20 @@ end
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
+
+--- Инициализирует подписку на обновление конфигурации
+function Wildcard.init_config_subscription()
+    local eventDispatcher = _get_event_dispatcher()
+    if eventDispatcher then
+        local instance = eventDispatcher.get_instance()
+        instance:subscribe("config:updated:pool", function(new_config)
+            if new_config.MaxCacheSize and new_config.MaxCacheSize.wildcard then
+                _m_config.MaxCacheSize.wildcard = new_config.MaxCacheSize.wildcard
+                Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
+            end
+        end)
+    end
+end
 
 --- Очищает кэш компиляции и дерево решений.
 --- Вызывается при изменении набора подписок или при необходимости полного сброса состояния.
