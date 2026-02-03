@@ -175,14 +175,10 @@ end
 --- @param pattern string Маска
 --- @return function Функция-матчер
 local function _create_regex_matcher(pattern)
-    -- Экранируем магические символы Lua, кроме * и ?
-    local regex = string_gsub(pattern, "%%", "%%%%")
-    regex = string_gsub(regex, "([%^%$%(%)%.%[%]%+%-%?])", function(c)
-        if c == "?" then return "." end
-        return "%%" .. c
-    end)
-    -- Заменяем * на .* для regex
-    regex = string_gsub(regex, "%*", ".*")
+    local regex = string_gsub(pattern, "([%^%$%(%)%.%[%]%*%+%-%?%%])", "%%%1")
+    regex = string_gsub(regex, "%%%?", ".")
+    regex = string_gsub(regex, "%%%*", ".*")
+
     local final_regex = "^" .. regex .. "$"
 
     return function(name)
