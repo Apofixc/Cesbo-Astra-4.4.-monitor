@@ -199,6 +199,12 @@ local function _get_logger()
     return Logger
 end
 
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    return EventDispatcher
+end
+
 --- Инициализирует структуру конфигурации значениями по умолчанию из схемы.
 --- @private
 local function _init_defaults()
@@ -413,14 +419,11 @@ function MonitorConfig.update(params)
         end
     end
 
-    if not EventDispatcher then
-        EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
-    end
-
+    local eventDispatcher = _get_event_dispatcher()
     -- 2. Рассылка событий об обновлении секций
-    if EventDispatcher then
+    if eventDispatcher then
         for section_name in pairs(updated_sections) do
-            EventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+            eventDispatcher:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
         end
     end
 
