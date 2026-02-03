@@ -18,6 +18,7 @@ local collectgarbage = _G.collectgarbage
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
 local Scheduler = nil -- Кэшируется при первом обращении
+local EventDispatcher = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 -- (Модуль не использует внешние зависимости Astra)
@@ -77,6 +78,12 @@ local function _get_scheduler()
     return Scheduler
 end
 
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    return EventDispatcher
+end
+
 --- Обновляет локальную конфигурацию из события
 --- @param new_config table Новая конфигурация секции Pool
 local function _update_config(new_config)
@@ -126,8 +133,9 @@ end
 
 --- Инициализирует подписку на обновление конфигурации
 function TablePool.init_config_subscription()
-    if _G.EventDispatcher then
-        _G.EventDispatcher:subscribe("config:updated:pool", _update_config)
+    local eventDispatcher = _get_event_dispatcher()
+    if eventDispatcher then
+        eventDispatcher:subscribe("config:updated:pool", _update_config)
     end
 end
 
