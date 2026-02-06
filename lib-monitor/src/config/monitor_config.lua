@@ -219,100 +219,55 @@ end
 --- Загружает конфигурацию из внешних JSON файлов.
 --- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
 --- @private
+--- Загружает конфигурацию из внешних JSON файлов.
+--- Сначала загружается локальный конфиг библиотеки, затем накладывается глобальный конфиг Astra.
+--- @private
+--- @return table|nil Загруженные параметры или nil в случае ошибки/отсутствия файла
 local function _load_from_file()
     local log = _get_logger()
     if not json_load then
         if log then log.error(COMPONENT_NAME, "json.load недоступен для загрузки конфигурации") end
-        return
+        return nil
     end
 
     -- 1. Загрузка основного конфига библиотеки
     local success, data = pcall(json_load, CONFIG_PATH)
     if success and type(data) == "table" then
-        -- Маппинг сгруппированного JSON на структуру MonitorConfig
-        for section_name, section_data in pairs(data) do
-            if MonitorConfig.ValidationSchema[section_name] and type(section_data) == "table" then
-                for key, value in pairs(section_data) do
-                    if MonitorConfig.ValidationSchema[section_name][key] then
-                        MonitorConfig[section_name][key] = value
-                    else
-                        if log then log.warning(COMPONENT_NAME, "Неизвестный ключ конфигурации в секции ", section_name, " в ", CONFIG_PATH, ": ", key) end
-                    end
-                end
-            else
-                if log then log.warning(COMPONENT_NAME, "Неизвестная секция конфигурации в ", CONFIG_PATH, ": ", section_name) end
-            end
-        end
+        return data
     elseif success and data == nil then
         if log then log.info(COMPONENT_NAME, "Файл конфигурации не найден или пуст: ", CONFIG_PATH) end
+        return nil
     else
         if log then log.error(COMPONENT_NAME, "Ошибка загрузки или парсинга JSON в ", CONFIG_PATH, ": ", data) end
+        return nil
     end
-
 end
 
 -- ===========================================================================
 -- Публичное API (Public API)
 -- ===========================================================================
 
---- Перезагружает конфигурацию из файлов и выполняет валидацию.
+--- Перезагружает конфигурацию из файлов и применяет ее.
 --- @return boolean success Статус успеха
 --- @return string|nil error_message Сообщение об ошибке при неудаче
 function MonitorConfig.reload()
-    _init_defaults()
-    _load_from_file()
+    _init_defaults() -- Сначала устанавливаем значения по умолчанию
     _state.cache = {} -- Сброс кэша при перезагрузке
 
-    return MonitorConfig.validate()
-end
-
---- Валидирует текущую конфигурацию на соответствие типам и диапазонам.
---- @return boolean success Статус валидности
---- @return string|nil error_message Описание первой найденной ошибки
-function MonitorConfig.validate()
-    local schema = MonitorConfig.ValidationSchema
-    if not schema then return true end
-
-    for section_name, section_rules in pairs(schema) do
-        local section = MonitorConfig[section_name]
-        if type(section) == "table" then
-            for key, rule in pairs(section_rules) do
-                local value = section[key]
-                if value ~= nil then
-                    if type(value) ~= rule.type then
-                        return false, string_format(
-                            "Parameter '%s.%s' must be a %s, got %s",
-                            section_name, key, rule.type, type(value)
-                        )
-                    end
-
-                    if rule.type == "number" then
-                        if rule.min and value < rule.min then
-                            return false, string_format(
-                                "Parameter '%s.%s' is too small (min: %s)",
-                                section_name, key, tostring(rule.min)
-                            )
-                        end
-                        if rule.max and value > rule.max then
-                            return false, string_format(
-                                "Parameter '%s.%s' is too large (max: %s)",
-                                section_name, key, tostring(rule.max)
-                            )
-                        end
-                    elseif rule.type == "string" and rule.enum then
-                        if not rule.enum[value] then
-                            return false, string_format(
-                                "Invalid value for '%s.%s': %s",
-                                section_name, key, tostring(value)
-                            )
-                        end
-                    end
-                end
+    local file_data = _load_from_file() -- Загружаем данные из файла
+    if file_data then
+        return MonitorConfig.update(file_data) -- Применяем загруженные данные через update
+    else
+        -- Если файл не загружен или пуст, все равно рассылаем события для дефолтной конфигурации
+        local eventDispatcher = _get_event_dispatcher()
+        if eventDispatcher then
+            local instance = eventDispatcher.get_instance()
+            for section_name in pairs(MonitorConfig.ValidationSchema) do
+                instance:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
             end
         end
+        return true -- Успех, так как дефолтные значения применены
     end
-
-    return true
 end
 
 --- Возвращает значение из кэша или генерирует новое, если кэш просрочен.
@@ -344,78 +299,70 @@ function MonitorConfig.get_stream_name_cached(ip)
 end
 
 --- Обновляет параметры конфигурации в рантайме.
---- @param params table Таблица новых параметров (может быть плоской или сгруппированной)
+--- @param params table Таблица новых параметров (только сгруппированные)
 --- @return boolean success Статус выполнения
 --- @return string|nil error_message Сообщение об ошибке
 function MonitorConfig.update(params)
-    if type(params) ~= "table" then return false, "Параметры должны быть таблицей" end
+    local log = _get_logger()
+    if type(params) ~= "table" then
+        if log then log.error(COMPONENT_NAME, "Параметры для обновления должны быть таблицей") end
+        return false, "Параметры должны быть таблицей"
+    end
 
     local schema = MonitorConfig.ValidationSchema
-    if not schema then return false, "Схема валидации отсутствует" end
+    if not schema then
+        if log then log.error(COMPONENT_NAME, "Схема валидации отсутствует") end
+        return false, "Схема валидации отсутствует"
+    end
 
     local updated_sections = {}
 
     -- 1. Валидация и применение
-    for k, v in pairs(params) do
-        if type(v) == "table" and schema[k] then
-            -- Сгруппированные параметры
-            for sub_k, sub_v in pairs(v) do
-                local rule = schema[k][sub_k]
+    for section_name, section_data in pairs(params) do
+        local section_rules = schema[section_name]
+        if type(section_data) == "table" and section_rules then
+            for key, value in pairs(section_data) do
+                local rule = section_rules[key]
                 if rule then
-                    -- Полная валидация по правилу
-                    if type(sub_v) ~= rule.type then
-                        return false, string_format(
+                    local is_valid = true
+                    local error_msg = ""
+
+                    if type(value) ~= rule.type then
+                        is_valid = false
+                        error_msg = string_format(
                             "Параметр '%s.%s' должен быть %s, получено %s",
-                            k, sub_k, rule.type, type(sub_v)
+                            section_name, key, rule.type, type(value)
                         )
-                    end
-                    if rule.type == "number" then
-                        if rule.min and sub_v < rule.min then
-                            return false, string_format("Параметр '%s.%s' слишком мал (min: %s)",
-                                k, sub_k, tostring(rule.min))
-                        end
-                        if rule.max and sub_v > rule.max then
-                            return false, string_format("Параметр '%s.%s' слишком велик (max: %s)",
-                                k, sub_k, tostring(rule.max))
+                    elseif rule.type == "number" then
+                        if rule.min and value < rule.min then
+                            is_valid = false
+                            error_msg = string_format("Параметр '%s.%s' слишком мал (min: %s)",
+                                section_name, key, tostring(rule.min))
+                        elseif rule.max and value > rule.max then
+                            is_valid = false
+                            error_msg = string_format("Параметр '%s.%s' слишком велик (max: %s)",
+                                section_name, key, tostring(rule.max))
                         end
                     elseif rule.type == "string" and rule.enum then
-                        if not rule.enum[sub_v] then
-                            return false, string_format("Недопустимое значение для '%s.%s': %s",
-                                k, sub_k, tostring(sub_v))
+                        if not rule.enum[value] then
+                            is_valid = false
+                            error_msg = string_format("Недопустимое значение для '%s.%s': %s",
+                                section_name, key, tostring(value))
                         end
                     end
-                    updated_sections[k] = true
-                    MonitorConfig[k][sub_k] = sub_v
+
+                    if is_valid then
+                        MonitorConfig[section_name][key] = value
+                        updated_sections[section_name] = true
+                    else
+                        if log then log.warning(COMPONENT_NAME, "Невалидный параметр при обновлении: ", error_msg, ". Игнорируется.") end
+                    end
+                else
+                    if log then log.warning(COMPONENT_NAME, "Неизвестный ключ конфигурации в секции ", section_name, " при обновлении: ", key, ". Игнорируется.") end
                 end
             end
         else
-            -- Плоские параметры (поиск по секциям)
-            for section_name, section_rules in pairs(schema) do
-                local rule = section_rules[k]
-                if rule then
-                    if type(v) ~= rule.type then
-                        return false, string_format("Параметр '%s' должен быть %s, получено %s", k, rule.type, type(v))
-                    end
-                    if rule.type == "number" then
-                        if rule.min and v < rule.min then
-                            return false, string_format("Параметр '%s' слишком мал (min: %s)",
-                                k, tostring(rule.min))
-                        end
-                        if rule.max and v > rule.max then
-                            return false, string_format("Параметр '%s' слишком велик (max: %s)",
-                                k, tostring(rule.max))
-                        end
-                    elseif rule.type == "string" and rule.enum then
-                        if not rule.enum[v] then
-                            return false, string_format("Недопустимое значение для '%s': %s",
-                                k, tostring(v))
-                        end
-                    end
-                    updated_sections[section_name] = true
-                    MonitorConfig[section_name][k] = v
-                    break
-                end
-            end
+            if log then log.warning(COMPONENT_NAME, "Неизвестная или неверно сгруппированная секция конфигурации при обновлении: ", section_name, ". Игнорируется.") end
         end
     end
 
@@ -430,7 +377,6 @@ function MonitorConfig.update(params)
 
     _state.cache = {} -- Сброс кэша
 
-    local log = _get_logger()
     if log and log.info then
         log.info(COMPONENT_NAME, "Конфигурация обновлена через API")
     end
