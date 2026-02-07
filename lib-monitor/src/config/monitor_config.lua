@@ -294,7 +294,10 @@ end
 --- @return string Имя потока или исходный IP
 function MonitorConfig.get_stream_name_cached(ip)
     return MonitorConfig.get_cached("stream_" .. ip, function()
-        return MonitorConfig.STREAM[ip] or ip
+        if type(MonitorConfig.STREAM) == "table" then
+            return MonitorConfig.STREAM[ip] or ip
+        end
+        return ip
     end)
 end
 
