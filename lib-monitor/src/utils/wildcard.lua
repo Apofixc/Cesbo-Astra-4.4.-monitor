@@ -219,6 +219,9 @@ end
 --- @param patterns table<string, any> Список активных паттернов (ключи - паттерны)
 --- @return table Список совпавших паттернов
 function Wildcard.match_multiple(name, patterns)
+    if not name or type(name) ~= "string" then return {} end
+    if not patterns or type(patterns) ~= "table" then return {} end
+
     -- Если паттернов мало, используем быстрый линейный перебор
     local count = 0
     for _ in pairs(patterns) do count = count + 1 end
