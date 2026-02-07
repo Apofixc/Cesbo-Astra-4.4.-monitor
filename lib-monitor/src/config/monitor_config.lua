@@ -355,8 +355,11 @@ function MonitorConfig.update(params)
                     end
 
                     if is_valid then
-                        MonitorConfig[section_name][key] = value
-                        updated_sections[section_name] = true
+                        -- Проверяем, изменилось ли значение, прежде чем обновлять и помечать секцию как обновленную
+                        if MonitorConfig[section_name][key] ~= value then
+                            MonitorConfig[section_name][key] = value
+                            updated_sections[section_name] = true
+                        end
                     else
                         if log then log.warning(COMPONENT_NAME, "Невалидный параметр при обновлении: ", error_msg, ". Игнорируется.") end
                     end
