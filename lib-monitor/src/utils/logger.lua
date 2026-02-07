@@ -27,6 +27,13 @@ local json_encode = ModuleManager.get_global_dependency("json.encode")
 -- 4. Константы и конфигурации
 
 --- Локальная конфигурация модуля (значения по умолчанию)
+--- @class LoggerConfig
+--- @field LogLevel string Уровень логирования (DEBUG, INFO, WARN, ERROR, NONE)
+--- @field LogFormat string Формат логирования (TEXT, JSON)
+--- @field LogBatchEnabled boolean Включена ли пакетная запись
+--- @field LogBufferSize number Размер кольцевого буфера для диагностики
+--- @field MaxLogQueueSize number Максимальный размер очереди пакетной записи
+--- @field MaxLogComponents number Максимальное количество компонентов, отслеживаемых в буфере
 local _m_config = {
     LogLevel = "INFO",
     LogFormat = "TEXT",
@@ -36,6 +43,7 @@ local _m_config = {
     MaxLogComponents = 100,
 }
 
+--- @type table<string, number>
 local LOG_LEVELS = {
     DEBUG = 1,
     INFO = 2,
@@ -44,6 +52,7 @@ local LOG_LEVELS = {
     NONE = 5
 }
 
+--- @type table<string, string>
 local LEVEL_MAP = {
     DEBUG = "debug",
     INFO = "info",
@@ -52,6 +61,7 @@ local LEVEL_MAP = {
 }
 
 -- 5. Внутреннее состояние (Private State)
+
 
 --- @class LoggerState
 --- @field last_errors table<number, string> Контекстное хранение ошибок
@@ -68,7 +78,7 @@ local LEVEL_MAP = {
 --- @field cached_log_buffer_size number Кэшированный размер буфера
 --- @field cached_log_batch_enabled boolean Флаг пакетной записи
 --- @field last_config_refresh number Время последнего обновления конфига
-
+--- @field table_pool_types_registered boolean Флаг, указывающий, были ли зарегистрированы типы TablePool
 local state = {
     -- Контекстное хранение ошибок
     last_errors = {},
@@ -90,7 +100,8 @@ local state = {
     cached_log_format = nil,
     cached_log_buffer_size = 0,
     cached_log_batch_enabled = false,
-    last_config_refresh = 0
+    last_config_refresh = 0,
+    table_pool_types_registered = false -- Новый флаг
 }
 
 -- ===========================================================================
@@ -104,16 +115,20 @@ local function _get_table_pool()
     TablePool = ModuleManager.get_module("table_pool")
 
     -- Регистрация типов пулов при первом обращении
-    if TablePool and TablePool.register_type then
+    -- Проверяем, что TablePool существует, register_type - это функция и типы еще не зарегистрированы
+    if TablePool and type(TablePool.register_type) == "function" and not state.table_pool_types_registered then
         -- Пул для записей в буфере и очереди
         TablePool.register_type("log_entry", { "timestamp", "level", "message", "context_id" })
         -- Пул для временных объектов при JSON-логировании
         TablePool.register_type("log_data", { "timestamp", "level", "component", "message", "context_id" })
+        state.table_pool_types_registered = true
     end
 
     return TablePool
 end
 
+--- Возвращает модуль EventDispatcher (ленивая загрузка)
+--- @return EventDispatcher|nil
 local function _get_event_dispatcher()
     if EventDispatcher then return EventDispatcher end
     EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
@@ -121,14 +136,16 @@ local function _get_event_dispatcher()
 end
 
 --- Обновляет кэшированные параметры логирования из локальной конфигурации
+--- @private
 local function _refresh_config_cache()
     state.cached_log_level = LOG_LEVELS[_m_config.LogLevel] or LOG_LEVELS.INFO
     state.cached_log_format = _m_config.LogFormat or "TEXT"
-    state.cached_log_buffer_size = _m_config.LogBufferSize or 0
+    state.cached_log_buffer_size = math.max(0, _m_config.LogBufferSize or 0) -- Убедимся, что размер буфера не отрицательный
     state.cached_log_batch_enabled = _m_config.LogBatchEnabled or false
 end
 
 --- Возвращает текущий уровень логирования
+--- @private
 --- @return number
 local function _get_current_level()
     if not state.cached_log_level then
@@ -138,6 +155,7 @@ local function _get_current_level()
 end
 
 --- Проверяет, должен ли лог данного уровня быть записан
+--- @private
 --- @param level number Числовой уровень лога
 --- @return boolean
 local function _should_log(level)
@@ -145,6 +163,7 @@ local function _should_log(level)
 end
 
 --- Формирует текстовое сообщение лога с защитой от ошибок форматирования
+--- @private
 --- @param format_str any
 --- @param ... any
 --- @return string
@@ -159,6 +178,7 @@ local function _format_message(format_str, ...)
 end
 
 --- Сохраняет ошибку в текущем контексте (Lazy Propagation)
+--- @private
 --- @param msg string Текст ошибки
 local function _propagate_error(msg)
     if not state.current_context_id then return end
@@ -167,6 +187,7 @@ local function _propagate_error(msg)
 end
 
 --- Выполняет непосредственную запись сообщения в лог Astra или консоль
+--- @private
 --- @param level_name string Имя уровня логирования
 --- @param message string Текст сообщения
 local function _write_to_output(level_name, message)
@@ -182,6 +203,7 @@ local function _write_to_output(level_name, message)
 end
 
 --- Добавляет сообщение в очередь пакетной записи
+--- @private
 --- @param level_name string Имя уровня логирования
 --- @param message string Текст сообщения
 local function _enqueue_log(level_name, message)
@@ -191,7 +213,7 @@ local function _enqueue_log(level_name, message)
     end
 
     local pool = _get_table_pool()
-    local item = pool and pool.get("log_entry") or {}
+    local item = (pool and pool.get("log_entry")) or {}
     item.level = level_name
     item.message = message
 
@@ -204,20 +226,27 @@ local function _enqueue_log(level_name, message)
         state.log_queue = {}
         for _, q_item in ipairs(current_queue) do
             _write_to_output(q_item.level, q_item.message)
-            if pool then pool.release(q_item, "log_entry") end
+            if pool and q_item then pool.release(q_item, "log_entry") end
         end
         table_insert(state.log_queue, item)
     end
 end
 
 --- Добавляет запись в кольцевой буфер логов
+--- @private
 --- @param level string Уровень лога
 --- @param component string Имя компонента
 --- @param message string Текст сообщения
 --- @param context_id? number ID контекста
 --- @param now? number Текущее время
 local function _write_to_buffer(level, component, message, context_id, now)
-    if not state.context_buffer[component] then
+    -- Если буферизация отключена, ничего не делаем
+    if state.cached_log_buffer_size == 0 or _m_config.MaxLogComponents == 0 then
+        return
+    end
+
+    local comp_key = type(component) == "string" and component or tostring(component)
+    if not state.context_buffer[comp_key] then
         -- Ограничение количества отслеживаемых компонентов
         if #state.component_list >= _m_config.MaxLogComponents then
             local old_comp = table_remove(state.component_list, 1)
@@ -231,13 +260,13 @@ local function _write_to_buffer(level, component, message, context_id, now)
                 state.context_buffer[old_comp] = nil
             end
         end
-        table_insert(state.component_list, component)
-        state.context_buffer[component] = {}
+        table_insert(state.component_list, comp_key)
+        state.context_buffer[comp_key] = {}
     end
 
-    local buffer = state.context_buffer[component]
+    local buffer = state.context_buffer[comp_key]
     local pool = _get_table_pool()
-    local entry = pool and pool.get("log_entry") or {}
+    local entry = (pool and pool.get("log_entry")) or {}
 
     entry.timestamp = now or os_time()
     entry.level = level
@@ -247,7 +276,7 @@ local function _write_to_buffer(level, component, message, context_id, now)
     table_insert(buffer, entry)
 
     -- Ограничение размера буфера (FIFO)
-    if #buffer > state.buffer_size then
+    if #buffer > state.cached_log_buffer_size then -- Используем кэшированный размер буфера
         local old = table_remove(buffer, 1)
         if pool and old then
             pool.release(old, "log_entry")
@@ -256,6 +285,7 @@ local function _write_to_buffer(level, component, message, context_id, now)
 end
 
 --- Внутренняя функция для записи лога
+--- @private
 --- @param level_name string Имя уровня (INFO, ERROR и т.д.)
 --- @param component string Имя компонента
 --- @param format_str any Форматная строка
@@ -266,6 +296,7 @@ local function _write_log(level_name, component, format_str, ...)
     local should_log_msg = _should_log(level)
 
     -- Оптимизация: Проверяем уровень ДО формирования строки
+    -- Логируем ошибки, если есть активный контекст, даже если уровень лога низкий
     if not should_log_msg and not (is_error and state.current_context_id) then
         return
     end
@@ -281,37 +312,34 @@ local function _write_log(level_name, component, format_str, ...)
 
     -- Буферизация для диагностики
     if state.cached_log_buffer_size > 0 then
-        state.buffer_size = state.cached_log_buffer_size
         -- Используем прямую запись в буфер, так как Logger еще не полностью определен
         _write_to_buffer(level_name, component, msg, state.current_context_id, now)
     end
 
     -- Вывод лога
-    if should_log_msg then
-        local output_msg
-        if state.cached_log_format == "JSON" then
-            local pool = _get_table_pool()
-            local log_data = pool and pool.get("log_data") or {}
-            log_data.timestamp = now
-            log_data.level = level_name
-            log_data.component = component
-            log_data.message = msg
-            log_data.context_id = state.current_context_id
+    local output_msg
+    if state.cached_log_format == "JSON" then
+        local pool = _get_table_pool()
+        local log_data = (pool and pool.get("log_data")) or {}
+        log_data.timestamp = now
+        log_data.level = level_name
+        log_data.component = component
+        log_data.message = msg
+        log_data.context_id = state.current_context_id
 
-            local ok_json, encoded_json = pcall(json_encode, log_data)
-            if ok_json then
-                output_msg = encoded_json
-            else
-                output_msg = string_format("[ОШИБКА JSON-СЕРИАЛИЗАЦИИ] %s: %s", component, msg)
-                _write_to_output("ERROR", output_msg) -- Логируем ошибку сериализации напрямую
-            end
-            if pool then pool.release(log_data, "log_data") end
+        local ok_json, encoded_json = pcall(json_encode, log_data)
+        if ok_json then
+            output_msg = encoded_json
         else
-            output_msg = string_format("[%s] %s", component, msg)
+            output_msg = string_format("[ОШИБКА JSON-СЕРИАЛИЗАЦИИ] %s: %s", component, msg)
+            level_name = "ERROR"
         end
-
-        _enqueue_log(level_name, output_msg)
+        if pool and log_data then pool.release(log_data, "log_data") end
+    else
+        output_msg = string_format("[%s] %s", component, msg)
     end
+
+    _enqueue_log(level_name, output_msg)
 end
 
 
@@ -409,7 +437,7 @@ function Logger.flush()
     local pool = _get_table_pool()
     for _, item in ipairs(current_queue) do
         _write_to_output(item.level, item.message)
-        if pool then
+        if pool and item then
             pool.release(item, "log_entry")
         end
     end
@@ -476,7 +504,7 @@ function Logger.with_error(func, ...)
 
     -- Pop context (защита от повреждения стека)
     state.current_context_id = prev_context_id
-    if prev_context_id and #state.context_stack > 0 then -- Добавлена проверка на непустой стек
+    if prev_context_id and #state.context_stack > 0 then
         table_remove(state.context_stack)
     end
 
@@ -484,6 +512,7 @@ function Logger.with_error(func, ...)
     local function _cleanup()
         state.last_errors[context_id] = nil
         state.active_contexts = state.active_contexts - 1
+        -- Сбрасываем context_counter только если нет активных контекстов
         if state.active_contexts == 0 then
             state.context_counter = 0
         end
