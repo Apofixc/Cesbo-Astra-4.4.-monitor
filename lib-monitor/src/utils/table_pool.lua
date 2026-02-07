@@ -104,22 +104,21 @@ local function _clear_visited_cache()
 end
 
 --- Внутренняя рекурсивная функция очистки таблицы.
---- Реализует автоматический возврат вложенных таблиц в их родные пулы.
+--- Реализует автоматический рекурсивный возврат вложенных объектов в их пулы.
 --- @param t table Таблица для очистки
---- @param deep boolean|string Флаг глубокой очистки (рекурсия по обычным таблицам)
+--- @param do_deep boolean Флаг глубокой очистки (рекурсия по обычным таблицам)
+--- @param default_child_pool string|nil Имя пула для дочерних таблиц без __pool_type
 --- @param depth number Текущая глубина рекурсии
-local function _do_clear_table(t, deep, depth)
-    local default_child_pool = type(deep) == "string" and deep or nil
-
+local function _do_clear_table(t, do_deep, default_child_pool, depth)
     for k, v in next, t do
         if k ~= "__pool_type" then
             if type(v) == "table" and not state.visited_cache[v] then
                 local v_pool_type = v.__pool_type or default_child_pool
                 if v_pool_type then
-                    TablePool.release(v, v_pool_type, deep, depth + 1)
-                elseif deep and depth < MAX_DEPTH then
+                    TablePool.release(v, v_pool_type, do_deep, depth + 1)
+                elseif do_deep and depth < MAX_DEPTH then
                     state.visited_cache[v] = true
-                    _do_clear_table(v, deep, depth + 1)
+                    _do_clear_table(v, do_deep, default_child_pool, depth + 1)
                 end
             end
             t[k] = nil
@@ -180,17 +179,17 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
     if type(cleaner) == "table" then
         local schema = cleaner
         local schema_len = #schema
-        cleaner = function(t, deep, depth)
+        cleaner = function(t, deep_param, default_child_pool_param, depth) -- Изменено: deep -> deep_param, добавлен default_child_pool_param
             for i = 1, schema_len do
                 local k = schema[i]
                 local v = t[k]
                 if type(v) == "table" and not state.visited_cache[v] then
-                    local v_pool_type = v.__pool_type
+                    local v_pool_type = v.__pool_type or default_child_pool_param
                     if v_pool_type then
-                        TablePool.release(v, v_pool_type, deep, depth + 1)
-                    elseif deep and depth < MAX_DEPTH then
+                        TablePool.release(v, v_pool_type, deep_param, depth + 1)
+                    elseif deep_param and depth < MAX_DEPTH then
                         state.visited_cache[v] = true
-                        _do_clear_table(v, true, depth + 1)
+                        _do_clear_table(v, true, default_child_pool_param, depth + 1) -- Изменено: deep теперь boolean, default_child_pool_name = nil
                     end
                 end
                 t[k] = nil
@@ -199,9 +198,9 @@ function TablePool.register_type(pool_type, cleaner, max_size, preallocate_count
             if state.debug_mode then
                 for k in next, t do
                     if k ~= "__pool_type" and k ~= "__in_pool" then
-                        Logger.error(COMPONENT_NAME,
+                        if Logger then Logger.error(COMPONENT_NAME,
                             "Схематичный очиститель '%s' пропустил поле: %s",
-                            pool_type, tostring(k))
+                            pool_type, tostring(k)) end
                         t[k] = nil
                     end
                 end
@@ -282,9 +281,9 @@ end
 --- Возвращает таблицу в пул для повторного использования.
 --- @param t table Таблица для возврата
 --- @param pool_type? string Тип пула (если nil, берется из объекта)
---- @param deep? boolean|string Флаг глубокой очистки (рекурсивный возврат вложенных таблиц)
+--- @param do_deep? boolean Флаг глубокой очистки (рекурсивный возврат вложенных таблиц)
 --- @param depth? number Внутренний параметр глубины рекурсии
-function TablePool.release(t, pool_type, deep, depth)
+function TablePool.release(t, pool_type, do_deep, depth)
     depth = depth or 0
     if type(t) ~= "table" or state.visited_cache[t] then return end
     if depth == 0 then state.visited_count = state.visited_count + 1 end
@@ -297,13 +296,13 @@ function TablePool.release(t, pool_type, deep, depth)
     local force_deep = false
     if original_type and original_type ~= pool_type then
         force_deep = true
-        deep = true
+        do_deep = true -- Принудительная глубокая очистка
     end
 
     -- Защита от двойного возврата (O(1))
     if t.__in_pool then
-        Logger.warning(COMPONENT_NAME,
-            "Попытка двойного освобождения таблицы в пул '%s'", pool_type)
+        if Logger then Logger.warning(COMPONENT_NAME,
+            "Попытка двойного освобождения таблицы в пул '%s'", pool_type) end
         if depth == 0 then
             state.visited_count = state.visited_count - 1
             if state.visited_count == 0 then _clear_visited_cache() end
@@ -319,7 +318,7 @@ function TablePool.release(t, pool_type, deep, depth)
 
     -- Оптимизация: если пул полон и не требуется глубокая очистка, выходим сразу
     local limit = state.limits[pool_type] or _m_config.MaxPoolSize
-    if depth == 0 and #pool >= limit and not deep then
+    if depth == 0 and #pool >= limit and not do_deep then
         state.visited_count = state.visited_count - 1
         if state.visited_count == 0 then _clear_visited_cache() end
         return
@@ -329,21 +328,22 @@ function TablePool.release(t, pool_type, deep, depth)
 
     -- Выполняем очистку
     local cleaner = state.cleaners[pool_type]
-    local is_deep = (deep == true or type(deep) == "string")
+    local default_child_pool_name = (type(do_deep) == "string" and do_deep) or nil -- Если do_deep - строка, это имя пула по умолчанию
+    local actual_do_deep = (do_deep == true or default_child_pool_name ~= nil) -- Фактический флаг глубокой очистки
     local is_flat = state.is_flat[pool_type] and not force_deep
 
     if force_deep then
         -- Принудительная полная очистка при смене типа пула
-        _do_clear_table(t, true, depth)
+        _do_clear_table(t, true, nil, depth) -- Здесь default_child_pool не нужен, т.к. все будет очищено
     elseif cleaner then
         -- Кастомные очистители запускаем в pcall для безопасности
-        local ok, err = pcall(cleaner, t, is_deep, depth)
+        local ok, err = pcall(cleaner, t, actual_do_deep, default_child_pool_name, depth) -- Изменено: добавлен default_child_pool_name
         if not ok then
-            Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err))
+            if Logger then Logger.error(COMPONENT_NAME, "Ошибка в кастомном очистителе пула '%s': %s", pool_type, tostring(err)) end
         end
     elseif not is_flat and depth < MAX_DEPTH then
         -- Стандартная очистка (быстрее без pcall)
-        _do_clear_table(t, is_deep, depth)
+        _do_clear_table(t, actual_do_deep, default_child_pool_name, depth)
     elseif is_flat then
         -- Быстрая очистка для плоских пулов
         for k in next, t do
