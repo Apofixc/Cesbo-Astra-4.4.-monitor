@@ -18,6 +18,7 @@ local unpack = _G.table.unpack
 
 -- 2. Функции из ModuleManager.get_module()
 local TablePool = nil -- Кэшируется при первом обращении
+local EventDispatcher = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 local log = ModuleManager.get_global_dependency("log")
@@ -111,6 +112,12 @@ local function _get_table_pool()
     end
 
     return TablePool
+end
+
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    return EventDispatcher
 end
 
 --- Обновляет кэшированные параметры логирования из локальной конфигурации
@@ -291,8 +298,13 @@ local function _write_log(level_name, component, format_str, ...)
             log_data.message = msg
             log_data.context_id = state.current_context_id
 
-            output_msg = json_encode(log_data)
-
+            local ok_json, encoded_json = pcall(json_encode, log_data)
+            if ok_json then
+                output_msg = encoded_json
+            else
+                output_msg = string_format("[ОШИБКА JSON-СЕРИАЛИЗАЦИИ] %s: %s", component, msg)
+                _write_to_output("ERROR", output_msg) -- Логируем ошибку сериализации напрямую
+            end
             if pool then pool.release(log_data, "log_data") end
         else
             output_msg = string_format("[%s] %s", component, msg)
@@ -315,8 +327,9 @@ Logger._context_buffer = state.context_buffer
 
 --- Инициализирует подписку на обновление конфигурации
 function Logger.init_config_subscription()
-    if _G.EventDispatcher then
-        _G.EventDispatcher:subscribe("config:updated:logger", function(new_config)
+    local eventDispatcher = _get_event_dispatcher()
+    if eventDispatcher then
+        eventDispatcher:subscribe("config:updated:logger", function(new_config)
             for k, v in pairs(new_config) do
                 _m_config[k] = v
             end
@@ -463,7 +476,7 @@ function Logger.with_error(func, ...)
 
     -- Pop context (защита от повреждения стека)
     state.current_context_id = prev_context_id
-    if prev_context_id then
+    if prev_context_id and #state.context_stack > 0 then -- Добавлена проверка на непустой стек
         table_remove(state.context_stack)
     end
 
