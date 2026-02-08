@@ -17,6 +17,7 @@ local math_floor = _G.math.floor
 
 -- 2. Функции из ModuleManager.get_module()
 local Logger = ModuleManager.get_module("logger")
+local EventDispatcher = nil -- Кэшируется при первом обращении
 
 -- 3. Глобальные зависимости Astra
 local timer = ModuleManager.get_global_dependency("timer")
@@ -56,6 +57,12 @@ local instance = nil
 -- ===========================================================================
 -- Внутренние функции (Private/Protected)
 -- ===========================================================================
+
+local function _get_event_dispatcher()
+    if EventDispatcher then return EventDispatcher end
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
+    return EventDispatcher
+end
 
 --- Инициализирует планировщик и запускает основной цикл
 --- @private
@@ -310,8 +317,10 @@ end
 
 --- Инициализирует подписку на обновление конфигурации
 function Scheduler:init_config_subscription()
-    if _G.EventDispatcher then
-        _G.EventDispatcher:subscribe("config:updated:system", function(new_config)
+    local eventDispatcher = _get_event_dispatcher()
+    if eventDispatcher then
+        local instance = eventDispatcher.get_instance()
+        instance:subscribe("config:updated:system", function(new_config)
             if new_config.SchedulerInterval and new_config.SchedulerInterval ~= self._current_interval then
                 self._current_interval = new_config.SchedulerInterval
                 -- Пересоздаем таймер с новым интервалом
