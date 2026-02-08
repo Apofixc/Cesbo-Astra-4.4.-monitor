@@ -357,7 +357,8 @@ Logger._context_buffer = state.context_buffer
 function Logger.init_config_subscription()
     local eventDispatcher = _get_event_dispatcher()
     if eventDispatcher then
-        eventDispatcher:subscribe("config:updated:logger", function(new_config)
+        local instance = eventDispatcher.get_instance()
+        instance:subscribe("config:updated:logger", function(new_config)
             for k, v in pairs(new_config) do
                 _m_config[k] = v
             end
