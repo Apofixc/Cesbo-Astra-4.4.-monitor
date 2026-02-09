@@ -327,7 +327,6 @@ local function _write_log(level_name, component, format_str, ...)
         log_data.context_id = state.current_context_id
 
         local ok_json, encoded_json = pcall(json_encode, log_data)
-        print(encoded_json)
         if ok_json then
             output_msg = encoded_json
         else
