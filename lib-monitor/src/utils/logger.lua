@@ -207,7 +207,7 @@ end
 --- @param level_name string Имя уровня логирования
 --- @param message string Текст сообщения
 local function _enqueue_log(level_name, message)
-    if not state.cached_log_batch_enabled then
+    if not state.cached_log_batch_enabled or _m_config.MaxLogQueueSize == 0 or _m_config.MaxLogQueueSize == nil  then
         _write_to_output(level_name, message)
         return
     end
@@ -221,14 +221,13 @@ local function _enqueue_log(level_name, message)
         table_insert(state.log_queue, item)
     else
         -- Если очередь переполнена, сбрасываем немедленно
-        -- Используем прямую очистку очереди, так как Logger еще не полностью определен
         local current_queue = state.log_queue
         state.log_queue = {}
         for _, q_item in ipairs(current_queue) do
             _write_to_output(q_item.level, q_item.message)
             if pool and q_item then pool.release(q_item, "log_entry") end
         end
-        table_insert(state.log_queue, item)
+        table_insert(state.log_queue, item) -- После сброса всех очередей, мы добавляем новую в таблицу.
     end
 end
 
@@ -328,6 +327,7 @@ local function _write_log(level_name, component, format_str, ...)
         log_data.context_id = state.current_context_id
 
         local ok_json, encoded_json = pcall(json_encode, log_data)
+        print(encoded_json)
         if ok_json then
             output_msg = encoded_json
         else
