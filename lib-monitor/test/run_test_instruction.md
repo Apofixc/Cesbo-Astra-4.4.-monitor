@@ -7,27 +7,27 @@
 `run_test.lua` — это основной скрипт, который:
 *   Настраивает среду выполнения Lua, включая `package.path` для доступа к тестовым утилитам и модулям `lib-monitor`.
 *   Инициализирует Luacov для сбора статистики покрытия кода.
-*   Рекурсивно ищет тестовые файлы (файлы, начинающиеся с `test_` и имеющие расширение `.lua`) в указанной директории (по умолчанию `/opt/astra/lib-monitor/test/unit`).
+*   Рекурсивно ищет тестовые файлы (файлы, начинающиеся с `test_` и имеющие расширение `.lua`) в указанной директории (по умолчанию `/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/unit`).
 *   Запускает найденные тесты в изолированной среде.
 *   Генерирует и выводит отчет Luacov после завершения всех тестов.
 *   Возвращает код выхода `0` при успешном прохождении всех тестов и `1` в случае ошибок.
 
 ## 2. Запуск тестов
 
-Для запуска тестов необходимо выполнить скрипт `run_test.lua` с помощью интерпретатора `astra` (версии 4.4.182 или 4.4.187cw), который находится в `/opt/astra/astra4.4.182` или `/opt/astra/astra4.4.187cw`.
+Для запуска тестов необходимо выполнить скрипт `run_test.lua` с помощью интерпретатора `astra` (версии 4.4.182 или 4.4.187cw), который находится в `/opt/Cesbo-Astra-4.4.-monitor/astra4.4.182` или `/opt/Cesbo-Astra-4.4.-monitor/astra4.4.187cw`.
 
 **Важно:** `astra4.4.182` или `astra4.4.187cw` не поддерживают внешние библиотеки на C.
 
 Пример запуска:
 ```bash
-/opt/astra/astra4.4.182 /opt/astra/lib-monitor/test/run_test.lua
+/opt/Cesbo-Astra-4.4.-monitor/astra4.4.182 /opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/run_test.lua
 ```
 или
 ```bash
-/opt/astra/astra4.4.187cw /opt/astra/lib-monitor/test/run_test.lua
+/opt/Cesbo-Astra-4.4.-monitor/astra4.4.187cw /opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/run_test.lua
 ```
 
-Скрипт автоматически найдет и запустит все тесты в директории `/opt/astra/lib-monitor/test/unit`.
+Скрипт автоматически найдет и запустит все тесты в директории `/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/unit`.
 
 ## 3. Структура тестовых файлов
 
@@ -381,9 +381,9 @@ my_suite:run()
 ## 7. Сбор покрытия кода (Luacov)
 
 `run_test.lua` автоматически интегрируется с Luacov. Если Luacov успешно инициализирован, он будет собирать статистику покрытия кода для всех запущенных тестовых файлов.
-После завершения всех тестов, `run_test.lua` вызывает `luacov_runner.shutdown()` и пытается прочитать и вывести сводку из файла отчета `luacov.report.out`, который находится в `/opt/astra/lib-monitor/test/`.
+После завершения всех тестов, `run_test.lua` вызывает `luacov_runner.shutdown()` и пытается прочитать и вывести сводку из файла отчета `luacov.report.out`, который находится в `/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/`.
 
-Для просмотра полного отчета покрытия кода после запуска тестов, вы можете открыть файл `/opt/astra/lib-monitor/test/luacov.report.out` в текстовом редакторе.
+Для просмотра полного отчета покрытия кода после запуска тестов, вы можете открыть файл `/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/luacov.report.out` в текстовом редакторе.
 
 ## 8. Рекомендации
 

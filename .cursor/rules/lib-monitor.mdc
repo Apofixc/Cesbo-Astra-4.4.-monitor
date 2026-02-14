@@ -1,0 +1,200 @@
+---
+alwaysApply: true
+---
+# Cesbo Astra API
+
+## ЧАСТЬ 1: Cesbo Astra API — подробное описание
+
+### astra (глобальная таблица)
+| Элемент | Вход | Выход | Описание |
+|---------|------|-------|----------|
+| astra.version | — | string | Версия Astra |
+| astra.debug | — | boolean | Отладочная сборка |
+| astra.exit() | — | — | Нормальный выход |
+| astra.abort() | — | — | Аварийное завершение |
+| astra.reload() | — | — | Перезагрузка скрипта |
+
+### log (глобальная таблица)
+| Элемент | Вход | Выход | Описание |
+|---------|------|-------|----------|
+| log.set(options) | options: table {debug?, filename?, syslog?, stdout?} | — | Настройка логирования |
+| log.error(msg) | msg: string | — | Ошибка |
+| log.warning(msg) | msg: string | — | Предупреждение |
+| log.info(msg) | msg: string | — | Информация |
+| log.debug(msg) | msg: string | — | Отладка (если debug=true) |
+
+### utils (глобальная таблица)
+| Элемент | Вход | Выход | Описание |
+|---------|------|-------|----------|
+| utils.hostname() | — | string | Имя хоста |
+| utils.ifaddrs() | — | table | Интерфейсы: {name={ipv4?, ipv6?, link?}} |
+| utils.stat(path) | path: string | table | type, size, mtime и др. |
+| utils.readdir(path) | path: string | iterator | Элементы каталога |
+
+### json (глобальная таблица)
+| Элемент | Вход | Выход | Описание |
+|---------|------|-------|----------|
+| json.encode(t) | t: table | string | Таблица → JSON |
+| json.decode(s) | s: string | table |nil | JSON → таблица; nil при ошибке |
+| json.load(path) | path: string | table |nil | Файл → таблица; nil при ошибке |
+| json.save(path, t) | path: string, t: table | boolean | true=успех, false=ошибка |
+
+### base64 (глобальная таблица)
+| Элемент | Вход | Выход | Описание |
+|---------|------|-------|----------|
+| base64.encode(s) | s: string | string | Кодирование |
+| base64.decode(s) | s: string | string | Декодирование |
+
+### dvbls() (глобальная функция)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| — | table | Массив {adapter, device, mac} для каждого DVB-адаптера |
+
+### string.split(s, delimiter)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| s: string, delimiter: string | table | Разбиение строки; nil если s=nil |
+
+---
+
+### timer(opt)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {interval: number, callback: function} | instance | interval — секунды; callback(self) вызывается по таймеру |
+
+**Методы instance:**
+| Метод | Вход | Выход | Описание |
+|-------|------|-------|----------|
+| :close() | — | — | Остановка и освобождение таймера |
+
+---
+
+### http_server(opt)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {addr, port, server_name?, http_version?, sctp?, route} | instance | route: {{"/path", callback}, ...}; callback(server, client, request) |
+
+**request (таблица):** method, version, path, query, headers, content
+
+**Методы instance:**
+| Метод | Вход | Выход | Описание |
+|-------|------|-------|----------|
+| :port() | — | number | Порт сервера |
+| :close() | — | — | Остановка сервера |
+| :close(client) | client: lightuserdata | — | Закрытие соединения клиента |
+| :send(client, response) | response: {code, message?, headers?, content?} | — | code — обязательно |
+| :data(client) | client: lightuserdata | table | Персистентная таблица для данных клиента |
+| :abort(client, code, text?) | code: number, text?: string | — | Ответ с ошибкой, закрытие соединения |
+
+---
+
+### http_request(opt)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {host, port?, path?, method?, headers?, content?, stream?, sync?, timeout?, callback, upstream?} | instance | callback(self, response); при stream=true response:stream() возвращает stream |
+
+**response:** code, message, headers (table), content (string); nil при ошибке соединения/таймауте
+
+---
+
+### dvb_tune(conf)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| conf: {adapter, device?} или {mac} + параметры тюнинга (type, tp, lnb, pnr и др.) | instance | DVB-вход; adapter/device или mac обязательны; type: S, S2, T, T2, C, ATSC, ISDBT; tp: "freq:pol:sr"; astra.abort() при ошибке |
+
+**instance:** :stream(), :close() — через dvb_input
+
+---
+
+### analyze(opt)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {upstream, name, callback, rate_stat?, join_pid?, cc_limit?, bitrate_limit?} | instance | Анализ MPEG-TS; callback(data) |
+
+**data:**
+| Поле | Тип | Описание |
+|------|-----|----------|
+| data.error | string | Ошибка парсинга |
+| data.psi | string | "pat"|"pmt"|"cat"|"sdt" — PSI событие |
+| data.analyze | table | По PID: pid, bitrate, cc_error, sc_error, pes_error |
+| data.total | table | bitrate, cc_errors, pes_errors, scrambled |
+| data.on_air | boolean | Статус потока (приходит с data.analyze) |
+| data.rate | table | rate_stat массив (если rate_stat=true) |
+
+---
+
+### channel(opt)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {upstream, name, pnr?, pid?, no_sdt?, no_eit?, cas?, set_pnr?, map?, filter?, no_reload?} | instance | MPEG-TS demux; pnr — номер программы; map: {"type=pid"}; filter: список PID для отбрасывания |
+
+**instance:** :stream(), :set_upstream() — через module stream API
+
+---
+
+### transmit(opt?)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| opt: {instance_id?} | instance | Прозрачная передача потока |
+
+**Методы:** :set_upstream(stream), :stream()
+
+---
+
+### parse_url(url)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| url: string | table |nil | Парсинг URL; форматы: udp, rtp, http, https, np, dvb, file |
+
+**Выход:** {format, host?, port?, path?, addr?, filename?, login?, password?, localaddr?} + опции из #fragment
+
+---
+
+### init_input(conf)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| conf: table | instance |nil | conf.name, conf.format обязательны; format: udp, rtp, file, http, dvb; conf — из parse_url или таблица; astra.abort() при ошибке |
+
+**instance:** .input (модуль), .tail (последний в цепочке), .channel?, .decrypt?; .tail:stream() — stream для upstream
+
+---
+
+### kill_input(instance)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| instance: table | nil | Освобождение входа; nil если instance=nil |
+
+---
+
+### make_channel(channel_config)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| config: {name, input, output?, timeout?, enable?, map?, set_pnr?} | channel_data |nil | name, input[] обязательны; input/output — строки URL или таблицы {url, format, ...}; enable=true по умолчанию; nil при ошибке или enable=false |
+
+**channel_data:** config, input[], output[], transmit, tail, active_input_id, clients
+
+---
+
+### kill_channel(channel_data)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| channel_data: table | nil | Полная остановка канала; nil если channel_data не найден в channel_list |
+
+---
+
+### find_channel(key, value)
+| Вход | Выход | Описание |
+|------|-------|----------|
+| key: string, value: any | channel_data |nil | Поиск по channel_list где config[key]==value |
+
+---
+
+### channel_list (глобальная таблица)
+| Тип | Описание |
+|-----|----------|
+| table | Массив активных channel_data (из make_channel) |
+
+---
+
+### stream() — общий метод модулей потока
+Все модули (udp_input, channel, analyze, transmit, dvb_input и др.): **instance:stream()** возвращает stream для передачи в upstream следующего модуля.

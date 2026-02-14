@@ -262,8 +262,10 @@ function MonitorConfig.reload()
         local eventDispatcher = _get_event_dispatcher()
         if eventDispatcher then
             local instance = eventDispatcher.get_instance()
-            for section_name in pairs(MonitorConfig.ValidationSchema) do
-                instance:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+            if instance then
+                for section_name in pairs(MonitorConfig.ValidationSchema) do
+                    instance:emit_safe("config:updated:" .. section_name:lower(), MonitorConfig[section_name])
+                end
             end
         end
         return true -- Успех, так как дефолтные значения применены

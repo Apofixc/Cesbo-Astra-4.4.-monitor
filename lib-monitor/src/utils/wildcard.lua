@@ -197,9 +197,12 @@ function Wildcard.init_config_subscription()
     if eventDispatcher then
         local instance = eventDispatcher.get_instance()
         instance:subscribe("config:updated:pool", function(new_config)
+            if not new_config or type(new_config) ~= "table" then return end
             if new_config.MaxCacheSize and new_config.MaxCacheSize.wildcard then
                 _m_config.MaxCacheSize.wildcard = new_config.MaxCacheSize.wildcard
-                Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
+                if Logger then
+                    Logger.debug(COMPONENT_NAME, "Лимит кэша Wildcard обновлен: %d", _m_config.MaxCacheSize.wildcard)
+                end
             end
         end)
     end

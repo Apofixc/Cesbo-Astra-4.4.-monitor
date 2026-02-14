@@ -1,16 +1,16 @@
-statsfile = "/opt/astra/lib-monitor/test/luacov.stats.out"
-reportfile = "/opt/astra/lib-monitor/test/luacov.report.out"
+statsfile = "/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/luacov.stats.out"
+reportfile = "/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/luacov.report.out"
 
 include = {
-    "opt/astra/lib%-monitor/src/.*",
-    "opt/astra/lib%-monitor/http/.*",
+    "opt/Cesbo-Astra-4.4.-monitor/lib%-monitor/src/.*",
+    "opt/Cesbo-Astra-4.4.-monitor/lib%-monitor/http/.*",
     -- Добавьте относительные пути, если запуск идет из /opt/astra/lib-monitor
     "src/.*",
     "http/.*"
 }
 
 exclude = {
-    "^/opt/astra/lib-monitor/test/.+$"
+    "^/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/test/.+$"
 }
 
 runreport = true

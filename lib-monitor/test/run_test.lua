@@ -6,7 +6,20 @@
 local TestRunner = {}
 
 -- 1. Константы и конфигурация
-local LIB_DIR = "/opt/astra/lib-monitor"
+local function _detect_lib_dir()
+    local info = debug.getinfo(1, "S")
+    local source = info and info.source
+    if source and source:sub(1, 1) == "@" then
+        local script_path = source:sub(2)
+        local test_dir = script_path:match("^(.+)/")  -- .../lib-monitor/test
+        if test_dir then
+            local lib_dir = test_dir:match("^(.+)/")  -- .../lib-monitor
+            if lib_dir then return lib_dir end
+        end
+    end
+    return "/opt/Cesbo-Astra-4.4.-monitor/lib-monitor"
+end
+local LIB_DIR = _detect_lib_dir()
 local TEST_ROOT_DIR = LIB_DIR .. "/test"
 local LUAC_REPORT_PATH = LIB_DIR .. "/test/luacov.report.out"
 local LUAC_CONFIG_PATH = LIB_DIR .. "/test/.luacov"
@@ -22,10 +35,10 @@ end
 --- @brief Настраивает среду выполнения, включая пути Lua и инициализацию Luacov.
 --- @return boolean Успешна ли инициализация Luacov.
 function TestRunner.setup_environment()
-    -- Настройка package.path для всех новых поддиректорий тестов
+    -- Настройка package.path: тесты + lib-monitor src для require
     package.path = string.format(
-        "%s/luacov/?.lua;%s/?.lua;%s/unit/?.lua;%s/integration/?.lua;%s/system/?.lua;%s/performance/?.lua;%s/stress/?.lua;%s/tools/?.lua;%s",
-        TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, package.path
+        "%s/?.lua;%s/luacov/?.lua;%s/?.lua;%s/unit/?.lua;%s/integration/?.lua;%s/system/?.lua;%s/performance/?.lua;%s/stress/?.lua;%s/tools/?.lua;%s",
+        LIB_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, TEST_ROOT_DIR, package.path
     )
 
     local ok_lc, luacov_runner = pcall(require, "luacov.runner")

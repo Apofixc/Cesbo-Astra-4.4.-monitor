@@ -87,6 +87,7 @@ end
 --- Обновляет локальную конфигурацию из события
 --- @param new_config table Новая конфигурация секции Pool
 local function _update_config(new_config)
+    if not new_config or type(new_config) ~= "table" then return end
     for k, v in pairs(new_config) do
         _m_config[k] = v
     end
@@ -365,7 +366,7 @@ function TablePool.release(t, pool_type, do_deep, depth)
     if state.debug_mode and depth == 0 then
         for k in next, t do
             if k ~= "__pool_type" and k ~= "__in_pool" then
-                Logger.error(COMPONENT_NAME, "Таблица '%s' осталась грязной! Поле: %s", pool_type, tostring(k))
+                if Logger then Logger.error(COMPONENT_NAME, "Таблица '%s' осталась грязной! Поле: %s", pool_type, tostring(k)) end
                 t[k] = nil
             end
         end
@@ -395,7 +396,7 @@ function TablePool.drain(pool_type, count)
         pool[size - i + 1] = nil
     end
 
-    if state.debug_mode then
+    if state.debug_mode and Logger then
         Logger.debug(COMPONENT_NAME, "Пул '%s' частично очищен: удалено %d таблиц", pool_type, to_remove)
     end
 end
@@ -418,7 +419,9 @@ function TablePool.clear_all()
     end
 
     collectgarbage()
-    Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
+    if Logger then
+        Logger.debug(COMPONENT_NAME, "Все пулы таблиц очищены")
+    end
 end
 
 --- Останавливает обслуживание пулов и очищает ресурсы.
@@ -474,9 +477,11 @@ function TablePool.maintain()
                 local new_limit = math_max(current_limit + 1,
                     math_floor(current_limit * (1 + _m_config.PoolAdaptiveStep)))
                 state.limits[name] = new_limit
-                Logger.debug(COMPONENT_NAME,
-                    "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
-                    name, current_limit, new_limit, miss_rate)
+                if Logger then
+                    Logger.debug(COMPONENT_NAME,
+                        "Пул '%s' расширен: %d -> %d (miss rate: %.2f)",
+                        name, current_limit, new_limit, miss_rate)
+                end
             elseif miss_rate < 0.05 and current_size < (current_limit * 0.5) then
                 -- Сжимаем пул, только если промахов почти нет И он заполнен менее чем наполовину
                 -- Это предотвращает осцилляцию при активном, но стабильном использовании.
@@ -486,7 +491,9 @@ function TablePool.maintain()
                 )
                 if new_limit < current_limit then
                     state.limits[name] = new_limit
-                    Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)
+                    if Logger then
+                        Logger.debug(COMPONENT_NAME, "Пул '%s' сжат: %d -> %d", name, current_limit, new_limit)
+                    end
                 end
             end
 

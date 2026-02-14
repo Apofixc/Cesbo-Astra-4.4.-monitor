@@ -161,7 +161,7 @@ end
 
 --- Возвращает таблицу всех upvalue для всех функций в модуле.
 --- @param module_table table Таблица, представляющая модуль.
---- @return table<function, table<string, any>> Таблица, где ключи - функции, значения - их upvalue.
+--- @return table<function, table<string, any>> Таблица.
 function Mock:get_module_upvalues(module_table)
     local module_upvalues = {}
     for _, func in pairs(module_table) do
