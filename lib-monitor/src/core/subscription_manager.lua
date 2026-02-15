@@ -43,7 +43,7 @@ local USER_AGENT = "User-Agent: Astra v." .. astra_version
 local COMPONENT_NAME = "SubscriptionManager"
 local CONTENT_TYPE = "Content-Type: application/json;charset=utf-8"
 local CONNECTION_CLOSE = "Connection: close"
-local STORAGE_PATH = "/opt/astra/lib-monitor/subscribers.json"
+local STORAGE_PATH = (ModuleManager.get_lib_root() or "./") .. "subscribers.json"
 
 --- Локальная конфигурация модуля (значения по умолчанию)
 local _m_config = {

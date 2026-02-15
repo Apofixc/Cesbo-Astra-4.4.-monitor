@@ -55,6 +55,7 @@ function SystemRoutes.get_health(server, client, request)
 
     local response = {
         status = status,
+        hostname = utils_hostname and utils_hostname() or "unknown",
         bind_address = HttpServer and HttpServer._bind_addr or "unknown",
         bind_port = HttpServer and HttpServer._bind_port or 0,
         astra_version = astra_version or "unknown",

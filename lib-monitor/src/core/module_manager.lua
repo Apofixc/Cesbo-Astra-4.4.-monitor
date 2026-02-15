@@ -49,6 +49,9 @@ local _nested_dependency_cache = {}
 --- @type table<string, string[]> Кэш разобранных путей зависимостей
 local _path_parts_cache = {}
 
+--- @type string|nil Корневой каталог библиотеки lib-monitor (с завершающим /)
+local _lib_root = nil
+
 --- @type boolean Флаг блокировки изменений во время загрузки
 local _is_loading = false
 
@@ -390,6 +393,29 @@ function ModuleManager.get_global_dependencies()
     return deps
 end
 
+--- Устанавливает корневой каталог библиотеки lib-monitor (для config.json, subscribers.json и т.д.).
+--- @param path string|nil Путь к каталогу (добавляется завершающий / при необходимости).
+--- @return boolean Статус выполнения.
+function ModuleManager.set_lib_root(path)
+    if path == nil or path == "" then
+        _lib_root = nil
+        return true
+    end
+    local p = path
+    if p:sub(-1) ~= "/" then
+        p = p .. "/"
+    end
+    _lib_root = p
+    _log_debug(COMPONENT_NAME, "Корень библиотеки установлен: %s", _lib_root)
+    return true
+end
+
+--- Возвращает корневой каталог библиотеки lib-monitor (с завершающим /) или nil.
+--- @return string|nil Путь к каталогу или nil, если не установлен.
+function ModuleManager.get_lib_root()
+    return _lib_root
+end
+
 --- Проверяет, загружен ли конкретный модуль.
 --- @param name string Имя модуля.
 --- @return boolean
@@ -428,6 +454,7 @@ function ModuleManager.reset()
     _global_dependencies = {}
     _nested_dependency_cache = {}
     _path_parts_cache = {}
+    _lib_root = nil
     _log_debug(COMPONENT_NAME, "Состояние ModuleManager сброшено.")
 end
 

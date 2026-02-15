@@ -19,6 +19,24 @@ local path_prefix = (... and (...):match("(.-)init_monitor$")) or ""
 --- @type ModuleManager
 local ModuleManager = require(path_prefix .. "src.core.module_manager")
 
+--- Определяет корневой каталог библиотеки по пути к текущему файлу (init_monitor.lua).
+--- @return string|nil Путь к каталогу lib-monitor с завершающим / или nil.
+local function _detect_lib_root()
+    local info = debug.getinfo(1, "S")
+    local src = info and info.source
+    if not src or src:sub(1, 1) ~= "@" then
+        return nil
+    end
+    local filepath = src:sub(2)
+    local dir = filepath:match("^(.+)/") or filepath:match("^(.+)\\[^\\]*$")
+    return (dir and (dir .. "/")) or "./"
+end
+
+local lib_root = _detect_lib_root()
+if lib_root and ModuleManager.set_lib_root then
+    ModuleManager.set_lib_root(lib_root)
+end
+
 -- 3. Фазы инициализации
 local INIT_PHASES = {
     DEPENDENCIES = 1,

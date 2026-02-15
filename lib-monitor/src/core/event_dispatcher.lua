@@ -463,6 +463,21 @@ end
 --- send_lvc (отправить последнее состояние сразу)
 --- @return string|nil ID подписки (UUID)
 function EventDispatcher:subscribe(event_type, callback, filters, options)
+    -- Защита: ленивая инициализация subscription_manager на случай вызова get_instance()
+    -- до полной загрузки зависимостей (например из MonitorConfig.reload() при загрузке модуля).
+    if not self.subscription_manager then
+        local SM = ModuleManager.get_module("core.subscription_manager")
+        if SM then
+            self.subscription_manager = SM.new()
+        end
+    end
+    if not self.subscription_manager then
+        if Logger and Logger.error then
+            Logger.error(COMPONENT_NAME, "subscribe: subscription_manager недоступен")
+        end
+        return nil
+    end
+
     local sub_id = self.subscription_manager:subscribe(event_type, {
         callback = callback,
         filters = filters,

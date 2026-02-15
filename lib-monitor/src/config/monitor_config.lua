@@ -25,7 +25,7 @@ local json_save = ModuleManager.get_global_dependency("json.save")
 
 -- 4. Константы и конфигурации
 local COMPONENT_NAME = "MonitorConfig"
-local CONFIG_PATH = "/opt/astra/lib-monitor/config.json"
+local CONFIG_PATH = (ModuleManager.get_lib_root() or "./") .. "config.json"
 
 --- @class ValidationRule
 --- @field type string Тип данных ("number"|"boolean"|"string"|"table")
