@@ -146,6 +146,7 @@ end
 function TestRunner.execute_tests(test_files)
     local print = print
     local os_clock = os.clock
+    local orig_os_clock = _G.os and _G.os.clock
 
     local total_passed = 0
     local total_failed = 0
@@ -162,10 +163,12 @@ function TestRunner.execute_tests(test_files)
         -- test_helper и test_moc загружаются внутри каждого тестового файла,
         -- поэтому их не нужно явно загружать здесь.
 
+        if orig_os_clock and _G.os then _G.os.clock = orig_os_clock end
         local start_time = os_clock()
         local f, err = loadfile(file_path, "bt", test_env)
         if f then
             local ok, run_err = pcall(f)
+            if orig_os_clock and _G.os then _G.os.clock = orig_os_clock end
             local end_time = os_clock()
             local duration = end_time - start_time
 

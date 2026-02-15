@@ -191,7 +191,7 @@ end
 --- @return EventDispatcher|nil
 local function _get_event_dispatcher()
     if EventDispatcher then return EventDispatcher end
-    EventDispatcher = ModuleManager.get_module("table_pool")
+    EventDispatcher = ModuleManager.get_module("core.event_dispatcher")
     return EventDispatcher
 end
 
@@ -460,16 +460,16 @@ local function _check_thresholds(report)
     end
 
     -- 4. Анализ тренда памяти (Memory Leak Detection)
-    -- Сохраняем историю lua_post_gc
+    -- Сохраняем историю lua (текущее потребление) для детекции монотонного роста
     state.mem_history_idx = (state.mem_history_idx % 10) + 1
-    state.mem_history[state.mem_history_idx] = report.memory.lua_post_gc
+    state.mem_history[state.mem_history_idx] = report.memory.lua
 
     if #state.mem_history >= 10 then
         local is_growing = true
         for i = 1, 9 do
             local curr = state.mem_history[((state.mem_history_idx - i - 1) % 10) + 1]
             local prev = state.mem_history[((state.mem_history_idx - i) % 10) + 1]
-            if curr and prev and curr <= prev then -- Исправлено: curr должен быть > prev для роста
+            if curr and prev and curr >= prev then -- Рост: newer > older (prev > curr), т.е. curr < prev
                 is_growing = false
                 break
             end
@@ -517,6 +517,15 @@ end
 --- @return SystemReport|nil Актуальный отчет
 function ResourceMonitor.check()
     local ok, err = _G.pcall(function()
+        if not state.report then
+            state.report = {
+                pid = nil, uptime = 0, fd_size = 0,
+                cpu = { usage = 0, user = 0, system = 0, threads = 0 },
+                memory = { lua = 0, lua_delta = 0, lua_post_gc = 0, resident = 0, virtual = 0 },
+                network = {}
+            }
+            for i = 1, 10 do state.report.network[i] = { interface = "", ip = "" } end
+        end
         state.iteration_count = state.iteration_count + 1
 
         local now_clock = os_clock()
@@ -542,7 +551,6 @@ function ResourceMonitor.check()
                 report.cpu.user = u_usage
                 report.cpu.system = s_usage
                 report.cpu.usage = _moving_average(u_usage + s_usage)
-                state.last_cpu_usage = report.cpu.usage
             end
         end
 
@@ -558,7 +566,6 @@ function ResourceMonitor.check()
             state.last_post_gc_mem = current_lua_mem
         end
         report.memory.lua_post_gc = state.last_post_gc_mem
-        state.last_lua_mem = current_lua_mem
 
         -- Метрики сети (Static Table Reuse)
         if now_time - state.last_network_check > _m_config.NetworkCheckInterval then
@@ -592,6 +599,8 @@ function ResourceMonitor.check()
 
         -- Проверка порогов
         _check_thresholds(report)
+        state.last_cpu_usage = report.cpu.usage
+        state.last_lua_mem = report.memory.lua
     end)
 
     if not ok then
@@ -602,6 +611,11 @@ function ResourceMonitor.check()
     end
 
     return state.report
+end
+
+--- Сбрасывает report для тестирования ветки get_report при nil (только для unit-тестов)
+function ResourceMonitor._test_clear_report()
+    state.report = nil
 end
 
 --- Возвращает последний собранный отчет

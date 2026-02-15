@@ -221,28 +221,44 @@ end)
 
 suite:add_test("save: при недоступном json.save возвращает false", function()
     local_mock = Mock:new()
-    local orig_gd = ref_ModuleManager.get_global_dependency
-    local_mock:mock_field(ref_ModuleManager, "get_global_dependency", function(name)
-        if name == "json.save" then return nil end
-        return orig_gd(name)
-    end)
-    package.loaded["src.config.monitor_config"] = nil
-    local M = require("src.config.monitor_config")
-    Assert.is_false(M.save(), "save должен вернуть false при недоступном json.save")
+    -- Модуль уже загружен в before_each с json_save = function; подменяем upvalue в save()
+    local patched = local_mock:mock_module_upvalue(ModuleUnderTest, "json_save", nil)
+    Assert.is_true(patched, "upvalue json_save найден в модуле")
+    Assert.is_false(ModuleUnderTest.save(), "save должен вернуть false при недоступном json.save")
 end)
 
--- Покрытие: _load_from_file при json_load == nil (log.error и return nil)
-suite:add_test("reload: при недоступном json.load применяет дефолты (хак: мок до require)", function()
+-- Покрытие: _load_from_file при json_load == nil (строки 229-230). Патчим upvalue в _load_from_file.
+suite:add_test("reload: при недоступном json.load применяет дефолты (upvalue)", function()
     local_mock = Mock:new()
-    local orig_gd = ref_ModuleManager.get_global_dependency
-    local_mock:mock_field(ref_ModuleManager, "get_global_dependency", function(name)
-        if name == "json.load" then return nil end
-        return orig_gd(name)
-    end)
-    package.loaded["src.config.monitor_config"] = nil
-    local M = require("src.config.monitor_config")
-    local ok = M.reload()
+    local reload_fn = ModuleUnderTest.reload
+    local load_fn
+    for i = 1, 20 do
+        local name, val = debug.getupvalue(reload_fn, i)
+        if not name then break end
+        if name == "_load_from_file" then load_fn = val break end
+    end
+    Assert.is_not_nil(load_fn, "_load_from_file найдена в upvalue reload")
+    local patched = local_mock:mock_upvalue(load_fn, "json_load", nil)
+    Assert.is_true(patched, "json_load замокан в _load_from_file")
+    local ok = ModuleUnderTest.reload()
     Assert.is_true(ok, "reload при nil json.load возвращает true (дефолты)")
+end)
+
+-- Покрытие: _load_from_file при не-таблице от json.load (строки 241-242)
+suite:add_test("reload: при возврате не-таблицы от json.load применяет дефолты", function()
+    local_mock = Mock:new()
+    local reload_fn = ModuleUnderTest.reload
+    local load_fn
+    for i = 1, 20 do
+        local name, val = debug.getupvalue(reload_fn, i)
+        if not name then break end
+        if name == "_load_from_file" then load_fn = val break end
+    end
+    Assert.is_not_nil(load_fn, "_load_from_file найдена")
+    local patched = local_mock:mock_upvalue(load_fn, "json_load", function() return "invalid" end)
+    Assert.is_true(patched, "json_load замокан")
+    local ok = ModuleUnderTest.reload()
+    Assert.is_true(ok, "reload при не-таблице от json.load возвращает true (дефолты)")
 end)
 
 -- Покрытие: update при schema == nil (защитная ветка)

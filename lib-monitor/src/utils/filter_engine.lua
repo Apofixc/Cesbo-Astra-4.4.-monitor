@@ -44,9 +44,11 @@ local _m_config = {
 --- @field accessor_cache table<string, function|nil> Кэш функций-аксессоров
 --- @field accessor_cache_count number Текущее количество аксессоров в кэше
 --- @field duration_state table<string, table<string, number>> Состояние фильтров по длительности
+--- @field script_env table<string, table> Кэш env для скриптов (чтобы подставлять актуальный data при каждом вызове)
 local state = {
     script_cache = {},
     script_cache_count = 0,
+    script_env = {},
     accessor_cache = {},
     accessor_cache_count = 0,
     duration_state = {},
@@ -389,7 +391,7 @@ function FilterEngine.match(data, filters, sub_id)
                 -- JIT для простых фильтров по полям
                 local parts = {}
                 for k, v in pairs(filters) do
-                    if not k:find("^_") then
+                    if k:sub(1, 1) ~= "_" then
                         local val_expr = type(v) == "string" and string_format("%q", v) or tostring(v)
                         table_insert(parts, string_format("(data[%q] == %s)", k, val_expr))
                     end
@@ -426,23 +428,28 @@ function FilterEngine.match(data, filters, sub_id)
     if filters.script and type(filters.script) == "string" then
         ---@type function|nil
         local func = state.script_cache[filters.script]
+        local env = state.script_env[filters.script]
         if not func then
             if state.script_cache_count >= _m_config.MaxCacheSize.filter_engine then
                 state.script_cache = {}
+                state.script_env = {}
                 state.script_cache_count = 0
             end
-            local env = {
+            env = {
                 data = data, type = type, tostring = tostring, os_time = os_time, pairs = pairs, ipairs = ipairs
             }
             local err
             func, err = load(filters.script, "=(filter_script)", "t", env)
             if func then
                 state.script_cache[filters.script] = func
+                state.script_env[filters.script] = env
                 state.script_cache_count = state.script_cache_count + 1
             else
                 Logger.error(COMPONENT_NAME, "Script Error: %s", tostring(err))
                 return false
             end
+        else
+            env.data = data
         end
         local ok, res = pcall(func)
         return ok and res == true
@@ -466,7 +473,7 @@ function FilterEngine.match(data, filters, sub_id)
 
     -- Простая фильтрация по полям
     for key, val in pairs(filters) do
-        if key ~= "conditions" and key ~= "logic" and key ~= "script" and not key:find("^_") then
+        if key ~= "conditions" and key ~= "logic" and key ~= "script" and (key:sub(1, 1) ~= "_") then
             if data[key] ~= val then return false end
         end
     end

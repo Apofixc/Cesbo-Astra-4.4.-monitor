@@ -154,7 +154,7 @@ end)
 
 -- Негативные сценарии
 suite:add_test("release: не таблица — выход без ошибки", function()
-    Assert.is_nil(TablePool.release(123))
+    Assert.is_nil(TablePool.release(123), "release не-таблицы возвращает nil без ошибки")
 end)
 
 suite:add_test("release: двойной возврат одной таблицы — предупреждение, без падения", function()

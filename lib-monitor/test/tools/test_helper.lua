@@ -182,62 +182,75 @@ end
 --- @class Assert
 local Assert = {}
 
+local function require_message(message, method)
+    if message == nil or type(message) ~= "string" or message == "" then
+        error(string.format("Assert.%s: параметр message обязателен (строка, не пустая)", method))
+    end
+end
+
 --- @param condition boolean
---- @param message string
+--- @param message string Обязателен.
 function Assert.is_true(condition, message)
+    require_message(message, "is_true")
     if not condition then
-        error(message or "Ожидалось true, получено false")
+        error(message)
     end
 end
 
 --- @param condition boolean
---- @param message string
+--- @param message string Обязателен.
 function Assert.is_false(condition, message)
+    require_message(message, "is_false")
     if condition then
-        error(message or "Ожидалось false, получено true")
+        error(message)
     end
 end
 
 --- @param expected any
 --- @param actual any
---- @param message string
+--- @param message string Обязателен.
 function Assert.are_equal(expected, actual, message)
+    require_message(message, "are_equal")
     if expected ~= actual then
-        error(message or string.format("Ожидалось '%s', получено '%s'", tostring(expected), tostring(actual)))
+        error(message)
     end
 end
 
 --- @param expected any
 --- @param actual any
---- @param message string
+--- @param message string Обязателен.
 function Assert.are_not_equal(expected, actual, message)
+    require_message(message, "are_not_equal")
     if expected == actual then
-        error(message or string.format("Ожидалось не '%s', получено '%s'", tostring(expected), tostring(actual)))
+        error(message)
     end
 end
 
 --- @param value any
---- @param message string
+--- @param message string Обязателен.
 function Assert.is_nil(value, message)
+    require_message(message, "is_nil")
     if value ~= nil then
-        error(message or string.format("Ожидалось nil, получено '%s'", tostring(value)))
+        error(message)
     end
 end
 
 --- @param value any
---- @param message string
+--- @param message string Обязателен.
 function Assert.is_not_nil(value, message)
+    require_message(message, "is_not_nil")
     if value == nil then
-        error(message or "Ожидалось не nil, получено nil")
+        error(message)
     end
 end
 
 --- @param func function
---- @param message string
+--- @param message string Обязателен.
 function Assert.raises_error(func, message)
+    require_message(message, "raises_error")
     local status, err = pcall(func)
     if status then
-        error(message or "Ожидалась ошибка, но функция выполнилась успешно")
+        error(message)
     end
 end
 
@@ -245,8 +258,9 @@ end
 --- @param prefix string
 --- @param message string
 function Assert.string_starts_with(str, prefix, message)
+    require_message(message, "string_starts_with")
     if not str or not prefix or string.sub(str, 1, #prefix) ~= prefix then
-        error(message or string.format("Ожидалось, что строка '%s' начинается с '%s'", tostring(str), tostring(prefix)))
+        error(message)
     end
 end
 

@@ -36,7 +36,10 @@ end
 --- @param value any Новое значение.
 function Mock:mock_global(name, value)
     self.original_env[name] = _G[name]
-    if type(_G[name]) == "table" and type(value) == "table" then
+    if name == "ModuleManager" and type(value) == "table" then
+        -- ModuleManager: прямая подмена, без merge — чтобы патчи ref_ModuleManager применялись к _G.ModuleManager
+        _G[name] = value
+    elseif type(_G[name]) == "table" and type(value) == "table" then
         -- Если оригинальное и новое значение - таблицы, объединяем их
         local new_table = {}
         for k, v in pairs(_G[name]) do

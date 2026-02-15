@@ -216,11 +216,11 @@ suite:run()
     ```
 
 *   **`Assert`**
-    Предоставляет статические методы для проверки условий:
+    Предоставляет статические методы для проверки условий. **Параметр `message` обязателен** — при падении теста по нему можно понять, какая проверка не прошла.
     *   `Assert.is_true(condition, message)`: Проверяет, что `condition` истинно.
     *   `Assert.is_false(condition, message)`: Проверяет, что `condition` ложно.
-    *   `Assert.are_equal(expected, actual, message)`: Проверяет равенство `expected` и `actual`.
-    *   `Assert.are_not_equal(expected, actual, message)`: Проверяет неравенство `expected` и `actual`.
+    *   `Assert.are_equal(expected, actual, message)`: Проверяет равенство. **Порядок аргументов строго (expected, actual)**. Для проверок равенства использовать `are_equal`, а не `is_true(x == y)`.
+    *   `Assert.are_not_equal(expected, actual, message)`: Проверяет неравенство. Порядок аргументов: (expected, actual).
     *   `Assert.is_nil(value, message)`: Проверяет, что `value` равно `nil`.
     *   `Assert.is_not_nil(value, message)`: Проверяет, что `value` не равно `nil`.
     *   `Assert.raises_error(func, message)`: Проверяет, что вызов `func` приводит к ошибке.

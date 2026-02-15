@@ -315,12 +315,8 @@ function EventDispatcher:emit(event_type, event_data, priority, options)
         end
     end
 
-    -- Оптимизация: Subscription-aware Emitting
-    -- Если нет подписчиков (плана) и не нужно кэшировать, выходим
+    -- no_cache при отсутствии плана уже обработан выше (ранний return)
     local no_cache = options and options.no_cache
-    if no_cache and not plan then
-        return nil
-    end
 
     -- Обновляем LVC (если не запрещено в опциях)
     if not no_cache then

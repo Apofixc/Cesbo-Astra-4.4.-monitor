@@ -104,13 +104,8 @@ function Utils.ratio(old, new)
     local abs_old = math_abs(old)
     local abs_new = math_abs(new)
     local max_abs = math_max(abs_old, abs_new)
-
-    if max_abs == 0 then
-        return 0
-    elseif abs_old == 0 or abs_new == 0 then
-        return 1
-    end
-
+    -- max_abs == 0 только при old == new == 0 (уже обработано выше)
+    if abs_old == 0 or abs_new == 0 then return 1 end
     return math_abs(old - new) / max_abs
 end
 

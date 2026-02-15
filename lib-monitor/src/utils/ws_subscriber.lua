@@ -30,10 +30,12 @@ local COMPONENT_NAME = "WsSubscriber"
 --- @field clients table<userdata, WsClientInfo> Список активных WebSocket клиентов
 --- @field http_server_instance any Ссылка на экземпляр http_server
 --- @field is_task_running boolean Флаг запущенной задачи планировщика
+--- @field client_count number Количество клиентов (O(1) для get_clients_count)
 local state = {
     clients = {},
     http_server_instance = nil,
     is_task_running = false,
+    client_count = 0,
 }
 
 --- Локальная конфигурация модуля (значения по умолчанию)
@@ -68,6 +70,7 @@ local function _flush_buffers()
                 info.error_count = info.error_count + 1
                 if info.error_count >= 5 then
                     state.clients[client] = nil
+                    state.client_count = state.client_count - 1
                     if server.close then pcall(server.close, server, client) end
                 end
             else
@@ -129,6 +132,7 @@ end
 --- Очищает список клиентов и сбрасывает ссылку на сервер
 function WsSubscriber.clear()
     state.clients = {}
+    state.client_count = 0
     state.http_server_instance = nil
 end
 
@@ -159,6 +163,9 @@ function WsSubscriber.on_message(server, client, request)
 
     -- Если request == nil, значит соединение закрыто
     if request == nil then
+        if state.clients[client] then
+            state.client_count = state.client_count - 1
+        end
         state.clients[client] = nil
         return
     end
@@ -168,6 +175,7 @@ function WsSubscriber.on_message(server, client, request)
     if not info then
         info = { error_count = 0, batch = false, buffer = nil }
         state.clients[client] = info
+        state.client_count = state.client_count + 1
         pcall(server.send, server, client, '{"event":"sys:connected","data":"Добро пожаловать"}')
     end
 
@@ -226,6 +234,7 @@ function WsSubscriber.broadcast_raw(event_type, json_data)
                 info.error_count = info.error_count + 1
                 if info.error_count >= 5 then
                     state.clients[client] = nil
+                    state.client_count = state.client_count - 1
                     if close then pcall(close, server, client) end
                 end
             else
@@ -238,9 +247,7 @@ end
 --- Возвращает количество активных WebSocket клиентов
 --- @return number Количество клиентов
 function WsSubscriber.get_clients_count()
-    local count = 0
-    for _ in pairs(state.clients) do count = count + 1 end
-    return count
+    return state.client_count
 end
 
 -- ===========================================================================
