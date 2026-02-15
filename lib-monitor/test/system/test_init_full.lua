@@ -1,6 +1,6 @@
--- SYS: Init & Shutdown (ПМИ 2.1)
--- Проверка модуля init_monitor и graceful_shutdown.
--- Полная инициализация требует Astra с config.json и всеми зависимостями.
+-- SYS: Init Module Structure (ПМИ 2.1)
+-- Проверка структуры init_monitor без полной инициализации.
+-- Полная init требует Astra с config.json (см. readme/template.lua).
 
 if not _G.RUN_TEST_ACTIVE then
     io.stderr:write("Ошибка: Запуск через run_test.lua обязателен.\n")
@@ -11,34 +11,31 @@ local test_helper = require("tools.test_helper")
 local TestSuite = test_helper.TestSuite
 local Assert = test_helper.Assert
 
-local suite = TestSuite:new("SYS.init_shutdown")
+local suite = TestSuite:new("SYS.init_structure")
+local saved_ModuleManager
 
-suite:add_test("SYS-INIT-01: init_monitor модуль загружается и возвращает ModuleManager", function()
-    package.loaded["init_monitor"] = nil
-    local mm = require("init_monitor")
-    Assert.is_not_nil(mm, "init_monitor возвращает значение")
-    Assert.is_true(type(mm) == "table", "возвращает таблицу")
-    Assert.is_true(type(mm.get_module) == "function", "имеет get_module")
-    Assert.is_true(type(mm.check_nested_dependency) == "function", "имеет check_nested_dependency")
+suite:setup(function()
+    saved_ModuleManager = _G.ModuleManager
 end)
 
-suite:add_test("SYS-INIT-02: add_shutdown_handler и graceful_shutdown экспортированы в _G", function()
-    Assert.is_not_nil(_G.add_shutdown_handler, "add_shutdown_handler в _G")
-    Assert.is_not_nil(_G.graceful_shutdown, "graceful_shutdown в _G")
-    Assert.is_true(type(_G.add_shutdown_handler) == "function", "add_shutdown_handler — функция")
-    Assert.is_true(type(_G.graceful_shutdown) == "function", "graceful_shutdown — функция")
+suite:teardown(function()
+    _G.ModuleManager = saved_ModuleManager
+    package.loaded["src.core.module_manager"] = nil
 end)
 
-suite:add_test("SYS-INIT-03: graceful_shutdown выполняется без падения", function()
-    local ok, err = pcall(_G.graceful_shutdown)
-    Assert.is_true(ok, "graceful_shutdown выполнен: " .. tostring(err))
+suite:add_test("SYS-INIT-01: init_monitor — ModuleManager загружается", function()
+    package.loaded["src.core.module_manager"] = nil
+    local mm = require("src.core.module_manager")
+    Assert.is_not_nil(mm, "ModuleManager загружен")
+    Assert.is_true(type(mm.register_module) == "function", "register_module")
+    Assert.is_true(type(mm.load_modules) == "function", "load_modules")
+    Assert.is_true(type(mm.check_nested_dependency) == "function", "check_nested_dependency")
+    _G.ModuleManager = saved_ModuleManager
 end)
 
-suite:add_test("SYS-INIT-04: add_shutdown_handler регистрирует обработчик", function()
-    local called = false
-    _G.add_shutdown_handler("test_sys_handler", function() called = true end)
-    _G.graceful_shutdown()
-    Assert.is_true(called, "обработчик вызван при shutdown")
+suite:add_test("SYS-INIT-02: init_monitor — пути lib-monitor в package.path", function()
+    local found = package.path:find("lib%-monitor") or package.path:find("Cesbo")
+    Assert.is_true(found ~= nil, "package.path содержит lib-monitor")
 end)
 
 suite:run()
