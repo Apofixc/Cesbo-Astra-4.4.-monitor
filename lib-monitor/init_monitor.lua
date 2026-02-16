@@ -5,14 +5,19 @@
 -- отвечая за инициализацию и загрузку всех ее компонентов.
 -- ===========================================================================
 
+-- Сохраняем стандартную библиотеку debug до любых вызовов log.set (Astra перезаписывает _G.debug)
+local _debug = _G.debug
+
 -- 1. Стандартные Lua функции
-local ipairs = ipairs
-local print = print
-local type = type
-local string_format = string.format
-local pcall = pcall
-local error = error
-local tostring = tostring
+local ipairs = _G.ipairs
+local print = _G.print
+local type = _G.type
+local string_format = _G.string.format
+local pcall = _G.pcall
+local error = _G.error
+local tostring = _G.tostring
+local pidfile = _G.pidfile
+local log = _G.log
 
 -- 2. Функции из ModuleManager.get_module()
 local path_prefix = (... and (...):match("(.-)init_monitor$")) or ""
@@ -22,7 +27,7 @@ local ModuleManager = require(path_prefix .. "src.core.module_manager")
 --- Определяет корневой каталог библиотеки по пути к текущему файлу (init_monitor.lua).
 --- @return string|nil Путь к каталогу lib-monitor с завершающим / или nil.
 local function _detect_lib_root()
-    local info = debug.getinfo(1, "S")
+    local info = _debug.getinfo(1, "S")
     local src = info and info.source
     if not src or src:sub(1, 1) ~= "@" then
         return nil
@@ -411,4 +416,24 @@ end)
 _G.add_shutdown_handler = add_shutdown_handler
 _G.graceful_shutdown = graceful_shutdown
 
-return ModuleManager
+--- Возвращает ModuleManager после применения опций Astra (pidfile, log).
+--- @param name_pid string|nil Путь к pid-файлу (вызов pidfile(name_pid)).
+--- @param debug_flag boolean|nil Включить уровень debug в логе.
+--- @param filename string|nil Файл лога.
+--- @param syslog boolean|nil Опция syslog для log.set.
+--- @param stdout boolean|nil Вывод лога в stdout.
+--- @return table ModuleManager
+return function(name_pid, debug_flag, filename, syslog, stdout)
+    if type(name_pid) == "string" and name_pid ~= "" and type(pidfile) == "function" then
+        pidfile(name_pid)
+    end
+    local log_opts = {}
+    if debug_flag ~= nil then log_opts.debug = debug_flag end
+    if filename ~= nil then log_opts.filename = filename end
+    if syslog ~= nil then log_opts.syslog = syslog end
+    if stdout ~= nil then log_opts.stdout = stdout end
+    if next(log_opts) and type(log) == "table" and type(log.set) == "function" then
+        log.set(log_opts)
+    end
+    return ModuleManager
+end

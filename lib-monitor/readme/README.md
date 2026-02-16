@@ -42,8 +42,8 @@
 ## Быстрый старт
 
 ```lua
--- 1. Подключение
-local init = require("init_monitor")
+-- 1. Подключение (опционально: name_pid, debug, filename, syslog, stdout)
+local init = require("init_monitor")()
 
 -- 2. Запуск API сервера
 server_start("0.0.0.0", 8080)

@@ -11,7 +11,8 @@ package.path = script_path .. "?.lua;" .. package.path
 
 -- 2. Подключение библиотеки
 -- init_monitor автоматически проверит зависимости и загрузит все модули
-require("init_monitor")
+-- Опционально: require("init_monitor")(name_pid, debug, filename, syslog, stdout)
+require("init_monitor")()
 
 -- 3. Запуск HTTP сервера
 -- Параметры берутся из переменных окружения или используются значения по умолчанию

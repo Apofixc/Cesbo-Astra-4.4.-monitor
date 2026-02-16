@@ -15,8 +15,8 @@ export LUA_PATH="./?.lua;/opt/astra/lib-monitor/?.lua;;"
 ## 2. Подключение в скрипте
 
 ```lua
--- Инициализация библиотеки
-local init = require("init_monitor")
+-- Инициализация библиотеки (опционально: (name_pid, debug, filename, syslog, stdout))
+local init = require("init_monitor")()
 if not init then
     log.error("Не удалось загрузить lib-monitor")
     astra.exit()
