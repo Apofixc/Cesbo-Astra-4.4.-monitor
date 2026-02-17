@@ -1,5 +1,5 @@
 package.path = "/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/?.lua;;" .. package.path
-local init = require("init_monitor")()
+local init = require("init_monitor")("/var/run/test2.pid")
 
 server_start("0.0.0.0", 5001)
 

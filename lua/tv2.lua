@@ -1,8 +1,7 @@
 package.path = "/opt/Cesbo-Astra-4.4.-monitor/lib-monitor/?.lua;;" .. package.path
--- name_pid, debug, filename, syslog, stdout
-local init = require("init_monitor")("/var/run/tv2.pid", false, nil, nil, true)
+local init = require("init_monitor")("/var/run/tv2.pid")
 
-server_start("0.0.0.0", 5003)
+server_start("0.0.0.0", 5004)
 
 make_channel({
   name = "TV2",
